@@ -83,7 +83,10 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
         try {
             send(player, playerInfoPacket(definition, instance));
             send(player, spawnPacket(instance));
-            send(player, equipmentPacket(instance, definition));
+            PacketContainer equipment = equipmentPacket(instance, definition);
+            if (equipment != null) {
+                send(player, equipment);
+            }
             send(player, headRotationPacket(instance));
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Could not render NPC " + definition.getKey() + " for " + player.getName(), exception);
@@ -178,8 +181,6 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
     }
 
     private PacketContainer equipmentPacket(NpcInstance instance, NpcDefinition definition) {
-        PacketContainer packet = protocolManager.createPacket(PacketType.Play.Server.ENTITY_EQUIPMENT);
-        packet.getIntegers().writeSafely(0, instance.getEntityId());
         List<Pair<EnumWrappers.ItemSlot, ItemStack>> equipment = new ArrayList<>();
         addEquipment(equipment, EnumWrappers.ItemSlot.MAINHAND, definition.getMainHand());
         addEquipment(equipment, EnumWrappers.ItemSlot.OFFHAND, definition.getOffHand());
@@ -188,6 +189,12 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
         addEquipment(equipment, EnumWrappers.ItemSlot.LEGS, armor[1]);
         addEquipment(equipment, EnumWrappers.ItemSlot.CHEST, armor[2]);
         addEquipment(equipment, EnumWrappers.ItemSlot.HEAD, armor[3]);
+        if (equipment.isEmpty()) {
+            return null;
+        }
+
+        PacketContainer packet = protocolManager.createPacket(PacketType.Play.Server.ENTITY_EQUIPMENT);
+        packet.getIntegers().writeSafely(0, instance.getEntityId());
         packet.getSlotStackPairLists().writeSafely(0, equipment);
         return packet;
     }
