@@ -1,0 +1,3 @@
+render-distance: 64.0
+dialog-default-seconds-per-line: 3
+chat-input-timeout-seconds: 60
