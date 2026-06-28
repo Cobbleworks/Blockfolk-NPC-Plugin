@@ -26,6 +26,7 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.util.Vector;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -208,10 +209,21 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
     private PacketContainer spawnPacket(NpcInstance instance) {
         Location location = instance.getLocation();
         PacketType spawnType = playerSpawnPacketType();
+        if (PacketType.Play.Server.SPAWN_ENTITY.equals(spawnType)) {
+            PacketContainer constructed = constructSpawnEntityPacket(instance, location);
+            if (constructed != null) {
+                return constructed;
+            }
+        }
+
         PacketContainer packet = protocolManager.createPacket(spawnType);
         packet.getIntegers().writeSafely(0, instance.getEntityId());
         packet.getUUIDs().writeSafely(0, instance.getId());
         if (PacketType.Play.Server.SPAWN_ENTITY.equals(spawnType)) {
+            if (packet.getEntityTypeModifier().size() == 0) {
+                throw new IllegalStateException("ProtocolLib cannot expose the entity type field for " + spawnType
+                    + "; unable to spawn fake player NPC safely.");
+            }
             packet.getEntityTypeModifier().write(0, EntityType.PLAYER);
             EntityType writtenType = packet.getEntityTypeModifier().read(0);
             if (writtenType != EntityType.PLAYER) {
@@ -225,6 +237,31 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
         packet.getBytes().writeSafely(1, angle(location.getYaw()));
         packet.getBytes().writeSafely(2, angle(location.getYaw()));
         return packet;
+    }
+
+    private PacketContainer constructSpawnEntityPacket(NpcInstance instance, Location location) {
+        Object[] constructorArguments = {
+            instance.getEntityId(),
+            instance.getId(),
+            location.getX(),
+            location.getY(),
+            location.getZ(),
+            location.getPitch(),
+            location.getYaw(),
+            EntityType.PLAYER,
+            0,
+            new Vector(0, 0, 0),
+            (double) location.getYaw()
+        };
+
+        try {
+            return protocolManager
+                .createPacketConstructor(PacketType.Play.Server.SPAWN_ENTITY, constructorArguments)
+                .createPacket(constructorArguments);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.FINE, "Could not construct modern player spawn packet directly.", exception);
+            return null;
+        }
     }
 
     private PacketContainer metadataPacket(NpcInstance instance) {
