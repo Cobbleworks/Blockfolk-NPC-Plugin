@@ -212,7 +212,11 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
         packet.getIntegers().writeSafely(0, instance.getEntityId());
         packet.getUUIDs().writeSafely(0, instance.getId());
         if (PacketType.Play.Server.SPAWN_ENTITY.equals(spawnType)) {
-            packet.getEntityTypeModifier().writeSafely(0, EntityType.PLAYER);
+            packet.getEntityTypeModifier().write(0, EntityType.PLAYER);
+            EntityType writtenType = packet.getEntityTypeModifier().read(0);
+            if (writtenType != EntityType.PLAYER) {
+                throw new IllegalStateException("Could not set NPC spawn entity type to PLAYER; packet contains " + writtenType);
+            }
         }
         packet.getDoubles().writeSafely(0, location.getX());
         packet.getDoubles().writeSafely(1, location.getY());
@@ -290,9 +294,9 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
 
     private PacketType playerSpawnPacketType() {
         List<PacketType> packetTypes = new ArrayList<>();
-        packetTypes.add(PacketType.Play.Server.SPAWN_ENTITY);
-        packetTypes.add(findPacketType("SPAWN_PLAYER"));
         packetTypes.add(findPacketType("NAMED_ENTITY_SPAWN"));
+        packetTypes.add(findPacketType("SPAWN_PLAYER"));
+        packetTypes.add(PacketType.Play.Server.SPAWN_ENTITY);
         for (PacketType packetType : packetTypes) {
             if (packetType == null || !canCreatePacket(packetType)) {
                 continue;
