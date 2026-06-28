@@ -10,6 +10,7 @@ import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -70,6 +71,25 @@ public final class NpcInstanceRegistry {
                 dialogService.attach(instance, definition);
             }
         }
+    }
+
+    public int deleteInstances(NpcDefinition definition) {
+        int removed = 0;
+        Iterator<NpcInstance> iterator = instances.values().iterator();
+        while (iterator.hasNext()) {
+            NpcInstance instance = iterator.next();
+            if (!instance.getDefinitionKey().equals(definition.getKey())) {
+                continue;
+            }
+            renderer.destroyForAll(instance);
+            dialogService.detach(instance.getId());
+            iterator.remove();
+            removed++;
+        }
+        if (removed > 0) {
+            instanceRepository.saveAll(instances.values());
+        }
+        return removed;
     }
 
     public void saveAndDespawnAll() {

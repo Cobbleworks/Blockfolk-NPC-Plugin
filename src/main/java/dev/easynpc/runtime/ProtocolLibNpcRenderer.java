@@ -11,6 +11,8 @@ import com.comphenix.protocol.wrappers.EnumWrappers;
 import com.comphenix.protocol.wrappers.Pair;
 import com.comphenix.protocol.wrappers.PlayerInfoData;
 import com.comphenix.protocol.wrappers.WrappedChatComponent;
+import com.comphenix.protocol.wrappers.WrappedDataValue;
+import com.comphenix.protocol.wrappers.WrappedDataWatcher;
 import com.comphenix.protocol.wrappers.WrappedGameProfile;
 import com.comphenix.protocol.wrappers.WrappedSignedProperty;
 import com.google.common.collect.ArrayListMultimap;
@@ -25,8 +27,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +48,7 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
     private final double renderDistanceSquared;
     private final ProtocolManager protocolManager;
     private final Map<UUID, NpcInstance> renderedInstances = new ConcurrentHashMap<>();
+    private final Map<UUID, Set<UUID>> viewersByInstance = new ConcurrentHashMap<>();
 
     public ProtocolLibNpcRenderer(Plugin plugin, double renderDistance) {
         this.plugin = plugin;
@@ -79,15 +84,23 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
         if (instance.getEntityId() == 0) {
             instance.setEntityId(ENTITY_IDS.incrementAndGet());
         }
+        if (isRenderedFor(player, instance)) {
+            return;
+        }
         renderedInstances.put(instance.getId(), instance);
         try {
             send(player, playerInfoPacket(definition, instance));
             send(player, spawnPacket(instance));
+            send(player, metadataPacket(instance));
             PacketContainer equipment = equipmentPacket(instance, definition);
             if (equipment != null) {
                 send(player, equipment);
             }
-            send(player, headRotationPacket(instance));
+            PacketContainer headRotation = headRotationPacket(instance);
+            if (headRotation != null) {
+                send(player, headRotation);
+            }
+            viewersByInstance.computeIfAbsent(instance.getId(), ignored -> ConcurrentHashMap.newKeySet()).add(player.getUniqueId());
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Could not render NPC " + definition.getKey() + " for " + player.getName(), exception);
         }
@@ -103,6 +116,10 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
             PacketContainer removeInfo = protocolManager.createPacket(PacketType.Play.Server.PLAYER_INFO_REMOVE);
             removeInfo.getUUIDLists().writeSafely(0, List.of(instance.getId()));
             send(player, removeInfo);
+            Set<UUID> viewers = viewersByInstance.get(instance.getId());
+            if (viewers != null) {
+                viewers.remove(player.getUniqueId());
+            }
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.FINE, "Could not destroy NPC " + instance.getId() + " for " + player.getName(), exception);
         }
@@ -114,6 +131,7 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
             destroyFor(player, instance);
         }
         renderedInstances.remove(instance.getId());
+        viewersByInstance.remove(instance.getId());
     }
 
     @Override
@@ -146,37 +164,71 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
             EnumWrappers.PlayerInfoAction.UPDATE_LATENCY,
             EnumWrappers.PlayerInfoAction.UPDATE_LISTED
         );
-        Set<EnumWrappers.PlayerInfoAction> packetActions = packet.getPlayerInfoActions().readSafely(0);
-        if (packetActions != null) {
-            packetActions.addAll(actions);
-        } else {
-            packet.getPlayerInfoActions().writeSafely(0, actions);
+        PacketContainer constructed = constructPlayerInfoPacket(actions, List.of(infoData));
+        if (constructed != null) {
+            return constructed;
         }
-
-        List<PlayerInfoData> entries = packet.getPlayerInfoDataLists().readSafely(1);
-        if (entries == null) {
-            entries = packet.getPlayerInfoDataLists().readSafely(0);
-        }
-        if (entries != null) {
-            entries.add(infoData);
-        } else {
-            packet.getPlayerInfoDataLists().writeSafely(0, List.of(infoData));
-        }
+        packet.getPlayerInfoActions().writeSafely(0, actions);
+        packet.getPlayerInfoDataLists().writeSafely(0, new ArrayList<>(List.of(infoData)));
         return packet;
+    }
+
+    private PacketContainer constructPlayerInfoPacket(Set<EnumWrappers.PlayerInfoAction> actions, List<PlayerInfoData> entries) {
+        try {
+            Set<Object> nmsActions = createNmsPlayerInfoActions(actions);
+            List<Object> nmsEntries = entries.stream()
+                .map(PlayerInfoData.getConverter()::getGeneric)
+                .toList();
+
+            for (Constructor<?> constructor : PacketType.Play.Server.PLAYER_INFO.getPacketClass().getConstructors()) {
+                Class<?>[] parameterTypes = constructor.getParameterTypes();
+                if (parameterTypes.length != 2
+                    || !EnumSet.class.isAssignableFrom(parameterTypes[0])
+                    || !Collection.class.isAssignableFrom(parameterTypes[1])) {
+                    continue;
+                }
+                Object handle = constructor.newInstance(nmsActions, nmsEntries);
+                return new PacketContainer(PacketType.Play.Server.PLAYER_INFO, handle);
+            }
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            plugin.getLogger().log(Level.FINE, "Could not construct immutable player info packet directly.", exception);
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Set<Object> createNmsPlayerInfoActions(Set<EnumWrappers.PlayerInfoAction> actions) {
+        Set<Object> nmsActions = (Set<Object>) (Object) EnumWrappers.createEmptyEnumSet(EnumWrappers.getPlayerInfoActionClass());
+        for (EnumWrappers.PlayerInfoAction action : actions) {
+            nmsActions.add(EnumWrappers.getPlayerInfoActionConverter().getGeneric(action));
+        }
+        return nmsActions;
     }
 
     private PacketContainer spawnPacket(NpcInstance instance) {
         Location location = instance.getLocation();
-        PacketContainer packet = protocolManager.createPacket(PacketType.Play.Server.SPAWN_ENTITY);
+        PacketType spawnType = playerSpawnPacketType();
+        PacketContainer packet = protocolManager.createPacket(spawnType);
         packet.getIntegers().writeSafely(0, instance.getEntityId());
         packet.getUUIDs().writeSafely(0, instance.getId());
-        packet.getEntityTypeModifier().writeSafely(0, EntityType.PLAYER);
+        if (PacketType.Play.Server.SPAWN_ENTITY.equals(spawnType)) {
+            packet.getEntityTypeModifier().writeSafely(0, EntityType.PLAYER);
+        }
         packet.getDoubles().writeSafely(0, location.getX());
         packet.getDoubles().writeSafely(1, location.getY());
         packet.getDoubles().writeSafely(2, location.getZ());
         packet.getBytes().writeSafely(0, angle(location.getPitch()));
         packet.getBytes().writeSafely(1, angle(location.getYaw()));
         packet.getBytes().writeSafely(2, angle(location.getYaw()));
+        return packet;
+    }
+
+    private PacketContainer metadataPacket(NpcInstance instance) {
+        PacketContainer packet = protocolManager.createPacket(PacketType.Play.Server.ENTITY_METADATA);
+        packet.getIntegers().writeSafely(0, instance.getEntityId());
+        List<WrappedDataValue> values = new ArrayList<>();
+        values.add(new WrappedDataValue(17, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x7F));
+        packet.getDataValueCollectionModifier().writeSafely(0, values);
         return packet;
     }
 
@@ -200,10 +252,15 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
     }
 
     private PacketContainer headRotationPacket(NpcInstance instance) {
-        PacketContainer packet = protocolManager.createPacket(PacketType.Play.Server.ENTITY_HEAD_ROTATION);
-        packet.getIntegers().writeSafely(0, instance.getEntityId());
-        packet.getBytes().writeSafely(0, angle(instance.getLocation().getYaw()));
-        return packet;
+        try {
+            PacketContainer packet = protocolManager.createPacket(PacketType.Play.Server.ENTITY_HEAD_ROTATION);
+            packet.getIntegers().writeSafely(0, instance.getEntityId());
+            packet.getBytes().writeSafely(0, angle(instance.getLocation().getYaw()));
+            return packet;
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.FINE, "Skipping optional NPC head rotation packet.", exception);
+            return null;
+        }
     }
 
     private void send(Player player, PacketContainer packet) {
@@ -211,10 +268,15 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
     }
 
     private boolean canSee(Player player, Location location) {
-        if (player.getWorld() != location.getWorld()) {
+        if (!player.getWorld().equals(location.getWorld())) {
             return false;
         }
         return player.getLocation().distanceSquared(location) <= renderDistanceSquared;
+    }
+
+    private boolean isRenderedFor(Player player, NpcInstance instance) {
+        Set<UUID> viewers = viewersByInstance.get(instance.getId());
+        return viewers != null && viewers.contains(player.getUniqueId());
     }
 
     private byte angle(float degrees) {
@@ -224,6 +286,42 @@ public final class ProtocolLibNpcRenderer implements NpcRenderer {
     private String trimName(String name) {
         String plain = name == null || name.isBlank() ? "EasyNPC" : name;
         return plain.length() <= 16 ? plain : plain.substring(0, 16);
+    }
+
+    private PacketType playerSpawnPacketType() {
+        List<PacketType> packetTypes = new ArrayList<>();
+        packetTypes.add(PacketType.Play.Server.SPAWN_ENTITY);
+        packetTypes.add(findPacketType("SPAWN_PLAYER"));
+        packetTypes.add(findPacketType("NAMED_ENTITY_SPAWN"));
+        for (PacketType packetType : packetTypes) {
+            if (packetType == null || !canCreatePacket(packetType)) {
+                continue;
+            }
+            return packetType;
+        }
+        return PacketType.Play.Server.SPAWN_ENTITY;
+    }
+
+    private PacketType findPacketType(String fieldName) {
+        try {
+            Field field = PacketType.Play.Server.class.getField(fieldName);
+            Object value = field.get(null);
+            if (value instanceof PacketType packetType) {
+                return packetType;
+            }
+        } catch (IllegalAccessException | NoSuchFieldException ignored) {
+        }
+        return null;
+    }
+
+    private boolean canCreatePacket(PacketType packetType) {
+        try {
+            protocolManager.createPacket(packetType);
+            return true;
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.FINE, "Packet type " + packetType + " is not available on this server.", exception);
+            return false;
+        }
     }
 
     private void addEquipment(List<Pair<EnumWrappers.ItemSlot, ItemStack>> equipment, EnumWrappers.ItemSlot slot, ItemStack item) {

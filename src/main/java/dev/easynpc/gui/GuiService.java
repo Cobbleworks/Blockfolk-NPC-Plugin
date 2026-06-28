@@ -20,13 +20,17 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 public final class GuiService implements Listener {
     private final Plugin plugin;
     private final NpcDefinitionRepository definitionRepository;
     private final NpcInstanceRegistry instanceRegistry;
     private final ChatInputService chatInputService;
+    private final Set<UUID> explicitInventorySaves = new HashSet<>();
 
     public GuiService(
         Plugin plugin,
@@ -64,6 +68,10 @@ public final class GuiService implements Listener {
         inventory.setItem(13, item(Material.CHEST, "Edit Inventory", List.of(ChatColor.GRAY + "Items, armor, and hands")));
         inventory.setItem(14, item(Material.WRITABLE_BOOK, "Edit Dialog", List.of(ChatColor.GRAY + String.valueOf(definition.getDialogLines().size()) + " lines")));
         inventory.setItem(15, item(Material.ARMOR_STAND, "Spawn Copy", List.of(ChatColor.GRAY + "Creates a persistent instance")));
+        inventory.setItem(16, item(Material.REDSTONE_BLOCK, "Delete Instances", List.of(
+            ChatColor.GRAY + "Removes spawned copies only",
+            ChatColor.GRAY + "Preset stays saved"
+        )));
         inventory.setItem(26, item(Material.BARRIER, "Back", List.of()));
         player.openInventory(inventory);
     }
@@ -116,11 +124,17 @@ public final class GuiService implements Listener {
         if (!(event.getInventory().getHolder() instanceof InventoryHolderImpl holder)) {
             return;
         }
+        if (event.getPlayer() instanceof Player player && explicitInventorySaves.remove(player.getUniqueId())) {
+            return;
+        }
         definitionRepository.find(holder.key()).ifPresent(definition -> saveInventoryEditor(event.getInventory(), definition));
     }
 
     private void handleMainClick(InventoryClickEvent event, Player player) {
         event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
         if (event.getRawSlot() == 53) {
             chatInputService.request(player, "Enter a new NPC name:", value -> {
                 NpcDefinition definition = NpcDefinition.create(value);
@@ -143,6 +157,9 @@ public final class GuiService implements Listener {
 
     private void handleEditorClick(InventoryClickEvent event, Player player, String key) {
         event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
         NpcDefinition definition = definitionRepository.find(key).orElse(null);
         if (definition == null) {
             player.closeInventory();
@@ -176,6 +193,11 @@ public final class GuiService implements Listener {
                 }
                 openEditor(player, definition);
             }
+            case 16 -> {
+                int removed = instanceRegistry.deleteInstances(definition);
+                player.sendMessage(Component.text("Deleted " + removed + " NPC instance" + (removed == 1 ? "." : "s.")));
+                openEditor(player, definition);
+            }
             case 26 -> openMain(player);
             default -> {
             }
@@ -184,6 +206,9 @@ public final class GuiService implements Listener {
 
     private void handleDialogClick(InventoryClickEvent event, Player player, String key) {
         event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
         NpcDefinition definition = definitionRepository.find(key).orElse(null);
         if (definition == null) {
             player.closeInventory();
@@ -214,11 +239,15 @@ public final class GuiService implements Listener {
     }
 
     private void handleInventoryClick(InventoryClickEvent event, Player player, String key) {
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
         if (event.getRawSlot() == 53) {
             event.setCancelled(true);
             definitionRepository.find(key).ifPresent(definition -> {
                 saveInventoryEditor(event.getInventory(), definition);
                 saveRefresh(definition);
+                explicitInventorySaves.add(player.getUniqueId());
                 openEditor(player, definition);
             });
         }
@@ -244,6 +273,11 @@ public final class GuiService implements Listener {
     private void saveRefresh(NpcDefinition definition) {
         definitionRepository.save(definition);
         instanceRegistry.refreshDefinition(definition);
+    }
+
+    private boolean isTopInventoryClick(InventoryClickEvent event) {
+        int slot = event.getRawSlot();
+        return slot >= 0 && slot < event.getView().getTopInventory().getSize();
     }
 
     private ItemStack item(Material material, String name, List<String> lore) {

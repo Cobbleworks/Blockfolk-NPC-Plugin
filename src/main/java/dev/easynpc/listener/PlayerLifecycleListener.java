@@ -6,6 +6,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.plugin.Plugin;
 
@@ -29,6 +30,14 @@ public final class PlayerLifecycleListener implements Listener {
 
     @EventHandler
     public void onWorldChange(PlayerChangedWorldEvent event) {
+        registry.renderFor(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onMove(PlayerMoveEvent event) {
+        if (event.getTo() == null || event.getFrom().getBlock().equals(event.getTo().getBlock())) {
+            return;
+        }
         registry.renderFor(event.getPlayer());
     }
 
