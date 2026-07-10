@@ -6,6 +6,7 @@ import dev.easynpc.dialog.DialogService;
 import dev.easynpc.input.ChatInputService;
 import dev.easynpc.model.AggressionLevel;
 import dev.easynpc.model.CombatProfile;
+import dev.easynpc.model.LootTier;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcInstance;
 import dev.easynpc.model.NpcRoute;
@@ -51,10 +52,10 @@ import java.util.function.Consumer;
 public final class GuiService implements Listener {
     private static final int PAGE_SIZE = 45;
     private static final Set<Integer> INVENTORY_EDIT_SLOTS = Set.of(
-        0, 1, 2, 3, 4, 5, 6, 7, 8,
-        9, 10, 11, 12, 13, 14, 15, 16, 17,
-        18, 19, 20, 21, 22, 23, 24, 25, 26,
-        27, 28, 29, 30, 31, 32, 33, 34, 35,
+        1, 2, 3, 4, 5, 6, 7, 8,
+        10, 11, 12, 13, 14, 15, 16, 17,
+        19, 20, 21, 22, 23, 24, 25, 26,
+        28, 29, 30, 31, 32, 33, 34, 35,
         45, 46, 47, 48, 50, 51
     );
 
@@ -210,7 +211,14 @@ public final class GuiService implements Listener {
             Component.text("Equipment: " + definition.getDisplayName()));
         ItemStack[] contents = definition.getInventoryContents();
         for (int index = 0; index < contents.length; index++) {
-            inventory.setItem(index, contents[index]);
+            if (!LootTier.isRowStarterSlot(index)) {
+                inventory.setItem(index, contents[index]);
+            }
+        }
+        for (LootTier tier : LootTier.values()) {
+            inventory.setItem(tier.rowStarterSlot(), item(tier.icon(), tier.displayName(), List.of(
+                ChatColor.GRAY + "" + tier.dropChancePercent() + "% chance per item slot"
+            )));
         }
         inventory.setItem(36, label("Helmet", Material.CHAINMAIL_HELMET));
         inventory.setItem(37, label("Chestplate", Material.CHAINMAIL_CHESTPLATE));
@@ -218,7 +226,10 @@ public final class GuiService implements Listener {
         inventory.setItem(39, label("Boots", Material.CHAINMAIL_BOOTS));
         inventory.setItem(41, label("Main Hand", Material.IRON_SWORD));
         inventory.setItem(42, label("Off Hand", Material.SHIELD));
-        inventory.setItem(44, label("NPC inventory above", Material.CHEST));
+        inventory.setItem(44, item(Material.CHEST, "NPC loot above", List.of(
+            ChatColor.GRAY + "Each filled slot rolls independently",
+            ChatColor.GRAY + "Equipment is stored below"
+        )));
         ItemStack[] armor = definition.getArmorContents();
         inventory.setItem(45, armor[3]);
         inventory.setItem(46, armor[2]);
@@ -785,7 +796,9 @@ public final class GuiService implements Listener {
     private void readEquipmentEditor(Inventory inventory, NpcDefinition definition) {
         ItemStack[] contents = new ItemStack[36];
         for (int index = 0; index < contents.length; index++) {
-            contents[index] = inventory.getItem(index);
+            if (!LootTier.isRowStarterSlot(index)) {
+                contents[index] = inventory.getItem(index);
+            }
         }
         definition.setInventoryContents(contents);
         definition.setArmorContents(new ItemStack[]{

@@ -2,6 +2,7 @@ package dev.easynpc.runtime;
 
 import dev.easynpc.model.AggressionLevel;
 import dev.easynpc.model.CombatProfile;
+import dev.easynpc.model.LootTier;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcInstance;
 import dev.easynpc.model.WalkingSpeed;
@@ -31,6 +32,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 public final class NpcCombatService implements Listener {
     private static final double SIGHT_RANGE = 16.0;
@@ -118,8 +120,15 @@ public final class NpcCombatService implements Listener {
         event.getDrops().clear();
         NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
         if (definition != null) {
-            for (ItemStack item : definition.getInventoryContents()) {
-                if (item != null && !item.getType().isAir() && item.getAmount() > 0) {
+            ItemStack[] contents = definition.getInventoryContents();
+            for (int slot = 0; slot < contents.length; slot++) {
+                if (LootTier.isRowStarterSlot(slot)) {
+                    continue;
+                }
+                ItemStack item = contents[slot];
+                LootTier tier = LootTier.forInventorySlot(slot);
+                if (item != null && !item.getType().isAir() && item.getAmount() > 0
+                    && tier.shouldDrop(ThreadLocalRandom.current().nextDouble())) {
                     event.getDrops().add(item);
                 }
             }
