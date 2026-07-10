@@ -84,6 +84,7 @@ public final class NpcDefinitionRepository {
         configuration.set("dialog.seconds-per-line", definition.getSecondsPerDialogLine());
         configuration.set("combat.enabled", !definition.getCombatProfile().invulnerable());
         configuration.set("combat.max-health", definition.getCombatProfile().maxHealth());
+        configuration.set("combat.respawn-seconds", definition.getCombatProfile().respawnSeconds());
         configuration.set("combat.aggression", definition.getCombatProfile().aggressionLevel().name().toLowerCase(Locale.ROOT));
         configuration.set("combat.shoutout", definition.getCombatProfile().shoutout());
         configuration.set("movement.enabled", definition.getMovementProfile().enabled());
@@ -129,6 +130,7 @@ public final class NpcDefinitionRepository {
         int legacyHealth = configuration.getBoolean("combat.enabled", false) ? 20 : 0;
         definition.setCombatProfile(new CombatProfile(
             configuration.getInt("combat.max-health", legacyHealth),
+            configuration.getInt("combat.respawn-seconds", 0),
             AggressionLevel.fromStored(configuration.getString("combat.aggression")),
             configuration.getString("combat.shoutout")
         ));

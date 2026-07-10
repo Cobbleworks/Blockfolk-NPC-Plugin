@@ -21,6 +21,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.scheduler.BukkitTask;
@@ -44,6 +45,7 @@ public final class NpcCombatService implements Listener {
     private final NpcInstanceRegistry instanceRegistry;
     private final NativeNpcNavigationService navigationService;
     private final Map<UUID, CombatState> states = new HashMap<>();
+    private final Map<UUID, BukkitTask> pendingRespawns = new HashMap<>();
     private BukkitTask task;
     private long currentTick;
 
@@ -74,6 +76,8 @@ public final class NpcCombatService implements Listener {
                 instanceRegistry.stopNavigating(instance);
             }
         }
+        pendingRespawns.values().forEach(BukkitTask::cancel);
+        pendingRespawns.clear();
         states.clear();
     }
 
@@ -112,9 +116,33 @@ public final class NpcCombatService implements Listener {
             return;
         }
         event.getDrops().clear();
+        NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
+        if (definition != null) {
+            for (ItemStack item : definition.getInventoryContents()) {
+                if (item != null && !item.getType().isAir() && item.getAmount() > 0) {
+                    event.getDrops().add(item);
+                }
+            }
+        }
         event.setDroppedExp(0);
         states.remove(instance.getId());
-        Bukkit.getScheduler().runTask(plugin, () -> instanceRegistry.deleteInstance(instance.getId()));
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!instanceRegistry.deleteInstance(instance.getId()) || definition == null
+                || definition.getCombatProfile().respawnSeconds() == 0) {
+                return;
+            }
+            long delayTicks = definition.getCombatProfile().respawnSeconds() * 20L;
+            BukkitTask respawnTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                pendingRespawns.remove(instance.getId());
+                definitionRepository.find(instance.getDefinitionKey()).ifPresent(currentDefinition -> {
+                    Location spawnpoint = currentDefinition.getSpawnpoint();
+                    if (currentDefinition.getCombatProfile().respawnSeconds() > 0 && spawnpoint != null) {
+                        instanceRegistry.spawnPersistent(currentDefinition, spawnpoint);
+                    }
+                });
+            }, delayTicks);
+            pendingRespawns.put(instance.getId(), respawnTask);
+        });
     }
 
     private void tick() {

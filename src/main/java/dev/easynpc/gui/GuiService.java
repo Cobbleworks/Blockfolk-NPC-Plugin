@@ -193,6 +193,7 @@ public final class GuiService implements Listener {
         CombatProfile combat = definition.getCombatProfile();
         inventory.setItem(23, item(Material.IRON_SWORD, "Fighting", List.of(
             ChatColor.GRAY + "Health: " + ChatColor.WHITE + healthLabel(combat),
+            ChatColor.GRAY + "Respawn: " + ChatColor.WHITE + respawnLabel(combat),
             ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.aggressionLevel().displayName(),
             ChatColor.YELLOW + "Click to configure combat"
         )));
@@ -251,36 +252,49 @@ public final class GuiService implements Listener {
         CombatProfile combat = definition.getCombatProfile();
         Inventory inventory = Bukkit.createInventory(new FightingHolder(definition.getKey()), 27,
             Component.text("Fighting: " + definition.getDisplayName()));
-        inventory.setItem(4, item(Material.IRON_SWORD, "Combat Capabilities", List.of(
-            ChatColor.GRAY + "Health: " + ChatColor.WHITE + healthLabel(combat),
-            ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.aggressionLevel().displayName()
-        )));
-        inventory.setItem(10, item(Material.RED_DYE, "- " + CombatProfile.HEALTH_STEP + " Health", List.of(
+        inventory.setItem(1, item(Material.RED_DYE, "- " + CombatProfile.HEALTH_STEP + " Health", List.of(
             ChatColor.GRAY + "Current: " + ChatColor.WHITE + healthLabel(combat),
             ChatColor.YELLOW + "Click to decrease max health"
         )));
-        inventory.setItem(11, item(combat.invulnerable() ? Material.TOTEM_OF_UNDYING : Material.GOLDEN_APPLE,
+        inventory.setItem(10, item(combat.invulnerable() ? Material.TOTEM_OF_UNDYING : Material.GOLDEN_APPLE,
             "Max Health: " + healthLabel(combat), List.of(
                 combat.invulnerable()
                     ? ChatColor.GREEN + "This NPC cannot be damaged"
                     : ChatColor.GRAY + "The NPC is removed when killed",
                 ChatColor.DARK_GRAY + "Set health to 0 for invulnerability"
             )));
-        inventory.setItem(12, item(Material.LIME_DYE, "+ " + CombatProfile.HEALTH_STEP + " Health", List.of(
+        inventory.setItem(19, item(Material.LIME_DYE, "+ " + CombatProfile.HEALTH_STEP + " Health", List.of(
             ChatColor.GRAY + "Current: " + ChatColor.WHITE + healthLabel(combat),
             ChatColor.YELLOW + "Click to increase max health"
         )));
-        inventory.setItem(14, item(aggressionMaterial(combat.aggressionLevel()), "Aggression", List.of(
+        inventory.setItem(3, item(Material.RED_DYE, "- " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds", List.of(
+            ChatColor.GRAY + "Current: " + ChatColor.WHITE + respawnLabel(combat),
+            ChatColor.YELLOW + "Click to decrease respawn time"
+        )));
+        inventory.setItem(12, item(combat.respawnSeconds() == 0 ? Material.BARRIER : Material.CLOCK,
+            "Respawn Time: " + respawnLabel(combat), List.of(
+                combat.respawnSeconds() == 0
+                    ? ChatColor.GRAY + "Killed NPCs will not respawn"
+                    : ChatColor.GREEN + "Respawns at the preset spawn point",
+                definition.getSpawnpoint() == null
+                    ? ChatColor.RED + "A preset spawn point is required"
+                    : ChatColor.DARK_GRAY + "Preset spawn point is configured"
+            )));
+        inventory.setItem(21, item(Material.LIME_DYE, "+ " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds", List.of(
+            ChatColor.GRAY + "Current: " + ChatColor.WHITE + respawnLabel(combat),
+            ChatColor.YELLOW + "Click to increase respawn time"
+        )));
+        inventory.setItem(5, item(aggressionMaterial(combat.aggressionLevel()), "Aggression", List.of(
             ChatColor.GRAY + "Current: " + ChatColor.WHITE + combat.aggressionLevel().displayName(),
             aggressionDescription(combat.aggressionLevel()),
             ChatColor.YELLOW + "Click to cycle aggression level"
         )));
-        inventory.setItem(16, item(Material.WRITABLE_BOOK, "Combat Shoutout", List.of(
+        inventory.setItem(14, item(Material.WRITABLE_BOOK, "Combat Shoutout", List.of(
             ChatColor.GRAY + (combat.shoutout() == null ? "No shoutout configured" : combat.shoutout()),
             ChatColor.YELLOW + "Click to enter a custom shoutout",
             ChatColor.DARK_GRAY + "Enter 'clear' to remove it"
         )));
-        inventory.setItem(22, item(Material.ARROW, "Back", List.of()));
+        inventory.setItem(23, item(Material.ARROW, "Back", List.of()));
         player.openInventory(inventory);
     }
 
@@ -573,30 +587,46 @@ public final class GuiService implements Listener {
         }
         CombatProfile combat = definition.getCombatProfile();
         switch (event.getRawSlot()) {
-            case 10 -> {
+            case 1 -> {
                 definition.setCombatProfile(combat.withMaxHealth(combat.maxHealth() - CombatProfile.HEALTH_STEP));
                 saveRefresh(definition);
                 openFightingEditor(player, definition);
             }
-            case 12 -> {
+            case 19 -> {
                 definition.setCombatProfile(combat.withMaxHealth(combat.maxHealth() + CombatProfile.HEALTH_STEP));
                 saveRefresh(definition);
                 openFightingEditor(player, definition);
             }
-            case 14 -> {
+            case 3 -> {
+                definition.setCombatProfile(combat.withRespawnSeconds(
+                    combat.respawnSeconds() - CombatProfile.RESPAWN_STEP_SECONDS
+                ));
+                definitionRepository.save(definition);
+                openFightingEditor(player, definition);
+            }
+            case 21 -> {
+                int respawnSeconds = (int) Math.min(
+                    Integer.MAX_VALUE,
+                    (long) combat.respawnSeconds() + CombatProfile.RESPAWN_STEP_SECONDS
+                );
+                definition.setCombatProfile(combat.withRespawnSeconds(respawnSeconds));
+                definitionRepository.save(definition);
+                openFightingEditor(player, definition);
+            }
+            case 5 -> {
                 AggressionLevel aggression = combat.aggressionLevel().next();
                 definition.setCombatProfile(combat.withAggressionLevel(aggression));
                 definitionRepository.save(definition);
                 player.sendMessage(Component.text("Aggression set to " + aggression.displayName() + "."));
                 openFightingEditor(player, definition);
             }
-            case 16 -> chatInputService.request(player, "Enter a combat shoutout, or 'clear':", value -> {
+            case 14 -> chatInputService.request(player, "Enter a combat shoutout, or 'clear':", value -> {
                 String shoutout = value.trim().equalsIgnoreCase("clear") ? null : value;
                 definition.setCombatProfile(definition.getCombatProfile().withShoutout(shoutout));
                 definitionRepository.save(definition);
                 openFightingEditor(player, definition);
             });
-            case 22 -> openEditor(player, definition);
+            case 23 -> openEditor(player, definition);
             default -> {
             }
         }
@@ -916,6 +946,10 @@ public final class GuiService implements Listener {
 
     private String healthLabel(CombatProfile combat) {
         return combat.invulnerable() ? "Invulnerable (0 HP)" : combat.maxHealth() + " HP";
+    }
+
+    private String respawnLabel(CombatProfile combat) {
+        return combat.respawnSeconds() == 0 ? "Disabled (0 seconds)" : combat.respawnSeconds() + " seconds";
     }
 
     private Material aggressionMaterial(AggressionLevel aggressionLevel) {
