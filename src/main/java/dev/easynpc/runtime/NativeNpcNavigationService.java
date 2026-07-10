@@ -31,6 +31,7 @@ public final class NativeNpcNavigationService {
     private static final double ARRIVAL_HORIZONTAL_SQUARED = 0.8 * 0.8;
     private static final double ARRIVAL_VERTICAL = 1.5;
     private static final int REPATH_TICKS = 40;
+    private static final int STUCK_TICKS = 5 * 20;
 
     private final Plugin plugin;
     private final NamespacedKey navigatorKey;
@@ -65,21 +66,27 @@ public final class NativeNpcNavigationService {
 
         NavigationState state = states.computeIfAbsent(instance.getId(), ignored -> new NavigationState());
         boolean changed = !sameTarget(state.target, target) || state.walkingSpeed != walkingSpeed;
-        updateProgress(state, current);
-        if (changed || !navigator.getPathfinder().hasPath() || state.stationaryTicks >= REPATH_TICKS) {
-            if (changed || state.retryTicks <= 0 || state.stationaryTicks >= REPATH_TICKS) {
+        if (changed) {
+            state.target = target.clone();
+            state.walkingSpeed = walkingSpeed;
+            state.lastLocation = current.clone();
+            state.stationaryTicks = 0;
+            requestPath(navigator, target, walkingSpeed);
+            state.retryTicks = REPATH_TICKS;
+        } else {
+            updateProgress(state, current);
+            if (state.retryTicks <= 0
+                && (!navigator.getPathfinder().hasPath() || state.stationaryTicks >= REPATH_TICKS)) {
                 requestPath(navigator, target, walkingSpeed);
-                state.target = target.clone();
-                state.walkingSpeed = walkingSpeed;
                 state.retryTicks = REPATH_TICKS;
-                state.stationaryTicks = 0;
             }
         }
         if (state.retryTicks > 0) {
             state.retryTicks--;
         }
+        boolean stuck = state.stationaryTicks >= STUCK_TICKS;
         return new NavigationUpdate(
-            navigator.getPathfinder().hasPath() ? NavigationStatus.MOVING : NavigationStatus.STALLED,
+            !stuck && navigator.getPathfinder().hasPath() ? NavigationStatus.MOVING : NavigationStatus.STALLED,
             current
         );
     }

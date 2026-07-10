@@ -116,7 +116,8 @@ public final class RouteMovementService {
             target,
             movement.walkingSpeed()
         );
-        if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED) {
+        if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED
+            || status == NativeNpcNavigationService.NavigationStatus.STALLED) {
             int nextIndex = (progress.targetIndex() + 1) % progress.orderedPoints().size();
             progressByInstance.put(instance.getId(), progress.withTargetIndex(nextIndex));
         }
