@@ -6,7 +6,10 @@ import dev.easynpc.dialog.DialogService;
 import dev.easynpc.input.ChatInputService;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcInstance;
+import dev.easynpc.model.MovementProfile;
+import dev.easynpc.model.NpcRoute;
 import dev.easynpc.repository.NpcDefinitionRepository;
+import dev.easynpc.repository.RouteRepository;
 import dev.easynpc.runtime.NpcInstanceRegistry;
 import dev.easynpc.util.SkinTextureUtil;
 import net.kyori.adventure.text.Component;
@@ -48,6 +51,7 @@ public final class GuiService implements Listener {
     );
 
     private final NpcDefinitionRepository definitionRepository;
+    private final RouteRepository routeRepository;
     private final NpcInstanceRegistry instanceRegistry;
     private final ChatInputService chatInputService;
     private final DialogService dialogService;
@@ -55,11 +59,13 @@ public final class GuiService implements Listener {
 
     public GuiService(
         NpcDefinitionRepository definitionRepository,
+        RouteRepository routeRepository,
         NpcInstanceRegistry instanceRegistry,
         ChatInputService chatInputService,
         DialogService dialogService
     ) {
         this.definitionRepository = definitionRepository;
+        this.routeRepository = routeRepository;
         this.instanceRegistry = instanceRegistry;
         this.chatInputService = chatInputService;
         this.dialogService = dialogService;
@@ -144,6 +150,14 @@ public final class GuiService implements Listener {
             ChatColor.GRAY + "" + instances + " spawned instance(s)",
             ChatColor.YELLOW + "Teleport to or remove copies"
         )));
+        String assignedRouteKey = definition.getMovementProfile().routeKey();
+        String routeName = assignedRouteKey == null ? "None" : routeRepository.find(assignedRouteKey)
+            .map(NpcRoute::getDisplayName)
+            .orElse("Missing route");
+        inventory.setItem(20, item(Material.RAIL, "Walking Route", List.of(
+            ChatColor.GRAY + "Assigned: " + ChatColor.WHITE + routeName,
+            ChatColor.YELLOW + "Click to assign or clear a route"
+        )));
         inventory.setItem(22, item(Material.SUNFLOWER, "Refresh Instances", List.of(
             ChatColor.GRAY + "Re-applies name, skin, and equipment",
             ChatColor.YELLOW + "Click to refresh all copies"
@@ -196,6 +210,41 @@ public final class GuiService implements Listener {
         )));
         inventory.setItem(14, item(Material.BOOK, "Current Dialog", previewLines(definition)));
         inventory.setItem(22, item(Material.ARROW, "Back", List.of()));
+        player.openInventory(inventory);
+    }
+
+    public void openRouteAssignment(Player player, NpcDefinition definition, int requestedPage) {
+        List<NpcRoute> routes = new ArrayList<>(routeRepository.findAll());
+        int pages = Math.max(1, (routes.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int page = Math.max(0, Math.min(requestedPage, pages - 1));
+        Inventory inventory = Bukkit.createInventory(new RouteAssignmentHolder(definition.getKey(), page), 54,
+            Component.text("Route: " + definition.getDisplayName()));
+        int from = page * PAGE_SIZE;
+        int to = Math.min(from + PAGE_SIZE, routes.size());
+        for (int index = from; index < to; index++) {
+            NpcRoute route = routes.get(index);
+            boolean selected = route.getKey().equals(definition.getMovementProfile().routeKey());
+            inventory.setItem(index - from, item(selected ? Material.POWERED_RAIL : Material.RAIL, route.getDisplayName(), List.of(
+                ChatColor.DARK_GRAY + "Key: " + route.getKey(),
+                ChatColor.GRAY + "Key points: " + ChatColor.WHITE + route.getPoints().size(),
+                selected ? ChatColor.GREEN + "Currently assigned" : ChatColor.YELLOW + "Click to assign"
+            )));
+        }
+        if (routes.isEmpty()) {
+            inventory.setItem(22, item(Material.GRAY_DYE, "No Routes", List.of(
+                ChatColor.GRAY + "Create one with /eznpc routes"
+            )));
+        }
+        if (page > 0) {
+            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+        }
+        inventory.setItem(48, item(Material.ARROW, "Back to Preset", List.of()));
+        inventory.setItem(49, item(Material.BARRIER, "Clear Route", List.of(
+            ChatColor.GRAY + "Stops this NPC preset from walking"
+        )));
+        if (page + 1 < pages) {
+            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        }
         player.openInventory(inventory);
     }
 
@@ -253,6 +302,8 @@ public final class GuiService implements Listener {
             handleEquipmentClick(event, player, equipmentHolder.key());
         } else if (holder instanceof InstancesHolder instancesHolder) {
             handleInstancesClick(event, player, instancesHolder);
+        } else if (holder instanceof RouteAssignmentHolder routeHolder) {
+            handleRouteAssignmentClick(event, player, routeHolder);
         } else if (holder instanceof ConfirmationHolder confirmationHolder) {
             handleConfirmationClick(event, player, confirmationHolder);
         }
@@ -391,6 +442,7 @@ public final class GuiService implements Listener {
                 openEditor(player, definition);
             }
             case 16 -> openInstances(player, definition, 0);
+            case 20 -> openRouteAssignment(player, definition, 0);
             case 22 -> {
                 instanceRegistry.refreshDefinition(definition);
                 player.sendMessage(Component.text("Refreshed " + instanceRegistry.findByDefinition(definition).size() + " instance(s)."));
@@ -497,6 +549,41 @@ public final class GuiService implements Listener {
         }
     }
 
+    private void handleRouteAssignmentClick(InventoryClickEvent event, Player player, RouteAssignmentHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
+        NpcDefinition definition = definitionRepository.find(holder.definitionKey()).orElse(null);
+        if (definition == null) {
+            player.closeInventory();
+            return;
+        }
+        switch (event.getRawSlot()) {
+            case 45 -> openRouteAssignment(player, definition, holder.page() - 1);
+            case 48 -> openEditor(player, definition);
+            case 49 -> {
+                definition.setMovementProfile(MovementProfile.disabled());
+                saveRefresh(definition);
+                player.sendMessage(Component.text("Walking route cleared."));
+                openEditor(player, definition);
+            }
+            case 53 -> openRouteAssignment(player, definition, holder.page() + 1);
+            default -> {
+                List<NpcRoute> routes = new ArrayList<>(routeRepository.findAll());
+                int index = holder.page() * PAGE_SIZE + event.getRawSlot();
+                if (event.getRawSlot() >= PAGE_SIZE || index < 0 || index >= routes.size()) {
+                    return;
+                }
+                NpcRoute route = routes.get(index);
+                definition.setMovementProfile(MovementProfile.assigned(route.getKey()));
+                saveRefresh(definition);
+                player.sendMessage(Component.text("Assigned route '" + route.getDisplayName() + "'."));
+                openEditor(player, definition);
+            }
+        }
+    }
+
     private void handleConfirmationClick(InventoryClickEvent event, Player player, ConfirmationHolder holder) {
         event.setCancelled(true);
         if (!isTopInventoryClick(event)) {
@@ -571,6 +658,7 @@ public final class GuiService implements Listener {
             || holder instanceof EditorHolder
             || holder instanceof DialogHolder
             || holder instanceof InstancesHolder
+            || holder instanceof RouteAssignmentHolder
             || holder instanceof ConfirmationHolder;
     }
 
@@ -667,6 +755,13 @@ public final class GuiService implements Listener {
     }
 
     private record InstancesHolder(String key, int page) implements InventoryHolder {
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
+    private record RouteAssignmentHolder(String definitionKey, int page) implements InventoryHolder {
         @Override
         public Inventory getInventory() {
             return null;

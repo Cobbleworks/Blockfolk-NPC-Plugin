@@ -79,6 +79,7 @@ public final class NpcDefinitionRepository {
         configuration.set("dialog.seconds-per-line", definition.getSecondsPerDialogLine());
         configuration.set("combat.enabled", definition.getCombatProfile().enabled());
         configuration.set("movement.enabled", definition.getMovementProfile().enabled());
+        configuration.set("movement.route", definition.getMovementProfile().routeKey());
         try {
             configuration.save(file);
         } catch (IOException exception) {
@@ -113,7 +114,10 @@ public final class NpcDefinitionRepository {
         definition.setDialogLines(configuration.getStringList("dialog.lines"));
         definition.setSecondsPerDialogLine(configuration.getInt("dialog.seconds-per-line", 3));
         definition.setCombatProfile(new CombatProfile(configuration.getBoolean("combat.enabled", false)));
-        definition.setMovementProfile(new MovementProfile(configuration.getBoolean("movement.enabled", false)));
+        definition.setMovementProfile(new MovementProfile(
+            configuration.getBoolean("movement.enabled", false),
+            configuration.getString("movement.route")
+        ));
         return definition;
     }
 

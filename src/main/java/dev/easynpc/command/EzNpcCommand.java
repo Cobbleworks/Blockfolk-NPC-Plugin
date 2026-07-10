@@ -1,6 +1,7 @@
 package dev.easynpc.command;
 
 import dev.easynpc.gui.GuiService;
+import dev.easynpc.gui.RouteGuiService;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.repository.NpcDefinitionRepository;
 import dev.easynpc.runtime.NpcInstanceRegistry;
@@ -20,11 +21,18 @@ public final class EzNpcCommand implements CommandExecutor, TabCompleter {
     private final NpcDefinitionRepository definitionRepository;
     private final NpcInstanceRegistry instanceRegistry;
     private final GuiService guiService;
+    private final RouteGuiService routeGuiService;
 
-    public EzNpcCommand(NpcDefinitionRepository definitionRepository, NpcInstanceRegistry instanceRegistry, GuiService guiService) {
+    public EzNpcCommand(
+        NpcDefinitionRepository definitionRepository,
+        NpcInstanceRegistry instanceRegistry,
+        GuiService guiService,
+        RouteGuiService routeGuiService
+    ) {
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.guiService = guiService;
+        this.routeGuiService = routeGuiService;
     }
 
     @Override
@@ -39,6 +47,10 @@ public final class EzNpcCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 0) {
             guiService.openMain(player);
+            return true;
+        }
+        if (args.length == 1 && args[0].equalsIgnoreCase("routes")) {
+            routeGuiService.openRoutes(player);
             return true;
         }
         if (args.length >= 2 && args[0].equalsIgnoreCase("create")) {
@@ -68,7 +80,7 @@ public final class EzNpcCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(Component.text("Spawned NPC copy of " + definition.getDisplayName() + "."));
             return true;
         }
-        player.sendMessage(Component.text("Usage: /eznpc [create <name>|<name> spawn]"));
+        player.sendMessage(Component.text("Usage: /eznpc [routes|create <name>|<name> spawn]"));
         return true;
     }
 
@@ -80,10 +92,13 @@ public final class EzNpcCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) {
             List<String> suggestions = new ArrayList<>();
             suggestions.add("create");
+            suggestions.add("routes");
             definitionRepository.findAll().forEach(definition -> suggestions.add(definition.getKey()));
             return filter(suggestions, args[0]);
         }
-        if (args.length == 2 && !args[0].equalsIgnoreCase("create")) {
+        if (args.length == 2
+            && !args[0].equalsIgnoreCase("create")
+            && !args[0].equalsIgnoreCase("routes")) {
             return filter(List.of("spawn"), args[1]);
         }
         return List.of();

@@ -2,6 +2,7 @@ package dev.easynpc.runtime;
 
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcInstance;
+import org.bukkit.Location;
 
 public interface NpcRenderer {
     void start();
@@ -13,4 +14,6 @@ public interface NpcRenderer {
     void destroy(NpcInstance instance);
 
     void refresh(NpcInstance instance, NpcDefinition definition);
+
+    boolean move(NpcInstance instance, Location location);
 }

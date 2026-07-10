@@ -100,6 +100,18 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         applyDefinition(mannequin, instance, definition);
     }
 
+    @Override
+    public boolean move(NpcInstance instance, Location location) {
+        Mannequin mannequin = findEntity(instance);
+        if (mannequin == null || !mannequin.teleport(location)) {
+            return false;
+        }
+        mannequin.setRotation(location.getYaw(), location.getPitch());
+        mannequin.setBodyYaw(location.getYaw());
+        instance.setLocation(location);
+        return true;
+    }
+
     private Mannequin findEntity(NpcInstance instance) {
         UUID entityUuid = entityIdsByInstance.get(instance.getId());
         Location location = instance.getLocation();
