@@ -4,10 +4,18 @@ import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
 import dev.easynpc.dialog.DialogService;
 import dev.easynpc.input.ChatInputService;
+import dev.easynpc.model.AggressionLevel;
+import dev.easynpc.model.CombatProfile;
+import dev.easynpc.model.LootTier;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcInstance;
+import dev.easynpc.model.NpcRoute;
+import dev.easynpc.model.WalkingSpeed;
 import dev.easynpc.repository.NpcDefinitionRepository;
+import dev.easynpc.repository.RouteRepository;
 import dev.easynpc.runtime.NpcInstanceRegistry;
+import dev.easynpc.util.ResolvedSkin;
+import dev.easynpc.util.SkinResolver;
 import dev.easynpc.util.SkinTextureUtil;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -17,8 +25,8 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.inventory.InventoryAction;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -29,40 +37,57 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.plugin.Plugin;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 public final class GuiService implements Listener {
     private static final int PAGE_SIZE = 45;
     private static final Set<Integer> INVENTORY_EDIT_SLOTS = Set.of(
-        0, 1, 2, 3, 4, 5, 6, 7, 8,
-        9, 10, 11, 12, 13, 14, 15, 16, 17,
-        18, 19, 20, 21, 22, 23, 24, 25, 26,
-        27, 28, 29, 30, 31, 32, 33, 34, 35,
+        1, 2, 3, 4, 5, 6, 7, 8,
+        10, 11, 12, 13, 14, 15, 16, 17,
+        19, 20, 21, 22, 23, 24, 25, 26,
+        28, 29, 30, 31, 32, 33, 34, 35,
         45, 46, 47, 48, 50, 51
     );
 
+    private final Plugin plugin;
     private final NpcDefinitionRepository definitionRepository;
+    private final RouteRepository routeRepository;
     private final NpcInstanceRegistry instanceRegistry;
     private final ChatInputService chatInputService;
     private final DialogService dialogService;
+    private final SkinResolver skinResolver;
+    private final Consumer<Player> routeGuiOpener;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
+    private final Map<String, String> pendingSkinUrls = new HashMap<>();
 
     public GuiService(
+        Plugin plugin,
         NpcDefinitionRepository definitionRepository,
+        RouteRepository routeRepository,
         NpcInstanceRegistry instanceRegistry,
         ChatInputService chatInputService,
-        DialogService dialogService
+        DialogService dialogService,
+        SkinResolver skinResolver,
+        Consumer<Player> routeGuiOpener
     ) {
+        this.plugin = plugin;
         this.definitionRepository = definitionRepository;
+        this.routeRepository = routeRepository;
         this.instanceRegistry = instanceRegistry;
         this.chatInputService = chatInputService;
         this.dialogService = dialogService;
+        this.skinResolver = skinResolver;
+        this.routeGuiOpener = routeGuiOpener;
     }
 
     public void openMain(Player player) {
@@ -86,8 +111,12 @@ public final class GuiService implements Listener {
                 ChatColor.YELLOW + "Click to manage"
             )));
         }
+        inventory.setItem(45, item(Material.MAP, "Manage Routes", List.of(
+            ChatColor.GRAY + "Create and edit NPC walking routes",
+            ChatColor.YELLOW + "Click to open route setup"
+        )));
         if (page > 0) {
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of(ChatColor.GRAY + "Page " + page + " of " + pages)));
+            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of(ChatColor.GRAY + "Page " + page + " of " + pages)));
         }
         inventory.setItem(49, item(Material.NETHER_STAR, "EasyNPC Overview", List.of(
             ChatColor.GRAY + "Presets: " + ChatColor.WHITE + definitions.size(),
@@ -123,7 +152,7 @@ public final class GuiService implements Listener {
             ChatColor.YELLOW + "Click to set a URL or texture hash",
             ChatColor.DARK_GRAY + "Enter 'default' to clear it"
         )));
-        inventory.setItem(12, item(Material.COMPASS, "Preset Spawnpoint", List.of(
+        inventory.setItem(12, item(Material.RED_BED, "Preset Spawnpoint", List.of(
             ChatColor.GRAY + formatLocation(definition.getSpawnpoint()),
             ChatColor.YELLOW + "Click to use your current location"
         )));
@@ -144,15 +173,36 @@ public final class GuiService implements Listener {
             ChatColor.GRAY + "" + instances + " spawned instance(s)",
             ChatColor.YELLOW + "Teleport to or remove copies"
         )));
+        String assignedRouteKey = definition.getMovementProfile().routeKey();
+        String routeName = assignedRouteKey == null ? "None" : routeRepository.find(assignedRouteKey)
+            .map(NpcRoute::getDisplayName)
+            .orElse("Missing route");
+        inventory.setItem(20, item(Material.RAIL, "Walking Route", List.of(
+            ChatColor.GRAY + "Assigned: " + ChatColor.WHITE + routeName,
+            ChatColor.YELLOW + "Click to assign or clear a route"
+        )));
+        WalkingSpeed walkingSpeed = definition.getMovementProfile().walkingSpeed();
+        inventory.setItem(21, item(Material.FEATHER, "Walking Speed", List.of(
+            ChatColor.GRAY + "Current: " + ChatColor.WHITE + walkingSpeed.displayName(),
+            ChatColor.GRAY + "" + walkingSpeed.blocksPerSecond() + " blocks/second",
+            ChatColor.YELLOW + "Click to cycle to " + walkingSpeed.next().displayName()
+        )));
         inventory.setItem(22, item(Material.SUNFLOWER, "Refresh Instances", List.of(
             ChatColor.GRAY + "Re-applies name, skin, and equipment",
             ChatColor.YELLOW + "Click to refresh all copies"
         )));
+        CombatProfile combat = definition.getCombatProfile();
+        inventory.setItem(23, item(Material.IRON_SWORD, "Fighting", List.of(
+            ChatColor.GRAY + "Health: " + ChatColor.WHITE + healthLabel(combat),
+            ChatColor.GRAY + "Respawn: " + ChatColor.WHITE + respawnLabel(combat),
+            ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.aggressionLevel().displayName(),
+            ChatColor.YELLOW + "Click to configure combat"
+        )));
         inventory.setItem(24, item(Material.TNT, "Delete Preset", List.of(
             ChatColor.RED + "Deletes this preset and all its copies",
-            ChatColor.YELLOW + "Click for confirmation"
+            ChatColor.YELLOW + "Shift-click for confirmation"
         )));
-        inventory.setItem(31, item(Material.ARROW, "Back to Presets", List.of()));
+        inventory.setItem(31, item(Material.BARRIER, "Back to Presets", List.of()));
         player.openInventory(inventory);
     }
 
@@ -161,7 +211,14 @@ public final class GuiService implements Listener {
             Component.text("Equipment: " + definition.getDisplayName()));
         ItemStack[] contents = definition.getInventoryContents();
         for (int index = 0; index < contents.length; index++) {
-            inventory.setItem(index, contents[index]);
+            if (!LootTier.isRowStarterSlot(index)) {
+                inventory.setItem(index, contents[index]);
+            }
+        }
+        for (LootTier tier : LootTier.values()) {
+            inventory.setItem(tier.rowStarterSlot(), item(tier.icon(), tier.displayName(), List.of(
+                ChatColor.GRAY + "" + tier.dropChancePercent() + "% chance per item slot"
+            )));
         }
         inventory.setItem(36, label("Helmet", Material.CHAINMAIL_HELMET));
         inventory.setItem(37, label("Chestplate", Material.CHAINMAIL_CHESTPLATE));
@@ -169,7 +226,10 @@ public final class GuiService implements Listener {
         inventory.setItem(39, label("Boots", Material.CHAINMAIL_BOOTS));
         inventory.setItem(41, label("Main Hand", Material.IRON_SWORD));
         inventory.setItem(42, label("Off Hand", Material.SHIELD));
-        inventory.setItem(44, label("NPC inventory above", Material.CHEST));
+        inventory.setItem(44, item(Material.CHEST, "NPC loot above", List.of(
+            ChatColor.GRAY + "Each filled slot rolls independently",
+            ChatColor.GRAY + "Equipment is stored below"
+        )));
         ItemStack[] armor = definition.getArmorContents();
         inventory.setItem(45, armor[3]);
         inventory.setItem(46, armor[2]);
@@ -195,7 +255,92 @@ public final class GuiService implements Listener {
             ChatColor.YELLOW + "Click to change"
         )));
         inventory.setItem(14, item(Material.BOOK, "Current Dialog", previewLines(definition)));
-        inventory.setItem(22, item(Material.ARROW, "Back", List.of()));
+        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
+        player.openInventory(inventory);
+    }
+
+    public void openFightingEditor(Player player, NpcDefinition definition) {
+        CombatProfile combat = definition.getCombatProfile();
+        Inventory inventory = Bukkit.createInventory(new FightingHolder(definition.getKey()), 27,
+            Component.text("Fighting: " + definition.getDisplayName()));
+        inventory.setItem(1, item(Material.RED_DYE, "- " + CombatProfile.HEALTH_STEP + " Health", List.of(
+            ChatColor.GRAY + "Current: " + ChatColor.WHITE + healthLabel(combat),
+            ChatColor.YELLOW + "Click to decrease max health"
+        )));
+        inventory.setItem(10, item(combat.invulnerable() ? Material.TOTEM_OF_UNDYING : Material.GOLDEN_APPLE,
+            "Max Health: " + healthLabel(combat), List.of(
+                combat.invulnerable()
+                    ? ChatColor.GREEN + "This NPC cannot be damaged"
+                    : ChatColor.GRAY + "The NPC is removed when killed",
+                ChatColor.DARK_GRAY + "Set health to 0 for invulnerability"
+            )));
+        inventory.setItem(19, item(Material.LIME_DYE, "+ " + CombatProfile.HEALTH_STEP + " Health", List.of(
+            ChatColor.GRAY + "Current: " + ChatColor.WHITE + healthLabel(combat),
+            ChatColor.YELLOW + "Click to increase max health"
+        )));
+        inventory.setItem(3, item(Material.RED_DYE, "- " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds", List.of(
+            ChatColor.GRAY + "Current: " + ChatColor.WHITE + respawnLabel(combat),
+            ChatColor.YELLOW + "Click to decrease respawn time"
+        )));
+        inventory.setItem(12, item(combat.respawnSeconds() == 0 ? Material.BARRIER : Material.CLOCK,
+            "Respawn Time: " + respawnLabel(combat), List.of(
+                combat.respawnSeconds() == 0
+                    ? ChatColor.GRAY + "Killed NPCs will not respawn"
+                    : ChatColor.GREEN + "Respawns at the preset spawn point",
+                definition.getSpawnpoint() == null
+                    ? ChatColor.RED + "A preset spawn point is required"
+                    : ChatColor.DARK_GRAY + "Preset spawn point is configured"
+            )));
+        inventory.setItem(21, item(Material.LIME_DYE, "+ " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds", List.of(
+            ChatColor.GRAY + "Current: " + ChatColor.WHITE + respawnLabel(combat),
+            ChatColor.YELLOW + "Click to increase respawn time"
+        )));
+        inventory.setItem(5, item(aggressionMaterial(combat.aggressionLevel()), "Aggression", List.of(
+            ChatColor.GRAY + "Current: " + ChatColor.WHITE + combat.aggressionLevel().displayName(),
+            aggressionDescription(combat.aggressionLevel()),
+            ChatColor.YELLOW + "Click to cycle aggression level"
+        )));
+        inventory.setItem(14, item(Material.WRITABLE_BOOK, "Combat Shoutout", List.of(
+            ChatColor.GRAY + (combat.shoutout() == null ? "No shoutout configured" : combat.shoutout()),
+            ChatColor.YELLOW + "Click to enter a custom shoutout",
+            ChatColor.DARK_GRAY + "Enter 'clear' to remove it"
+        )));
+        inventory.setItem(23, item(Material.BARRIER, "Back", List.of()));
+        player.openInventory(inventory);
+    }
+
+    public void openRouteAssignment(Player player, NpcDefinition definition, int requestedPage) {
+        List<NpcRoute> routes = new ArrayList<>(routeRepository.findAll());
+        int pages = Math.max(1, (routes.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int page = Math.max(0, Math.min(requestedPage, pages - 1));
+        Inventory inventory = Bukkit.createInventory(new RouteAssignmentHolder(definition.getKey(), page), 54,
+            Component.text("Route: " + definition.getDisplayName()));
+        int from = page * PAGE_SIZE;
+        int to = Math.min(from + PAGE_SIZE, routes.size());
+        for (int index = from; index < to; index++) {
+            NpcRoute route = routes.get(index);
+            boolean selected = route.getKey().equals(definition.getMovementProfile().routeKey());
+            inventory.setItem(index - from, item(selected ? Material.POWERED_RAIL : Material.RAIL, route.getDisplayName(), List.of(
+                ChatColor.DARK_GRAY + "Key: " + route.getKey(),
+                ChatColor.GRAY + "Key points: " + ChatColor.WHITE + route.getPoints().size(),
+                selected ? ChatColor.GREEN + "Currently assigned" : ChatColor.YELLOW + "Click to assign"
+            )));
+        }
+        if (routes.isEmpty()) {
+            inventory.setItem(22, item(Material.GRAY_DYE, "No Routes", List.of(
+                ChatColor.GRAY + "Create one with /eznpc routes"
+            )));
+        }
+        if (page > 0) {
+            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+        }
+        inventory.setItem(48, item(Material.BARRIER, "Back to Preset", List.of()));
+        inventory.setItem(49, item(Material.BARRIER, "Clear Route", List.of(
+            ChatColor.GRAY + "Stops this NPC preset from walking"
+        )));
+        if (page + 1 < pages) {
+            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        }
         player.openInventory(inventory);
     }
 
@@ -213,6 +358,7 @@ public final class GuiService implements Listener {
                 ChatColor.DARK_GRAY + instance.getId().toString(),
                 ChatColor.GRAY + formatLocation(instance.getLocation()),
                 ChatColor.YELLOW + "Left-click: teleport to instance",
+                ChatColor.AQUA + "Middle-click: move instance to you",
                 ChatColor.RED + "Right-click: remove instance"
             )));
         }
@@ -230,7 +376,7 @@ public final class GuiService implements Listener {
                 ChatColor.YELLOW + "Click for confirmation"
             )));
         }
-        inventory.setItem(49, item(Material.ARROW, "Back to Preset", List.of()));
+        inventory.setItem(49, item(Material.BARRIER, "Back to Preset", List.of()));
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
@@ -249,10 +395,14 @@ public final class GuiService implements Listener {
             handleEditorClick(event, player, editorHolder.key());
         } else if (holder instanceof DialogHolder dialogHolder) {
             handleDialogClick(event, player, dialogHolder.key());
+        } else if (holder instanceof FightingHolder fightingHolder) {
+            handleFightingClick(event, player, fightingHolder.key());
         } else if (holder instanceof EquipmentHolder equipmentHolder) {
             handleEquipmentClick(event, player, equipmentHolder.key());
         } else if (holder instanceof InstancesHolder instancesHolder) {
             handleInstancesClick(event, player, instancesHolder);
+        } else if (holder instanceof RouteAssignmentHolder routeHolder) {
+            handleRouteAssignmentClick(event, player, routeHolder);
         } else if (holder instanceof ConfirmationHolder confirmationHolder) {
             handleConfirmationClick(event, player, confirmationHolder);
         }
@@ -277,13 +427,6 @@ public final class GuiService implements Listener {
             return;
         }
         dialogService.startChat(event.getPlayer(), instance, definition);
-    }
-
-    @EventHandler
-    public void onNpcDamage(EntityDamageByEntityEvent event) {
-        if (instanceRegistry.findByEntityId(event.getEntity().getEntityId()).isPresent()) {
-            event.setCancelled(true);
-        }
     }
 
     @EventHandler
@@ -319,6 +462,10 @@ public final class GuiService implements Listener {
             return;
         }
         if (event.getRawSlot() == 45) {
+            routeGuiOpener.accept(player);
+            return;
+        }
+        if (event.getRawSlot() == 47) {
             openMain(player, page - 1);
             return;
         }
@@ -363,16 +510,9 @@ public final class GuiService implements Listener {
                 saveRefresh(definition);
                 openEditor(player, definition);
             });
-            case 11 -> chatInputService.request(player, "Enter a Minecraft texture URL/hash, or 'default':", value -> {
-                try {
-                    definition.setSkinUrl(SkinTextureUtil.normalizeTextureUrl(value));
-                    saveRefresh(definition);
-                    player.sendMessage(Component.text(definition.getSkinUrl() == null ? "Using the default skin." : "Skin updated."));
-                } catch (IllegalArgumentException exception) {
-                    player.sendMessage(Component.text(exception.getMessage()));
-                }
-                openEditor(player, definition);
-            });
+            case 11 -> chatInputService.request(player,
+                "Enter an HTTPS skin image URL, texture hash, or 'default':",
+                value -> updateSkin(player, definition, value));
             case 12 -> {
                 definition.setSpawnpoint(player.getLocation());
                 definitionRepository.save(definition);
@@ -391,12 +531,25 @@ public final class GuiService implements Listener {
                 openEditor(player, definition);
             }
             case 16 -> openInstances(player, definition, 0);
+            case 20 -> openRouteAssignment(player, definition, 0);
+            case 21 -> {
+                WalkingSpeed speed = definition.getMovementProfile().walkingSpeed().next();
+                definition.setMovementProfile(definition.getMovementProfile().withWalkingSpeed(speed));
+                definitionRepository.save(definition);
+                player.sendMessage(Component.text("Walking speed set to " + speed.displayName() + "."));
+                openEditor(player, definition);
+            }
             case 22 -> {
                 instanceRegistry.refreshDefinition(definition);
                 player.sendMessage(Component.text("Refreshed " + instanceRegistry.findByDefinition(definition).size() + " instance(s)."));
                 openEditor(player, definition);
             }
-            case 24 -> openConfirmation(player, definition, ConfirmationAction.DELETE_DEFINITION);
+            case 23 -> openFightingEditor(player, definition);
+            case 24 -> {
+                if (event.isShiftClick()) {
+                    openConfirmation(player, definition, ConfirmationAction.DELETE_DEFINITION);
+                }
+            }
             case 31 -> openMain(player);
             default -> {
             }
@@ -432,6 +585,63 @@ public final class GuiService implements Listener {
                 openDialogEditor(player, definition);
             });
             case 22 -> openEditor(player, definition);
+            default -> {
+            }
+        }
+    }
+
+    private void handleFightingClick(InventoryClickEvent event, Player player, String key) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
+        NpcDefinition definition = definitionRepository.find(key).orElse(null);
+        if (definition == null) {
+            player.closeInventory();
+            return;
+        }
+        CombatProfile combat = definition.getCombatProfile();
+        switch (event.getRawSlot()) {
+            case 1 -> {
+                definition.setCombatProfile(combat.withMaxHealth(combat.maxHealth() - CombatProfile.HEALTH_STEP));
+                saveRefresh(definition);
+                openFightingEditor(player, definition);
+            }
+            case 19 -> {
+                definition.setCombatProfile(combat.withMaxHealth(combat.maxHealth() + CombatProfile.HEALTH_STEP));
+                saveRefresh(definition);
+                openFightingEditor(player, definition);
+            }
+            case 3 -> {
+                definition.setCombatProfile(combat.withRespawnSeconds(
+                    combat.respawnSeconds() - CombatProfile.RESPAWN_STEP_SECONDS
+                ));
+                definitionRepository.save(definition);
+                openFightingEditor(player, definition);
+            }
+            case 21 -> {
+                int respawnSeconds = (int) Math.min(
+                    Integer.MAX_VALUE,
+                    (long) combat.respawnSeconds() + CombatProfile.RESPAWN_STEP_SECONDS
+                );
+                definition.setCombatProfile(combat.withRespawnSeconds(respawnSeconds));
+                definitionRepository.save(definition);
+                openFightingEditor(player, definition);
+            }
+            case 5 -> {
+                AggressionLevel aggression = combat.aggressionLevel().next();
+                definition.setCombatProfile(combat.withAggressionLevel(aggression));
+                definitionRepository.save(definition);
+                player.sendMessage(Component.text("Aggression set to " + aggression.displayName() + "."));
+                openFightingEditor(player, definition);
+            }
+            case 14 -> chatInputService.request(player, "Enter a combat shoutout, or 'clear':", value -> {
+                String shoutout = value.trim().equalsIgnoreCase("clear") ? null : value;
+                definition.setCombatProfile(definition.getCombatProfile().withShoutout(shoutout));
+                definitionRepository.save(definition);
+                openFightingEditor(player, definition);
+            });
+            case 23 -> openEditor(player, definition);
             default -> {
             }
         }
@@ -484,7 +694,15 @@ public final class GuiService implements Listener {
                     return;
                 }
                 NpcInstance instance = instances.get(index);
-                if (event.isRightClick()) {
+                if (event.getClick() == ClickType.MIDDLE) {
+                    Location destination = player.getLocation();
+                    if (instanceRegistry.move(instance, destination)) {
+                        player.sendMessage(Component.text("Moved NPC instance to your location."));
+                    } else {
+                        player.sendMessage(Component.text("Could not move the NPC instance."));
+                    }
+                    openInstances(player, definition, holder.page());
+                } else if (event.isRightClick()) {
                     instanceRegistry.deleteInstance(instance.getId());
                     player.sendMessage(Component.text("Removed NPC instance."));
                     openInstances(player, definition, holder.page());
@@ -493,6 +711,41 @@ public final class GuiService implements Listener {
                     player.teleport(instance.getLocation());
                     player.sendMessage(Component.text("Teleported to NPC instance."));
                 }
+            }
+        }
+    }
+
+    private void handleRouteAssignmentClick(InventoryClickEvent event, Player player, RouteAssignmentHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
+        NpcDefinition definition = definitionRepository.find(holder.definitionKey()).orElse(null);
+        if (definition == null) {
+            player.closeInventory();
+            return;
+        }
+        switch (event.getRawSlot()) {
+            case 45 -> openRouteAssignment(player, definition, holder.page() - 1);
+            case 48 -> openEditor(player, definition);
+            case 49 -> {
+                definition.setMovementProfile(definition.getMovementProfile().withoutRoute());
+                saveRefresh(definition);
+                player.sendMessage(Component.text("Walking route cleared."));
+                openEditor(player, definition);
+            }
+            case 53 -> openRouteAssignment(player, definition, holder.page() + 1);
+            default -> {
+                List<NpcRoute> routes = new ArrayList<>(routeRepository.findAll());
+                int index = holder.page() * PAGE_SIZE + event.getRawSlot();
+                if (event.getRawSlot() >= PAGE_SIZE || index < 0 || index >= routes.size()) {
+                    return;
+                }
+                NpcRoute route = routes.get(index);
+                definition.setMovementProfile(definition.getMovementProfile().withRoute(route.getKey()));
+                saveRefresh(definition);
+                player.sendMessage(Component.text("Assigned route '" + route.getDisplayName() + "'."));
+                openEditor(player, definition);
             }
         }
     }
@@ -543,7 +796,9 @@ public final class GuiService implements Listener {
     private void readEquipmentEditor(Inventory inventory, NpcDefinition definition) {
         ItemStack[] contents = new ItemStack[36];
         for (int index = 0; index < contents.length; index++) {
-            contents[index] = inventory.getItem(index);
+            if (!LootTier.isRowStarterSlot(index)) {
+                contents[index] = inventory.getItem(index);
+            }
         }
         definition.setInventoryContents(contents);
         definition.setArmorContents(new ItemStack[]{
@@ -561,6 +816,73 @@ public final class GuiService implements Listener {
         instanceRegistry.refreshDefinition(definition);
     }
 
+    private void updateSkin(Player player, NpcDefinition definition, String input) {
+        String normalized;
+        try {
+            normalized = SkinTextureUtil.normalizeTextureUrl(input);
+        } catch (IllegalArgumentException exception) {
+            player.sendMessage(Component.text(exception.getMessage()));
+            openEditor(player, definition);
+            return;
+        }
+
+        if (normalized == null || SkinTextureUtil.isMinecraftTextureUrl(normalized)) {
+            pendingSkinUrls.remove(definition.getKey());
+            definition.setSkinUrl(normalized);
+            saveRefresh(definition);
+            player.sendMessage(Component.text(normalized == null ? "Using the default skin." : "Skin updated."));
+            openEditor(player, definition);
+            return;
+        }
+
+        player.sendMessage(Component.text("Processing the skin image. This can take a few seconds..."));
+        pendingSkinUrls.put(definition.getKey(), normalized);
+        skinResolver.resolve(normalized).whenComplete((resolved, error) ->
+            Bukkit.getScheduler().runTask(plugin,
+                () -> finishSkinUpdate(player, definition.getKey(), normalized, resolved, error))
+        );
+    }
+
+    private void finishSkinUpdate(
+        Player player,
+        String definitionKey,
+        String requestedUrl,
+        ResolvedSkin resolved,
+        Throwable error
+    ) {
+        if (!requestedUrl.equals(pendingSkinUrls.get(definitionKey))) {
+            return;
+        }
+        pendingSkinUrls.remove(definitionKey);
+        NpcDefinition current = definitionRepository.find(definitionKey).orElse(null);
+        if (error != null) {
+            if (player.isOnline()) {
+                player.sendMessage(Component.text(rootMessage(error)));
+                if (current != null) {
+                    openEditor(player, current);
+                }
+            }
+            return;
+        }
+        if (current == null) {
+            return;
+        }
+        current.setResolvedSkin(resolved.url(), resolved.textureValue(), resolved.textureSignature());
+        saveRefresh(current);
+        if (player.isOnline()) {
+            player.sendMessage(Component.text("Skin processed and updated."));
+            openEditor(player, current);
+        }
+    }
+
+    private String rootMessage(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getMessage() == null ? "Could not process that skin image." : current.getMessage();
+    }
+
     private boolean isTopInventoryClick(InventoryClickEvent event) {
         int slot = event.getRawSlot();
         return slot >= 0 && slot < event.getView().getTopInventory().getSize();
@@ -570,7 +892,9 @@ public final class GuiService implements Listener {
         return holder instanceof MainHolder
             || holder instanceof EditorHolder
             || holder instanceof DialogHolder
+            || holder instanceof FightingHolder
             || holder instanceof InstancesHolder
+            || holder instanceof RouteAssignmentHolder
             || holder instanceof ConfirmationHolder;
     }
 
@@ -582,7 +906,14 @@ public final class GuiService implements Listener {
         try {
             UUID uuid = UUID.nameUUIDFromBytes(definition.getKey().getBytes(StandardCharsets.UTF_8));
             PlayerProfile profile = Bukkit.createProfileExact(uuid, "EasyNPC");
-            profile.setProperty(new ProfileProperty("textures", SkinTextureUtil.toTextureProperty(definition.getSkinUrl())));
+            String texture = definition.getSkinTextureValue();
+            if (texture == null) {
+                texture = SkinTextureUtil.toTextureProperty(definition.getSkinUrl());
+            }
+            String signature = definition.getSkinTextureSignature();
+            profile.setProperty(signature == null
+                ? new ProfileProperty("textures", texture)
+                : new ProfileProperty("textures", texture, signature));
             meta.setPlayerProfile(profile);
             head.setItemMeta(meta);
         } catch (RuntimeException ignored) {
@@ -630,6 +961,32 @@ public final class GuiService implements Listener {
         return hash.length() <= 24 ? hash : hash.substring(0, 24) + "...";
     }
 
+    private String healthLabel(CombatProfile combat) {
+        return combat.invulnerable() ? "Invulnerable (0 HP)" : combat.maxHealth() + " HP";
+    }
+
+    private String respawnLabel(CombatProfile combat) {
+        return combat.respawnSeconds() == 0 ? "Disabled (0 seconds)" : combat.respawnSeconds() + " seconds";
+    }
+
+    private Material aggressionMaterial(AggressionLevel aggressionLevel) {
+        return switch (aggressionLevel) {
+            case NONE -> Material.GRAY_DYE;
+            case FLEE -> Material.RABBIT_FOOT;
+            case FIGHT_BACK -> Material.SHIELD;
+            case FIGHTS_ON_SIGHT -> Material.DIAMOND_SWORD;
+        };
+    }
+
+    private String aggressionDescription(AggressionLevel aggressionLevel) {
+        return switch (aggressionLevel) {
+            case NONE -> ChatColor.GRAY + "Never reacts to nearby entities";
+            case FLEE -> ChatColor.GRAY + "Runs away after taking entity damage";
+            case FIGHT_BACK -> ChatColor.GRAY + "Attacks an entity that damages it";
+            case FIGHTS_ON_SIGHT -> ChatColor.GRAY + "Attacks nearby players, mobs, and NPCs";
+        };
+    }
+
     private String formatLocation(Location location) {
         if (location == null || location.getWorld() == null) {
             return "Not set";
@@ -659,6 +1016,13 @@ public final class GuiService implements Listener {
         }
     }
 
+    private record FightingHolder(String key) implements InventoryHolder {
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
     private record EquipmentHolder(String key) implements InventoryHolder {
         @Override
         public Inventory getInventory() {
@@ -667,6 +1031,13 @@ public final class GuiService implements Listener {
     }
 
     private record InstancesHolder(String key, int page) implements InventoryHolder {
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
+    private record RouteAssignmentHolder(String definitionKey, int page) implements InventoryHolder {
         @Override
         public Inventory getInventory() {
             return null;

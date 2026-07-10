@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,8 +47,26 @@ class SkinTextureUtilTest {
     }
 
     @Test
-    void rejectsNonMinecraftTextureHosts() {
+    void acceptsHttpsSkinImageUrls() {
+        String url = "https://www.minecraftskins.com/uploads/skins/2026/07/09/rotten-hearts-24183095.png?v960";
+
+        assertEquals(url, SkinTextureUtil.normalizeTextureUrl(url));
+    }
+
+    @Test
+    void identifiesMinecraftTextureUrls() {
+        assertTrue(SkinTextureUtil.isMinecraftTextureUrl(
+            "https://textures.minecraft.net/texture/0123456789abcdef0123456789abcdef"));
+    }
+
+    @Test
+    void doesNotTreatExternalImagesAsMinecraftTextures() {
+        assertFalse(SkinTextureUtil.isMinecraftTextureUrl("https://s.namemc.com/i/34743edd854210eb.png"));
+    }
+
+    @Test
+    void rejectsInsecureSkinImageUrls() {
         assertThrows(IllegalArgumentException.class, () ->
-            SkinTextureUtil.normalizeTextureUrl("https://example.test/texture/0123456789abcdef0123456789abcdef"));
+            SkinTextureUtil.normalizeTextureUrl("http://example.test/skin.png"));
     }
 }

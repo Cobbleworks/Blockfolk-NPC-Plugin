@@ -6,7 +6,7 @@ author: EasyNPC
 commands:
   eznpc:
     description: Opens and controls EasyNPC.
-    usage: /eznpc [create <name>|<name> spawn]
+    usage: /eznpc [routes|create <name>|<name> spawn]
     permission: eznpc.admin
 permissions:
   eznpc.admin:

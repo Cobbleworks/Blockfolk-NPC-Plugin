@@ -12,6 +12,8 @@ public final class NpcDefinition {
     private final String key;
     private String displayName;
     private String skinUrl;
+    private String skinTextureValue;
+    private String skinTextureSignature;
     private Location spawnpoint;
     private ItemStack[] inventoryContents;
     private ItemStack[] armorContents;
@@ -63,6 +65,24 @@ public final class NpcDefinition {
 
     public void setSkinUrl(String skinUrl) {
         this.skinUrl = skinUrl == null || skinUrl.isBlank() ? null : skinUrl.trim();
+        this.skinTextureValue = null;
+        this.skinTextureSignature = null;
+    }
+
+    public String getSkinTextureValue() {
+        return skinTextureValue;
+    }
+
+    public String getSkinTextureSignature() {
+        return skinTextureSignature;
+    }
+
+    public void setResolvedSkin(String skinUrl, String textureValue, String textureSignature) {
+        this.skinUrl = skinUrl == null || skinUrl.isBlank() ? null : skinUrl.trim();
+        this.skinTextureValue = textureValue == null || textureValue.isBlank() ? null : textureValue.trim();
+        this.skinTextureSignature = textureSignature == null || textureSignature.isBlank()
+            ? null
+            : textureSignature.trim();
     }
 
     public Location getSpawnpoint() {

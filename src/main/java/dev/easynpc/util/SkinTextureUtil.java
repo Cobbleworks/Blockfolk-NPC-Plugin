@@ -34,19 +34,41 @@ public final class SkinTextureUtil {
             URI uri = new URI(value);
             String path = uri.getPath();
             if (!"https".equalsIgnoreCase(uri.getScheme())
-                || !"textures.minecraft.net".equalsIgnoreCase(uri.getHost())
+                || uri.getHost() == null
+                || uri.getUserInfo() != null
                 || path == null
-                || !path.matches("/texture/[0-9a-fA-F]{32,128}")) {
+                || path.isBlank()) {
                 throw invalidTextureUrl();
             }
-            return TEXTURE_PREFIX + path.substring("/texture/".length()).toLowerCase(Locale.ROOT);
+            if ("textures.minecraft.net".equalsIgnoreCase(uri.getHost())) {
+                if (!path.matches("/texture/[0-9a-fA-F]{32,128}")) {
+                    throw invalidTextureUrl();
+                }
+                return TEXTURE_PREFIX + path.substring("/texture/".length()).toLowerCase(Locale.ROOT);
+            }
+            return uri.toASCIIString();
         } catch (URISyntaxException exception) {
             throw invalidTextureUrl();
         }
     }
 
+    public static boolean isMinecraftTextureUrl(String value) {
+        if (value == null) {
+            return false;
+        }
+        try {
+            URI uri = new URI(value);
+            return "https".equalsIgnoreCase(uri.getScheme())
+                && "textures.minecraft.net".equalsIgnoreCase(uri.getHost())
+                && uri.getPath() != null
+                && uri.getPath().matches("/texture/[0-9a-fA-F]{32,128}");
+        } catch (URISyntaxException exception) {
+            return false;
+        }
+    }
+
     private static IllegalArgumentException invalidTextureUrl() {
-        return new IllegalArgumentException("Use a textures.minecraft.net/texture URL, a texture hash, or 'default'.");
+        return new IllegalArgumentException("Use an HTTPS skin image URL, a Minecraft texture hash, or 'default'.");
     }
 
     private static String escapeJson(String value) {

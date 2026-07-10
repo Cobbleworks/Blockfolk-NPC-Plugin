@@ -1,8 +1,10 @@
 package dev.easynpc.repository;
 
 import dev.easynpc.model.CombatProfile;
+import dev.easynpc.model.AggressionLevel;
 import dev.easynpc.model.MovementProfile;
 import dev.easynpc.model.NpcDefinition;
+import dev.easynpc.model.WalkingSpeed;
 import dev.easynpc.util.LocationCodec;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -17,6 +19,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.logging.Level;
@@ -68,6 +71,8 @@ public final class NpcDefinitionRepository {
         configuration.set("key", definition.getKey());
         configuration.set("display-name", definition.getDisplayName());
         configuration.set("skin-url", definition.getSkinUrl());
+        configuration.set("skin-texture-value", definition.getSkinTextureValue());
+        configuration.set("skin-texture-signature", definition.getSkinTextureSignature());
         if (definition.getSpawnpoint() != null) {
             LocationCodec.write(configuration.createSection("spawnpoint"), definition.getSpawnpoint());
         }
@@ -77,8 +82,14 @@ public final class NpcDefinitionRepository {
         configuration.set("inventory.off-hand", definition.getOffHand());
         configuration.set("dialog.lines", definition.getDialogLines());
         configuration.set("dialog.seconds-per-line", definition.getSecondsPerDialogLine());
-        configuration.set("combat.enabled", definition.getCombatProfile().enabled());
+        configuration.set("combat.enabled", !definition.getCombatProfile().invulnerable());
+        configuration.set("combat.max-health", definition.getCombatProfile().maxHealth());
+        configuration.set("combat.respawn-seconds", definition.getCombatProfile().respawnSeconds());
+        configuration.set("combat.aggression", definition.getCombatProfile().aggressionLevel().name().toLowerCase(Locale.ROOT));
+        configuration.set("combat.shoutout", definition.getCombatProfile().shoutout());
         configuration.set("movement.enabled", definition.getMovementProfile().enabled());
+        configuration.set("movement.route", definition.getMovementProfile().routeKey());
+        configuration.set("movement.speed", definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
         try {
             configuration.save(file);
         } catch (IOException exception) {
@@ -104,7 +115,11 @@ public final class NpcDefinitionRepository {
         String key = configuration.getString("key", file.getName().replaceFirst("\\.yml$", ""));
         NpcDefinition definition = new NpcDefinition(NpcDefinition.toKey(key));
         definition.setDisplayName(configuration.getString("display-name", definition.getKey()));
-        definition.setSkinUrl(configuration.getString("skin-url"));
+        definition.setResolvedSkin(
+            configuration.getString("skin-url"),
+            configuration.getString("skin-texture-value"),
+            configuration.getString("skin-texture-signature")
+        );
         definition.setSpawnpoint(LocationCodec.read(configuration.getConfigurationSection("spawnpoint")));
         definition.setInventoryContents(readItemArray(configuration, "inventory.contents", 36));
         definition.setArmorContents(readItemArray(configuration, "inventory.armor", 4));
@@ -112,8 +127,18 @@ public final class NpcDefinitionRepository {
         definition.setOffHand(configuration.getItemStack("inventory.off-hand"));
         definition.setDialogLines(configuration.getStringList("dialog.lines"));
         definition.setSecondsPerDialogLine(configuration.getInt("dialog.seconds-per-line", 3));
-        definition.setCombatProfile(new CombatProfile(configuration.getBoolean("combat.enabled", false)));
-        definition.setMovementProfile(new MovementProfile(configuration.getBoolean("movement.enabled", false)));
+        int legacyHealth = configuration.getBoolean("combat.enabled", false) ? 20 : 0;
+        definition.setCombatProfile(new CombatProfile(
+            configuration.getInt("combat.max-health", legacyHealth),
+            configuration.getInt("combat.respawn-seconds", 0),
+            AggressionLevel.fromStored(configuration.getString("combat.aggression")),
+            configuration.getString("combat.shoutout")
+        ));
+        definition.setMovementProfile(new MovementProfile(
+            configuration.getBoolean("movement.enabled", false),
+            configuration.getString("movement.route"),
+            WalkingSpeed.fromStored(configuration.getString("movement.speed"))
+        ));
         return definition;
     }
 

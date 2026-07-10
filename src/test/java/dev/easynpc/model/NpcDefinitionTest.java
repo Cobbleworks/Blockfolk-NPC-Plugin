@@ -6,6 +6,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class NpcDefinitionTest {
     @Test
@@ -32,5 +33,17 @@ class NpcDefinitionTest {
 
         assertEquals(List.of("Hello"), copy);
         assertNotSame(copy, definition.getDialogLines());
+    }
+
+    @Test
+    void changingSkinUrlClearsPreviouslyResolvedTexture() {
+        NpcDefinition definition = NpcDefinition.create("Guard");
+        definition.setResolvedSkin("https://textures.minecraft.net/texture/hash", "value", "signature");
+
+        definition.setSkinUrl("https://example.test/new-skin.png");
+
+        assertEquals("https://example.test/new-skin.png", definition.getSkinUrl());
+        assertNull(definition.getSkinTextureValue());
+        assertNull(definition.getSkinTextureSignature());
     }
 }

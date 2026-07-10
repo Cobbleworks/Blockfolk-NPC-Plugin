@@ -10,6 +10,9 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
@@ -18,6 +21,7 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Level;
 
@@ -50,7 +54,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     public void spawn(NpcInstance instance, NpcDefinition definition) {
         Mannequin existing = findEntity(instance);
         if (existing != null) {
-            applyDefinition(existing, instance, definition);
+            applyDefinition(existing, instance, definition, false);
             return;
         }
 
@@ -71,7 +75,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
                 spawned.setInvulnerable(true);
                 spawned.setSilent(true);
                 spawned.setRemoveWhenFarAway(false);
-                applyDefinition(spawned, instance, definition);
+                applyDefinition(spawned, instance, definition, true);
             });
             entityIdsByInstance.put(instance.getId(), mannequin.getUniqueId());
             instance.setEntityId(mannequin.getEntityId());
@@ -97,7 +101,24 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
             spawn(instance, definition);
             return;
         }
-        applyDefinition(mannequin, instance, definition);
+        applyDefinition(mannequin, instance, definition, false);
+    }
+
+    @Override
+    public boolean move(NpcInstance instance, Location location) {
+        Mannequin mannequin = findEntity(instance);
+        if (mannequin == null || !mannequin.teleport(location)) {
+            return false;
+        }
+        mannequin.setRotation(location.getYaw(), location.getPitch());
+        mannequin.setBodyYaw(location.getYaw());
+        instance.setLocation(location);
+        return true;
+    }
+
+    @Override
+    public Optional<LivingEntity> findLivingEntity(NpcInstance instance) {
+        return Optional.ofNullable(findEntity(instance));
     }
 
     private Mannequin findEntity(NpcInstance instance) {
@@ -134,7 +155,12 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         return found;
     }
 
-    private void applyDefinition(Mannequin mannequin, NpcInstance instance, NpcDefinition definition) {
+    private void applyDefinition(
+        Mannequin mannequin,
+        NpcInstance instance,
+        NpcDefinition definition,
+        boolean healToFull
+    ) {
         mannequin.teleport(instance.getLocation());
         mannequin.setPersistent(true);
         mannequin.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
@@ -145,13 +171,38 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         mannequin.setRotation(instance.getLocation().getYaw(), instance.getLocation().getPitch());
         mannequin.setProfile(createProfile(instance, definition));
         applyEquipment(mannequin.getEquipment(), definition);
+        applyCombatProfile(mannequin, definition, healToFull);
+    }
+
+    private void applyCombatProfile(Mannequin mannequin, NpcDefinition definition, boolean healToFull) {
+        int configuredHealth = definition.getCombatProfile().maxHealth();
+        boolean invulnerable = configuredHealth == 0;
+        mannequin.setInvulnerable(invulnerable);
+
+        AttributeInstance maxHealth = mannequin.getAttribute(Attribute.MAX_HEALTH);
+        if (maxHealth == null) {
+            return;
+        }
+        double previousHealth = mannequin.getHealth();
+        if (!invulnerable) {
+            maxHealth.setBaseValue(configuredHealth);
+            mannequin.setHealth(healToFull ? configuredHealth : Math.min(previousHealth, configuredHealth));
+        } else if (previousHealth <= 0.0) {
+            mannequin.setHealth(maxHealth.getValue());
+        }
     }
 
     private ResolvableProfile createProfile(NpcInstance instance, NpcDefinition definition) {
         PlayerProfile profile = Bukkit.createProfileExact(instance.getId(), profileName(instance));
-        String texture = SkinTextureUtil.toTextureProperty(definition.getSkinUrl());
+        String texture = definition.getSkinTextureValue();
+        if (texture == null) {
+            texture = SkinTextureUtil.toTextureProperty(definition.getSkinUrl());
+        }
         if (texture != null) {
-            profile.setProperty(new ProfileProperty("textures", texture));
+            String signature = definition.getSkinTextureSignature();
+            profile.setProperty(signature == null
+                ? new ProfileProperty("textures", texture)
+                : new ProfileProperty("textures", texture, signature));
         }
         return ResolvableProfile.resolvableProfile(profile);
     }
