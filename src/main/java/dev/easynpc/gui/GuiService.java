@@ -6,8 +6,8 @@ import dev.easynpc.dialog.DialogService;
 import dev.easynpc.input.ChatInputService;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcInstance;
-import dev.easynpc.model.MovementProfile;
 import dev.easynpc.model.NpcRoute;
+import dev.easynpc.model.WalkingSpeed;
 import dev.easynpc.repository.NpcDefinitionRepository;
 import dev.easynpc.repository.RouteRepository;
 import dev.easynpc.runtime.NpcInstanceRegistry;
@@ -157,6 +157,12 @@ public final class GuiService implements Listener {
         inventory.setItem(20, item(Material.RAIL, "Walking Route", List.of(
             ChatColor.GRAY + "Assigned: " + ChatColor.WHITE + routeName,
             ChatColor.YELLOW + "Click to assign or clear a route"
+        )));
+        WalkingSpeed walkingSpeed = definition.getMovementProfile().walkingSpeed();
+        inventory.setItem(21, item(Material.FEATHER, "Walking Speed", List.of(
+            ChatColor.GRAY + "Current: " + ChatColor.WHITE + walkingSpeed.displayName(),
+            ChatColor.GRAY + "" + walkingSpeed.blocksPerSecond() + " blocks/second",
+            ChatColor.YELLOW + "Click to cycle to " + walkingSpeed.next().displayName()
         )));
         inventory.setItem(22, item(Material.SUNFLOWER, "Refresh Instances", List.of(
             ChatColor.GRAY + "Re-applies name, skin, and equipment",
@@ -443,6 +449,13 @@ public final class GuiService implements Listener {
             }
             case 16 -> openInstances(player, definition, 0);
             case 20 -> openRouteAssignment(player, definition, 0);
+            case 21 -> {
+                WalkingSpeed speed = definition.getMovementProfile().walkingSpeed().next();
+                definition.setMovementProfile(definition.getMovementProfile().withWalkingSpeed(speed));
+                definitionRepository.save(definition);
+                player.sendMessage(Component.text("Walking speed set to " + speed.displayName() + "."));
+                openEditor(player, definition);
+            }
             case 22 -> {
                 instanceRegistry.refreshDefinition(definition);
                 player.sendMessage(Component.text("Refreshed " + instanceRegistry.findByDefinition(definition).size() + " instance(s)."));
@@ -563,7 +576,7 @@ public final class GuiService implements Listener {
             case 45 -> openRouteAssignment(player, definition, holder.page() - 1);
             case 48 -> openEditor(player, definition);
             case 49 -> {
-                definition.setMovementProfile(MovementProfile.disabled());
+                definition.setMovementProfile(definition.getMovementProfile().withoutRoute());
                 saveRefresh(definition);
                 player.sendMessage(Component.text("Walking route cleared."));
                 openEditor(player, definition);
@@ -576,7 +589,7 @@ public final class GuiService implements Listener {
                     return;
                 }
                 NpcRoute route = routes.get(index);
-                definition.setMovementProfile(MovementProfile.assigned(route.getKey()));
+                definition.setMovementProfile(definition.getMovementProfile().withRoute(route.getKey()));
                 saveRefresh(definition);
                 player.sendMessage(Component.text("Assigned route '" + route.getDisplayName() + "'."));
                 openEditor(player, definition);

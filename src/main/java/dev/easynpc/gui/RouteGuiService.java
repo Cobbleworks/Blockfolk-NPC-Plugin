@@ -1,7 +1,6 @@
 package dev.easynpc.gui;
 
 import dev.easynpc.input.ChatInputService;
-import dev.easynpc.model.MovementProfile;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcRoute;
 import dev.easynpc.model.RoutePoint;
@@ -282,7 +281,7 @@ public final class RouteGuiService implements Listener {
             if (!route.getKey().equals(definition.getMovementProfile().routeKey())) {
                 continue;
             }
-            definition.setMovementProfile(MovementProfile.disabled());
+            definition.setMovementProfile(definition.getMovementProfile().withoutRoute());
             definitionRepository.save(definition);
             instanceRegistry.refreshDefinition(definition);
             unassigned++;

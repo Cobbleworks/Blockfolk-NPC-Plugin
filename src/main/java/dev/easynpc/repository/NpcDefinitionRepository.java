@@ -3,6 +3,7 @@ package dev.easynpc.repository;
 import dev.easynpc.model.CombatProfile;
 import dev.easynpc.model.MovementProfile;
 import dev.easynpc.model.NpcDefinition;
+import dev.easynpc.model.WalkingSpeed;
 import dev.easynpc.util.LocationCodec;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -17,6 +18,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.logging.Level;
@@ -80,6 +82,7 @@ public final class NpcDefinitionRepository {
         configuration.set("combat.enabled", definition.getCombatProfile().enabled());
         configuration.set("movement.enabled", definition.getMovementProfile().enabled());
         configuration.set("movement.route", definition.getMovementProfile().routeKey());
+        configuration.set("movement.speed", definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
         try {
             configuration.save(file);
         } catch (IOException exception) {
@@ -116,7 +119,8 @@ public final class NpcDefinitionRepository {
         definition.setCombatProfile(new CombatProfile(configuration.getBoolean("combat.enabled", false)));
         definition.setMovementProfile(new MovementProfile(
             configuration.getBoolean("movement.enabled", false),
-            configuration.getString("movement.route")
+            configuration.getString("movement.route"),
+            WalkingSpeed.fromStored(configuration.getString("movement.speed"))
         ));
         return definition;
     }

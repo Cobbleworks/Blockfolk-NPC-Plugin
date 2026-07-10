@@ -102,8 +102,7 @@ public final class RouteMovementService {
         double dy = target.getY() - current.getY();
         double dz = target.getZ() - current.getZ();
         double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        double blocksPerTick = Math.max(0.01,
-            plugin.getConfig().getDouble("route-movement-blocks-per-second", 2.0) / 20.0);
+        double blocksPerTick = movement.walkingSpeed().blocksPerSecond() / 20.0;
         boolean reached = distance <= blocksPerTick;
         Location next = reached ? target.clone() : current.clone().add(
             dx / distance * blocksPerTick,
