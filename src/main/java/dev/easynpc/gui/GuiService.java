@@ -151,7 +151,7 @@ public final class GuiService implements Listener {
             ChatColor.YELLOW + "Click to set a URL or texture hash",
             ChatColor.DARK_GRAY + "Enter 'default' to clear it"
         )));
-        inventory.setItem(12, item(Material.COMPASS, "Preset Spawnpoint", List.of(
+        inventory.setItem(12, item(Material.RED_BED, "Preset Spawnpoint", List.of(
             ChatColor.GRAY + formatLocation(definition.getSpawnpoint()),
             ChatColor.YELLOW + "Click to use your current location"
         )));
@@ -199,9 +199,9 @@ public final class GuiService implements Listener {
         )));
         inventory.setItem(24, item(Material.TNT, "Delete Preset", List.of(
             ChatColor.RED + "Deletes this preset and all its copies",
-            ChatColor.YELLOW + "Click for confirmation"
+            ChatColor.YELLOW + "Shift-click for confirmation"
         )));
-        inventory.setItem(31, item(Material.ARROW, "Back to Presets", List.of()));
+        inventory.setItem(31, item(Material.BARRIER, "Back to Presets", List.of()));
         player.openInventory(inventory);
     }
 
@@ -244,7 +244,7 @@ public final class GuiService implements Listener {
             ChatColor.YELLOW + "Click to change"
         )));
         inventory.setItem(14, item(Material.BOOK, "Current Dialog", previewLines(definition)));
-        inventory.setItem(22, item(Material.ARROW, "Back", List.of()));
+        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
         player.openInventory(inventory);
     }
 
@@ -294,7 +294,7 @@ public final class GuiService implements Listener {
             ChatColor.YELLOW + "Click to enter a custom shoutout",
             ChatColor.DARK_GRAY + "Enter 'clear' to remove it"
         )));
-        inventory.setItem(23, item(Material.ARROW, "Back", List.of()));
+        inventory.setItem(23, item(Material.BARRIER, "Back", List.of()));
         player.openInventory(inventory);
     }
 
@@ -323,7 +323,7 @@ public final class GuiService implements Listener {
         if (page > 0) {
             inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         }
-        inventory.setItem(48, item(Material.ARROW, "Back to Preset", List.of()));
+        inventory.setItem(48, item(Material.BARRIER, "Back to Preset", List.of()));
         inventory.setItem(49, item(Material.BARRIER, "Clear Route", List.of(
             ChatColor.GRAY + "Stops this NPC preset from walking"
         )));
@@ -365,7 +365,7 @@ public final class GuiService implements Listener {
                 ChatColor.YELLOW + "Click for confirmation"
             )));
         }
-        inventory.setItem(49, item(Material.ARROW, "Back to Preset", List.of()));
+        inventory.setItem(49, item(Material.BARRIER, "Back to Preset", List.of()));
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
@@ -534,7 +534,11 @@ public final class GuiService implements Listener {
                 openEditor(player, definition);
             }
             case 23 -> openFightingEditor(player, definition);
-            case 24 -> openConfirmation(player, definition, ConfirmationAction.DELETE_DEFINITION);
+            case 24 -> {
+                if (event.isShiftClick()) {
+                    openConfirmation(player, definition, ConfirmationAction.DELETE_DEFINITION);
+                }
+            }
             case 31 -> openMain(player);
             default -> {
             }
