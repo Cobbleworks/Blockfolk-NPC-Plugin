@@ -23,6 +23,7 @@ import java.util.UUID;
 
 public final class DialogService {
     private static final double MAX_CHAT_DISTANCE_SQUARED = 12.0 * 12.0;
+    private static final double DIALOG_DISPLAY_Y_OFFSET = 2.4;
 
     private final Plugin plugin;
     private final NamespacedKey instanceKey;
@@ -56,7 +57,7 @@ public final class DialogService {
         if (lines.isEmpty() || instance.getLocation().getWorld() == null) {
             return;
         }
-        Location location = instance.getLocation().add(0.0, 2.25, 0.0);
+        Location location = instance.getLocation().add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0);
         TextDisplay display = (TextDisplay) instance.getLocation().getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
         display.text(Component.text(lines.getFirst()));
         display.setBillboard(Display.Billboard.CENTER);
@@ -75,7 +76,7 @@ public final class DialogService {
         }
         DialogRuntime runtime = displays.get(instance.getId());
         if (runtime != null && runtime.display.isValid()) {
-            runtime.display.teleport(location.clone().add(0.0, 2.25, 0.0));
+            runtime.display.teleport(location.clone().add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0));
         }
         for (ChatRuntime chat : chats.values()) {
             if (chat.instanceId.equals(instance.getId())) {
