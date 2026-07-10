@@ -38,7 +38,7 @@ public final class NpcCombatService implements Listener {
     private static final double SIGHT_RANGE = 16.0;
     private static final double MAX_CHASE_RANGE_SQUARED = 32.0 * 32.0;
     private static final double ATTACK_RANGE_SQUARED = 3.0 * 3.0;
-    private static final double SHOUT_RANGE_SQUARED = 24.0 * 24.0;
+    private static final double SHOUT_RANGE_SQUARED = 12.0 * 12.0;
     private static final int ATTACK_COOLDOWN_TICKS = 20;
     private static final int FLEE_TICKS = 8 * 20;
 
