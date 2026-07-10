@@ -11,6 +11,8 @@ import dev.easynpc.runtime.NpcInstanceRegistry;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Color;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
@@ -32,6 +34,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -50,6 +53,7 @@ public final class RouteGuiService implements Listener {
     private final NamespacedKey wandRouteKey;
     private final NamespacedKey wandTokenKey;
     private final Map<UUID, EditSession> editSessions = new HashMap<>();
+    private BukkitTask markerTask;
 
     public RouteGuiService(
         JavaPlugin plugin,
@@ -69,6 +73,13 @@ public final class RouteGuiService implements Listener {
 
     public void openRoutes(Player player) {
         openRoutes(player, 0);
+    }
+
+    public void start() {
+        if (markerTask != null) {
+            markerTask.cancel();
+        }
+        markerTask = Bukkit.getScheduler().runTaskTimer(plugin, this::showRoutePoints, 0L, 10L);
     }
 
     public void openRoutes(Player player, int requestedPage) {
@@ -111,6 +122,10 @@ public final class RouteGuiService implements Listener {
     }
 
     public void stop() {
+        if (markerTask != null) {
+            markerTask.cancel();
+            markerTask = null;
+        }
         for (UUID playerId : List.copyOf(editSessions.keySet())) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
@@ -302,6 +317,7 @@ public final class RouteGuiService implements Listener {
         player.closeInventory();
         player.sendMessage(Component.text("Editing route '" + route.getDisplayName() + "'."));
         player.sendMessage(Component.text("Right-click blocks to add, sneak-right-click to remove, and left-click or drop the shard to finish."));
+        showRoutePoints(player, route);
     }
 
     private ItemStack createWand(NpcRoute route, UUID token) {
@@ -312,6 +328,7 @@ public final class RouteGuiService implements Listener {
             ChatColor.GRAY + "Unique editor: " + token.toString().substring(0, 8),
             ChatColor.YELLOW + "Right-click a block: add point",
             ChatColor.YELLOW + "Sneak-right-click: remove point",
+            ChatColor.LIGHT_PURPLE + "Points stay highlighted while editing",
             ChatColor.GREEN + "Left-click or drop: finish"
         ));
         meta.setEnchantmentGlintOverride(true);
@@ -362,6 +379,28 @@ public final class RouteGuiService implements Listener {
     private boolean isTopInventoryClick(InventoryClickEvent event) {
         int slot = event.getRawSlot();
         return slot >= 0 && slot < event.getView().getTopInventory().getSize();
+    }
+
+    private void showRoutePoints() {
+        for (Map.Entry<UUID, EditSession> entry : editSessions.entrySet()) {
+            Player player = Bukkit.getPlayer(entry.getKey());
+            NpcRoute route = routeRepository.find(entry.getValue().routeKey()).orElse(null);
+            if (player != null && player.isOnline() && route != null) {
+                showRoutePoints(player, route);
+            }
+        }
+    }
+
+    private void showRoutePoints(Player player, NpcRoute route) {
+        Particle.DustOptions dust = new Particle.DustOptions(Color.fromRGB(190, 80, 255), 1.5f);
+        for (RoutePoint point : route.getPoints()) {
+            Location location = point.toWalkingLocation();
+            if (location == null || location.getWorld() != player.getWorld()) {
+                continue;
+            }
+            location.add(0.0, 0.1, 0.0);
+            player.spawnParticle(Particle.DUST, location, 5, 0.22, 0.08, 0.22, 0.0, dust);
+        }
     }
 
     private ItemStack item(Material material, String name, List<String> lore) {

@@ -62,9 +62,26 @@ public final class DialogService {
         display.setBillboard(Display.Billboard.CENTER);
         display.setSeeThrough(false);
         display.setShadowed(true);
+        display.setTeleportDuration(1);
         display.setPersistent(true);
         display.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
         displays.put(instance.getId(), new DialogRuntime(display, lines, definition.getSecondsPerDialogLine()));
+    }
+
+    public void move(NpcInstance instance) {
+        Location location = instance.getLocation();
+        if (location.getWorld() == null) {
+            return;
+        }
+        DialogRuntime runtime = displays.get(instance.getId());
+        if (runtime != null && runtime.display.isValid()) {
+            runtime.display.teleport(location.clone().add(0.0, 2.25, 0.0));
+        }
+        for (ChatRuntime chat : chats.values()) {
+            if (chat.instanceId.equals(instance.getId())) {
+                chat.location = location.clone();
+            }
+        }
     }
 
     public void detach(UUID instanceId) {
@@ -170,7 +187,7 @@ public final class DialogService {
 
     private static final class ChatRuntime {
         private final UUID instanceId;
-        private final Location location;
+        private Location location;
         private final String displayName;
         private final List<String> lines;
         private final int secondsPerLine;

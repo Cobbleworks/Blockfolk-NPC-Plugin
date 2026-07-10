@@ -43,7 +43,7 @@ public final class EasyNpcPlugin extends JavaPlugin {
         chatInputService = new ChatInputService(this, getConfig().getInt("chat-input-timeout-seconds", 60));
         guiService = new GuiService(definitionRepository, routeRepository, instanceRegistry, chatInputService, dialogService);
         routeGuiService = new RouteGuiService(this, routeRepository, definitionRepository, instanceRegistry, chatInputService);
-        routeMovementService = new RouteMovementService(this, definitionRepository, routeRepository, instanceRegistry, npcRenderer);
+        routeMovementService = new RouteMovementService(this, definitionRepository, routeRepository, instanceRegistry);
 
         routeRepository.loadAll();
         definitionRepository.loadAll();
@@ -65,6 +65,7 @@ public final class EasyNpcPlugin extends JavaPlugin {
 
         npcRenderer.start();
         dialogService.start();
+        routeGuiService.start();
         instanceRegistry.spawnAll();
         routeMovementService.start();
         getLogger().info("EasyNPC enabled with " + definitionRepository.findAll().size() + " NPC definitions.");

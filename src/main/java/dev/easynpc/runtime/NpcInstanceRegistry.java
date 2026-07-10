@@ -96,6 +96,14 @@ public final class NpcInstanceRegistry {
         return instances.values();
     }
 
+    public boolean move(NpcInstance instance, Location location) {
+        if (!instances.containsKey(instance.getId()) || !renderer.move(instance, location)) {
+            return false;
+        }
+        dialogService.move(instance);
+        return true;
+    }
+
     public Optional<NpcInstance> findByEntityId(int entityId) {
         return instances.values().stream()
             .filter(instance -> instance.getEntityId() == entityId)

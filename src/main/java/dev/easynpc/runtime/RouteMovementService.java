@@ -24,7 +24,6 @@ public final class RouteMovementService {
     private final NpcDefinitionRepository definitionRepository;
     private final RouteRepository routeRepository;
     private final NpcInstanceRegistry instanceRegistry;
-    private final NpcRenderer renderer;
     private final Map<UUID, Progress> progressByInstance = new HashMap<>();
     private BukkitTask task;
 
@@ -32,14 +31,12 @@ public final class RouteMovementService {
         JavaPlugin plugin,
         NpcDefinitionRepository definitionRepository,
         RouteRepository routeRepository,
-        NpcInstanceRegistry instanceRegistry,
-        NpcRenderer renderer
+        NpcInstanceRegistry instanceRegistry
     ) {
         this.plugin = plugin;
         this.definitionRepository = definitionRepository;
         this.routeRepository = routeRepository;
         this.instanceRegistry = instanceRegistry;
-        this.renderer = renderer;
     }
 
     public void start() {
@@ -117,7 +114,7 @@ public final class RouteMovementService {
             next.setYaw((float) Math.toDegrees(Math.atan2(-dx, dz)));
             next.setPitch(0.0f);
         }
-        if (renderer.move(instance, next) && reached) {
+        if (instanceRegistry.move(instance, next) && reached) {
             int nextIndex = (progress.targetIndex() + 1) % progress.orderedPoints().size();
             progressByInstance.put(instance.getId(), progress.withTargetIndex(nextIndex));
         }
