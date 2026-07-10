@@ -21,6 +21,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
@@ -85,6 +86,22 @@ public final class NpcCombatService implements Listener {
 
     public boolean isEngaged(NpcInstance instance) {
         return states.containsKey(instance.getId());
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onNpcSuffocation(EntityDamageEvent event) {
+        if (event.getCause() != EntityDamageEvent.DamageCause.SUFFOCATION) {
+            return;
+        }
+        if (instanceRegistry.findByEntityId(event.getEntity().getEntityId()).isPresent()) {
+            // Movement is driven by a deliberately tiny, invisible pathfinder so
+            // it cannot steal player attacks from the visible mannequin. Near a
+            // wall, that navigator can briefly place the full-sized mannequin's
+            // bounding box inside a block. This is a renderer/navigation artifact,
+            // not meaningful combat damage, so suppress only the resulting
+            // suffocation tick while preserving every other damage source.
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
