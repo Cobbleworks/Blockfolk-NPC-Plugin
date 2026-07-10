@@ -4,13 +4,12 @@ import dev.easynpc.command.EzNpcCommand;
 import dev.easynpc.dialog.DialogService;
 import dev.easynpc.gui.GuiService;
 import dev.easynpc.input.ChatInputService;
-import dev.easynpc.listener.PlayerLifecycleListener;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.repository.NpcDefinitionRepository;
 import dev.easynpc.repository.NpcInstanceRepository;
 import dev.easynpc.runtime.NpcInstanceRegistry;
 import dev.easynpc.runtime.NpcRenderer;
-import dev.easynpc.runtime.ProtocolLibNpcRenderer;
+import dev.easynpc.runtime.PaperMannequinNpcRenderer;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -31,11 +30,11 @@ public final class EasyNpcPlugin extends JavaPlugin {
 
         definitionRepository = new NpcDefinitionRepository(this);
         instanceRepository = new NpcInstanceRepository(this);
-        npcRenderer = new ProtocolLibNpcRenderer(this, getConfig().getDouble("render-distance", 64.0));
+        npcRenderer = new PaperMannequinNpcRenderer(this);
         dialogService = new DialogService(this);
         instanceRegistry = new NpcInstanceRegistry(definitionRepository, instanceRepository, npcRenderer, dialogService);
         chatInputService = new ChatInputService(this, getConfig().getInt("chat-input-timeout-seconds", 60));
-        guiService = new GuiService(this, definitionRepository, instanceRegistry, chatInputService);
+        guiService = new GuiService(definitionRepository, instanceRegistry, chatInputService);
 
         definitionRepository.loadAll();
         instanceRegistry.loadPersistedInstances();
@@ -52,11 +51,10 @@ public final class EasyNpcPlugin extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(guiService, this);
         getServer().getPluginManager().registerEvents(chatInputService, this);
-        getServer().getPluginManager().registerEvents(new PlayerLifecycleListener(this, instanceRegistry), this);
 
         npcRenderer.start();
         dialogService.start();
-        instanceRegistry.spawnAllOnline();
+        instanceRegistry.spawnAll();
         getLogger().info("EasyNPC enabled with " + definitionRepository.findAll().size() + " NPC definitions.");
     }
 

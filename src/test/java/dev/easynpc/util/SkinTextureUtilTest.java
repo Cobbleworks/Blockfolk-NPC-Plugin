@@ -7,6 +7,7 @@ import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SkinTextureUtilTest {
@@ -30,5 +31,23 @@ class SkinTextureUtilTest {
     @Test
     void blankSkinUrlReturnsNull() {
         assertNull(SkinTextureUtil.toTextureProperty(" "));
+    }
+
+    @Test
+    void normalizesTextureHashes() {
+        String hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+        assertEquals("https://textures.minecraft.net/texture/" + hash, SkinTextureUtil.normalizeTextureUrl(hash));
+    }
+
+    @Test
+    void defaultClearsTexture() {
+        assertNull(SkinTextureUtil.normalizeTextureUrl("default"));
+    }
+
+    @Test
+    void rejectsNonMinecraftTextureHosts() {
+        assertThrows(IllegalArgumentException.class, () ->
+            SkinTextureUtil.normalizeTextureUrl("https://example.test/texture/0123456789abcdef0123456789abcdef"));
     }
 }

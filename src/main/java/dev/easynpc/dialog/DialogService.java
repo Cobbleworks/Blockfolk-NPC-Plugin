@@ -5,11 +5,13 @@ import dev.easynpc.model.NpcInstance;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.HashMap;
@@ -19,11 +21,13 @@ import java.util.UUID;
 
 public final class DialogService {
     private final Plugin plugin;
+    private final NamespacedKey instanceKey;
     private final Map<UUID, DialogRuntime> displays = new HashMap<>();
     private BukkitTask task;
 
     public DialogService(Plugin plugin) {
         this.plugin = plugin;
+        this.instanceKey = new NamespacedKey(plugin, "dialog-instance-id");
     }
 
     public void start() {
@@ -52,7 +56,8 @@ public final class DialogService {
         display.setBillboard(Display.Billboard.CENTER);
         display.setSeeThrough(false);
         display.setShadowed(true);
-        display.setPersistent(false);
+        display.setPersistent(true);
+        display.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
         displays.put(instance.getId(), new DialogRuntime(display, lines, definition.getSecondsPerDialogLine()));
     }
 
@@ -60,6 +65,19 @@ public final class DialogService {
         DialogRuntime runtime = displays.remove(instanceId);
         if (runtime != null) {
             runtime.display.remove();
+        }
+        removeTaggedDisplays(instanceId);
+    }
+
+    private void removeTaggedDisplays(UUID instanceId) {
+        String expectedId = instanceId.toString();
+        for (org.bukkit.World world : Bukkit.getWorlds()) {
+            for (TextDisplay display : world.getEntitiesByClass(TextDisplay.class)) {
+                String taggedId = display.getPersistentDataContainer().get(instanceKey, PersistentDataType.STRING);
+                if (expectedId.equals(taggedId)) {
+                    display.remove();
+                }
+            }
         }
     }
 

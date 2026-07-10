@@ -5,9 +5,7 @@ import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcInstance;
 import dev.easynpc.repository.NpcDefinitionRepository;
 import dev.easynpc.repository.NpcInstanceRepository;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.entity.Player;
 
 import java.util.Collection;
 import java.util.Iterator;
@@ -52,15 +50,9 @@ public final class NpcInstanceRegistry {
         return instance;
     }
 
-    public void spawnAllOnline() {
+    public void spawnAll() {
         for (NpcInstance instance : instances.values()) {
             definitionRepository.find(instance.getDefinitionKey()).ifPresent(definition -> spawnInstance(instance, definition));
-        }
-    }
-
-    public void renderFor(Player player) {
-        for (NpcInstance instance : instances.values()) {
-            definitionRepository.find(instance.getDefinitionKey()).ifPresent(definition -> renderer.spawnFor(player, instance, definition));
         }
     }
 
@@ -81,7 +73,7 @@ public final class NpcInstanceRegistry {
             if (!instance.getDefinitionKey().equals(definition.getKey())) {
                 continue;
             }
-            renderer.destroyForAll(instance);
+            renderer.destroy(instance);
             dialogService.detach(instance.getId());
             iterator.remove();
             removed++;
@@ -95,7 +87,7 @@ public final class NpcInstanceRegistry {
     public void saveAndDespawnAll() {
         instanceRepository.saveAll(instances.values());
         for (NpcInstance instance : instances.values()) {
-            renderer.destroyForAll(instance);
+            renderer.destroy(instance);
             dialogService.detach(instance.getId());
         }
     }
@@ -110,10 +102,25 @@ public final class NpcInstanceRegistry {
             .findFirst();
     }
 
-    private void spawnInstance(NpcInstance instance, NpcDefinition definition) {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            renderer.spawnFor(player, instance, definition);
+    public Collection<NpcInstance> findByDefinition(NpcDefinition definition) {
+        return instances.values().stream()
+            .filter(instance -> instance.getDefinitionKey().equals(definition.getKey()))
+            .toList();
+    }
+
+    public boolean deleteInstance(UUID instanceId) {
+        NpcInstance instance = instances.remove(instanceId);
+        if (instance == null) {
+            return false;
         }
+        renderer.destroy(instance);
+        dialogService.detach(instance.getId());
+        instanceRepository.saveAll(instances.values());
+        return true;
+    }
+
+    private void spawnInstance(NpcInstance instance, NpcDefinition definition) {
+        renderer.spawn(instance, definition);
         dialogService.attach(instance, definition);
     }
 }

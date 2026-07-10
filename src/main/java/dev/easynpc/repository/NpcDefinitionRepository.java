@@ -87,6 +87,18 @@ public final class NpcDefinitionRepository {
         return definition;
     }
 
+    public boolean delete(NpcDefinition definition) {
+        if (definitions.remove(definition.getKey()) == null) {
+            return false;
+        }
+        File file = new File(definitionsFolder, definition.getKey() + ".yml");
+        if (file.exists() && !file.delete()) {
+            definitions.put(definition.getKey(), definition);
+            throw new IllegalStateException("Could not delete NPC definition " + definition.getKey());
+        }
+        return true;
+    }
+
     private NpcDefinition load(File file) {
         YamlConfiguration configuration = YamlConfiguration.loadConfiguration(file);
         String key = configuration.getString("key", file.getName().replaceFirst("\\.yml$", ""));
