@@ -71,6 +71,8 @@ public final class NpcDefinitionRepository {
         configuration.set("key", definition.getKey());
         configuration.set("display-name", definition.getDisplayName());
         configuration.set("skin-url", definition.getSkinUrl());
+        configuration.set("skin-texture-value", definition.getSkinTextureValue());
+        configuration.set("skin-texture-signature", definition.getSkinTextureSignature());
         if (definition.getSpawnpoint() != null) {
             LocationCodec.write(configuration.createSection("spawnpoint"), definition.getSpawnpoint());
         }
@@ -112,7 +114,11 @@ public final class NpcDefinitionRepository {
         String key = configuration.getString("key", file.getName().replaceFirst("\\.yml$", ""));
         NpcDefinition definition = new NpcDefinition(NpcDefinition.toKey(key));
         definition.setDisplayName(configuration.getString("display-name", definition.getKey()));
-        definition.setSkinUrl(configuration.getString("skin-url"));
+        definition.setResolvedSkin(
+            configuration.getString("skin-url"),
+            configuration.getString("skin-texture-value"),
+            configuration.getString("skin-texture-signature")
+        );
         definition.setSpawnpoint(LocationCodec.read(configuration.getConfigurationSection("spawnpoint")));
         definition.setInventoryContents(readItemArray(configuration, "inventory.contents", 36));
         definition.setArmorContents(readItemArray(configuration, "inventory.armor", 4));

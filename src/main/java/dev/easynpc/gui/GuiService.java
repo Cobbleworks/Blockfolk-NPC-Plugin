@@ -13,6 +13,8 @@ import dev.easynpc.model.WalkingSpeed;
 import dev.easynpc.repository.NpcDefinitionRepository;
 import dev.easynpc.repository.RouteRepository;
 import dev.easynpc.runtime.NpcInstanceRegistry;
+import dev.easynpc.util.ResolvedSkin;
+import dev.easynpc.util.SkinResolver;
 import dev.easynpc.util.SkinTextureUtil;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -34,11 +36,14 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.plugin.Plugin;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -53,27 +58,34 @@ public final class GuiService implements Listener {
         45, 46, 47, 48, 50, 51
     );
 
+    private final Plugin plugin;
     private final NpcDefinitionRepository definitionRepository;
     private final RouteRepository routeRepository;
     private final NpcInstanceRegistry instanceRegistry;
     private final ChatInputService chatInputService;
     private final DialogService dialogService;
+    private final SkinResolver skinResolver;
     private final Consumer<Player> routeGuiOpener;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
+    private final Map<String, String> pendingSkinUrls = new HashMap<>();
 
     public GuiService(
+        Plugin plugin,
         NpcDefinitionRepository definitionRepository,
         RouteRepository routeRepository,
         NpcInstanceRegistry instanceRegistry,
         ChatInputService chatInputService,
         DialogService dialogService,
+        SkinResolver skinResolver,
         Consumer<Player> routeGuiOpener
     ) {
+        this.plugin = plugin;
         this.definitionRepository = definitionRepository;
         this.routeRepository = routeRepository;
         this.instanceRegistry = instanceRegistry;
         this.chatInputService = chatInputService;
         this.dialogService = dialogService;
+        this.skinResolver = skinResolver;
         this.routeGuiOpener = routeGuiOpener;
     }
 
@@ -473,16 +485,9 @@ public final class GuiService implements Listener {
                 saveRefresh(definition);
                 openEditor(player, definition);
             });
-            case 11 -> chatInputService.request(player, "Enter an HTTPS skin image URL, texture hash, or 'default':", value -> {
-                try {
-                    definition.setSkinUrl(SkinTextureUtil.normalizeTextureUrl(value));
-                    saveRefresh(definition);
-                    player.sendMessage(Component.text(definition.getSkinUrl() == null ? "Using the default skin." : "Skin updated."));
-                } catch (IllegalArgumentException exception) {
-                    player.sendMessage(Component.text(exception.getMessage()));
-                }
-                openEditor(player, definition);
-            });
+            case 11 -> chatInputService.request(player,
+                "Enter an HTTPS skin image URL, texture hash, or 'default':",
+                value -> updateSkin(player, definition, value));
             case 12 -> {
                 definition.setSpawnpoint(player.getLocation());
                 definitionRepository.save(definition);
@@ -764,6 +769,73 @@ public final class GuiService implements Listener {
         instanceRegistry.refreshDefinition(definition);
     }
 
+    private void updateSkin(Player player, NpcDefinition definition, String input) {
+        String normalized;
+        try {
+            normalized = SkinTextureUtil.normalizeTextureUrl(input);
+        } catch (IllegalArgumentException exception) {
+            player.sendMessage(Component.text(exception.getMessage()));
+            openEditor(player, definition);
+            return;
+        }
+
+        if (normalized == null || SkinTextureUtil.isMinecraftTextureUrl(normalized)) {
+            pendingSkinUrls.remove(definition.getKey());
+            definition.setSkinUrl(normalized);
+            saveRefresh(definition);
+            player.sendMessage(Component.text(normalized == null ? "Using the default skin." : "Skin updated."));
+            openEditor(player, definition);
+            return;
+        }
+
+        player.sendMessage(Component.text("Processing the skin image. This can take a few seconds..."));
+        pendingSkinUrls.put(definition.getKey(), normalized);
+        skinResolver.resolve(normalized).whenComplete((resolved, error) ->
+            Bukkit.getScheduler().runTask(plugin,
+                () -> finishSkinUpdate(player, definition.getKey(), normalized, resolved, error))
+        );
+    }
+
+    private void finishSkinUpdate(
+        Player player,
+        String definitionKey,
+        String requestedUrl,
+        ResolvedSkin resolved,
+        Throwable error
+    ) {
+        if (!requestedUrl.equals(pendingSkinUrls.get(definitionKey))) {
+            return;
+        }
+        pendingSkinUrls.remove(definitionKey);
+        NpcDefinition current = definitionRepository.find(definitionKey).orElse(null);
+        if (error != null) {
+            if (player.isOnline()) {
+                player.sendMessage(Component.text(rootMessage(error)));
+                if (current != null) {
+                    openEditor(player, current);
+                }
+            }
+            return;
+        }
+        if (current == null) {
+            return;
+        }
+        current.setResolvedSkin(resolved.url(), resolved.textureValue(), resolved.textureSignature());
+        saveRefresh(current);
+        if (player.isOnline()) {
+            player.sendMessage(Component.text("Skin processed and updated."));
+            openEditor(player, current);
+        }
+    }
+
+    private String rootMessage(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getMessage() == null ? "Could not process that skin image." : current.getMessage();
+    }
+
     private boolean isTopInventoryClick(InventoryClickEvent event) {
         int slot = event.getRawSlot();
         return slot >= 0 && slot < event.getView().getTopInventory().getSize();
@@ -787,7 +859,14 @@ public final class GuiService implements Listener {
         try {
             UUID uuid = UUID.nameUUIDFromBytes(definition.getKey().getBytes(StandardCharsets.UTF_8));
             PlayerProfile profile = Bukkit.createProfileExact(uuid, "EasyNPC");
-            profile.setProperty(new ProfileProperty("textures", SkinTextureUtil.toTextureProperty(definition.getSkinUrl())));
+            String texture = definition.getSkinTextureValue();
+            if (texture == null) {
+                texture = SkinTextureUtil.toTextureProperty(definition.getSkinUrl());
+            }
+            String signature = definition.getSkinTextureSignature();
+            profile.setProperty(signature == null
+                ? new ProfileProperty("textures", texture)
+                : new ProfileProperty("textures", texture, signature));
             meta.setPlayerProfile(profile);
             head.setItemMeta(meta);
         } catch (RuntimeException ignored) {

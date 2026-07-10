@@ -194,9 +194,15 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
 
     private ResolvableProfile createProfile(NpcInstance instance, NpcDefinition definition) {
         PlayerProfile profile = Bukkit.createProfileExact(instance.getId(), profileName(instance));
-        String texture = SkinTextureUtil.toTextureProperty(definition.getSkinUrl());
+        String texture = definition.getSkinTextureValue();
+        if (texture == null) {
+            texture = SkinTextureUtil.toTextureProperty(definition.getSkinUrl());
+        }
         if (texture != null) {
-            profile.setProperty(new ProfileProperty("textures", texture));
+            String signature = definition.getSkinTextureSignature();
+            profile.setProperty(signature == null
+                ? new ProfileProperty("textures", texture)
+                : new ProfileProperty("textures", texture, signature));
         }
         return ResolvableProfile.resolvableProfile(profile);
     }

@@ -52,6 +52,21 @@ public final class SkinTextureUtil {
         }
     }
 
+    public static boolean isMinecraftTextureUrl(String value) {
+        if (value == null) {
+            return false;
+        }
+        try {
+            URI uri = new URI(value);
+            return "https".equalsIgnoreCase(uri.getScheme())
+                && "textures.minecraft.net".equalsIgnoreCase(uri.getHost())
+                && uri.getPath() != null
+                && uri.getPath().matches("/texture/[0-9a-fA-F]{32,128}");
+        } catch (URISyntaxException exception) {
+            return false;
+        }
+    }
+
     private static IllegalArgumentException invalidTextureUrl() {
         return new IllegalArgumentException("Use an HTTPS skin image URL, a Minecraft texture hash, or 'default'.");
     }
