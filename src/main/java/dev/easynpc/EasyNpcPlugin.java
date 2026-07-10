@@ -52,8 +52,15 @@ public final class EasyNpcPlugin extends JavaPlugin {
             dialogService
         );
         chatInputService = new ChatInputService(this, getConfig().getInt("chat-input-timeout-seconds", 60));
-        guiService = new GuiService(definitionRepository, routeRepository, instanceRegistry, chatInputService, dialogService);
         routeGuiService = new RouteGuiService(this, routeRepository, definitionRepository, instanceRegistry, chatInputService);
+        guiService = new GuiService(
+            definitionRepository,
+            routeRepository,
+            instanceRegistry,
+            chatInputService,
+            dialogService,
+            routeGuiService::openRoutes
+        );
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
         routeMovementService = new RouteMovementService(
             this,

@@ -107,7 +107,9 @@ public final class NpcInstanceRegistry {
         if (!instances.containsKey(instance.getId()) || !renderer.move(instance, location)) {
             return false;
         }
+        navigationService.stop(instance);
         dialogService.move(instance);
+        instanceRepository.saveAll(instances.values());
         return true;
     }
 

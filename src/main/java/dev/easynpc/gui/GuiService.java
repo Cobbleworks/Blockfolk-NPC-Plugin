@@ -23,6 +23,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryAction;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -40,6 +41,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 public final class GuiService implements Listener {
     private static final int PAGE_SIZE = 45;
@@ -56,6 +58,7 @@ public final class GuiService implements Listener {
     private final NpcInstanceRegistry instanceRegistry;
     private final ChatInputService chatInputService;
     private final DialogService dialogService;
+    private final Consumer<Player> routeGuiOpener;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
 
     public GuiService(
@@ -63,13 +66,15 @@ public final class GuiService implements Listener {
         RouteRepository routeRepository,
         NpcInstanceRegistry instanceRegistry,
         ChatInputService chatInputService,
-        DialogService dialogService
+        DialogService dialogService,
+        Consumer<Player> routeGuiOpener
     ) {
         this.definitionRepository = definitionRepository;
         this.routeRepository = routeRepository;
         this.instanceRegistry = instanceRegistry;
         this.chatInputService = chatInputService;
         this.dialogService = dialogService;
+        this.routeGuiOpener = routeGuiOpener;
     }
 
     public void openMain(Player player) {
@@ -93,8 +98,12 @@ public final class GuiService implements Listener {
                 ChatColor.YELLOW + "Click to manage"
             )));
         }
+        inventory.setItem(45, item(Material.MAP, "Manage Routes", List.of(
+            ChatColor.GRAY + "Create and edit NPC walking routes",
+            ChatColor.YELLOW + "Click to open route setup"
+        )));
         if (page > 0) {
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of(ChatColor.GRAY + "Page " + page + " of " + pages)));
+            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of(ChatColor.GRAY + "Page " + page + " of " + pages)));
         }
         inventory.setItem(49, item(Material.NETHER_STAR, "EasyNPC Overview", List.of(
             ChatColor.GRAY + "Presets: " + ChatColor.WHITE + definitions.size(),
@@ -312,6 +321,7 @@ public final class GuiService implements Listener {
                 ChatColor.DARK_GRAY + instance.getId().toString(),
                 ChatColor.GRAY + formatLocation(instance.getLocation()),
                 ChatColor.YELLOW + "Left-click: teleport to instance",
+                ChatColor.AQUA + "Middle-click: move instance to you",
                 ChatColor.RED + "Right-click: remove instance"
             )));
         }
@@ -415,6 +425,10 @@ public final class GuiService implements Listener {
             return;
         }
         if (event.getRawSlot() == 45) {
+            routeGuiOpener.accept(player);
+            return;
+        }
+        if (event.getRawSlot() == 47) {
             openMain(player, page - 1);
             return;
         }
@@ -459,7 +473,7 @@ public final class GuiService implements Listener {
                 saveRefresh(definition);
                 openEditor(player, definition);
             });
-            case 11 -> chatInputService.request(player, "Enter a Minecraft texture URL/hash, or 'default':", value -> {
+            case 11 -> chatInputService.request(player, "Enter an HTTPS skin image URL, texture hash, or 'default':", value -> {
                 try {
                     definition.setSkinUrl(SkinTextureUtil.normalizeTextureUrl(value));
                     saveRefresh(definition);
@@ -630,7 +644,15 @@ public final class GuiService implements Listener {
                     return;
                 }
                 NpcInstance instance = instances.get(index);
-                if (event.isRightClick()) {
+                if (event.getClick() == ClickType.MIDDLE) {
+                    Location destination = player.getLocation();
+                    if (instanceRegistry.move(instance, destination)) {
+                        player.sendMessage(Component.text("Moved NPC instance to your location."));
+                    } else {
+                        player.sendMessage(Component.text("Could not move the NPC instance."));
+                    }
+                    openInstances(player, definition, holder.page());
+                } else if (event.isRightClick()) {
                     instanceRegistry.deleteInstance(instance.getId());
                     player.sendMessage(Component.text("Removed NPC instance."));
                     openInstances(player, definition, holder.page());

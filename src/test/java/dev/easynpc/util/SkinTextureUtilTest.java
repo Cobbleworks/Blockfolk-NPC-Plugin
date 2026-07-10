@@ -46,8 +46,15 @@ class SkinTextureUtilTest {
     }
 
     @Test
-    void rejectsNonMinecraftTextureHosts() {
+    void acceptsHttpsSkinImageUrls() {
+        String url = "https://www.minecraftskins.com/uploads/skins/2026/07/09/rotten-hearts-24183095.png?v960";
+
+        assertEquals(url, SkinTextureUtil.normalizeTextureUrl(url));
+    }
+
+    @Test
+    void rejectsInsecureSkinImageUrls() {
         assertThrows(IllegalArgumentException.class, () ->
-            SkinTextureUtil.normalizeTextureUrl("https://example.test/texture/0123456789abcdef0123456789abcdef"));
+            SkinTextureUtil.normalizeTextureUrl("http://example.test/skin.png"));
     }
 }
