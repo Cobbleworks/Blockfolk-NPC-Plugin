@@ -2,6 +2,7 @@ package dev.easynpc.gui;
 
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
+import dev.easynpc.dialog.DialogService;
 import dev.easynpc.input.ChatInputService;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcInstance;
@@ -49,16 +50,19 @@ public final class GuiService implements Listener {
     private final NpcDefinitionRepository definitionRepository;
     private final NpcInstanceRegistry instanceRegistry;
     private final ChatInputService chatInputService;
+    private final DialogService dialogService;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
 
     public GuiService(
         NpcDefinitionRepository definitionRepository,
         NpcInstanceRegistry instanceRegistry,
-        ChatInputService chatInputService
+        ChatInputService chatInputService,
+        DialogService dialogService
     ) {
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.chatInputService = chatInputService;
+        this.dialogService = dialogService;
     }
 
     public void openMain(Player player) {
@@ -272,9 +276,7 @@ public final class GuiService implements Listener {
             openEditor(event.getPlayer(), definition);
             return;
         }
-        if (!definition.getDialogLines().isEmpty()) {
-            event.getPlayer().sendMessage(Component.text(definition.getDisplayName() + ": " + definition.getDialogLines().getFirst()));
-        }
+        dialogService.startChat(event.getPlayer(), instance, definition);
     }
 
     @EventHandler

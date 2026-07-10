@@ -34,7 +34,7 @@ public final class EasyNpcPlugin extends JavaPlugin {
         dialogService = new DialogService(this);
         instanceRegistry = new NpcInstanceRegistry(definitionRepository, instanceRepository, npcRenderer, dialogService);
         chatInputService = new ChatInputService(this, getConfig().getInt("chat-input-timeout-seconds", 60));
-        guiService = new GuiService(definitionRepository, instanceRegistry, chatInputService);
+        guiService = new GuiService(definitionRepository, instanceRegistry, chatInputService, dialogService);
 
         definitionRepository.loadAll();
         instanceRegistry.loadPersistedInstances();
