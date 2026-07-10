@@ -20,6 +20,7 @@ import dev.easynpc.util.SkinResolver;
 import dev.easynpc.util.SkinTextureUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.logging.Level;
@@ -61,7 +62,14 @@ public final class EasyNpcPlugin extends JavaPlugin {
             getName() + "/" + getPluginMeta().getVersion(),
             getConfig().getString("mineskin-api-key", "")
         );
-        routeGuiService = new RouteGuiService(this, routeRepository, definitionRepository, instanceRegistry, chatInputService);
+        routeGuiService = new RouteGuiService(
+            this,
+            routeRepository,
+            definitionRepository,
+            instanceRegistry,
+            chatInputService,
+            this::openMainGui
+        );
         guiService = new GuiService(
             this,
             definitionRepository,
@@ -143,6 +151,10 @@ public final class EasyNpcPlugin extends JavaPlugin {
         NpcDefinition definition = NpcDefinition.create(name);
         definitionRepository.save(definition);
         return definition;
+    }
+
+    private void openMainGui(Player player) {
+        guiService.openMain(player);
     }
 
     private void resolveStoredExternalSkins() {

@@ -40,6 +40,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 public final class RouteGuiService implements Listener {
     private static final int PAGE_SIZE = 45;
@@ -49,6 +50,7 @@ public final class RouteGuiService implements Listener {
     private final NpcDefinitionRepository definitionRepository;
     private final NpcInstanceRegistry instanceRegistry;
     private final ChatInputService chatInputService;
+    private final Consumer<Player> mainGuiOpener;
     private final NamespacedKey wandRouteKey;
     private final NamespacedKey wandTokenKey;
     private final Map<UUID, EditSession> editSessions = new HashMap<>();
@@ -59,13 +61,15 @@ public final class RouteGuiService implements Listener {
         RouteRepository routeRepository,
         NpcDefinitionRepository definitionRepository,
         NpcInstanceRegistry instanceRegistry,
-        ChatInputService chatInputService
+        ChatInputService chatInputService,
+        Consumer<Player> mainGuiOpener
     ) {
         this.plugin = plugin;
         this.routeRepository = routeRepository;
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.chatInputService = chatInputService;
+        this.mainGuiOpener = mainGuiOpener;
         this.wandRouteKey = new NamespacedKey(plugin, "route-editor-route");
         this.wandTokenKey = new NamespacedKey(plugin, "route-editor-token");
     }
@@ -99,11 +103,15 @@ public final class RouteGuiService implements Listener {
                 ChatColor.GRAY + "Key points: " + ChatColor.WHITE + route.getPoints().size(),
                 ChatColor.GRAY + "Assigned presets: " + ChatColor.WHITE + assignments,
                 ChatColor.YELLOW + "Left-click: edit points",
-                ChatColor.RED + "Right-click: remove route"
+                ChatColor.RED + "Shift-right-click: remove route"
             )));
         }
+        inventory.setItem(45, item(Material.PLAYER_HEAD, "Manage NPCs", List.of(
+            ChatColor.GRAY + "Return to the main NPC menu",
+            ChatColor.YELLOW + "Click to manage NPC presets"
+        )));
         if (page > 0) {
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
         }
         inventory.setItem(49, item(Material.COMPASS, "Route Overview", List.of(
             ChatColor.GRAY + "Routes: " + ChatColor.WHITE + routes.size(),
@@ -230,6 +238,10 @@ public final class RouteGuiService implements Listener {
 
     private void handleRoutesClick(InventoryClickEvent event, Player player, int page) {
         if (event.getRawSlot() == 45) {
+            mainGuiOpener.accept(player);
+            return;
+        }
+        if (event.getRawSlot() == 47) {
             openRoutes(player, page - 1);
             return;
         }
@@ -256,7 +268,7 @@ public final class RouteGuiService implements Listener {
             return;
         }
         NpcRoute route = routes.get(index);
-        if (event.isRightClick()) {
+        if (event.isRightClick() && event.isShiftClick()) {
             openDeleteConfirmation(player, route, page);
         } else {
             beginEditing(player, route);

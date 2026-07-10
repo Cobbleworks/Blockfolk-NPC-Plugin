@@ -27,6 +27,7 @@ import java.util.logging.Level;
  * Paper's Pathfinder API themselves.
  */
 public final class NativeNpcNavigationService {
+    private static final double NAVIGATOR_SCALE = 0.0625;
     private static final double ARRIVAL_HORIZONTAL_SQUARED = 0.8 * 0.8;
     private static final double ARRIVAL_VERTICAL = 1.5;
     private static final int REPATH_TICKS = 40;
@@ -203,6 +204,13 @@ public final class NativeNpcNavigationService {
         navigator.getEquipment().clear();
         navigator.clearLootTable();
         Bukkit.getMobGoals().removeAllGoals(navigator);
+        AttributeInstance scale = navigator.getAttribute(Attribute.SCALE);
+        if (scale != null) {
+            // The husk only supplies pathfinding. Keeping its normal hitbox on
+            // top of the mannequin makes sword swings hit this invulnerable,
+            // invisible entity instead of the visible NPC.
+            scale.setBaseValue(NAVIGATOR_SCALE);
+        }
         Pathfinder pathfinder = navigator.getPathfinder();
         pathfinder.setCanOpenDoors(true);
         pathfinder.setCanPassDoors(true);

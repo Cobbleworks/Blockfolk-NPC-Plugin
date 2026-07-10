@@ -104,10 +104,17 @@ public final class NpcInstanceRegistry {
     }
 
     public boolean move(NpcInstance instance, Location location) {
-        if (!instances.containsKey(instance.getId()) || !renderer.move(instance, location)) {
+        if (!instances.containsKey(instance.getId())) {
             return false;
         }
-        navigationService.stop(instance);
+
+        // A routed NPC has an invisible navigation mob at its previous location.
+        // Remove it before teleporting so the next movement tick starts from the
+        // new location instead of snapping the mannequin back to the old path.
+        navigationService.destroy(instance);
+        if (!renderer.move(instance, location)) {
+            return false;
+        }
         dialogService.move(instance);
         instanceRepository.saveAll(instances.values());
         return true;
