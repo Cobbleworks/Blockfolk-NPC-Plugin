@@ -69,17 +69,23 @@ public final class RouteMovementService {
     private void move(NpcInstance instance) {
         NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
         if (definition == null) {
-            progressByInstance.remove(instance.getId());
+            stop(instance);
             return;
         }
         MovementProfile movement = definition.getMovementProfile();
         if (!movement.enabled()) {
-            progressByInstance.remove(instance.getId());
+            stop(instance);
             return;
         }
         NpcRoute route = routeRepository.find(movement.routeKey()).orElse(null);
         if (route == null || route.getPoints().isEmpty()) {
-            progressByInstance.remove(instance.getId());
+            stop(instance);
+            return;
+        }
+        Location current = instance.getLocation();
+        if (current.getWorld() == null
+            || !route.getPoints().getFirst().worldName().equals(current.getWorld().getName())) {
+            stop(instance);
             return;
         }
 
@@ -93,29 +99,25 @@ public final class RouteMovementService {
 
         RoutePoint targetPoint = progress.orderedPoints().get(progress.targetIndex());
         Location target = targetPoint.toWalkingLocation();
-        Location current = instance.getLocation();
-        if (target == null || current.getWorld() == null || !current.getWorld().equals(target.getWorld())) {
+        if (target == null || !current.getWorld().equals(target.getWorld())) {
+            stop(instance);
             return;
         }
 
-        double dx = target.getX() - current.getX();
-        double dy = target.getY() - current.getY();
-        double dz = target.getZ() - current.getZ();
-        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        double blocksPerTick = movement.walkingSpeed().blocksPerSecond() / 20.0;
-        boolean reached = distance <= blocksPerTick;
-        Location next = reached ? target.clone() : current.clone().add(
-            dx / distance * blocksPerTick,
-            dy / distance * blocksPerTick,
-            dz / distance * blocksPerTick
+        NativeNpcNavigationService.NavigationStatus status = instanceRegistry.navigate(
+            instance,
+            target,
+            movement.walkingSpeed()
         );
-        if (distance > 0.0001) {
-            next.setYaw((float) Math.toDegrees(Math.atan2(-dx, dz)));
-            next.setPitch(0.0f);
-        }
-        if (instanceRegistry.move(instance, next) && reached) {
+        if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED) {
             int nextIndex = (progress.targetIndex() + 1) % progress.orderedPoints().size();
             progressByInstance.put(instance.getId(), progress.withTargetIndex(nextIndex));
+        }
+    }
+
+    private void stop(NpcInstance instance) {
+        if (progressByInstance.remove(instance.getId()) != null) {
+            instanceRegistry.stopNavigating(instance);
         }
     }
 

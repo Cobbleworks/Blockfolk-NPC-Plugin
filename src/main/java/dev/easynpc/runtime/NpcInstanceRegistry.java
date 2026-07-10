@@ -3,6 +3,7 @@ package dev.easynpc.runtime;
 import dev.easynpc.dialog.DialogService;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcInstance;
+import dev.easynpc.model.WalkingSpeed;
 import dev.easynpc.repository.NpcDefinitionRepository;
 import dev.easynpc.repository.NpcInstanceRepository;
 import org.bukkit.Location;
@@ -18,6 +19,7 @@ public final class NpcInstanceRegistry {
     private final NpcDefinitionRepository definitionRepository;
     private final NpcInstanceRepository instanceRepository;
     private final NpcRenderer renderer;
+    private final NativeNpcNavigationService navigationService;
     private final DialogService dialogService;
     private final Map<UUID, NpcInstance> instances = new LinkedHashMap<>();
 
@@ -25,11 +27,13 @@ public final class NpcInstanceRegistry {
         NpcDefinitionRepository definitionRepository,
         NpcInstanceRepository instanceRepository,
         NpcRenderer renderer,
+        NativeNpcNavigationService navigationService,
         DialogService dialogService
     ) {
         this.definitionRepository = definitionRepository;
         this.instanceRepository = instanceRepository;
         this.renderer = renderer;
+        this.navigationService = navigationService;
         this.dialogService = dialogService;
     }
 
@@ -74,6 +78,7 @@ public final class NpcInstanceRegistry {
                 continue;
             }
             renderer.destroy(instance);
+            navigationService.destroy(instance);
             dialogService.detach(instance.getId());
             iterator.remove();
             removed++;
@@ -88,6 +93,7 @@ public final class NpcInstanceRegistry {
         instanceRepository.saveAll(instances.values());
         for (NpcInstance instance : instances.values()) {
             renderer.destroy(instance);
+            navigationService.destroy(instance);
             dialogService.detach(instance.getId());
         }
     }
@@ -102,6 +108,25 @@ public final class NpcInstanceRegistry {
         }
         dialogService.move(instance);
         return true;
+    }
+
+    public NativeNpcNavigationService.NavigationStatus navigate(
+        NpcInstance instance,
+        Location target,
+        WalkingSpeed walkingSpeed
+    ) {
+        if (!instances.containsKey(instance.getId())) {
+            return NativeNpcNavigationService.NavigationStatus.STALLED;
+        }
+        NativeNpcNavigationService.NavigationUpdate update = navigationService.navigate(instance, target, walkingSpeed);
+        if (renderer.move(instance, update.location())) {
+            dialogService.move(instance);
+        }
+        return update.status();
+    }
+
+    public void stopNavigating(NpcInstance instance) {
+        navigationService.stop(instance);
     }
 
     public Optional<NpcInstance> findByEntityId(int entityId) {
@@ -122,6 +147,7 @@ public final class NpcInstanceRegistry {
             return false;
         }
         renderer.destroy(instance);
+        navigationService.destroy(instance);
         dialogService.detach(instance.getId());
         instanceRepository.saveAll(instances.values());
         return true;

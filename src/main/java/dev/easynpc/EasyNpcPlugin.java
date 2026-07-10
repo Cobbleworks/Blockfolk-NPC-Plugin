@@ -10,6 +10,7 @@ import dev.easynpc.repository.NpcDefinitionRepository;
 import dev.easynpc.repository.NpcInstanceRepository;
 import dev.easynpc.repository.RouteRepository;
 import dev.easynpc.runtime.NpcInstanceRegistry;
+import dev.easynpc.runtime.NativeNpcNavigationService;
 import dev.easynpc.runtime.NpcRenderer;
 import dev.easynpc.runtime.PaperMannequinNpcRenderer;
 import dev.easynpc.runtime.RouteMovementService;
@@ -24,6 +25,7 @@ public final class EasyNpcPlugin extends JavaPlugin {
     private RouteRepository routeRepository;
     private NpcInstanceRegistry instanceRegistry;
     private NpcRenderer npcRenderer;
+    private NativeNpcNavigationService navigationService;
     private DialogService dialogService;
     private ChatInputService chatInputService;
     private GuiService guiService;
@@ -38,8 +40,15 @@ public final class EasyNpcPlugin extends JavaPlugin {
         instanceRepository = new NpcInstanceRepository(this);
         routeRepository = new RouteRepository(this);
         npcRenderer = new PaperMannequinNpcRenderer(this);
+        navigationService = new NativeNpcNavigationService(this);
         dialogService = new DialogService(this);
-        instanceRegistry = new NpcInstanceRegistry(definitionRepository, instanceRepository, npcRenderer, dialogService);
+        instanceRegistry = new NpcInstanceRegistry(
+            definitionRepository,
+            instanceRepository,
+            npcRenderer,
+            navigationService,
+            dialogService
+        );
         chatInputService = new ChatInputService(this, getConfig().getInt("chat-input-timeout-seconds", 60));
         guiService = new GuiService(definitionRepository, routeRepository, instanceRegistry, chatInputService, dialogService);
         routeGuiService = new RouteGuiService(this, routeRepository, definitionRepository, instanceRegistry, chatInputService);
