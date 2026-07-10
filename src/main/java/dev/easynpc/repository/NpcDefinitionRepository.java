@@ -1,6 +1,7 @@
 package dev.easynpc.repository;
 
 import dev.easynpc.model.CombatProfile;
+import dev.easynpc.model.AggressionLevel;
 import dev.easynpc.model.MovementProfile;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.WalkingSpeed;
@@ -79,7 +80,10 @@ public final class NpcDefinitionRepository {
         configuration.set("inventory.off-hand", definition.getOffHand());
         configuration.set("dialog.lines", definition.getDialogLines());
         configuration.set("dialog.seconds-per-line", definition.getSecondsPerDialogLine());
-        configuration.set("combat.enabled", definition.getCombatProfile().enabled());
+        configuration.set("combat.enabled", !definition.getCombatProfile().invulnerable());
+        configuration.set("combat.max-health", definition.getCombatProfile().maxHealth());
+        configuration.set("combat.aggression", definition.getCombatProfile().aggressionLevel().name().toLowerCase(Locale.ROOT));
+        configuration.set("combat.shoutout", definition.getCombatProfile().shoutout());
         configuration.set("movement.enabled", definition.getMovementProfile().enabled());
         configuration.set("movement.route", definition.getMovementProfile().routeKey());
         configuration.set("movement.speed", definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
@@ -116,7 +120,12 @@ public final class NpcDefinitionRepository {
         definition.setOffHand(configuration.getItemStack("inventory.off-hand"));
         definition.setDialogLines(configuration.getStringList("dialog.lines"));
         definition.setSecondsPerDialogLine(configuration.getInt("dialog.seconds-per-line", 3));
-        definition.setCombatProfile(new CombatProfile(configuration.getBoolean("combat.enabled", false)));
+        int legacyHealth = configuration.getBoolean("combat.enabled", false) ? 20 : 0;
+        definition.setCombatProfile(new CombatProfile(
+            configuration.getInt("combat.max-health", legacyHealth),
+            AggressionLevel.fromStored(configuration.getString("combat.aggression")),
+            configuration.getString("combat.shoutout")
+        ));
         definition.setMovementProfile(new MovementProfile(
             configuration.getBoolean("movement.enabled", false),
             configuration.getString("movement.route"),

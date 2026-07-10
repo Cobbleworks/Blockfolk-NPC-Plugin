@@ -10,6 +10,7 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Husk;
+import org.bukkit.entity.Entity;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
@@ -98,6 +99,10 @@ public final class NativeNpcNavigationService {
         }
         navigatorIdsByInstance.remove(instance.getId());
         states.remove(instance.getId());
+    }
+
+    public boolean isNavigator(Entity entity) {
+        return entity.getPersistentDataContainer().has(navigatorKey, PersistentDataType.STRING);
     }
 
     private void requestPath(Husk navigator, Location target, WalkingSpeed walkingSpeed) {

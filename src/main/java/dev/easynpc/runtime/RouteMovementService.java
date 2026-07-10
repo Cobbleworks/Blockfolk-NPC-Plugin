@@ -24,6 +24,7 @@ public final class RouteMovementService {
     private final NpcDefinitionRepository definitionRepository;
     private final RouteRepository routeRepository;
     private final NpcInstanceRegistry instanceRegistry;
+    private final NpcCombatService combatService;
     private final Map<UUID, Progress> progressByInstance = new HashMap<>();
     private BukkitTask task;
 
@@ -31,12 +32,14 @@ public final class RouteMovementService {
         JavaPlugin plugin,
         NpcDefinitionRepository definitionRepository,
         RouteRepository routeRepository,
-        NpcInstanceRegistry instanceRegistry
+        NpcInstanceRegistry instanceRegistry,
+        NpcCombatService combatService
     ) {
         this.plugin = plugin;
         this.definitionRepository = definitionRepository;
         this.routeRepository = routeRepository;
         this.instanceRegistry = instanceRegistry;
+        this.combatService = combatService;
     }
 
     public void start() {
@@ -67,6 +70,10 @@ public final class RouteMovementService {
     }
 
     private void move(NpcInstance instance) {
+        if (combatService.isEngaged(instance)) {
+            progressByInstance.remove(instance.getId());
+            return;
+        }
         NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
         if (definition == null) {
             stop(instance);

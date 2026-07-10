@@ -10,6 +10,7 @@ import dev.easynpc.repository.NpcDefinitionRepository;
 import dev.easynpc.repository.NpcInstanceRepository;
 import dev.easynpc.repository.RouteRepository;
 import dev.easynpc.runtime.NpcInstanceRegistry;
+import dev.easynpc.runtime.NpcCombatService;
 import dev.easynpc.runtime.NativeNpcNavigationService;
 import dev.easynpc.runtime.NpcRenderer;
 import dev.easynpc.runtime.PaperMannequinNpcRenderer;
@@ -31,6 +32,7 @@ public final class EasyNpcPlugin extends JavaPlugin {
     private GuiService guiService;
     private RouteGuiService routeGuiService;
     private RouteMovementService routeMovementService;
+    private NpcCombatService combatService;
 
     @Override
     public void onEnable() {
@@ -52,7 +54,14 @@ public final class EasyNpcPlugin extends JavaPlugin {
         chatInputService = new ChatInputService(this, getConfig().getInt("chat-input-timeout-seconds", 60));
         guiService = new GuiService(definitionRepository, routeRepository, instanceRegistry, chatInputService, dialogService);
         routeGuiService = new RouteGuiService(this, routeRepository, definitionRepository, instanceRegistry, chatInputService);
-        routeMovementService = new RouteMovementService(this, definitionRepository, routeRepository, instanceRegistry);
+        combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
+        routeMovementService = new RouteMovementService(
+            this,
+            definitionRepository,
+            routeRepository,
+            instanceRegistry,
+            combatService
+        );
 
         routeRepository.loadAll();
         definitionRepository.loadAll();
@@ -71,17 +80,22 @@ public final class EasyNpcPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(guiService, this);
         getServer().getPluginManager().registerEvents(routeGuiService, this);
         getServer().getPluginManager().registerEvents(chatInputService, this);
+        getServer().getPluginManager().registerEvents(combatService, this);
 
         npcRenderer.start();
         dialogService.start();
         routeGuiService.start();
         instanceRegistry.spawnAll();
+        combatService.start();
         routeMovementService.start();
         getLogger().info("EasyNPC enabled with " + definitionRepository.findAll().size() + " NPC definitions.");
     }
 
     @Override
     public void onDisable() {
+        if (combatService != null) {
+            combatService.stop();
+        }
         if (routeGuiService != null) {
             routeGuiService.stop();
         }

@@ -3,6 +3,9 @@ package dev.easynpc.runtime;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcInstance;
 import org.bukkit.Location;
+import org.bukkit.entity.LivingEntity;
+
+import java.util.Optional;
 
 public interface NpcRenderer {
     void start();
@@ -16,4 +19,6 @@ public interface NpcRenderer {
     void refresh(NpcInstance instance, NpcDefinition definition);
 
     boolean move(NpcInstance instance, Location location);
+
+    Optional<LivingEntity> findLivingEntity(NpcInstance instance);
 }

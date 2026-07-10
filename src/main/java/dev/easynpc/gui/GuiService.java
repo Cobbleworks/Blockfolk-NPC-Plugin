@@ -4,6 +4,8 @@ import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
 import dev.easynpc.dialog.DialogService;
 import dev.easynpc.input.ChatInputService;
+import dev.easynpc.model.AggressionLevel;
+import dev.easynpc.model.CombatProfile;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcInstance;
 import dev.easynpc.model.NpcRoute;
@@ -20,7 +22,6 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -168,6 +169,12 @@ public final class GuiService implements Listener {
             ChatColor.GRAY + "Re-applies name, skin, and equipment",
             ChatColor.YELLOW + "Click to refresh all copies"
         )));
+        CombatProfile combat = definition.getCombatProfile();
+        inventory.setItem(23, item(Material.IRON_SWORD, "Fighting", List.of(
+            ChatColor.GRAY + "Health: " + ChatColor.WHITE + healthLabel(combat),
+            ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.aggressionLevel().displayName(),
+            ChatColor.YELLOW + "Click to configure combat"
+        )));
         inventory.setItem(24, item(Material.TNT, "Delete Preset", List.of(
             ChatColor.RED + "Deletes this preset and all its copies",
             ChatColor.YELLOW + "Click for confirmation"
@@ -215,6 +222,43 @@ public final class GuiService implements Listener {
             ChatColor.YELLOW + "Click to change"
         )));
         inventory.setItem(14, item(Material.BOOK, "Current Dialog", previewLines(definition)));
+        inventory.setItem(22, item(Material.ARROW, "Back", List.of()));
+        player.openInventory(inventory);
+    }
+
+    public void openFightingEditor(Player player, NpcDefinition definition) {
+        CombatProfile combat = definition.getCombatProfile();
+        Inventory inventory = Bukkit.createInventory(new FightingHolder(definition.getKey()), 27,
+            Component.text("Fighting: " + definition.getDisplayName()));
+        inventory.setItem(4, item(Material.IRON_SWORD, "Combat Capabilities", List.of(
+            ChatColor.GRAY + "Health: " + ChatColor.WHITE + healthLabel(combat),
+            ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.aggressionLevel().displayName()
+        )));
+        inventory.setItem(10, item(Material.RED_DYE, "- " + CombatProfile.HEALTH_STEP + " Health", List.of(
+            ChatColor.GRAY + "Current: " + ChatColor.WHITE + healthLabel(combat),
+            ChatColor.YELLOW + "Click to decrease max health"
+        )));
+        inventory.setItem(11, item(combat.invulnerable() ? Material.TOTEM_OF_UNDYING : Material.GOLDEN_APPLE,
+            "Max Health: " + healthLabel(combat), List.of(
+                combat.invulnerable()
+                    ? ChatColor.GREEN + "This NPC cannot be damaged"
+                    : ChatColor.GRAY + "The NPC is removed when killed",
+                ChatColor.DARK_GRAY + "Set health to 0 for invulnerability"
+            )));
+        inventory.setItem(12, item(Material.LIME_DYE, "+ " + CombatProfile.HEALTH_STEP + " Health", List.of(
+            ChatColor.GRAY + "Current: " + ChatColor.WHITE + healthLabel(combat),
+            ChatColor.YELLOW + "Click to increase max health"
+        )));
+        inventory.setItem(14, item(aggressionMaterial(combat.aggressionLevel()), "Aggression", List.of(
+            ChatColor.GRAY + "Current: " + ChatColor.WHITE + combat.aggressionLevel().displayName(),
+            aggressionDescription(combat.aggressionLevel()),
+            ChatColor.YELLOW + "Click to cycle aggression level"
+        )));
+        inventory.setItem(16, item(Material.WRITABLE_BOOK, "Combat Shoutout", List.of(
+            ChatColor.GRAY + (combat.shoutout() == null ? "No shoutout configured" : combat.shoutout()),
+            ChatColor.YELLOW + "Click to enter a custom shoutout",
+            ChatColor.DARK_GRAY + "Enter 'clear' to remove it"
+        )));
         inventory.setItem(22, item(Material.ARROW, "Back", List.of()));
         player.openInventory(inventory);
     }
@@ -304,6 +348,8 @@ public final class GuiService implements Listener {
             handleEditorClick(event, player, editorHolder.key());
         } else if (holder instanceof DialogHolder dialogHolder) {
             handleDialogClick(event, player, dialogHolder.key());
+        } else if (holder instanceof FightingHolder fightingHolder) {
+            handleFightingClick(event, player, fightingHolder.key());
         } else if (holder instanceof EquipmentHolder equipmentHolder) {
             handleEquipmentClick(event, player, equipmentHolder.key());
         } else if (holder instanceof InstancesHolder instancesHolder) {
@@ -334,13 +380,6 @@ public final class GuiService implements Listener {
             return;
         }
         dialogService.startChat(event.getPlayer(), instance, definition);
-    }
-
-    @EventHandler
-    public void onNpcDamage(EntityDamageByEntityEvent event) {
-        if (instanceRegistry.findByEntityId(event.getEntity().getEntityId()).isPresent()) {
-            event.setCancelled(true);
-        }
     }
 
     @EventHandler
@@ -461,6 +500,7 @@ public final class GuiService implements Listener {
                 player.sendMessage(Component.text("Refreshed " + instanceRegistry.findByDefinition(definition).size() + " instance(s)."));
                 openEditor(player, definition);
             }
+            case 23 -> openFightingEditor(player, definition);
             case 24 -> openConfirmation(player, definition, ConfirmationAction.DELETE_DEFINITION);
             case 31 -> openMain(player);
             default -> {
@@ -495,6 +535,47 @@ public final class GuiService implements Listener {
                     player.sendMessage(Component.text("Enter a whole number of seconds."));
                 }
                 openDialogEditor(player, definition);
+            });
+            case 22 -> openEditor(player, definition);
+            default -> {
+            }
+        }
+    }
+
+    private void handleFightingClick(InventoryClickEvent event, Player player, String key) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
+        NpcDefinition definition = definitionRepository.find(key).orElse(null);
+        if (definition == null) {
+            player.closeInventory();
+            return;
+        }
+        CombatProfile combat = definition.getCombatProfile();
+        switch (event.getRawSlot()) {
+            case 10 -> {
+                definition.setCombatProfile(combat.withMaxHealth(combat.maxHealth() - CombatProfile.HEALTH_STEP));
+                saveRefresh(definition);
+                openFightingEditor(player, definition);
+            }
+            case 12 -> {
+                definition.setCombatProfile(combat.withMaxHealth(combat.maxHealth() + CombatProfile.HEALTH_STEP));
+                saveRefresh(definition);
+                openFightingEditor(player, definition);
+            }
+            case 14 -> {
+                AggressionLevel aggression = combat.aggressionLevel().next();
+                definition.setCombatProfile(combat.withAggressionLevel(aggression));
+                definitionRepository.save(definition);
+                player.sendMessage(Component.text("Aggression set to " + aggression.displayName() + "."));
+                openFightingEditor(player, definition);
+            }
+            case 16 -> chatInputService.request(player, "Enter a combat shoutout, or 'clear':", value -> {
+                String shoutout = value.trim().equalsIgnoreCase("clear") ? null : value;
+                definition.setCombatProfile(definition.getCombatProfile().withShoutout(shoutout));
+                definitionRepository.save(definition);
+                openFightingEditor(player, definition);
             });
             case 22 -> openEditor(player, definition);
             default -> {
@@ -670,6 +751,7 @@ public final class GuiService implements Listener {
         return holder instanceof MainHolder
             || holder instanceof EditorHolder
             || holder instanceof DialogHolder
+            || holder instanceof FightingHolder
             || holder instanceof InstancesHolder
             || holder instanceof RouteAssignmentHolder
             || holder instanceof ConfirmationHolder;
@@ -731,6 +813,28 @@ public final class GuiService implements Listener {
         return hash.length() <= 24 ? hash : hash.substring(0, 24) + "...";
     }
 
+    private String healthLabel(CombatProfile combat) {
+        return combat.invulnerable() ? "Invulnerable (0 HP)" : combat.maxHealth() + " HP";
+    }
+
+    private Material aggressionMaterial(AggressionLevel aggressionLevel) {
+        return switch (aggressionLevel) {
+            case NONE -> Material.GRAY_DYE;
+            case FLEE -> Material.RABBIT_FOOT;
+            case FIGHT_BACK -> Material.SHIELD;
+            case FIGHTS_ON_SIGHT -> Material.DIAMOND_SWORD;
+        };
+    }
+
+    private String aggressionDescription(AggressionLevel aggressionLevel) {
+        return switch (aggressionLevel) {
+            case NONE -> ChatColor.GRAY + "Never reacts to nearby entities";
+            case FLEE -> ChatColor.GRAY + "Runs away after taking entity damage";
+            case FIGHT_BACK -> ChatColor.GRAY + "Attacks an entity that damages it";
+            case FIGHTS_ON_SIGHT -> ChatColor.GRAY + "Attacks nearby players, mobs, and NPCs";
+        };
+    }
+
     private String formatLocation(Location location) {
         if (location == null || location.getWorld() == null) {
             return "Not set";
@@ -754,6 +858,13 @@ public final class GuiService implements Listener {
     }
 
     private record DialogHolder(String key) implements InventoryHolder {
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
+    private record FightingHolder(String key) implements InventoryHolder {
         @Override
         public Inventory getInventory() {
             return null;

@@ -7,6 +7,7 @@ import dev.easynpc.model.WalkingSpeed;
 import dev.easynpc.repository.NpcDefinitionRepository;
 import dev.easynpc.repository.NpcInstanceRepository;
 import org.bukkit.Location;
+import org.bukkit.entity.LivingEntity;
 
 import java.util.Collection;
 import java.util.Iterator;
@@ -133,6 +134,13 @@ public final class NpcInstanceRegistry {
         return instances.values().stream()
             .filter(instance -> instance.getEntityId() == entityId)
             .findFirst();
+    }
+
+    public Optional<LivingEntity> findEntity(NpcInstance instance) {
+        if (!instances.containsKey(instance.getId())) {
+            return Optional.empty();
+        }
+        return renderer.findLivingEntity(instance);
     }
 
     public Collection<NpcInstance> findByDefinition(NpcDefinition definition) {
