@@ -1,11 +1,5 @@
 package dev.easynpc.repository;
 
-import dev.easynpc.model.NpcInstance;
-import dev.easynpc.util.LocationCodec;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.plugin.java.JavaPlugin;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -13,7 +7,15 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import dev.easynpc.model.NpcInstance;
+import dev.easynpc.util.LocationCodec;
+
 public final class NpcInstanceRepository {
+
     private final File file;
 
     public NpcInstanceRepository(JavaPlugin plugin) {
@@ -40,9 +42,9 @@ public final class NpcInstanceRepository {
                 continue;
             }
             instances.add(new NpcInstance(
-                UUID.fromString(key),
-                definitionKey,
-                LocationCodec.read(section.getConfigurationSection("location"))
+                    UUID.fromString(key),
+                    definitionKey,
+                    LocationCodec.read(section.getConfigurationSection("location"))
             ));
         }
         return instances;

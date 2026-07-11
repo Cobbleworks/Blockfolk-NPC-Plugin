@@ -1,27 +1,28 @@
 package dev.easynpc.dialog;
 
-import dev.easynpc.model.NpcDefinition;
-import dev.easynpc.model.NpcInstance;
-import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.NamespacedKey;
-import org.bukkit.entity.Display;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Player;
-import org.bukkit.entity.TextDisplay;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.scheduler.BukkitTask;
-
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
+import org.bukkit.entity.Display;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitTask;
+
+import dev.easynpc.model.NpcDefinition;
+import dev.easynpc.model.NpcInstance;
+import net.kyori.adventure.text.Component;
+
 public final class DialogService {
+
     private static final double MAX_CHAT_DISTANCE_SQUARED = 12.0 * 12.0;
     private static final double DIALOG_DISPLAY_Y_OFFSET = 2.4;
 
@@ -106,19 +107,24 @@ public final class DialogService {
         }
 
         ChatRuntime runtime = new ChatRuntime(
-            instance.getId(),
-            instance.getLocation(),
-            definition.getDisplayName(),
-            lines,
-            definition.getSecondsPerDialogLine()
+                instance.getId(),
+                instance.getLocation(),
+                definition.getDisplayName(),
+                lines,
+                definition.getSecondsPerDialogLine()
         );
         chats.put(player.getUniqueId(), runtime);
         sendChatLine(player, runtime);
     }
 
-    /** Shows one behaviour-supplied hologram line for the preset's normal line duration. */
+    /**
+     * Shows one behaviour-supplied hologram line for the preset's normal line
+     * duration.
+     */
     public void showHologram(NpcInstance instance, NpcDefinition definition, String line) {
-        if (line == null || line.isBlank() || instance.getLocation().getWorld() == null) return;
+        if (line == null || line.isBlank() || instance.getLocation().getWorld() == null) {
+            return;
+        }
         DialogRuntime runtime = displays.get(instance.getId());
         if (runtime == null || !runtime.display.isValid()) {
             Location location = instance.getLocation().add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0);
@@ -148,7 +154,9 @@ public final class DialogService {
         while (displayIterator.hasNext()) {
             DialogRuntime runtime = displayIterator.next().getValue();
             if (runtime.overrideSeconds > 0) {
-                if (--runtime.overrideSeconds > 0) continue;
+                if (--runtime.overrideSeconds > 0) {
+                    continue;
+                }
                 if (runtime.lines.isEmpty()) {
                     runtime.display.remove();
                     displayIterator.remove();
@@ -158,7 +166,9 @@ public final class DialogService {
                 runtime.elapsedSeconds = 0;
                 continue;
             }
-            if (runtime.lines.isEmpty()) continue;
+            if (runtime.lines.isEmpty()) {
+                continue;
+            }
             runtime.elapsedSeconds++;
             if (runtime.elapsedSeconds < runtime.secondsPerLine) {
                 continue;
@@ -180,7 +190,7 @@ public final class DialogService {
             ChatRuntime runtime = entry.getValue();
             if (isTooFarAway(player, runtime.location)) {
                 player.sendMessage(Component.text(
-                    "You are too far away from " + runtime.displayName + ". Dialog stopped."
+                        "You are too far away from " + runtime.displayName + ". Dialog stopped."
                 ));
                 iterator.remove();
                 continue;
@@ -198,7 +208,7 @@ public final class DialogService {
 
     private boolean isTooFarAway(Player player, Location npcLocation) {
         return player.getWorld() != npcLocation.getWorld()
-            || player.getLocation().distanceSquared(npcLocation) > MAX_CHAT_DISTANCE_SQUARED;
+                || player.getLocation().distanceSquared(npcLocation) > MAX_CHAT_DISTANCE_SQUARED;
     }
 
     private void sendChatLine(Player player, ChatRuntime runtime) {
@@ -206,6 +216,7 @@ public final class DialogService {
     }
 
     private static final class DialogRuntime {
+
         private final TextDisplay display;
         private final List<String> lines;
         private final int secondsPerLine;
@@ -221,6 +232,7 @@ public final class DialogService {
     }
 
     private static final class ChatRuntime {
+
         private final UUID instanceId;
         private Location location;
         private final String displayName;
@@ -230,11 +242,11 @@ public final class DialogService {
         private int elapsedSeconds;
 
         private ChatRuntime(
-            UUID instanceId,
-            Location location,
-            String displayName,
-            List<String> lines,
-            int secondsPerLine
+                UUID instanceId,
+                Location location,
+                String displayName,
+                List<String> lines,
+                int secondsPerLine
         ) {
             this.instanceId = instanceId;
             this.location = location;

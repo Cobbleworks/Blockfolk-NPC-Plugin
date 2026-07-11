@@ -1,12 +1,11 @@
 package dev.easynpc.runtime;
 
-import com.destroystokyo.paper.profile.PlayerProfile;
-import com.destroystokyo.paper.profile.ProfileProperty;
-import dev.easynpc.model.NpcDefinition;
-import dev.easynpc.model.NpcInstance;
-import dev.easynpc.util.SkinTextureUtil;
-import io.papermc.paper.datacomponent.item.ResolvableProfile;
-import net.kyori.adventure.text.Component;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.logging.Level;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
@@ -19,11 +18,14 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.logging.Level;
+import com.destroystokyo.paper.profile.PlayerProfile;
+import com.destroystokyo.paper.profile.ProfileProperty;
+
+import dev.easynpc.model.NpcDefinition;
+import dev.easynpc.model.NpcInstance;
+import dev.easynpc.util.SkinTextureUtil;
+import io.papermc.paper.datacomponent.item.ResolvableProfile;
+import net.kyori.adventure.text.Component;
 
 /**
  * Renders NPCs with Paper's native player-shaped mannequin entity. Unlike a
@@ -31,6 +33,7 @@ import java.util.logging.Level;
  * layout changes cannot leave the client with a silently missing NPC.
  */
 public final class PaperMannequinNpcRenderer implements NpcRenderer {
+
     private final Plugin plugin;
     private final NamespacedKey instanceKey;
     private final Map<UUID, UUID> entityIdsByInstance = new HashMap<>();
@@ -131,7 +134,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
             return null;
         }
         if (entityUuid != null && location.getWorld().getEntity(entityUuid) instanceof Mannequin mannequin
-            && mannequin.isValid()) {
+                && mannequin.isValid()) {
             return mannequin;
         }
         entityIdsByInstance.remove(instance.getId());
@@ -159,10 +162,10 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     }
 
     private void applyDefinition(
-        Mannequin mannequin,
-        NpcInstance instance,
-        NpcDefinition definition,
-        boolean healToFull
+            Mannequin mannequin,
+            NpcInstance instance,
+            NpcDefinition definition,
+            boolean healToFull
     ) {
         mannequin.teleport(instance.getLocation());
         mannequin.setPersistent(true);
@@ -175,7 +178,9 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         mannequin.setRotation(instance.getLocation().getYaw(), instance.getLocation().getPitch());
         mannequin.setProfile(createProfile(instance, definition));
         AttributeInstance knockbackResistance = mannequin.getAttribute(Attribute.KNOCKBACK_RESISTANCE);
-        if (knockbackResistance != null) knockbackResistance.setBaseValue(1.0);
+        if (knockbackResistance != null) {
+            knockbackResistance.setBaseValue(1.0);
+        }
         applyEquipment(mannequin.getEquipment(), definition);
         applyCombatProfile(mannequin, definition, healToFull);
     }
@@ -207,8 +212,8 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         if (texture != null) {
             String signature = definition.getSkinTextureSignature();
             profile.setProperty(signature == null
-                ? new ProfileProperty("textures", texture)
-                : new ProfileProperty("textures", texture, signature));
+                    ? new ProfileProperty("textures", texture)
+                    : new ProfileProperty("textures", texture, signature));
         }
         return ResolvableProfile.resolvableProfile(profile);
     }

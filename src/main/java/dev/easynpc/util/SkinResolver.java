@@ -1,9 +1,5 @@
 package dev.easynpc.util;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -14,8 +10,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
-/** Converts arbitrary skin images into signed, Minecraft-hosted profile textures. */
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+/**
+ * Converts arbitrary skin images into signed, Minecraft-hosted profile
+ * textures.
+ */
 public final class SkinResolver {
+
     private static final URI QUEUE_URI = URI.create("https://api.mineskin.org/v2/queue");
     private static final int MAX_POLL_ATTEMPTS = 30;
 
@@ -36,7 +40,7 @@ public final class SkinResolver {
 
     public CompletableFuture<ResolvedSkin> resolve(String imageUrl) {
         return requests.computeIfAbsent(imageUrl, ignored -> queue(imageUrl)
-            .whenComplete((result, error) -> requests.remove(imageUrl)));
+                .whenComplete((result, error) -> requests.remove(imageUrl)));
     }
 
     private CompletableFuture<ResolvedSkin> queue(String imageUrl) {
@@ -45,11 +49,11 @@ public final class SkinResolver {
         body.addProperty("visibility", "unlisted");
         body.addProperty("variant", "unknown");
         HttpRequest request = request(QUEUE_URI)
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
-            .build();
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                .build();
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-            .thenCompose(response -> handleResponse(response, 0));
+                .thenCompose(response -> handleResponse(response, 0));
     }
 
     private CompletableFuture<ResolvedSkin> poll(String jobId, int attempt) {
@@ -58,9 +62,9 @@ public final class SkinResolver {
         }
         URI jobUri = QUEUE_URI.resolve("/v2/queue/" + jobId);
         return CompletableFuture.runAsync(() -> {
-        }, CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS)).thenCompose(ignored ->
-            client.sendAsync(request(jobUri).GET().build(), HttpResponse.BodyHandlers.ofString())
-                .thenCompose(response -> handleResponse(response, attempt + 1))
+        }, CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS)).thenCompose(ignored
+                -> client.sendAsync(request(jobUri).GET().build(), HttpResponse.BodyHandlers.ofString())
+                        .thenCompose(response -> handleResponse(response, attempt + 1))
         );
     }
 
@@ -113,9 +117,9 @@ public final class SkinResolver {
 
     private HttpRequest.Builder request(URI uri) {
         HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
-            .timeout(Duration.ofSeconds(15))
-            .header("Accept", "application/json")
-            .header("User-Agent", userAgent);
+                .timeout(Duration.ofSeconds(15))
+                .header("Accept", "application/json")
+                .header("User-Agent", userAgent);
         if (!apiKey.isEmpty()) {
             builder.header("Authorization", "Bearer " + apiKey);
         }
@@ -166,6 +170,7 @@ public final class SkinResolver {
     }
 
     public static final class SkinResolutionException extends RuntimeException {
+
         public SkinResolutionException(String message) {
             super(message);
         }

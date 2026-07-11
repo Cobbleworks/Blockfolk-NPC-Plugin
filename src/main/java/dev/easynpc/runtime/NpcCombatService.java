@@ -1,14 +1,11 @@
 package dev.easynpc.runtime;
 
-import dev.easynpc.combat.NpcAttack;
-import dev.easynpc.combat.NpcAttackSelector;
-import dev.easynpc.model.AggressionLevel;
-import dev.easynpc.model.CombatProfile;
-import dev.easynpc.model.LootTier;
-import dev.easynpc.model.NpcDefinition;
-import dev.easynpc.model.NpcInstance;
-import dev.easynpc.model.WalkingSpeed;
-import dev.easynpc.repository.NpcDefinitionRepository;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -30,13 +27,18 @@ import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
+import dev.easynpc.combat.NpcAttack;
+import dev.easynpc.combat.NpcAttackSelector;
+import dev.easynpc.model.AggressionLevel;
+import dev.easynpc.model.CombatProfile;
+import dev.easynpc.model.LootTier;
+import dev.easynpc.model.NpcDefinition;
+import dev.easynpc.model.NpcInstance;
+import dev.easynpc.model.WalkingSpeed;
+import dev.easynpc.repository.NpcDefinitionRepository;
 
 public final class NpcCombatService implements Listener {
+
     private static final double SIGHT_RANGE = 16.0;
     private static final double MAX_CHASE_RANGE_SQUARED = 32.0 * 32.0;
     private static final int FLEE_TICKS = 8 * 20;
@@ -53,10 +55,10 @@ public final class NpcCombatService implements Listener {
     private long currentTick;
 
     public NpcCombatService(
-        Plugin plugin,
-        NpcDefinitionRepository definitionRepository,
-        NpcInstanceRegistry instanceRegistry,
-        NativeNpcNavigationService navigationService
+            Plugin plugin,
+            NpcDefinitionRepository definitionRepository,
+            NpcInstanceRegistry instanceRegistry,
+            NativeNpcNavigationService navigationService
     ) {
         this.plugin = plugin;
         this.definitionRepository = definitionRepository;
@@ -88,13 +90,18 @@ public final class NpcCombatService implements Listener {
         return states.containsKey(instance.getId());
     }
 
-    public void setBehaviourService(NpcBehaviourService behaviourService) { this.behaviourService = behaviourService; }
+    public void setBehaviourService(NpcBehaviourService behaviourService) {
+        this.behaviourService = behaviourService;
+    }
 
     public void startCombat(NpcInstance instance, Entity target) {
-        if (!(target instanceof LivingEntity living) || !isAttackable(instance, living)) return;
+        if (!(target instanceof LivingEntity living) || !isAttackable(instance, living)) {
+            return;
+        }
         NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
-        if (definition != null && !definition.getCombatProfile().invulnerable())
+        if (definition != null && !definition.getCombatProfile().invulnerable()) {
             engage(instance, definition, CombatMode.FIGHT, living);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -154,7 +161,7 @@ public final class NpcCombatService implements Listener {
                 ItemStack item = contents[slot];
                 LootTier tier = LootTier.forInventorySlot(slot);
                 if (item != null && !item.getType().isAir() && item.getAmount() > 0
-                    && tier.shouldDrop(ThreadLocalRandom.current().nextDouble())) {
+                        && tier.shouldDrop(ThreadLocalRandom.current().nextDouble())) {
                     event.getDrops().add(item);
                 }
             }
@@ -163,7 +170,7 @@ public final class NpcCombatService implements Listener {
         clearState(instance);
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (!instanceRegistry.deleteInstance(instance.getId()) || definition == null
-                || definition.getCombatProfile().respawnSeconds() == 0) {
+                    || definition.getCombatProfile().respawnSeconds() == 0) {
                 return;
             }
             long delayTicks = definition.getCombatProfile().respawnSeconds() * 20L;
@@ -201,7 +208,7 @@ public final class NpcCombatService implements Listener {
                 state = null;
             }
             if (state == null && profile.aggressionLevel() == AggressionLevel.FIGHTS_ON_SIGHT
-                && currentTick % 10 == Math.floorMod(instance.getId().hashCode(), 10)) {
+                    && currentTick % 10 == Math.floorMod(instance.getId().hashCode(), 10)) {
                 LivingEntity target = findNearestTarget(instance, npc);
                 if (target != null) {
                     engage(instance, definition, CombatMode.FIGHT, target);
@@ -224,7 +231,7 @@ public final class NpcCombatService implements Listener {
         Entity threat = Bukkit.getEntity(state.entityId);
         Location threatLocation = threat != null && threat.isValid() ? threat.getLocation() : state.lastKnownLocation;
         if (currentTick >= state.expiresAt || threatLocation == null
-            || threatLocation.getWorld() != npc.getWorld()) {
+                || threatLocation.getWorld() != npc.getWorld()) {
             clearState(instance);
             return;
         }
@@ -244,8 +251,8 @@ public final class NpcCombatService implements Listener {
     private void fight(NpcInstance instance, LivingEntity npc, CombatState state) {
         Entity entity = Bukkit.getEntity(state.entityId);
         if (!(entity instanceof LivingEntity target) || !isAttackable(instance, target)
-            || target.getWorld() != npc.getWorld()
-            || target.getLocation().distanceSquared(npc.getLocation()) > MAX_CHASE_RANGE_SQUARED) {
+                || target.getWorld() != npc.getWorld()
+                || target.getLocation().distanceSquared(npc.getLocation()) > MAX_CHASE_RANGE_SQUARED) {
             clearState(instance);
             return;
         }
@@ -292,7 +299,7 @@ public final class NpcCombatService implements Listener {
         }
         Location targetLocation = target.getLocation();
         double targetDistance = Math.sqrt(
-            Math.pow(current.getX() - targetLocation.getX(), 2.0)
+                Math.pow(current.getX() - targetLocation.getX(), 2.0)
                 + Math.pow(current.getZ() - targetLocation.getZ(), 2.0)
         );
         double retreatDistance = Math.max(2.0, minimumRange - targetDistance + 1.5);
@@ -300,38 +307,40 @@ public final class NpcCombatService implements Listener {
     }
 
     private void engage(
-        NpcInstance instance,
-        NpcDefinition definition,
-        CombatMode mode,
-        LivingEntity entity
+            NpcInstance instance,
+            NpcDefinition definition,
+            CombatMode mode,
+            LivingEntity entity
     ) {
         CombatState previous = states.get(instance.getId());
         boolean enteringCombat = previous == null || previous.mode != mode || !previous.entityId.equals(entity.getUniqueId());
         states.put(instance.getId(), new CombatState(
-            mode,
-            entity.getUniqueId(),
-            entity.getLocation(),
-            currentTick + (mode == CombatMode.FLEE ? FLEE_TICKS : Long.MAX_VALUE),
-            currentTick
+                mode,
+                entity.getUniqueId(),
+                entity.getLocation(),
+                currentTick + (mode == CombatMode.FLEE ? FLEE_TICKS : Long.MAX_VALUE),
+                currentTick
         ));
         if (enteringCombat) {
-            if (behaviourService != null) behaviourService.trigger(dev.easynpc.model.BehaviourEvent.COMBAT_ENTERED, instance, entity);
+            if (behaviourService != null) {
+                behaviourService.trigger(dev.easynpc.model.BehaviourEvent.COMBAT_ENTERED, instance, entity);
+            }
         }
     }
 
     private LivingEntity findNearestTarget(NpcInstance instance, LivingEntity npc) {
         return npc.getNearbyEntities(SIGHT_RANGE, SIGHT_RANGE, SIGHT_RANGE).stream()
-            .filter(LivingEntity.class::isInstance)
-            .map(LivingEntity.class::cast)
-            .filter(target -> isAttackable(instance, target))
-            .filter(npc::hasLineOfSight)
-            .min(Comparator.comparingDouble(target -> target.getLocation().distanceSquared(npc.getLocation())))
-            .orElse(null);
+                .filter(LivingEntity.class::isInstance)
+                .map(LivingEntity.class::cast)
+                .filter(target -> isAttackable(instance, target))
+                .filter(npc::hasLineOfSight)
+                .min(Comparator.comparingDouble(target -> target.getLocation().distanceSquared(npc.getLocation())))
+                .orElse(null);
     }
 
     private boolean isAttackable(NpcInstance attacker, LivingEntity target) {
         if (!target.isValid() || target.isDead() || target.getEntityId() == attacker.getEntityId()
-            || navigationService.isNavigator(target)) {
+                || navigationService.isNavigator(target)) {
             return false;
         }
         if (target instanceof Player player) {
@@ -375,7 +384,7 @@ public final class NpcCombatService implements Listener {
             instanceRegistry.stopNavigating(instance);
             if (behaviourService != null) {
                 behaviourService.trigger(dev.easynpc.model.BehaviourEvent.COMBAT_EXITED,
-                    instance, Bukkit.getEntity(removed.entityId));
+                        instance, Bukkit.getEntity(removed.entityId));
             }
         }
     }
@@ -386,6 +395,7 @@ public final class NpcCombatService implements Listener {
     }
 
     private static final class CombatState {
+
         private final CombatMode mode;
         private final UUID entityId;
         private Location lastKnownLocation;
@@ -396,11 +406,11 @@ public final class NpcCombatService implements Listener {
         private boolean retreating;
 
         private CombatState(
-            CombatMode mode,
-            UUID entityId,
-            Location lastKnownLocation,
-            long expiresAt,
-            long nextAttackAt
+                CombatMode mode,
+                UUID entityId,
+                Location lastKnownLocation,
+                long expiresAt,
+                long nextAttackAt
         ) {
             this.mode = mode;
             this.entityId = entityId;

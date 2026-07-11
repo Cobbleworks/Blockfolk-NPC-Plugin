@@ -1,13 +1,15 @@
 package dev.easynpc.runtime;
 
-import dev.easynpc.model.NpcDefinition;
-import dev.easynpc.model.NpcInstance;
+import java.util.Optional;
+
 import org.bukkit.Location;
 import org.bukkit.entity.LivingEntity;
 
-import java.util.Optional;
+import dev.easynpc.model.NpcDefinition;
+import dev.easynpc.model.NpcInstance;
 
 public interface NpcRenderer {
+
     void start();
 
     void stop();

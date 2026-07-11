@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 
 public final class SkinTextureUtil {
+
     private static final String TEXTURE_PREFIX = "https://textures.minecraft.net/texture/";
     private static final Pattern TEXTURE_HASH = Pattern.compile("[0-9a-fA-F]{32,128}");
 
@@ -34,10 +35,10 @@ public final class SkinTextureUtil {
             URI uri = new URI(value);
             String path = uri.getPath();
             if (!"https".equalsIgnoreCase(uri.getScheme())
-                || uri.getHost() == null
-                || uri.getUserInfo() != null
-                || path == null
-                || path.isBlank()) {
+                    || uri.getHost() == null
+                    || uri.getUserInfo() != null
+                    || path == null
+                    || path.isBlank()) {
                 throw invalidTextureUrl();
             }
             if ("textures.minecraft.net".equalsIgnoreCase(uri.getHost())) {
@@ -59,9 +60,9 @@ public final class SkinTextureUtil {
         try {
             URI uri = new URI(value);
             return "https".equalsIgnoreCase(uri.getScheme())
-                && "textures.minecraft.net".equalsIgnoreCase(uri.getHost())
-                && uri.getPath() != null
-                && uri.getPath().matches("/texture/[0-9a-fA-F]{32,128}");
+                    && "textures.minecraft.net".equalsIgnoreCase(uri.getHost())
+                    && uri.getPath() != null
+                    && uri.getPath().matches("/texture/[0-9a-fA-F]{32,128}");
         } catch (URISyntaxException exception) {
             return false;
         }

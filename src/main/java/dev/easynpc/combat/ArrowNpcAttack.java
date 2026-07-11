@@ -8,6 +8,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 
 final class ArrowNpcAttack implements NpcAttack {
+
     private static final double RANGE = 16.0;
     private static final double MINIMUM_RANGE = 6.0;
     private final boolean crossbow;
@@ -49,10 +50,10 @@ final class ArrowNpcAttack implements NpcAttack {
 
     static Vector aimedVelocity(LivingEntity attacker, LivingEntity target, double speed, double gravity) {
         return aimedVelocity(
-            attacker.getEyeLocation().toVector(),
-            target.getEyeLocation().toVector(),
-            speed,
-            gravity
+                attacker.getEyeLocation().toVector(),
+                target.getEyeLocation().toVector(),
+                speed,
+                gravity
         );
     }
 

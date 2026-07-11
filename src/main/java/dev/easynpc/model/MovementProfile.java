@@ -3,6 +3,7 @@ package dev.easynpc.model;
 import java.util.Objects;
 
 public record MovementProfile(boolean enabled, String routeKey, WalkingSpeed walkingSpeed) {
+
     public MovementProfile(boolean enabled) {
         this(enabled, null, WalkingSpeed.NORMAL);
     }

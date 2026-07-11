@@ -1,19 +1,5 @@
 package dev.easynpc.runtime;
 
-import com.destroystokyo.paper.entity.Pathfinder;
-import dev.easynpc.model.NpcInstance;
-import dev.easynpc.model.WalkingSpeed;
-import net.kyori.adventure.util.TriState;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.NamespacedKey;
-import org.bukkit.attribute.Attribute;
-import org.bukkit.attribute.AttributeInstance;
-import org.bukkit.entity.Husk;
-import org.bukkit.entity.Entity;
-import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.plugin.Plugin;
-
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -21,12 +7,29 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Husk;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.Plugin;
+
+import com.destroystokyo.paper.entity.Pathfinder;
+
+import dev.easynpc.model.NpcInstance;
+import dev.easynpc.model.WalkingSpeed;
+import net.kyori.adventure.util.TriState;
+
 /**
  * Uses an invisible, goal-free mob as the native Minecraft navigator for a
  * mannequin. Mannequins are LivingEntity implementations and do not expose
  * Paper's Pathfinder API themselves.
  */
 public final class NativeNpcNavigationService {
+
     private static final double NAVIGATOR_SCALE = 0.0625;
     private static final double ARRIVAL_HORIZONTAL_SQUARED = 0.8 * 0.8;
     private static final double ARRIVAL_VERTICAL = 1.5;
@@ -58,7 +61,7 @@ public final class NativeNpcNavigationService {
         double dx = target.getX() - current.getX();
         double dz = target.getZ() - current.getZ();
         if (dx * dx + dz * dz <= ARRIVAL_HORIZONTAL_SQUARED
-            && Math.abs(target.getY() - current.getY()) <= ARRIVAL_VERTICAL) {
+                && Math.abs(target.getY() - current.getY()) <= ARRIVAL_VERTICAL) {
             navigator.getPathfinder().stopPathfinding();
             states.remove(instance.getId());
             return new NavigationUpdate(NavigationStatus.ARRIVED, current);
@@ -76,7 +79,7 @@ public final class NativeNpcNavigationService {
         } else {
             updateProgress(state, current);
             if (state.retryTicks <= 0
-                && (!navigator.getPathfinder().hasPath() || state.stationaryTicks >= REPATH_TICKS)) {
+                    && (!navigator.getPathfinder().hasPath() || state.stationaryTicks >= REPATH_TICKS)) {
                 requestPath(navigator, target, walkingSpeed);
                 state.retryTicks = REPATH_TICKS;
             }
@@ -86,8 +89,8 @@ public final class NativeNpcNavigationService {
         }
         boolean stuck = state.stationaryTicks >= STUCK_TICKS;
         return new NavigationUpdate(
-            !stuck && navigator.getPathfinder().hasPath() ? NavigationStatus.MOVING : NavigationStatus.STALLED,
-            current
+                !stuck && navigator.getPathfinder().hasPath() ? NavigationStatus.MOVING : NavigationStatus.STALLED,
+                current
         );
     }
 
@@ -144,9 +147,9 @@ public final class NativeNpcNavigationService {
         try {
             Husk spawned = location.getWorld().spawn(location, Husk.class, navigator -> {
                 navigator.getPersistentDataContainer().set(
-                    navigatorKey,
-                    PersistentDataType.STRING,
-                    instance.getId().toString()
+                        navigatorKey,
+                        PersistentDataType.STRING,
+                        instance.getId().toString()
                 );
                 configure(navigator);
             });
@@ -166,7 +169,7 @@ public final class NativeNpcNavigationService {
         }
         UUID navigatorId = navigatorIdsByInstance.get(instance.getId());
         if (navigatorId != null && location.getWorld().getEntity(navigatorId) instanceof Husk navigator
-            && navigator.isValid()) {
+                && navigator.isValid()) {
             return navigator;
         }
         navigatorIdsByInstance.remove(instance.getId());
@@ -234,7 +237,7 @@ public final class NativeNpcNavigationService {
 
     private void updateProgress(NavigationState state, Location current) {
         if (state.lastLocation == null || state.lastLocation.getWorld() != current.getWorld()
-            || state.lastLocation.distanceSquared(current) > 0.0025) {
+                || state.lastLocation.distanceSquared(current) > 0.0025) {
             state.lastLocation = current.clone();
             state.stationaryTicks = 0;
         } else {
@@ -244,8 +247,8 @@ public final class NativeNpcNavigationService {
 
     private boolean sameTarget(Location first, Location second) {
         return first != null
-            && first.getWorld() == second.getWorld()
-            && first.distanceSquared(second) < 0.0001;
+                && first.getWorld() == second.getWorld()
+                && first.distanceSquared(second) < 0.0001;
     }
 
     public enum NavigationStatus {
@@ -255,9 +258,11 @@ public final class NativeNpcNavigationService {
     }
 
     public record NavigationUpdate(NavigationStatus status, Location location) {
+
     }
 
     private static final class NavigationState {
+
         private Location target;
         private Location lastLocation;
         private WalkingSpeed walkingSpeed;

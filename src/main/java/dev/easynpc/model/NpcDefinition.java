@@ -1,16 +1,17 @@
 package dev.easynpc.model;
 
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+
 import org.bukkit.Location;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.EnumMap;
-import java.util.Map;
-import java.util.Locale;
-import java.util.Objects;
-
 public final class NpcDefinition {
+
     private final String key;
     private String displayName;
     private String skinUrl;
@@ -85,8 +86,8 @@ public final class NpcDefinition {
         this.skinUrl = skinUrl == null || skinUrl.isBlank() ? null : skinUrl.trim();
         this.skinTextureValue = textureValue == null || textureValue.isBlank() ? null : textureValue.trim();
         this.skinTextureSignature = textureSignature == null || textureSignature.isBlank()
-            ? null
-            : textureSignature.trim();
+                ? null
+                : textureSignature.trim();
     }
 
     public Location getSpawnpoint() {
@@ -166,8 +167,11 @@ public final class NpcDefinition {
     }
 
     public void setBehaviourActions(BehaviourEvent event, List<BehaviourAction> actions) {
-        if (actions == null || actions.isEmpty()) behaviours.remove(event);
-        else behaviours.put(event, new ArrayList<>(actions));
+        if (actions == null || actions.isEmpty()) {
+            behaviours.remove(event); 
+        }else {
+            behaviours.put(event, new ArrayList<>(actions));
+        }
     }
 
     public void addBehaviourAction(BehaviourEvent event, BehaviourAction action) {
@@ -176,9 +180,13 @@ public final class NpcDefinition {
 
     public void removeBehaviourAction(BehaviourEvent event, int index) {
         List<BehaviourAction> actions = behaviours.get(event);
-        if (actions == null || index < 0 || index >= actions.size()) return;
+        if (actions == null || index < 0 || index >= actions.size()) {
+            return;
+        }
         actions.remove(index);
-        if (actions.isEmpty()) behaviours.remove(event);
+        if (actions.isEmpty()) {
+            behaviours.remove(event);
+        }
     }
 
     private static ItemStack[] cloneArray(ItemStack[] source, int length) {

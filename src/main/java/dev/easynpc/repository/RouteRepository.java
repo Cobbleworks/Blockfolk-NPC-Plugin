@@ -1,12 +1,5 @@
 package dev.easynpc.repository;
 
-import dev.easynpc.model.NpcDefinition;
-import dev.easynpc.model.NpcRoute;
-import dev.easynpc.model.RoutePoint;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.plugin.java.JavaPlugin;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.Collection;
@@ -15,7 +8,16 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import dev.easynpc.model.NpcDefinition;
+import dev.easynpc.model.NpcRoute;
+import dev.easynpc.model.RoutePoint;
+
 public final class RouteRepository {
+
     private final File file;
     private final Map<String, NpcRoute> routes = new LinkedHashMap<>();
 
@@ -46,10 +48,10 @@ public final class RouteRepository {
                     }
                     try {
                         route.addPoint(new RoutePoint(
-                            point.getString("world"),
-                            point.getInt("x"),
-                            point.getInt("y"),
-                            point.getInt("z")
+                                point.getString("world"),
+                                point.getInt("x"),
+                                point.getInt("y"),
+                                point.getInt("z")
                         ));
                     } catch (IllegalArgumentException ignored) {
                         // Ignore malformed cross-world or duplicate legacy points.

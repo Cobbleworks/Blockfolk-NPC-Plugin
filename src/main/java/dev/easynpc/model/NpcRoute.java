@@ -1,18 +1,19 @@
 package dev.easynpc.model;
 
-import org.bukkit.Location;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
+import org.bukkit.Location;
+
 public final class NpcRoute {
+
     private static final Comparator<RoutePoint> POINT_ORDER = Comparator
-        .comparing(RoutePoint::worldName)
-        .thenComparingInt(RoutePoint::x)
-        .thenComparingInt(RoutePoint::y)
-        .thenComparingInt(RoutePoint::z);
+            .comparing(RoutePoint::worldName)
+            .thenComparingInt(RoutePoint::x)
+            .thenComparingInt(RoutePoint::y)
+            .thenComparingInt(RoutePoint::z);
 
     private final String key;
     private String displayName;
@@ -76,8 +77,8 @@ public final class NpcRoute {
 
     /**
      * Computes an order without relying on placement order: start at the point
-     * nearest the NPC, then repeatedly visit the nearest unvisited point.
-     * The movement task closes the loop from the last result back to the first.
+     * nearest the NPC, then repeatedly visit the nearest unvisited point. The
+     * movement task closes the loop from the last result back to the first.
      */
     public List<RoutePoint> logicallyOrdered(Location origin) {
         if (points.isEmpty()) {
@@ -85,16 +86,16 @@ public final class NpcRoute {
         }
         List<RoutePoint> remaining = new ArrayList<>(points);
         RoutePoint current = remaining.stream()
-            .min(Comparator.comparingDouble((RoutePoint point) -> point.distanceSquared(origin)).thenComparing(POINT_ORDER))
-            .orElseThrow();
+                .min(Comparator.comparingDouble((RoutePoint point) -> point.distanceSquared(origin)).thenComparing(POINT_ORDER))
+                .orElseThrow();
         List<RoutePoint> ordered = new ArrayList<>();
         ordered.add(current);
         remaining.remove(current);
         while (!remaining.isEmpty()) {
             RoutePoint previous = current;
             current = remaining.stream()
-                .min(Comparator.comparingDouble((RoutePoint point) -> previous.distanceSquared(point)).thenComparing(POINT_ORDER))
-                .orElseThrow();
+                    .min(Comparator.comparingDouble((RoutePoint point) -> previous.distanceSquared(point)).thenComparing(POINT_ORDER))
+                    .orElseThrow();
             ordered.add(current);
             remaining.remove(current);
         }

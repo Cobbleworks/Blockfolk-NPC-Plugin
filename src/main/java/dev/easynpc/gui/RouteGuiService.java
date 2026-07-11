@@ -1,13 +1,12 @@
 package dev.easynpc.gui;
 
-import dev.easynpc.input.ChatInputService;
-import dev.easynpc.model.NpcDefinition;
-import dev.easynpc.model.NpcRoute;
-import dev.easynpc.model.RoutePoint;
-import dev.easynpc.repository.NpcDefinitionRepository;
-import dev.easynpc.repository.RouteRepository;
-import dev.easynpc.runtime.NpcInstanceRegistry;
-import net.kyori.adventure.text.Component;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Consumer;
+
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
@@ -35,14 +34,17 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.function.Consumer;
+import dev.easynpc.input.ChatInputService;
+import dev.easynpc.model.NpcDefinition;
+import dev.easynpc.model.NpcRoute;
+import dev.easynpc.model.RoutePoint;
+import dev.easynpc.repository.NpcDefinitionRepository;
+import dev.easynpc.repository.RouteRepository;
+import dev.easynpc.runtime.NpcInstanceRegistry;
+import net.kyori.adventure.text.Component;
 
 public final class RouteGuiService implements Listener {
+
     private static final int PAGE_SIZE = 45;
 
     private final JavaPlugin plugin;
@@ -57,12 +59,12 @@ public final class RouteGuiService implements Listener {
     private BukkitTask markerTask;
 
     public RouteGuiService(
-        JavaPlugin plugin,
-        RouteRepository routeRepository,
-        NpcDefinitionRepository definitionRepository,
-        NpcInstanceRegistry instanceRegistry,
-        ChatInputService chatInputService,
-        Consumer<Player> mainGuiOpener
+            JavaPlugin plugin,
+            RouteRepository routeRepository,
+            NpcDefinitionRepository definitionRepository,
+            NpcInstanceRegistry instanceRegistry,
+            ChatInputService chatInputService,
+            Consumer<Player> mainGuiOpener
     ) {
         this.plugin = plugin;
         this.routeRepository = routeRepository;
@@ -96,31 +98,31 @@ public final class RouteGuiService implements Listener {
         for (int index = from; index < to; index++) {
             NpcRoute route = routes.get(index);
             long assignments = definitionRepository.findAll().stream()
-                .filter(definition -> route.getKey().equals(definition.getMovementProfile().routeKey()))
-                .count();
+                    .filter(definition -> route.getKey().equals(definition.getMovementProfile().routeKey()))
+                    .count();
             inventory.setItem(index - from, item(Material.AMETHYST_CLUSTER, route.getDisplayName(), List.of(
-                ChatColor.DARK_GRAY + "Key: " + route.getKey(),
-                ChatColor.GRAY + "Key points: " + ChatColor.WHITE + route.getPoints().size(),
-                ChatColor.GRAY + "Assigned presets: " + ChatColor.WHITE + assignments,
-                ChatColor.YELLOW + "Left-click: edit points",
-                ChatColor.RED + "Shift-right-click: remove route"
+                    ChatColor.DARK_GRAY + "Key: " + route.getKey(),
+                    ChatColor.GRAY + "Key points: " + ChatColor.WHITE + route.getPoints().size(),
+                    ChatColor.GRAY + "Assigned presets: " + ChatColor.WHITE + assignments,
+                    ChatColor.YELLOW + "Left-click: edit points",
+                    ChatColor.RED + "Shift-right-click: remove route"
             )));
         }
         inventory.setItem(45, item(Material.PLAYER_HEAD, "Manage NPCs", List.of(
-            ChatColor.GRAY + "Return to the main NPC menu",
-            ChatColor.YELLOW + "Click to manage NPC presets"
+                ChatColor.GRAY + "Return to the main NPC menu",
+                ChatColor.YELLOW + "Click to manage NPC presets"
         )));
         if (page > 0) {
             inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
         }
         inventory.setItem(49, item(Material.COMPASS, "Route Overview", List.of(
-            ChatColor.GRAY + "Routes: " + ChatColor.WHITE + routes.size(),
-            ChatColor.GRAY + "NPCs start at their nearest point",
-            ChatColor.GRAY + "then follow nearest unvisited points in a loop"
+                ChatColor.GRAY + "Routes: " + ChatColor.WHITE + routes.size(),
+                ChatColor.GRAY + "NPCs start at their nearest point",
+                ChatColor.GRAY + "then follow nearest unvisited points in a loop"
         )));
         inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
-            ChatColor.GRAY + "Creates an empty route",
-            ChatColor.YELLOW + "Click, then enter its name in chat"
+                ChatColor.GRAY + "Creates an empty route",
+                ChatColor.YELLOW + "Click, then enter its name in chat"
         )));
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
@@ -305,10 +307,10 @@ public final class RouteGuiService implements Listener {
 
     private void openDeleteConfirmation(Player player, NpcRoute route, int page) {
         Inventory inventory = Bukkit.createInventory(new DeleteRouteHolder(route.getKey(), page), 27,
-            Component.text("Delete route: " + route.getDisplayName()));
+                Component.text("Delete route: " + route.getDisplayName()));
         inventory.setItem(11, item(Material.LIME_CONCRETE, "Confirm", List.of(
-            ChatColor.RED + "Permanently delete this route",
-            ChatColor.GRAY + "NPC presets using it will be unassigned"
+                ChatColor.RED + "Permanently delete this route",
+                ChatColor.GRAY + "NPC presets using it will be unassigned"
         )));
         inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel", List.of(ChatColor.GRAY + "Nothing will be changed")));
         player.openInventory(inventory);
@@ -322,8 +324,8 @@ public final class RouteGuiService implements Listener {
         ItemStack held = player.getInventory().getItemInMainHand();
         player.getInventory().setItemInMainHand(createWand(route, token));
         if (!held.getType().isAir()) {
-            player.getInventory().addItem(held).values().forEach(leftover ->
-                player.getWorld().dropItemNaturally(player.getLocation(), leftover));
+            player.getInventory().addItem(held).values().forEach(leftover
+                    -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
         }
         player.closeInventory();
         player.sendMessage(Component.text("Editing route '" + route.getDisplayName() + "'."));
@@ -336,11 +338,11 @@ public final class RouteGuiService implements Listener {
         ItemMeta meta = wand.getItemMeta();
         meta.setDisplayName(ChatColor.LIGHT_PURPLE + "Route Editor: " + route.getDisplayName());
         meta.setLore(List.of(
-            ChatColor.GRAY + "Unique editor: " + token.toString().substring(0, 8),
-            ChatColor.YELLOW + "Right-click a block: add point",
-            ChatColor.YELLOW + "Sneak-right-click: remove point",
-            ChatColor.LIGHT_PURPLE + "Points stay highlighted while editing",
-            ChatColor.GREEN + "Left-click or drop: finish"
+                ChatColor.GRAY + "Unique editor: " + token.toString().substring(0, 8),
+                ChatColor.YELLOW + "Right-click a block: add point",
+                ChatColor.YELLOW + "Sneak-right-click: remove point",
+                ChatColor.LIGHT_PURPLE + "Points stay highlighted while editing",
+                ChatColor.GREEN + "Left-click or drop: finish"
         ));
         meta.setEnchantmentGlintOverride(true);
         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
@@ -424,9 +426,11 @@ public final class RouteGuiService implements Listener {
     }
 
     private record EditSession(String routeKey, UUID token) {
+
     }
 
     private record RoutesHolder(int page) implements InventoryHolder {
+
         @Override
         public Inventory getInventory() {
             return null;
@@ -434,6 +438,7 @@ public final class RouteGuiService implements Listener {
     }
 
     private record DeleteRouteHolder(String routeKey, int page) implements InventoryHolder {
+
         @Override
         public Inventory getInventory() {
             return null;

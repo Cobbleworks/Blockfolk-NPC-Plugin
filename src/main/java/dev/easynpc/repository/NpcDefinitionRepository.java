@@ -28,6 +28,7 @@ import java.util.Optional;
 import java.util.logging.Level;
 
 public final class NpcDefinitionRepository {
+
     private final JavaPlugin plugin;
     private final File definitionsFolder;
     private final Map<String, NpcDefinition> definitions = new LinkedHashMap<>();
@@ -63,8 +64,8 @@ public final class NpcDefinitionRepository {
 
     public Collection<NpcDefinition> findAll() {
         return definitions.values().stream()
-            .sorted(Comparator.comparing(NpcDefinition::getKey))
-            .toList();
+                .sorted(Comparator.comparing(NpcDefinition::getKey))
+                .toList();
     }
 
     public NpcDefinition save(NpcDefinition definition) {
@@ -97,7 +98,9 @@ public final class NpcDefinitionRepository {
             List<Map<String, Object>> actions = definition.getBehaviourActions(event).stream().map(action -> {
                 Map<String, Object> stored = new LinkedHashMap<String, Object>();
                 stored.put("type", action.type().name().toLowerCase(Locale.ROOT));
-                if (action.value() != null) stored.put("value", action.value());
+                if (action.value() != null) {
+                    stored.put("value", action.value());
+                }
                 return stored;
             }).toList();
             configuration.set("behaviours." + event.name().toLowerCase(Locale.ROOT), actions.isEmpty() ? null : actions);
@@ -128,9 +131,9 @@ public final class NpcDefinitionRepository {
         NpcDefinition definition = new NpcDefinition(NpcDefinition.toKey(key));
         definition.setDisplayName(configuration.getString("display-name", definition.getKey()));
         definition.setResolvedSkin(
-            configuration.getString("skin-url"),
-            configuration.getString("skin-texture-value"),
-            configuration.getString("skin-texture-signature")
+                configuration.getString("skin-url"),
+                configuration.getString("skin-texture-value"),
+                configuration.getString("skin-texture-signature")
         );
         definition.setSpawnpoint(LocationCodec.read(configuration.getConfigurationSection("spawnpoint")));
         definition.setInventoryContents(readItemArray(configuration, "inventory.contents", 36));
@@ -141,24 +144,26 @@ public final class NpcDefinitionRepository {
         definition.setSecondsPerDialogLine(configuration.getInt("dialog.seconds-per-line", 3));
         int legacyHealth = configuration.getBoolean("combat.enabled", false) ? 20 : 0;
         definition.setCombatProfile(new CombatProfile(
-            configuration.getInt("combat.max-health", legacyHealth),
-            configuration.getInt("combat.respawn-seconds", 0),
-            AggressionLevel.fromStored(configuration.getString("combat.aggression")),
-            configuration.getString("combat.shoutout")
+                configuration.getInt("combat.max-health", legacyHealth),
+                configuration.getInt("combat.respawn-seconds", 0),
+                AggressionLevel.fromStored(configuration.getString("combat.aggression")),
+                configuration.getString("combat.shoutout")
         ));
         definition.setMovementProfile(new MovementProfile(
-            configuration.getBoolean("movement.enabled", false),
-            configuration.getString("movement.route"),
-            WalkingSpeed.fromStored(configuration.getString("movement.speed"))
+                configuration.getBoolean("movement.enabled", false),
+                configuration.getString("movement.route"),
+                WalkingSpeed.fromStored(configuration.getString("movement.speed"))
         ));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
             for (Map<?, ?> entry : configuration.getMapList("behaviours." + event.name().toLowerCase(Locale.ROOT))) {
                 Object type = entry.get("type");
-                if (type == null) continue;
+                if (type == null) {
+                    continue;
+                }
                 try {
                     actions.add(new BehaviourAction(BehaviourActionType.fromStored(type.toString()),
-                        entry.get("value") == null ? null : entry.get("value").toString()));
+                            entry.get("value") == null ? null : entry.get("value").toString()));
                 } catch (IllegalArgumentException ignored) {
                     plugin.getLogger().warning("Ignoring unknown behaviour action '" + type + "' in " + file.getName());
                 }
@@ -169,12 +174,12 @@ public final class NpcDefinitionRepository {
         String legacyShoutout = configuration.getString("combat.shoutout");
         if (legacyShoutout != null && definition.getBehaviourActions(BehaviourEvent.COMBAT_ENTERED).isEmpty()) {
             definition.addBehaviourAction(BehaviourEvent.COMBAT_ENTERED,
-                new BehaviourAction(BehaviourActionType.SEND_DIALOG, legacyShoutout));
+                    new BehaviourAction(BehaviourActionType.SEND_DIALOG, legacyShoutout));
         }
         String legacyRoute = configuration.getString("movement.route");
         if (legacyRoute != null && definition.getBehaviourActions(BehaviourEvent.SPAWN).isEmpty()) {
             definition.addBehaviourAction(BehaviourEvent.SPAWN,
-                new BehaviourAction(BehaviourActionType.SET_ROUTE, legacyRoute));
+                    new BehaviourAction(BehaviourActionType.SET_ROUTE, legacyRoute));
         }
         return definition;
     }

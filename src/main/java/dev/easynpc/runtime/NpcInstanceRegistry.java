@@ -1,14 +1,5 @@
 package dev.easynpc.runtime;
 
-import dev.easynpc.dialog.DialogService;
-import dev.easynpc.model.NpcDefinition;
-import dev.easynpc.model.NpcInstance;
-import dev.easynpc.model.WalkingSpeed;
-import dev.easynpc.repository.NpcDefinitionRepository;
-import dev.easynpc.repository.NpcInstanceRepository;
-import org.bukkit.Location;
-import org.bukkit.entity.LivingEntity;
-
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -17,25 +8,38 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
+import org.bukkit.Location;
+import org.bukkit.entity.LivingEntity;
+
+import dev.easynpc.dialog.DialogService;
+import dev.easynpc.model.NpcDefinition;
+import dev.easynpc.model.NpcInstance;
+import dev.easynpc.model.WalkingSpeed;
+import dev.easynpc.repository.NpcDefinitionRepository;
+import dev.easynpc.repository.NpcInstanceRepository;
+
 public final class NpcInstanceRegistry {
+
     private final NpcDefinitionRepository definitionRepository;
     private final NpcInstanceRepository instanceRepository;
     private final NpcRenderer renderer;
     private final NativeNpcNavigationService navigationService;
     private final DialogService dialogService;
     private final Map<UUID, NpcInstance> instances = new LinkedHashMap<>();
-    private BiConsumer<NpcInstance, NpcDefinition> spawnListener = (instance, definition) -> { };
+    private BiConsumer<NpcInstance, NpcDefinition> spawnListener = (instance, definition) -> {
+    };
 
     public void setSpawnListener(BiConsumer<NpcInstance, NpcDefinition> spawnListener) {
-        this.spawnListener = spawnListener == null ? (instance, definition) -> { } : spawnListener;
+        this.spawnListener = spawnListener == null ? (instance, definition) -> {
+        } : spawnListener;
     }
 
     public NpcInstanceRegistry(
-        NpcDefinitionRepository definitionRepository,
-        NpcInstanceRepository instanceRepository,
-        NpcRenderer renderer,
-        NativeNpcNavigationService navigationService,
-        DialogService dialogService
+            NpcDefinitionRepository definitionRepository,
+            NpcInstanceRepository instanceRepository,
+            NpcRenderer renderer,
+            NativeNpcNavigationService navigationService,
+            DialogService dialogService
     ) {
         this.definitionRepository = definitionRepository;
         this.instanceRepository = instanceRepository;
@@ -127,9 +131,9 @@ public final class NpcInstanceRegistry {
     }
 
     public NativeNpcNavigationService.NavigationStatus navigate(
-        NpcInstance instance,
-        Location target,
-        WalkingSpeed walkingSpeed
+            NpcInstance instance,
+            Location target,
+            WalkingSpeed walkingSpeed
     ) {
         if (!instances.containsKey(instance.getId())) {
             return NativeNpcNavigationService.NavigationStatus.STALLED;
@@ -147,8 +151,8 @@ public final class NpcInstanceRegistry {
 
     public Optional<NpcInstance> findByEntityId(int entityId) {
         return instances.values().stream()
-            .filter(instance -> instance.getEntityId() == entityId)
-            .findFirst();
+                .filter(instance -> instance.getEntityId() == entityId)
+                .findFirst();
     }
 
     public Optional<LivingEntity> findEntity(NpcInstance instance) {
@@ -160,8 +164,8 @@ public final class NpcInstanceRegistry {
 
     public Collection<NpcInstance> findByDefinition(NpcDefinition definition) {
         return instances.values().stream()
-            .filter(instance -> instance.getDefinitionKey().equals(definition.getKey()))
-            .toList();
+                .filter(instance -> instance.getDefinitionKey().equals(definition.getKey()))
+                .toList();
     }
 
     public boolean deleteInstance(UUID instanceId) {

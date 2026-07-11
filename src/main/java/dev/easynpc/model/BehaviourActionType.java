@@ -19,8 +19,15 @@ public enum BehaviourActionType {
         this.displayName = displayName;
         this.requiresValue = requiresValue;
     }
-    public String displayName() { return displayName; }
-    public boolean requiresValue() { return requiresValue; }
+
+    public String displayName() {
+        return displayName;
+    }
+
+    public boolean requiresValue() {
+        return requiresValue;
+    }
+
     public static BehaviourActionType fromStored(String value) {
         return valueOf(value.trim().toUpperCase(Locale.ROOT).replace('-', '_'));
     }

@@ -1,13 +1,14 @@
 package dev.easynpc.model;
 
+import java.util.Objects;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 
-import java.util.Objects;
-
 public record RoutePoint(String worldName, int x, int y, int z) {
+
     public RoutePoint {
         Objects.requireNonNull(worldName, "worldName");
     }

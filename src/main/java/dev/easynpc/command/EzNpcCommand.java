@@ -1,11 +1,9 @@
 package dev.easynpc.command;
 
-import dev.easynpc.gui.GuiService;
-import dev.easynpc.gui.RouteGuiService;
-import dev.easynpc.model.NpcDefinition;
-import dev.easynpc.repository.NpcDefinitionRepository;
-import dev.easynpc.runtime.NpcInstanceRegistry;
-import net.kyori.adventure.text.Component;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
 import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -13,21 +11,25 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
+import dev.easynpc.gui.GuiService;
+import dev.easynpc.gui.RouteGuiService;
+import dev.easynpc.model.NpcDefinition;
+import dev.easynpc.repository.NpcDefinitionRepository;
+import dev.easynpc.runtime.NpcInstanceRegistry;
+import net.kyori.adventure.text.Component;
 
 public final class EzNpcCommand implements CommandExecutor, TabCompleter {
+
     private final NpcDefinitionRepository definitionRepository;
     private final NpcInstanceRegistry instanceRegistry;
     private final GuiService guiService;
     private final RouteGuiService routeGuiService;
 
     public EzNpcCommand(
-        NpcDefinitionRepository definitionRepository,
-        NpcInstanceRegistry instanceRegistry,
-        GuiService guiService,
-        RouteGuiService routeGuiService
+            NpcDefinitionRepository definitionRepository,
+            NpcInstanceRegistry instanceRegistry,
+            GuiService guiService,
+            RouteGuiService routeGuiService
     ) {
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
@@ -97,8 +99,8 @@ public final class EzNpcCommand implements CommandExecutor, TabCompleter {
             return filter(suggestions, args[0]);
         }
         if (args.length == 2
-            && !args[0].equalsIgnoreCase("create")
-            && !args[0].equalsIgnoreCase("routes")) {
+                && !args[0].equalsIgnoreCase("create")
+                && !args[0].equalsIgnoreCase("routes")) {
             return filter(List.of("spawn"), args[1]);
         }
         return List.of();
@@ -107,7 +109,7 @@ public final class EzNpcCommand implements CommandExecutor, TabCompleter {
     private List<String> filter(List<String> values, String prefix) {
         String normalized = prefix.toLowerCase(Locale.ROOT);
         return values.stream()
-            .filter(value -> value.toLowerCase(Locale.ROOT).startsWith(normalized))
-            .toList();
+                .filter(value -> value.toLowerCase(Locale.ROOT).startsWith(normalized))
+                .toList();
     }
 }

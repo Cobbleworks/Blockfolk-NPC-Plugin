@@ -3,6 +3,7 @@ package dev.easynpc.model;
 import java.util.Objects;
 
 public record CombatProfile(int maxHealth, int respawnSeconds, AggressionLevel aggressionLevel, String shoutout) {
+
     public static final int HEALTH_STEP = 5;
     public static final int RESPAWN_STEP_SECONDS = 10;
     public static final int MAX_HEALTH = 1024;

@@ -1,33 +1,35 @@
 package dev.easynpc;
 
+import java.util.logging.Level;
+
+import org.bukkit.Bukkit;
+import org.bukkit.command.PluginCommand;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
+
 import dev.easynpc.command.EzNpcCommand;
 import dev.easynpc.dialog.DialogService;
 import dev.easynpc.gui.GuiService;
 import dev.easynpc.gui.RouteGuiService;
 import dev.easynpc.input.ChatInputService;
+import dev.easynpc.model.BehaviourEvent;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.repository.NpcDefinitionRepository;
 import dev.easynpc.repository.NpcInstanceRepository;
 import dev.easynpc.repository.RouteRepository;
-import dev.easynpc.runtime.NpcInstanceRegistry;
-import dev.easynpc.runtime.NpcCombatService;
-import dev.easynpc.runtime.NpcBehaviourService;
-import dev.easynpc.model.BehaviourEvent;
 import dev.easynpc.runtime.NativeNpcNavigationService;
+import dev.easynpc.runtime.NpcBehaviourService;
+import dev.easynpc.runtime.NpcCombatService;
+import dev.easynpc.runtime.NpcInstanceRegistry;
 import dev.easynpc.runtime.NpcRenderer;
 import dev.easynpc.runtime.PaperMannequinNpcRenderer;
 import dev.easynpc.runtime.RouteMovementService;
 import dev.easynpc.util.ResolvedSkin;
 import dev.easynpc.util.SkinResolver;
 import dev.easynpc.util.SkinTextureUtil;
-import org.bukkit.Bukkit;
-import org.bukkit.command.PluginCommand;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
-
-import java.util.logging.Level;
 
 public final class EasyNpcPlugin extends JavaPlugin {
+
     private NpcDefinitionRepository definitionRepository;
     private NpcInstanceRepository instanceRepository;
     private RouteRepository routeRepository;
@@ -54,34 +56,34 @@ public final class EasyNpcPlugin extends JavaPlugin {
         navigationService = new NativeNpcNavigationService(this);
         dialogService = new DialogService(this);
         instanceRegistry = new NpcInstanceRegistry(
-            definitionRepository,
-            instanceRepository,
-            npcRenderer,
-            navigationService,
-            dialogService
+                definitionRepository,
+                instanceRepository,
+                npcRenderer,
+                navigationService,
+                dialogService
         );
         chatInputService = new ChatInputService(this, getConfig().getInt("chat-input-timeout-seconds", 60));
         skinResolver = new SkinResolver(
-            getName() + "/" + getPluginMeta().getVersion(),
-            getConfig().getString("mineskin-api-key", "")
+                getName() + "/" + getPluginMeta().getVersion(),
+                getConfig().getString("mineskin-api-key", "")
         );
         routeGuiService = new RouteGuiService(
-            this,
-            routeRepository,
-            definitionRepository,
-            instanceRegistry,
-            chatInputService,
-            this::openMainGui
+                this,
+                routeRepository,
+                definitionRepository,
+                instanceRegistry,
+                chatInputService,
+                this::openMainGui
         );
         guiService = new GuiService(
-            this,
-            definitionRepository,
-            routeRepository,
-            instanceRegistry,
-            chatInputService,
-            dialogService,
-            skinResolver,
-            routeGuiService::openRoutes
+                this,
+                definitionRepository,
+                routeRepository,
+                instanceRegistry,
+                chatInputService,
+                dialogService,
+                skinResolver,
+                routeGuiService::openRoutes
         );
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
         behaviourService = new NpcBehaviourService(this, definitionRepository, instanceRegistry, dialogService);
@@ -93,12 +95,12 @@ public final class EasyNpcPlugin extends JavaPlugin {
             behaviourService.trigger(BehaviourEvent.SPAWN, instance, null);
         });
         routeMovementService = new RouteMovementService(
-            this,
-            definitionRepository,
-            routeRepository,
-            instanceRegistry,
-            combatService,
-            behaviourService
+                this,
+                definitionRepository,
+                routeRepository,
+                instanceRegistry,
+                combatService,
+                behaviourService
         );
 
         routeRepository.loadAll();
@@ -178,21 +180,21 @@ public final class EasyNpcPlugin extends JavaPlugin {
         for (NpcDefinition definition : definitionRepository.findAll()) {
             String skinUrl = definition.getSkinUrl();
             if (skinUrl == null || definition.getSkinTextureValue() != null
-                || SkinTextureUtil.isMinecraftTextureUrl(skinUrl)) {
+                    || SkinTextureUtil.isMinecraftTextureUrl(skinUrl)) {
                 continue;
             }
-            skinResolver.resolve(skinUrl).whenComplete((resolved, error) ->
-                Bukkit.getScheduler().runTask(this,
-                    () -> finishStoredSkinResolution(definition.getKey(), skinUrl, resolved, error))
+            skinResolver.resolve(skinUrl).whenComplete((resolved, error)
+                    -> Bukkit.getScheduler().runTask(this,
+                            () -> finishStoredSkinResolution(definition.getKey(), skinUrl, resolved, error))
             );
         }
     }
 
     private void finishStoredSkinResolution(
-        String definitionKey,
-        String requestedUrl,
-        ResolvedSkin resolved,
-        Throwable error
+            String definitionKey,
+            String requestedUrl,
+            ResolvedSkin resolved,
+            Throwable error
     ) {
         if (error != null) {
             getLogger().log(Level.WARNING, "Could not process the stored skin for NPC " + definitionKey, error);

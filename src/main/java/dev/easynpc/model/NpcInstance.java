@@ -1,10 +1,11 @@
 package dev.easynpc.model;
 
-import org.bukkit.Location;
-
 import java.util.UUID;
 
+import org.bukkit.Location;
+
 public final class NpcInstance {
+
     private final UUID id;
     private final String definitionKey;
     private Location location;

@@ -6,6 +6,7 @@ import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 
 public final class LocationCodec {
+
     private LocationCodec() {
     }
 
@@ -31,12 +32,12 @@ public final class LocationCodec {
             return null;
         }
         return new Location(
-            world,
-            section.getDouble("x"),
-            section.getDouble("y"),
-            section.getDouble("z"),
-            (float) section.getDouble("yaw"),
-            (float) section.getDouble("pitch")
+                world,
+                section.getDouble("x"),
+                section.getDouble("y"),
+                section.getDouble("z"),
+                (float) section.getDouble("yaw"),
+                (float) section.getDouble("pitch")
         );
     }
 }

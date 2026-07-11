@@ -1,6 +1,10 @@
 package dev.easynpc.input;
 
-import net.kyori.adventure.text.Component;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Consumer;
+
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -10,12 +14,10 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-import java.util.function.Consumer;
+import net.kyori.adventure.text.Component;
 
 public final class ChatInputService implements Listener {
+
     private final Plugin plugin;
     private final int timeoutSeconds;
     private final Map<UUID, PendingInput> pendingInputs = new HashMap<>();
@@ -74,5 +76,6 @@ public final class ChatInputService implements Listener {
     }
 
     private record PendingInput(Consumer<String> consumer, BukkitTask timeout) {
+
     }
 }

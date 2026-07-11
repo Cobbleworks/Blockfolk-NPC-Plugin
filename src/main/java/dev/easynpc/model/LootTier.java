@@ -46,8 +46,8 @@ public enum LootTier {
 
     public static boolean isRowStarterSlot(int slot) {
         return slot >= 0
-            && slot < values().length * SLOTS_PER_TIER
-            && slot % SLOTS_PER_TIER == 0;
+                && slot < values().length * SLOTS_PER_TIER
+                && slot % SLOTS_PER_TIER == 0;
     }
 
     public static LootTier forInventorySlot(int slot) {

@@ -1,17 +1,5 @@
 package dev.easynpc.runtime;
 
-import dev.easynpc.model.MovementProfile;
-import dev.easynpc.model.NpcDefinition;
-import dev.easynpc.model.NpcInstance;
-import dev.easynpc.model.NpcRoute;
-import dev.easynpc.model.RoutePoint;
-import dev.easynpc.repository.NpcDefinitionRepository;
-import dev.easynpc.repository.RouteRepository;
-import org.bukkit.Location;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
-import org.bukkit.plugin.java.JavaPlugin;
-
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -19,7 +7,21 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.bukkit.Location;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
+
+import dev.easynpc.model.MovementProfile;
+import dev.easynpc.model.NpcDefinition;
+import dev.easynpc.model.NpcInstance;
+import dev.easynpc.model.NpcRoute;
+import dev.easynpc.model.RoutePoint;
+import dev.easynpc.repository.NpcDefinitionRepository;
+import dev.easynpc.repository.RouteRepository;
+
 public final class RouteMovementService {
+
     private final JavaPlugin plugin;
     private final NpcDefinitionRepository definitionRepository;
     private final RouteRepository routeRepository;
@@ -30,12 +32,12 @@ public final class RouteMovementService {
     private BukkitTask task;
 
     public RouteMovementService(
-        JavaPlugin plugin,
-        NpcDefinitionRepository definitionRepository,
-        RouteRepository routeRepository,
-        NpcInstanceRegistry instanceRegistry,
-        NpcCombatService combatService,
-        NpcBehaviourService behaviourService
+            JavaPlugin plugin,
+            NpcDefinitionRepository definitionRepository,
+            RouteRepository routeRepository,
+            NpcInstanceRegistry instanceRegistry,
+            NpcCombatService combatService,
+            NpcBehaviourService behaviourService
     ) {
         this.plugin = plugin;
         this.definitionRepository = definitionRepository;
@@ -94,7 +96,7 @@ public final class RouteMovementService {
         }
         Location current = instance.getLocation();
         if (current.getWorld() == null
-            || !route.getPoints().getFirst().worldName().equals(current.getWorld().getName())) {
+                || !route.getPoints().getFirst().worldName().equals(current.getWorld().getName())) {
             stop(instance);
             return;
         }
@@ -115,12 +117,12 @@ public final class RouteMovementService {
         }
 
         NativeNpcNavigationService.NavigationStatus status = instanceRegistry.navigate(
-            instance,
-            target,
-            movement.walkingSpeed()
+                instance,
+                target,
+                movement.walkingSpeed()
         );
         if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED
-            || status == NativeNpcNavigationService.NavigationStatus.STALLED) {
+                || status == NativeNpcNavigationService.NavigationStatus.STALLED) {
             int nextIndex = (progress.targetIndex() + 1) % progress.orderedPoints().size();
             progressByInstance.put(instance.getId(), progress.withTargetIndex(nextIndex));
         }
@@ -133,11 +135,12 @@ public final class RouteMovementService {
     }
 
     private record Progress(
-        String routeKey,
-        List<RoutePoint> sourcePoints,
-        List<RoutePoint> orderedPoints,
-        int targetIndex
-    ) {
+            String routeKey,
+            List<RoutePoint> sourcePoints,
+            List<RoutePoint> orderedPoints,
+            int targetIndex
+            ) {
+
         private Progress {
             sourcePoints = List.copyOf(sourcePoints);
             orderedPoints = List.copyOf(orderedPoints);
