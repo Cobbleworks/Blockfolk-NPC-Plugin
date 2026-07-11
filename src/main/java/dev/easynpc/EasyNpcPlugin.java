@@ -127,6 +127,7 @@ public final class EasyNpcPlugin extends JavaPlugin {
         instanceRegistry.spawnAll();
         resolveStoredExternalSkins();
         combatService.start();
+        behaviourService.start();
         routeMovementService.start();
         getLogger().info("EasyNPC enabled with " + definitionRepository.findAll().size() + " NPC definitions.");
     }
@@ -135,6 +136,9 @@ public final class EasyNpcPlugin extends JavaPlugin {
     public void onDisable() {
         if (combatService != null) {
             combatService.stop();
+        }
+        if (behaviourService != null) {
+            behaviourService.stop();
         }
         if (routeGuiService != null) {
             routeGuiService.stop();

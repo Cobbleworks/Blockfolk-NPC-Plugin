@@ -350,6 +350,32 @@ public final class GuiService implements Listener {
         player.openInventory(inventory);
     }
 
+    private void openBehaviourRoutePicker(Player player, NpcDefinition definition, ActionPickerHolder action, int requestedRoutePage) {
+        List<NpcRoute> routes = new ArrayList<>(routeRepository.findAll());
+        int pages = Math.max(1, (routes.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int routePage = Math.max(0, Math.min(requestedRoutePage, pages - 1));
+        Inventory inventory = Bukkit.createInventory(new BehaviourRoutePickerHolder(
+            action.key(), action.event(), action.actionIndex(), action.page(), routePage), 54,
+            Component.text("Select Route"));
+        int from = routePage * PAGE_SIZE;
+        int to = Math.min(from + PAGE_SIZE, routes.size());
+        for (int index = from; index < to; index++) {
+            NpcRoute route = routes.get(index);
+            inventory.setItem(index - from, item(Material.RAIL, route.getDisplayName(), List.of(
+                ChatColor.DARK_GRAY + "Key: " + route.getKey(),
+                ChatColor.GRAY + "" + route.getPoints().size() + " route point(s)",
+                ChatColor.YELLOW + "Click to select"
+            )));
+        }
+        if (routes.isEmpty()) inventory.setItem(22, item(Material.BARRIER, "No Routes Available", List.of(
+            ChatColor.GRAY + "Create a route from the main preset menu first"
+        )));
+        if (routePage > 0) inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        if (routePage + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        player.openInventory(inventory);
+    }
+
     public void openRouteAssignment(Player player, NpcDefinition definition, int requestedPage) {
         List<NpcRoute> routes = new ArrayList<>(routeRepository.findAll());
         int pages = Math.max(1, (routes.size() + PAGE_SIZE - 1) / PAGE_SIZE);
@@ -448,6 +474,8 @@ public final class GuiService implements Listener {
             handleBehaviourClick(event, player, behaviourHolder);
         } else if (holder instanceof ActionPickerHolder pickerHolder) {
             handleActionPickerClick(event, player, pickerHolder);
+        } else if (holder instanceof BehaviourRoutePickerHolder routePickerHolder) {
+            handleBehaviourRoutePickerClick(event, player, routePickerHolder);
         } else if (holder instanceof ConfirmationHolder confirmationHolder) {
             handleConfirmationClick(event, player, confirmationHolder);
         }
@@ -816,7 +844,9 @@ public final class GuiService implements Listener {
         int typeIndex = event.getRawSlot() - 10;
         if (typeIndex < 0 || typeIndex >= BehaviourActionType.values().length) return;
         BehaviourActionType type = BehaviourActionType.values()[typeIndex];
-        if (type == BehaviourActionType.START_NAVIGATION) {
+        if (type == BehaviourActionType.SET_ROUTE) {
+            openBehaviourRoutePicker(player, definition, holder, 0);
+        } else if (type == BehaviourActionType.START_NAVIGATION) {
             Location location = player.getLocation();
             setAction(definition, holder, type, location.getWorld().getName() + "," + location.getX() + "," + location.getY() + "," + location.getZ());
             openBehaviours(player, definition, holder.page());
@@ -826,7 +856,6 @@ public final class GuiService implements Listener {
         } else {
             String prompt = switch (type) {
                 case SEND_DIALOG -> "Enter the dialog line:";
-                case SET_ROUTE -> "Enter the route name or key:";
                 case RUN_CONSOLE_COMMAND -> "Enter the command without a leading slash:";
                 case SET_WALK_SPEED -> "Enter speed: slouch, slow, normal, fast, or very_fast:";
                 default -> "Enter the action value:";
@@ -836,6 +865,29 @@ public final class GuiService implements Listener {
                 openBehaviours(player, definition, holder.page());
             });
         }
+    }
+
+    private void handleBehaviourRoutePickerClick(
+        InventoryClickEvent event,
+        Player player,
+        BehaviourRoutePickerHolder holder
+    ) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
+        if (definition == null) { player.closeInventory(); return; }
+        ActionPickerHolder action = new ActionPickerHolder(holder.key(), holder.event(), holder.actionIndex(), holder.behaviourPage());
+        int slot = event.getRawSlot();
+        if (slot == 45) { openBehaviourRoutePicker(player, definition, action, holder.routePage() - 1); return; }
+        if (slot == 49) { openActionPicker(player, definition, holder.event(), holder.actionIndex(), holder.behaviourPage()); return; }
+        if (slot == 53) { openBehaviourRoutePicker(player, definition, action, holder.routePage() + 1); return; }
+        List<NpcRoute> routes = new ArrayList<>(routeRepository.findAll());
+        int index = holder.routePage() * PAGE_SIZE + slot;
+        if (slot >= PAGE_SIZE || index < 0 || index >= routes.size()) return;
+        NpcRoute route = routes.get(index);
+        setAction(definition, action, BehaviourActionType.SET_ROUTE, route.getKey());
+        player.sendMessage(Component.text("Selected route '" + route.getDisplayName() + "'."));
+        openBehaviours(player, definition, holder.behaviourPage());
     }
 
     private void setAction(NpcDefinition definition, ActionPickerHolder holder, BehaviourActionType type, String value) {
@@ -994,6 +1046,7 @@ public final class GuiService implements Listener {
             || holder instanceof RouteAssignmentHolder
             || holder instanceof BehaviourHolder
             || holder instanceof ActionPickerHolder
+            || holder instanceof BehaviourRoutePickerHolder
             || holder instanceof ConfirmationHolder;
     }
 
@@ -1173,6 +1226,16 @@ public final class GuiService implements Listener {
 
     private record ActionPickerHolder(String key, BehaviourEvent event, int actionIndex, int page)
         implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record BehaviourRoutePickerHolder(
+        String key,
+        BehaviourEvent event,
+        int actionIndex,
+        int behaviourPage,
+        int routePage
+    ) implements InventoryHolder {
         @Override public Inventory getInventory() { return null; }
     }
 

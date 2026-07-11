@@ -68,7 +68,10 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
             Mannequin mannequin = location.getWorld().spawn(location, Mannequin.class, spawned -> {
                 spawned.setPersistent(true);
                 spawned.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
-                spawned.setImmovable(true);
+                // The native immovable flag also prevents projectile impacts from
+                // being processed. Use full knockback resistance instead so arrows
+                // still damage the NPC while route movement remains authoritative.
+                spawned.setImmovable(false);
                 spawned.setAI(false);
                 spawned.setGravity(false);
                 spawned.setCollidable(false);
@@ -168,8 +171,11 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         mannequin.setCustomNameVisible(true);
         mannequin.setDescription(null);
         mannequin.setInvisible(false);
+        mannequin.setImmovable(false);
         mannequin.setRotation(instance.getLocation().getYaw(), instance.getLocation().getPitch());
         mannequin.setProfile(createProfile(instance, definition));
+        AttributeInstance knockbackResistance = mannequin.getAttribute(Attribute.KNOCKBACK_RESISTANCE);
+        if (knockbackResistance != null) knockbackResistance.setBaseValue(1.0);
         applyEquipment(mannequin.getEquipment(), definition);
         applyCombatProfile(mannequin, definition, healToFull);
     }

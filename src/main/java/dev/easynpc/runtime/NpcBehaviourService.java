@@ -22,6 +22,7 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -37,7 +38,10 @@ public final class NpcBehaviourService implements Listener {
     private final Set<UUID> lowHealthTriggered = new HashSet<>();
     private final Map<UUID, String> routeOverrides = new HashMap<>();
     private final Map<UUID, WalkingSpeed> speedOverrides = new HashMap<>();
+    private final Map<UUID, Location> directNavigationTargets = new HashMap<>();
+    private final Set<UUID> routePaused = new HashSet<>();
     private NpcCombatService combatService;
+    private BukkitTask navigationTask;
 
     public NpcBehaviourService(Plugin plugin, NpcDefinitionRepository definitions, NpcInstanceRegistry instances) {
         this.plugin = plugin;
@@ -46,6 +50,18 @@ public final class NpcBehaviourService implements Listener {
     }
 
     public void setCombatService(NpcCombatService combatService) { this.combatService = combatService; }
+
+    public void start() {
+        stop();
+        navigationTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickDirectNavigation, 1L, 1L);
+    }
+
+    public void stop() {
+        if (navigationTask != null) navigationTask.cancel();
+        navigationTask = null;
+        directNavigationTargets.clear();
+        routePaused.clear();
+    }
 
     public void trigger(BehaviourEvent event, NpcInstance instance, Entity actor) {
         NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
@@ -57,11 +73,15 @@ public final class NpcBehaviourService implements Listener {
         lowHealthTriggered.remove(instance.getId());
         routeOverrides.remove(instance.getId());
         speedOverrides.remove(instance.getId());
+        directNavigationTargets.remove(instance.getId());
+        routePaused.remove(instance.getId());
     }
 
     public MovementProfile movementFor(NpcInstance instance, NpcDefinition definition) {
         String route = routeOverrides.get(instance.getId());
         WalkingSpeed speed = speedOverrides.getOrDefault(instance.getId(), definition.getMovementProfile().walkingSpeed());
+        if (routePaused.contains(instance.getId()) || directNavigationTargets.containsKey(instance.getId()))
+            return MovementProfile.disabled().withWalkingSpeed(speed);
         return route == null ? definition.getMovementProfile().withWalkingSpeed(speed)
             : new MovementProfile(true, route, speed);
     }
@@ -104,7 +124,12 @@ public final class NpcBehaviourService implements Listener {
         switch (action.type()) {
             case SEND_DIALOG -> sendDialog(instance, definition, action.value());
             case SET_ROUTE -> {
-                if (action.value() != null) routeOverrides.put(instance.getId(), action.value());
+                if (action.value() != null) {
+                    routeOverrides.put(instance.getId(), action.value());
+                    directNavigationTargets.remove(instance.getId());
+                    routePaused.remove(instance.getId());
+                    instances.stopNavigating(instance);
+                }
             }
             case RUN_CONSOLE_COMMAND -> {
                 if (action.value() != null) Bukkit.dispatchCommand(Bukkit.getConsoleSender(), placeholders(action.value(), instance, definition, actor));
@@ -114,11 +139,41 @@ public final class NpcBehaviourService implements Listener {
             }
             case START_NAVIGATION -> {
                 Location target = decodeLocation(action.value());
-                if (target != null) instances.navigate(instance, target, movementFor(instance, definition).walkingSpeed());
+                if (target != null) {
+                    routePaused.add(instance.getId());
+                    directNavigationTargets.put(instance.getId(), target);
+                    instances.stopNavigating(instance);
+                }
             }
-            case STOP_NAVIGATION -> instances.stopNavigating(instance);
+            case STOP_NAVIGATION -> {
+                directNavigationTargets.remove(instance.getId());
+                routePaused.add(instance.getId());
+                instances.stopNavigating(instance);
+            }
             case SET_WALK_SPEED -> speedOverrides.put(instance.getId(), WalkingSpeed.fromStored(action.value()));
         }
+    }
+
+    private void tickDirectNavigation() {
+        Set<UUID> active = new HashSet<>();
+        for (NpcInstance instance : instances.findAll()) {
+            active.add(instance.getId());
+            Location target = directNavigationTargets.get(instance.getId());
+            if (target == null || combatService != null && combatService.isEngaged(instance)) continue;
+            NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+            if (definition == null) {
+                directNavigationTargets.remove(instance.getId());
+                continue;
+            }
+            NativeNpcNavigationService.NavigationStatus status = instances.navigate(
+                instance, target, movementFor(instance, definition).walkingSpeed());
+            if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED) {
+                directNavigationTargets.remove(instance.getId());
+                instances.stopNavigating(instance);
+            }
+        }
+        directNavigationTargets.keySet().retainAll(active);
+        routePaused.retainAll(active);
     }
 
     private void sendDialog(NpcInstance instance, NpcDefinition definition, String line) {
