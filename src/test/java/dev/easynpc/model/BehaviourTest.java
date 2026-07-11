@@ -8,6 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BehaviourTest {
+
+    @Test
+    void parsesNewBehaviourTypesFromStoredNames() {
+        assertEquals(BehaviourActionType.SHOW_HOLO_DIALOG,
+            BehaviourActionType.fromStored("show-holo-dialog"));
+        assertEquals(BehaviourEvent.HEAL, BehaviourEvent.fromStored("heal"));
+    }
+
     @Test
     void actionsRemainOrderedAndAreDefensivelyCopied() {
         NpcDefinition definition = new NpcDefinition("guard");

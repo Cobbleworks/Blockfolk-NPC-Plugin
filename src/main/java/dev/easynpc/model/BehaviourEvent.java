@@ -12,6 +12,7 @@ public enum BehaviourEvent {
     DEATH("On Death"),
     SPAWN("On Spawn"),
     DAMAGE_TAKEN("On Damage Taken"),
+    HEAL("On Heal — 2+ Hearts"),
     LOW_HEALTH("On Low Health — 25% HP");
 
     private final String displayName;

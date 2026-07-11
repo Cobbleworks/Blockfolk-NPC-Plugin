@@ -60,13 +60,17 @@ public final class DialogService {
         Location location = instance.getLocation().add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0);
         TextDisplay display = (TextDisplay) instance.getLocation().getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
         display.text(Component.text(lines.getFirst()));
+        configureDisplay(display, instance);
+        displays.put(instance.getId(), new DialogRuntime(display, lines, definition.getSecondsPerDialogLine()));
+    }
+
+    private void configureDisplay(TextDisplay display, NpcInstance instance) {
         display.setBillboard(Display.Billboard.CENTER);
         display.setSeeThrough(false);
         display.setShadowed(true);
         display.setTeleportDuration(1);
         display.setPersistent(true);
         display.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
-        displays.put(instance.getId(), new DialogRuntime(display, lines, definition.getSecondsPerDialogLine()));
     }
 
     public void move(NpcInstance instance) {
@@ -112,6 +116,21 @@ public final class DialogService {
         sendChatLine(player, runtime);
     }
 
+    /** Shows one behaviour-supplied hologram line for the preset's normal line duration. */
+    public void showHologram(NpcInstance instance, NpcDefinition definition, String line) {
+        if (line == null || line.isBlank() || instance.getLocation().getWorld() == null) return;
+        DialogRuntime runtime = displays.get(instance.getId());
+        if (runtime == null || !runtime.display.isValid()) {
+            Location location = instance.getLocation().add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0);
+            TextDisplay display = (TextDisplay) location.getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
+            configureDisplay(display, instance);
+            runtime = new DialogRuntime(display, List.of(), definition.getSecondsPerDialogLine());
+            displays.put(instance.getId(), runtime);
+        }
+        runtime.display.text(Component.text(line));
+        runtime.overrideSeconds = definition.getSecondsPerDialogLine();
+    }
+
     private void removeTaggedDisplays(UUID instanceId) {
         String expectedId = instanceId.toString();
         for (org.bukkit.World world : Bukkit.getWorlds()) {
@@ -125,7 +144,21 @@ public final class DialogService {
     }
 
     private void tick() {
-        for (DialogRuntime runtime : displays.values()) {
+        Iterator<Map.Entry<UUID, DialogRuntime>> displayIterator = displays.entrySet().iterator();
+        while (displayIterator.hasNext()) {
+            DialogRuntime runtime = displayIterator.next().getValue();
+            if (runtime.overrideSeconds > 0) {
+                if (--runtime.overrideSeconds > 0) continue;
+                if (runtime.lines.isEmpty()) {
+                    runtime.display.remove();
+                    displayIterator.remove();
+                    continue;
+                }
+                runtime.display.text(Component.text(runtime.lines.get(runtime.index)));
+                runtime.elapsedSeconds = 0;
+                continue;
+            }
+            if (runtime.lines.isEmpty()) continue;
             runtime.elapsedSeconds++;
             if (runtime.elapsedSeconds < runtime.secondsPerLine) {
                 continue;
@@ -178,6 +211,7 @@ public final class DialogService {
         private final int secondsPerLine;
         private int index;
         private int elapsedSeconds;
+        private int overrideSeconds;
 
         private DialogRuntime(TextDisplay display, List<String> lines, int secondsPerLine) {
             this.display = display;

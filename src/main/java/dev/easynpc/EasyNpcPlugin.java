@@ -84,7 +84,7 @@ public final class EasyNpcPlugin extends JavaPlugin {
             routeGuiService::openRoutes
         );
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
-        behaviourService = new NpcBehaviourService(this, definitionRepository, instanceRegistry);
+        behaviourService = new NpcBehaviourService(this, definitionRepository, instanceRegistry, dialogService);
         behaviourService.setCombatService(combatService);
         combatService.setBehaviourService(behaviourService);
         guiService.setBehaviourService(behaviourService);

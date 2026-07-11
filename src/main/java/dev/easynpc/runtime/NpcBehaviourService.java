@@ -1,5 +1,6 @@
 package dev.easynpc.runtime;
 
+import dev.easynpc.dialog.DialogService;
 import dev.easynpc.model.BehaviourAction;
 import dev.easynpc.model.BehaviourActionType;
 import dev.easynpc.model.BehaviourEvent;
@@ -20,6 +21,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -33,9 +35,11 @@ public final class NpcBehaviourService implements Listener {
     private static final double DIALOG_RANGE_SQUARED = 12.0 * 12.0;
     private static final double APPROACH_RANGE_SQUARED = 8.0 * 8.0;
     private static final double LEAVE_RANGE_SQUARED = 10.0 * 10.0;
+    private static final double HEAL_BURST_THRESHOLD = 4.0;
     private final Plugin plugin;
     private final NpcDefinitionRepository definitions;
     private final NpcInstanceRegistry instances;
+    private final DialogService dialogService;
     private final Set<UUID> lowHealthTriggered = new HashSet<>();
     private final Map<UUID, String> routeOverrides = new HashMap<>();
     private final Map<UUID, WalkingSpeed> speedOverrides = new HashMap<>();
@@ -45,10 +49,16 @@ public final class NpcBehaviourService implements Listener {
     private BukkitTask behaviourTask;
     private int proximityTick;
 
-    public NpcBehaviourService(Plugin plugin, NpcDefinitionRepository definitions, NpcInstanceRegistry instances) {
+    public NpcBehaviourService(
+        Plugin plugin,
+        NpcDefinitionRepository definitions,
+        NpcInstanceRegistry instances,
+        DialogService dialogService
+    ) {
         this.plugin = plugin;
         this.definitions = definitions;
         this.instances = instances;
+        this.dialogService = dialogService;
     }
 
     public void setCombatService(NpcCombatService combatService) { this.combatService = combatService; }
@@ -114,6 +124,13 @@ public final class NpcBehaviourService implements Listener {
             });
     }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onHeal(EntityRegainHealthEvent event) {
+        if (event.getAmount() < HEAL_BURST_THRESHOLD) return;
+        instances.findByEntityId(event.getEntity().getEntityId())
+            .ifPresent(instance -> trigger(BehaviourEvent.HEAL, instance, null));
+    }
+
     private void checkLowHealth(NpcInstance instance, Entity actor) {
         LivingEntity entity = instances.findEntity(instance).orElse(null);
         NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
@@ -132,6 +149,7 @@ public final class NpcBehaviourService implements Listener {
     ) {
         switch (action.type()) {
             case SEND_DIALOG -> sendDialog(event, instance, definition, action.value(), actor);
+            case SHOW_HOLO_DIALOG -> dialogService.showHologram(instance, definition, action.value());
             case SET_ROUTE -> {
                 if (action.value() != null) {
                     routeOverrides.put(instance.getId(), action.value());
