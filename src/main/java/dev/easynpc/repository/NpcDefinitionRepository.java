@@ -2,6 +2,7 @@ package dev.easynpc.repository;
 
 import dev.easynpc.model.CombatProfile;
 import dev.easynpc.model.AggressionLevel;
+import dev.easynpc.model.AttackReaction;
 import dev.easynpc.model.MovementProfile;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.WalkingSpeed;
@@ -89,7 +90,13 @@ public final class NpcDefinitionRepository {
         configuration.set("combat.enabled", !definition.getCombatProfile().invulnerable());
         configuration.set("combat.max-health", definition.getCombatProfile().maxHealth());
         configuration.set("combat.respawn-seconds", definition.getCombatProfile().respawnSeconds());
-        configuration.set("combat.aggression", definition.getCombatProfile().aggressionLevel().name().toLowerCase(Locale.ROOT));
+        configuration.set("combat.aggression", null);
+        configuration.set("combat.reaction-to-attacks",
+                definition.getCombatProfile().attackReaction().name().toLowerCase(Locale.ROOT));
+        configuration.set("combat.targets.mobs", definition.getCombatProfile().targetMobs());
+        configuration.set("combat.targets.animals", definition.getCombatProfile().targetAnimals());
+        configuration.set("combat.targets.players", definition.getCombatProfile().targetPlayers());
+        configuration.set("combat.targets.npcs", definition.getCombatProfile().targetNpcs());
         configuration.set("combat.shoutout", null);
         configuration.set("movement.enabled", null);
         configuration.set("movement.route", null);
@@ -143,10 +150,26 @@ public final class NpcDefinitionRepository {
         definition.setDialogLines(configuration.getStringList("dialog.lines"));
         definition.setSecondsPerDialogLine(configuration.getInt("dialog.seconds-per-line", 3));
         int legacyHealth = configuration.getBoolean("combat.enabled", false) ? 20 : 0;
+        AggressionLevel legacyAggression = AggressionLevel.fromStored(configuration.getString("combat.aggression"));
+        boolean hasNewAggressionSettings = configuration.contains("combat.reaction-to-attacks")
+                || configuration.contains("combat.targets");
+        AttackReaction attackReaction = hasNewAggressionSettings
+                ? AttackReaction.fromStored(configuration.getString("combat.reaction-to-attacks"))
+                : switch (legacyAggression) {
+                    case FLEE -> AttackReaction.FLEE;
+                    case FIGHT_BACK, FIGHTS_ON_SIGHT -> AttackReaction.FIGHT_BACK;
+                    case NONE -> AttackReaction.IGNORE;
+                };
+        boolean legacySightTargeting = !hasNewAggressionSettings
+                && legacyAggression == AggressionLevel.FIGHTS_ON_SIGHT;
         definition.setCombatProfile(new CombatProfile(
                 configuration.getInt("combat.max-health", legacyHealth),
                 configuration.getInt("combat.respawn-seconds", 0),
-                AggressionLevel.fromStored(configuration.getString("combat.aggression")),
+                attackReaction,
+                configuration.getBoolean("combat.targets.mobs", legacySightTargeting),
+                configuration.getBoolean("combat.targets.animals", legacySightTargeting),
+                configuration.getBoolean("combat.targets.players", legacySightTargeting),
+                configuration.getBoolean("combat.targets.npcs", legacySightTargeting),
                 configuration.getString("combat.shoutout")
         ));
         definition.setMovementProfile(new MovementProfile(

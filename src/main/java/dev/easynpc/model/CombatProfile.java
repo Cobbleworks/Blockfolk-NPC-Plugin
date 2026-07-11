@@ -2,7 +2,16 @@ package dev.easynpc.model;
 
 import java.util.Objects;
 
-public record CombatProfile(int maxHealth, int respawnSeconds, AggressionLevel aggressionLevel, String shoutout) {
+public record CombatProfile(
+        int maxHealth,
+        int respawnSeconds,
+        AttackReaction attackReaction,
+        boolean targetMobs,
+        boolean targetAnimals,
+        boolean targetPlayers,
+        boolean targetNpcs,
+        String shoutout
+) {
 
     public static final int HEALTH_STEP = 5;
     public static final int RESPAWN_STEP_SECONDS = 10;
@@ -11,12 +20,12 @@ public record CombatProfile(int maxHealth, int respawnSeconds, AggressionLevel a
     public CombatProfile {
         maxHealth = Math.max(0, Math.min(MAX_HEALTH, maxHealth));
         respawnSeconds = Math.max(0, respawnSeconds);
-        aggressionLevel = Objects.requireNonNullElse(aggressionLevel, AggressionLevel.NONE);
+        attackReaction = Objects.requireNonNullElse(attackReaction, AttackReaction.IGNORE);
         shoutout = shoutout == null || shoutout.isBlank() ? null : shoutout.trim();
     }
 
     public static CombatProfile disabled() {
-        return new CombatProfile(0, 0, AggressionLevel.NONE, null);
+        return new CombatProfile(0, 0, AttackReaction.IGNORE, false, false, false, false, null);
     }
 
     public boolean invulnerable() {
@@ -24,18 +33,46 @@ public record CombatProfile(int maxHealth, int respawnSeconds, AggressionLevel a
     }
 
     public CombatProfile withMaxHealth(int maxHealth) {
-        return new CombatProfile(maxHealth, respawnSeconds, aggressionLevel, shoutout);
+        return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
     }
 
     public CombatProfile withRespawnSeconds(int respawnSeconds) {
-        return new CombatProfile(maxHealth, respawnSeconds, aggressionLevel, shoutout);
+        return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
     }
 
-    public CombatProfile withAggressionLevel(AggressionLevel aggressionLevel) {
-        return new CombatProfile(maxHealth, respawnSeconds, aggressionLevel, shoutout);
+    public CombatProfile withAttackReaction(AttackReaction attackReaction) {
+        return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
+    }
+
+    public CombatProfile withTargetMobs(boolean targetMobs) {
+        return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
+    }
+
+    public CombatProfile withTargetAnimals(boolean targetAnimals) {
+        return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
+    }
+
+    public CombatProfile withTargetPlayers(boolean targetPlayers) {
+        return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
+    }
+
+    public CombatProfile withTargetNpcs(boolean targetNpcs) {
+        return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
     }
 
     public CombatProfile withShoutout(String shoutout) {
-        return new CombatProfile(maxHealth, respawnSeconds, aggressionLevel, shoutout);
+        return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
+    }
+
+    public boolean hasSightTargets() {
+        return targetMobs || targetAnimals || targetPlayers || targetNpcs;
     }
 }

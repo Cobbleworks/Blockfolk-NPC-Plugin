@@ -38,7 +38,7 @@ import com.destroystokyo.paper.profile.ProfileProperty;
 
 import dev.easynpc.dialog.DialogService;
 import dev.easynpc.input.ChatInputService;
-import dev.easynpc.model.AggressionLevel;
+import dev.easynpc.model.AttackReaction;
 import dev.easynpc.model.BehaviourAction;
 import dev.easynpc.model.BehaviourActionType;
 import dev.easynpc.model.BehaviourEvent;
@@ -209,7 +209,8 @@ public final class GuiService implements Listener {
         inventory.setItem(23, item(Material.IRON_SWORD, "Fighting", List.of(
                 ChatColor.GRAY + "Health: " + ChatColor.WHITE + healthLabel(combat),
                 ChatColor.GRAY + "Respawn: " + ChatColor.WHITE + respawnLabel(combat),
-                ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.aggressionLevel().displayName(),
+                ChatColor.GRAY + "Attack reaction: " + ChatColor.WHITE + combat.attackReaction().displayName(),
+                ChatColor.GRAY + "Sight targets: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
                 ChatColor.YELLOW + "Click to configure combat"
         )));
         inventory.setItem(24, item(Material.TNT, "Delete Preset", List.of(
@@ -311,12 +312,33 @@ public final class GuiService implements Listener {
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + respawnLabel(combat),
                 ChatColor.YELLOW + "Click to decrease respawn time"
         )));
-        inventory.setItem(5, item(aggressionMaterial(combat.aggressionLevel()), "Aggression", List.of(
-                ChatColor.GRAY + "Current: " + ChatColor.WHITE + combat.aggressionLevel().displayName(),
-                aggressionDescription(combat.aggressionLevel()),
-                ChatColor.YELLOW + "Click to cycle aggression level"
+        inventory.setItem(5, item(Material.TARGET, "Targets & Behaviour", List.of(
+                ChatColor.GRAY + "Attack reaction: " + ChatColor.WHITE + combat.attackReaction().displayName(),
+                ChatColor.GRAY + "Sight targets enabled: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
+                ChatColor.YELLOW + "Click to configure"
         )));
         inventory.setItem(23, item(Material.BARRIER, "Back", List.of()));
+        player.openInventory(inventory);
+    }
+
+    public void openTargetsAndBehaviour(Player player, NpcDefinition definition) {
+        CombatProfile combat = definition.getCombatProfile();
+        Inventory inventory = Bukkit.createInventory(new TargetsHolder(definition.getKey()), 27,
+                Component.text("Targets & Behaviour: " + definition.getDisplayName()));
+        inventory.setItem(10, item(reactionMaterial(combat.attackReaction()), "Reaction to Attacks", List.of(
+                ChatColor.GRAY + "Current: " + ChatColor.WHITE + combat.attackReaction().displayName(),
+                reactionDescription(combat.attackReaction()),
+                ChatColor.YELLOW + "Click to cycle"
+        )));
+        inventory.setItem(12, toggleItem(Material.ZOMBIE_HEAD, "Target Mobs", combat.targetMobs(),
+                "Attacks non-animal mobs on sight"));
+        inventory.setItem(13, toggleItem(Material.PORKCHOP, "Target Animals", combat.targetAnimals(),
+                "Attacks animals on sight"));
+        inventory.setItem(14, toggleItem(Material.PLAYER_HEAD, "Target Players", combat.targetPlayers(),
+                "Attacks survival and adventure players on sight"));
+        inventory.setItem(15, toggleItem(Material.ARMOR_STAND, "Target Other NPCs", combat.targetNpcs(),
+                "Attacks vulnerable NPCs on sight"));
+        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
         player.openInventory(inventory);
     }
 
@@ -521,6 +543,8 @@ public final class GuiService implements Listener {
             handleDialogClick(event, player, dialogHolder.key());
         } else if (holder instanceof FightingHolder fightingHolder) {
             handleFightingClick(event, player, fightingHolder.key());
+        } else if (holder instanceof TargetsHolder targetsHolder) {
+            handleTargetsClick(event, player, targetsHolder.key());
         } else if (holder instanceof EquipmentHolder equipmentHolder) {
             handleEquipmentClick(event, player, equipmentHolder.key());
         } else if (holder instanceof InstancesHolder instancesHolder) {
@@ -780,16 +804,40 @@ public final class GuiService implements Listener {
                 openFightingEditor(player, definition);
             }
             case 5 -> {
-                AggressionLevel aggression = combat.aggressionLevel().next();
-                definition.setCombatProfile(combat.withAggressionLevel(aggression));
-                definitionRepository.save(definition);
-                player.sendMessage(Component.text("Aggression set to " + aggression.displayName() + "."));
-                openFightingEditor(player, definition);
+                openTargetsAndBehaviour(player, definition);
             }
             case 23 ->
                 openEditor(player, definition);
             default -> {
             }
+        }
+    }
+
+    private void handleTargetsClick(InventoryClickEvent event, Player player, String key) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
+        NpcDefinition definition = definitionRepository.find(key).orElse(null);
+        if (definition == null) {
+            player.closeInventory();
+            return;
+        }
+        CombatProfile combat = definition.getCombatProfile();
+        CombatProfile updated = switch (event.getRawSlot()) {
+            case 10 -> combat.withAttackReaction(combat.attackReaction().next());
+            case 12 -> combat.withTargetMobs(!combat.targetMobs());
+            case 13 -> combat.withTargetAnimals(!combat.targetAnimals());
+            case 14 -> combat.withTargetPlayers(!combat.targetPlayers());
+            case 15 -> combat.withTargetNpcs(!combat.targetNpcs());
+            default -> null;
+        };
+        if (updated != null) {
+            definition.setCombatProfile(updated);
+            definitionRepository.save(definition);
+            openTargetsAndBehaviour(player, definition);
+        } else if (event.getRawSlot() == 22) {
+            openFightingEditor(player, definition);
         }
     }
 
@@ -1275,17 +1323,28 @@ public final class GuiService implements Listener {
         return combat.respawnSeconds() == 0 ? "Disabled (0 seconds)" : combat.respawnSeconds() + " seconds";
     }
 
-    private Material aggressionMaterial(AggressionLevel aggressionLevel) {
-        return switch (aggressionLevel) {
-            case NONE ->
+    private Material reactionMaterial(AttackReaction reaction) {
+        return switch (reaction) {
+            case IGNORE ->
                 Material.GRAY_DYE;
             case FLEE ->
                 Material.RABBIT_FOOT;
             case FIGHT_BACK ->
                 Material.SHIELD;
-            case FIGHTS_ON_SIGHT ->
-                Material.DIAMOND_SWORD;
         };
+    }
+
+    private ItemStack toggleItem(Material material, String name, boolean enabled, String description) {
+        return item(enabled ? material : Material.GRAY_DYE, name, List.of(
+                (enabled ? ChatColor.GREEN + "On" : ChatColor.RED + "Off"),
+                ChatColor.GRAY + description,
+                ChatColor.YELLOW + "Click to toggle"
+        ));
+    }
+
+    private int enabledTargetCount(CombatProfile combat) {
+        return (combat.targetMobs() ? 1 : 0) + (combat.targetAnimals() ? 1 : 0)
+                + (combat.targetPlayers() ? 1 : 0) + (combat.targetNpcs() ? 1 : 0);
     }
 
     private Material eventMaterial(BehaviourEvent event) {
@@ -1336,16 +1395,14 @@ public final class GuiService implements Listener {
         };
     }
 
-    private String aggressionDescription(AggressionLevel aggressionLevel) {
-        return switch (aggressionLevel) {
-            case NONE ->
-                ChatColor.GRAY + "Never reacts to nearby entities";
+    private String reactionDescription(AttackReaction reaction) {
+        return switch (reaction) {
+            case IGNORE ->
+                ChatColor.GRAY + "Does not react when attacked";
             case FLEE ->
                 ChatColor.GRAY + "Runs away after taking entity damage";
             case FIGHT_BACK ->
                 ChatColor.GRAY + "Attacks an entity that damages it";
-            case FIGHTS_ON_SIGHT ->
-                ChatColor.GRAY + "Attacks nearby players, mobs, and NPCs";
         };
     }
 
@@ -1382,6 +1439,14 @@ public final class GuiService implements Listener {
     }
 
     private record FightingHolder(String key) implements InventoryHolder {
+
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
+    private record TargetsHolder(String key) implements InventoryHolder {
 
         @Override
         public Inventory getInventory() {

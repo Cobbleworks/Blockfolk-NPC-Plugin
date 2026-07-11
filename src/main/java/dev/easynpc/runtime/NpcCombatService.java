@@ -10,6 +10,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Animals;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Mob;
@@ -29,7 +30,7 @@ import org.bukkit.util.Vector;
 
 import dev.easynpc.combat.NpcAttack;
 import dev.easynpc.combat.NpcAttackSelector;
-import dev.easynpc.model.AggressionLevel;
+import dev.easynpc.model.AttackReaction;
 import dev.easynpc.model.CombatProfile;
 import dev.easynpc.model.LootTier;
 import dev.easynpc.model.NpcDefinition;
@@ -136,10 +137,10 @@ public final class NpcCombatService implements Listener {
         if (attacker == null || !isAttackable(instance, attacker)) {
             return;
         }
-        AggressionLevel aggression = definition.getCombatProfile().aggressionLevel();
-        if (aggression == AggressionLevel.FLEE) {
+        AttackReaction reaction = definition.getCombatProfile().attackReaction();
+        if (reaction == AttackReaction.FLEE) {
             engage(instance, definition, CombatMode.FLEE, attacker);
-        } else if (aggression == AggressionLevel.FIGHT_BACK || aggression == AggressionLevel.FIGHTS_ON_SIGHT) {
+        } else if (reaction == AttackReaction.FIGHT_BACK) {
             engage(instance, definition, CombatMode.FIGHT, attacker);
         }
     }
@@ -197,19 +198,16 @@ public final class NpcCombatService implements Listener {
                 continue;
             }
             CombatProfile profile = definition.getCombatProfile();
-            if (profile.invulnerable() || profile.aggressionLevel() == AggressionLevel.NONE) {
+            if (profile.invulnerable() || (profile.attackReaction() == AttackReaction.IGNORE
+                    && !profile.hasSightTargets())) {
                 clearState(instance);
                 continue;
             }
 
             CombatState state = states.get(instance.getId());
-            if (state != null && (profile.aggressionLevel() == AggressionLevel.FLEE) != (state.mode == CombatMode.FLEE)) {
-                clearState(instance);
-                state = null;
-            }
-            if (state == null && profile.aggressionLevel() == AggressionLevel.FIGHTS_ON_SIGHT
+            if (state == null && profile.hasSightTargets()
                     && currentTick % 10 == Math.floorMod(instance.getId().hashCode(), 10)) {
-                LivingEntity target = findNearestTarget(instance, npc);
+                LivingEntity target = findNearestTarget(instance, npc, profile);
                 if (target != null) {
                     engage(instance, definition, CombatMode.FIGHT, target);
                     state = states.get(instance.getId());
@@ -328,14 +326,28 @@ public final class NpcCombatService implements Listener {
         }
     }
 
-    private LivingEntity findNearestTarget(NpcInstance instance, LivingEntity npc) {
+    private LivingEntity findNearestTarget(NpcInstance instance, LivingEntity npc, CombatProfile profile) {
         return npc.getNearbyEntities(SIGHT_RANGE, SIGHT_RANGE, SIGHT_RANGE).stream()
                 .filter(LivingEntity.class::isInstance)
                 .map(LivingEntity.class::cast)
                 .filter(target -> isAttackable(instance, target))
+                .filter(target -> isSightTarget(target, profile))
                 .filter(npc::hasLineOfSight)
                 .min(Comparator.comparingDouble(target -> target.getLocation().distanceSquared(npc.getLocation())))
                 .orElse(null);
+    }
+
+    private boolean isSightTarget(LivingEntity target, CombatProfile profile) {
+        if (target instanceof Mannequin) {
+            return profile.targetNpcs();
+        }
+        if (target instanceof Player) {
+            return profile.targetPlayers();
+        }
+        if (target instanceof Animals) {
+            return profile.targetAnimals();
+        }
+        return target instanceof Mob && profile.targetMobs();
     }
 
     private boolean isAttackable(NpcInstance attacker, LivingEntity target) {

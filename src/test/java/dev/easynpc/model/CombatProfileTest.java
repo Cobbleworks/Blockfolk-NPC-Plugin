@@ -18,11 +18,13 @@ class CombatProfileTest {
 
     @Test
     void clampsHealthAndNormalizesShoutout() {
-        CombatProfile profile = new CombatProfile(-5, -10, null, "  Stand down!  ");
+        CombatProfile profile = new CombatProfile(
+                -5, -10, null, false, false, false, false, "  Stand down!  "
+        );
 
         assertEquals(0, profile.maxHealth());
         assertEquals(0, profile.respawnSeconds());
-        assertEquals(AggressionLevel.NONE, profile.aggressionLevel());
+        assertEquals(AttackReaction.IGNORE, profile.attackReaction());
         assertEquals("Stand down!", profile.shoutout());
         assertNull(profile.withShoutout("   ").shoutout());
         assertEquals(CombatProfile.MAX_HEALTH, profile.withMaxHealth(Integer.MAX_VALUE).maxHealth());
@@ -30,10 +32,19 @@ class CombatProfileTest {
     }
 
     @Test
-    void aggressionCyclesAndReadsStoredNames() {
-        assertEquals(AggressionLevel.FLEE, AggressionLevel.NONE.next());
-        assertEquals(AggressionLevel.FIGHT_BACK, AggressionLevel.fromStored("fight-back"));
-        assertEquals(AggressionLevel.FIGHTS_ON_SIGHT, AggressionLevel.fromStored("start fights on sight"));
-        assertEquals(AggressionLevel.NONE, AggressionLevel.FIGHTS_ON_SIGHT.next());
+    void attackReactionCyclesAndReadsStoredNames() {
+        assertEquals(AttackReaction.FIGHT_BACK, AttackReaction.IGNORE.next());
+        assertEquals(AttackReaction.FIGHT_BACK, AttackReaction.fromStored("fights-back"));
+        assertEquals(AttackReaction.FLEE, AttackReaction.FIGHT_BACK.next());
+        assertEquals(AttackReaction.IGNORE, AttackReaction.FLEE.next());
+    }
+
+    @Test
+    void targetTogglesAreIndependent() {
+        CombatProfile profile = CombatProfile.disabled().withTargetAnimals(true).withTargetNpcs(true);
+
+        assertTrue(profile.targetAnimals());
+        assertTrue(profile.targetNpcs());
+        assertTrue(profile.hasSightTargets());
     }
 }
