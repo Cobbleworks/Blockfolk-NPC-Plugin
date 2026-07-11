@@ -39,6 +39,7 @@ public final class RouteRepository {
             }
             NpcRoute route = new NpcRoute(NpcDefinition.toKey(storedKey));
             route.setDisplayName(section.getString("display-name", route.getKey()));
+            route.setIcon(section.getItemStack("icon"));
             ConfigurationSection points = section.getConfigurationSection("points");
             if (points != null) {
                 points.getKeys(false).stream().sorted(RouteRepository::comparePointKeys).forEach(index -> {
@@ -90,6 +91,7 @@ public final class RouteRepository {
         for (NpcRoute route : routes.values()) {
             ConfigurationSection section = root.createSection(route.getKey());
             section.set("display-name", route.getDisplayName());
+            section.set("icon", route.getIcon());
             ConfigurationSection points = section.createSection("points");
             for (int index = 0; index < route.getPoints().size(); index++) {
                 RoutePoint routePoint = route.getPoints().get(index);

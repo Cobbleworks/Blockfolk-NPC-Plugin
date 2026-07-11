@@ -194,6 +194,17 @@ public final class GuiService implements Listener {
                 ChatColor.GRAY + "Build event-to-action sequences",
                 ChatColor.YELLOW + "Click to configure"
         )));
+        BehaviourAction spawnRoute = definition.getBehaviourActions(BehaviourEvent.SPAWN).stream()
+                .filter(action -> action.type() == BehaviourActionType.SET_ROUTE)
+                .findFirst()
+                .orElse(null);
+        String spawnRouteName = spawnRoute == null ? "Not configured" : routeRepository.find(spawnRoute.value())
+                .map(NpcRoute::getDisplayName)
+                .orElse(spawnRoute.value());
+        inventory.setItem(21, item(Material.POWERED_RAIL, "Start Route", List.of(
+                ChatColor.GRAY + "Spawn → Set Route: " + ChatColor.WHITE + spawnRouteName,
+                ChatColor.YELLOW + "Click to select a route"
+        )));
         CombatProfile combat = definition.getCombatProfile();
         inventory.setItem(23, item(Material.IRON_SWORD, "Fighting", List.of(
                 ChatColor.GRAY + "Health: " + ChatColor.WHITE + healthLabel(combat),
@@ -660,6 +671,25 @@ public final class GuiService implements Listener {
                 openInstances(player, definition, 0);
             case 20 ->
                 openBehaviours(player, definition, 0);
+            case 21 -> {
+                List<BehaviourAction> spawnActions = definition.getBehaviourActions(BehaviourEvent.SPAWN);
+                int routeIndex = -1;
+                for (int index = 0; index < spawnActions.size(); index++) {
+                    if (spawnActions.get(index).type() == BehaviourActionType.SET_ROUTE) {
+                        routeIndex = index;
+                        break;
+                    }
+                }
+                if (routeIndex < 0 && spawnActions.size() >= 7) {
+                    player.sendMessage(Component.text("The Spawn event already has the maximum of 7 actions."));
+                    return;
+                }
+                ActionPickerHolder action = new ActionPickerHolder(
+                        definition.getKey(), BehaviourEvent.SPAWN,
+                        routeIndex < 0 ? spawnActions.size() : routeIndex, 0
+                );
+                openBehaviourValuePicker(player, definition, action, BehaviourValuePickerType.ROUTE, 0);
+            }
             case 23 ->
                 openFightingEditor(player, definition);
             case 24 -> {

@@ -20,6 +20,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -100,10 +101,11 @@ public final class RouteGuiService implements Listener {
             long assignments = definitionRepository.findAll().stream()
                     .filter(definition -> route.getKey().equals(definition.getMovementProfile().routeKey()))
                     .count();
-            inventory.setItem(index - from, item(Material.AMETHYST_CLUSTER, route.getDisplayName(), List.of(
+            inventory.setItem(index - from, routeItem(route, List.of(
                     ChatColor.DARK_GRAY + "Key: " + route.getKey(),
                     ChatColor.GRAY + "Key points: " + ChatColor.WHITE + route.getPoints().size(),
                     ChatColor.GRAY + "Assigned presets: " + ChatColor.WHITE + assignments,
+                    ChatColor.AQUA + "Middle-click: set icon from main hand",
                     ChatColor.YELLOW + "Left-click: edit points",
                     ChatColor.RED + "Shift-right-click: remove route"
             )));
@@ -270,7 +272,12 @@ public final class RouteGuiService implements Listener {
             return;
         }
         NpcRoute route = routes.get(index);
-        if (event.isRightClick() && event.isShiftClick()) {
+        if (event.getClick() == ClickType.MIDDLE) {
+            route.setIcon(player.getInventory().getItemInMainHand());
+            routeRepository.save(route);
+            player.sendMessage(Component.text(route.getIcon() == null ? "Route icon cleared." : "Route icon updated."));
+            openRoutes(player, page);
+        } else if (event.isRightClick() && event.isShiftClick()) {
             openDeleteConfirmation(player, route, page);
         } else {
             beginEditing(player, route);
@@ -423,6 +430,17 @@ public final class RouteGuiService implements Listener {
         meta.setLore(lore);
         item.setItemMeta(meta);
         return item;
+    }
+
+    private ItemStack routeItem(NpcRoute route, List<String> lore) {
+        ItemStack icon = route.getIcon();
+        ItemStack result = icon == null ? new ItemStack(Material.AMETHYST_CLUSTER) : icon;
+        result.setAmount(1);
+        ItemMeta meta = result.getItemMeta();
+        meta.setDisplayName(ChatColor.GOLD + route.getDisplayName());
+        meta.setLore(lore);
+        result.setItemMeta(meta);
+        return result;
     }
 
     private record EditSession(String routeKey, UUID token) {

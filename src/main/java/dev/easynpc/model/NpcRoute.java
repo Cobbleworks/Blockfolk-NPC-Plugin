@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Objects;
 
 import org.bukkit.Location;
+import org.bukkit.inventory.ItemStack;
 
 public final class NpcRoute {
 
@@ -17,6 +18,7 @@ public final class NpcRoute {
 
     private final String key;
     private String displayName;
+    private ItemStack icon;
     private final List<RoutePoint> points = new ArrayList<>();
 
     public NpcRoute(String key) {
@@ -43,6 +45,14 @@ public final class NpcRoute {
         if (this.displayName.isBlank()) {
             this.displayName = key;
         }
+    }
+
+    public ItemStack getIcon() {
+        return icon == null ? null : icon.clone();
+    }
+
+    public void setIcon(ItemStack icon) {
+        this.icon = icon == null || icon.getType().isAir() ? null : icon.clone();
     }
 
     public List<RoutePoint> getPoints() {
