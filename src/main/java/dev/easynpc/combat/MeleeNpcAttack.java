@@ -1,13 +1,27 @@
-package dev.easynpc.runtime;
+package dev.easynpc.combat;
 
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.inventory.ItemStack;
 
-final class NpcMeleeAttack {
+final class MeleeNpcAttack implements NpcAttack {
     private static final double UNARMED_DAMAGE = 2.0;
 
-    private NpcMeleeAttack() {
+    @Override
+    public double rangeSquared() {
+        return 3.0 * 3.0;
+    }
+
+    @Override
+    public int cooldownTicks() {
+        return 20;
+    }
+
+    @Override
+    public void execute(LivingEntity attacker, LivingEntity target) {
+        attacker.swingMainHand();
+        target.damage(damage(attacker.getEquipment().getItemInMainHand()), attacker);
     }
 
     static double damage(ItemStack weapon) {

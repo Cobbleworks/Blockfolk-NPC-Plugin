@@ -1,5 +1,7 @@
 package dev.easynpc.runtime;
 
+import dev.easynpc.combat.NpcAttack;
+import dev.easynpc.combat.NpcAttackSelector;
 import dev.easynpc.model.AggressionLevel;
 import dev.easynpc.model.CombatProfile;
 import dev.easynpc.model.LootTier;
@@ -38,15 +40,14 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class NpcCombatService implements Listener {
     private static final double SIGHT_RANGE = 16.0;
     private static final double MAX_CHASE_RANGE_SQUARED = 32.0 * 32.0;
-    private static final double ATTACK_RANGE_SQUARED = 3.0 * 3.0;
     private static final double SHOUT_RANGE_SQUARED = 12.0 * 12.0;
-    private static final int ATTACK_COOLDOWN_TICKS = 20;
     private static final int FLEE_TICKS = 8 * 20;
 
     private final Plugin plugin;
     private final NpcDefinitionRepository definitionRepository;
     private final NpcInstanceRegistry instanceRegistry;
     private final NativeNpcNavigationService navigationService;
+    private final NpcAttackSelector attackSelector = new NpcAttackSelector();
     private final Map<UUID, CombatState> states = new HashMap<>();
     private final Map<UUID, BukkitTask> pendingRespawns = new HashMap<>();
     private BukkitTask task;
@@ -241,23 +242,53 @@ public final class NpcCombatService implements Listener {
             return;
         }
         state.lastKnownLocation = target.getLocation();
-        if (npc.getLocation().distanceSquared(target.getLocation()) > ATTACK_RANGE_SQUARED) {
-            if (state.navigationTarget == null || currentTick >= state.nextRepathAt) {
+        NpcAttack attack = attackSelector.select(npc.getEquipment().getItemInMainHand());
+        double distanceSquared = npc.getLocation().distanceSquared(target.getLocation());
+        if (distanceSquared > attack.rangeSquared()) {
+            if (state.navigationTarget == null || state.retreating || currentTick >= state.nextRepathAt) {
                 state.navigationTarget = target.getLocation();
                 state.nextRepathAt = currentTick + 10;
             }
+            state.retreating = false;
+            instanceRegistry.navigate(instance, state.navigationTarget, WalkingSpeed.FAST);
+            return;
+        }
+        if (distanceSquared < attack.minimumRangeSquared()) {
+            if (state.navigationTarget == null || !state.retreating || currentTick >= state.nextRepathAt) {
+                state.navigationTarget = retreatLocation(npc, target, Math.sqrt(attack.minimumRangeSquared()));
+                state.nextRepathAt = currentTick + 10;
+            }
+            state.retreating = true;
             instanceRegistry.navigate(instance, state.navigationTarget, WalkingSpeed.FAST);
             return;
         }
 
         instanceRegistry.stopNavigating(instance);
         state.navigationTarget = null;
+        state.retreating = false;
         face(npc, target);
         if (currentTick >= state.nextAttackAt && npc.hasLineOfSight(target)) {
-            npc.swingMainHand();
-            target.damage(NpcMeleeAttack.damage(npc.getEquipment().getItemInMainHand()), npc);
-            state.nextAttackAt = currentTick + ATTACK_COOLDOWN_TICKS;
+            attack.execute(npc, target);
+            state.nextAttackAt = currentTick + attack.cooldownTicks();
         }
+    }
+
+    private Location retreatLocation(LivingEntity npc, LivingEntity target, double minimumRange) {
+        Location current = npc.getLocation();
+        Vector away = current.toVector().subtract(target.getLocation().toVector()).setY(0.0);
+        if (away.lengthSquared() < 0.01) {
+            away = current.getDirection().setY(0.0).multiply(-1.0);
+        }
+        if (away.lengthSquared() < 0.01) {
+            away = new Vector(1.0, 0.0, 0.0);
+        }
+        Location targetLocation = target.getLocation();
+        double targetDistance = Math.sqrt(
+            Math.pow(current.getX() - targetLocation.getX(), 2.0)
+                + Math.pow(current.getZ() - targetLocation.getZ(), 2.0)
+        );
+        double retreatDistance = Math.max(2.0, minimumRange - targetDistance + 1.5);
+        return current.clone().add(away.normalize().multiply(retreatDistance));
     }
 
     private void engage(
@@ -364,6 +395,7 @@ public final class NpcCombatService implements Listener {
         private long nextAttackAt;
         private Location navigationTarget;
         private long nextRepathAt;
+        private boolean retreating;
 
         private CombatState(
             CombatMode mode,
