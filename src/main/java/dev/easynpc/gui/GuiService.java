@@ -350,30 +350,51 @@ public final class GuiService implements Listener {
         player.openInventory(inventory);
     }
 
-    private void openBehaviourRoutePicker(Player player, NpcDefinition definition, ActionPickerHolder action, int requestedRoutePage) {
-        List<NpcRoute> routes = new ArrayList<>(routeRepository.findAll());
-        int pages = Math.max(1, (routes.size() + PAGE_SIZE - 1) / PAGE_SIZE);
-        int routePage = Math.max(0, Math.min(requestedRoutePage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(new BehaviourRoutePickerHolder(
-            action.key(), action.event(), action.actionIndex(), action.page(), routePage), 54,
-            Component.text("Select Route"));
-        int from = routePage * PAGE_SIZE;
-        int to = Math.min(from + PAGE_SIZE, routes.size());
+    private void openBehaviourValuePicker(
+        Player player,
+        NpcDefinition definition,
+        ActionPickerHolder action,
+        BehaviourValuePickerType pickerType,
+        int requestedValuePage
+    ) {
+        List<BehaviourPickerOption> options = pickerOptions(pickerType);
+        int pages = Math.max(1, (options.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int valuePage = Math.max(0, Math.min(requestedValuePage, pages - 1));
+        Inventory inventory = Bukkit.createInventory(new BehaviourValuePickerHolder(
+            action.key(), action.event(), action.actionIndex(), action.page(), pickerType, valuePage), 54,
+            Component.text(pickerType.title()));
+        int from = valuePage * PAGE_SIZE;
+        int to = Math.min(from + PAGE_SIZE, options.size());
         for (int index = from; index < to; index++) {
-            NpcRoute route = routes.get(index);
-            inventory.setItem(index - from, item(Material.RAIL, route.getDisplayName(), List.of(
-                ChatColor.DARK_GRAY + "Key: " + route.getKey(),
-                ChatColor.GRAY + "" + route.getPoints().size() + " route point(s)",
-                ChatColor.YELLOW + "Click to select"
-            )));
+            BehaviourPickerOption option = options.get(index);
+            List<String> lore = new ArrayList<>(option.lore());
+            lore.add(ChatColor.YELLOW + "Click to select");
+            inventory.setItem(index - from, item(option.material(), option.label(), lore));
         }
-        if (routes.isEmpty()) inventory.setItem(22, item(Material.BARRIER, "No Routes Available", List.of(
-            ChatColor.GRAY + "Create a route from the main preset menu first"
+        if (options.isEmpty()) inventory.setItem(22, item(Material.BARRIER, "No Values Available", List.of(
+            ChatColor.GRAY + pickerType.emptyMessage()
         )));
-        if (routePage > 0) inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+        if (valuePage > 0) inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
-        if (routePage + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        if (valuePage + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         player.openInventory(inventory);
+    }
+
+    private List<BehaviourPickerOption> pickerOptions(BehaviourValuePickerType pickerType) {
+        return switch (pickerType) {
+            case ROUTE -> routeRepository.findAll().stream()
+                .map(route -> new BehaviourPickerOption(route.getKey(), route.getDisplayName(), Material.RAIL, List.of(
+                    ChatColor.DARK_GRAY + "Key: " + route.getKey(),
+                    ChatColor.GRAY + "" + route.getPoints().size() + " route point(s)"
+                )))
+                .toList();
+            case WALK_SPEED -> java.util.Arrays.stream(WalkingSpeed.values())
+                .map(speed -> new BehaviourPickerOption(speed.name().toLowerCase(java.util.Locale.ROOT),
+                    speed.displayName(), Material.FEATHER, List.of(
+                        ChatColor.GRAY + "" + speed.blocksPerSecond() + " blocks/second"
+                    )))
+                .toList();
+        };
     }
 
     public void openRouteAssignment(Player player, NpcDefinition definition, int requestedPage) {
@@ -474,8 +495,8 @@ public final class GuiService implements Listener {
             handleBehaviourClick(event, player, behaviourHolder);
         } else if (holder instanceof ActionPickerHolder pickerHolder) {
             handleActionPickerClick(event, player, pickerHolder);
-        } else if (holder instanceof BehaviourRoutePickerHolder routePickerHolder) {
-            handleBehaviourRoutePickerClick(event, player, routePickerHolder);
+        } else if (holder instanceof BehaviourValuePickerHolder valuePickerHolder) {
+            handleBehaviourValuePickerClick(event, player, valuePickerHolder);
         } else if (holder instanceof ConfirmationHolder confirmationHolder) {
             handleConfirmationClick(event, player, confirmationHolder);
         }
@@ -845,7 +866,9 @@ public final class GuiService implements Listener {
         if (typeIndex < 0 || typeIndex >= BehaviourActionType.values().length) return;
         BehaviourActionType type = BehaviourActionType.values()[typeIndex];
         if (type == BehaviourActionType.SET_ROUTE) {
-            openBehaviourRoutePicker(player, definition, holder, 0);
+            openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.ROUTE, 0);
+        } else if (type == BehaviourActionType.SET_WALK_SPEED) {
+            openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.WALK_SPEED, 0);
         } else if (type == BehaviourActionType.START_NAVIGATION) {
             Location location = player.getLocation();
             setAction(definition, holder, type, location.getWorld().getName() + "," + location.getX() + "," + location.getY() + "," + location.getZ());
@@ -857,7 +880,6 @@ public final class GuiService implements Listener {
             String prompt = switch (type) {
                 case SEND_DIALOG -> "Enter the dialog line:";
                 case RUN_CONSOLE_COMMAND -> "Enter the command without a leading slash:";
-                case SET_WALK_SPEED -> "Enter speed: slouch, slow, normal, fast, or very_fast:";
                 default -> "Enter the action value:";
             };
             chatInputService.request(player, prompt, value -> {
@@ -867,10 +889,10 @@ public final class GuiService implements Listener {
         }
     }
 
-    private void handleBehaviourRoutePickerClick(
+    private void handleBehaviourValuePickerClick(
         InventoryClickEvent event,
         Player player,
-        BehaviourRoutePickerHolder holder
+        BehaviourValuePickerHolder holder
     ) {
         event.setCancelled(true);
         if (!isTopInventoryClick(event)) return;
@@ -878,15 +900,15 @@ public final class GuiService implements Listener {
         if (definition == null) { player.closeInventory(); return; }
         ActionPickerHolder action = new ActionPickerHolder(holder.key(), holder.event(), holder.actionIndex(), holder.behaviourPage());
         int slot = event.getRawSlot();
-        if (slot == 45) { openBehaviourRoutePicker(player, definition, action, holder.routePage() - 1); return; }
+        if (slot == 45) { openBehaviourValuePicker(player, definition, action, holder.pickerType(), holder.valuePage() - 1); return; }
         if (slot == 49) { openActionPicker(player, definition, holder.event(), holder.actionIndex(), holder.behaviourPage()); return; }
-        if (slot == 53) { openBehaviourRoutePicker(player, definition, action, holder.routePage() + 1); return; }
-        List<NpcRoute> routes = new ArrayList<>(routeRepository.findAll());
-        int index = holder.routePage() * PAGE_SIZE + slot;
-        if (slot >= PAGE_SIZE || index < 0 || index >= routes.size()) return;
-        NpcRoute route = routes.get(index);
-        setAction(definition, action, BehaviourActionType.SET_ROUTE, route.getKey());
-        player.sendMessage(Component.text("Selected route '" + route.getDisplayName() + "'."));
+        if (slot == 53) { openBehaviourValuePicker(player, definition, action, holder.pickerType(), holder.valuePage() + 1); return; }
+        List<BehaviourPickerOption> options = pickerOptions(holder.pickerType());
+        int index = holder.valuePage() * PAGE_SIZE + slot;
+        if (slot >= PAGE_SIZE || index < 0 || index >= options.size()) return;
+        BehaviourPickerOption option = options.get(index);
+        setAction(definition, action, holder.pickerType().actionType(), option.value());
+        player.sendMessage(Component.text("Selected '" + option.label() + "'."));
         openBehaviours(player, definition, holder.behaviourPage());
     }
 
@@ -1046,7 +1068,7 @@ public final class GuiService implements Listener {
             || holder instanceof RouteAssignmentHolder
             || holder instanceof BehaviourHolder
             || holder instanceof ActionPickerHolder
-            || holder instanceof BehaviourRoutePickerHolder
+            || holder instanceof BehaviourValuePickerHolder
             || holder instanceof ConfirmationHolder;
     }
 
@@ -1133,6 +1155,9 @@ public final class GuiService implements Listener {
     private Material eventMaterial(BehaviourEvent event) {
         return switch (event) {
             case COMBAT_ENTERED -> Material.IRON_SWORD;
+            case COMBAT_EXITED -> Material.IRON_CHESTPLATE;
+            case PLAYER_APPROACH -> Material.SPYGLASS;
+            case PLAYER_LEAVES -> Material.ENDER_PEARL;
             case LEFT_CLICK -> Material.WOODEN_SWORD;
             case RIGHT_CLICK -> Material.LEVER;
             case DEATH -> Material.SKELETON_SKULL;
@@ -1229,14 +1254,41 @@ public final class GuiService implements Listener {
         @Override public Inventory getInventory() { return null; }
     }
 
-    private record BehaviourRoutePickerHolder(
+    private record BehaviourValuePickerHolder(
         String key,
         BehaviourEvent event,
         int actionIndex,
         int behaviourPage,
-        int routePage
+        BehaviourValuePickerType pickerType,
+        int valuePage
     ) implements InventoryHolder {
         @Override public Inventory getInventory() { return null; }
+    }
+
+    private record BehaviourPickerOption(
+        String value,
+        String label,
+        Material material,
+        List<String> lore
+    ) { }
+
+    private enum BehaviourValuePickerType {
+        ROUTE(BehaviourActionType.SET_ROUTE, "Select Route", "Create a route from the main preset menu first"),
+        WALK_SPEED(BehaviourActionType.SET_WALK_SPEED, "Select Walk Speed", "No walking speeds are available");
+
+        private final BehaviourActionType actionType;
+        private final String title;
+        private final String emptyMessage;
+
+        BehaviourValuePickerType(BehaviourActionType actionType, String title, String emptyMessage) {
+            this.actionType = actionType;
+            this.title = title;
+            this.emptyMessage = emptyMessage;
+        }
+
+        BehaviourActionType actionType() { return actionType; }
+        String title() { return title; }
+        String emptyMessage() { return emptyMessage; }
     }
 
     private record ConfirmationHolder(String key, ConfirmationAction action) implements InventoryHolder {

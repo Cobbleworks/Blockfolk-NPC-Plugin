@@ -32,6 +32,8 @@ import java.util.HashMap;
 
 public final class NpcBehaviourService implements Listener {
     private static final double DIALOG_RANGE_SQUARED = 12.0 * 12.0;
+    private static final double APPROACH_RANGE_SQUARED = 8.0 * 8.0;
+    private static final double LEAVE_RANGE_SQUARED = 10.0 * 10.0;
     private final Plugin plugin;
     private final NpcDefinitionRepository definitions;
     private final NpcInstanceRegistry instances;
@@ -40,8 +42,10 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, WalkingSpeed> speedOverrides = new HashMap<>();
     private final Map<UUID, Location> directNavigationTargets = new HashMap<>();
     private final Set<UUID> routePaused = new HashSet<>();
+    private final Set<ProximityKey> nearbyPlayers = new HashSet<>();
     private NpcCombatService combatService;
     private BukkitTask navigationTask;
+    private int proximityTick;
 
     public NpcBehaviourService(Plugin plugin, NpcDefinitionRepository definitions, NpcInstanceRegistry instances) {
         this.plugin = plugin;
@@ -61,6 +65,7 @@ public final class NpcBehaviourService implements Listener {
         navigationTask = null;
         directNavigationTargets.clear();
         routePaused.clear();
+        nearbyPlayers.clear();
     }
 
     public void trigger(BehaviourEvent event, NpcInstance instance, Entity actor) {
@@ -75,6 +80,7 @@ public final class NpcBehaviourService implements Listener {
         speedOverrides.remove(instance.getId());
         directNavigationTargets.remove(instance.getId());
         routePaused.remove(instance.getId());
+        nearbyPlayers.removeIf(key -> key.instanceId().equals(instance.getId()));
     }
 
     public MovementProfile movementFor(NpcInstance instance, NpcDefinition definition) {
@@ -155,6 +161,10 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void tickDirectNavigation() {
+        if (++proximityTick >= 10) {
+            proximityTick = 0;
+            tickProximity();
+        }
         Set<UUID> active = new HashSet<>();
         for (NpcInstance instance : instances.findAll()) {
             active.add(instance.getId());
@@ -174,6 +184,31 @@ public final class NpcBehaviourService implements Listener {
         }
         directNavigationTargets.keySet().retainAll(active);
         routePaused.retainAll(active);
+    }
+
+    private void tickProximity() {
+        Set<ProximityKey> nowNearby = new HashSet<>();
+        Map<UUID, NpcInstance> activeInstances = new HashMap<>();
+        for (NpcInstance instance : instances.findAll()) {
+            activeInstances.put(instance.getId(), instance);
+            Location npcLocation = instance.getLocation();
+            if (npcLocation.getWorld() == null) continue;
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                ProximityKey key = new ProximityKey(instance.getId(), player.getUniqueId());
+                if (player.getWorld() != npcLocation.getWorld()) continue;
+                double range = nearbyPlayers.contains(key) ? LEAVE_RANGE_SQUARED : APPROACH_RANGE_SQUARED;
+                if (player.getLocation().distanceSquared(npcLocation) > range) continue;
+                nowNearby.add(key);
+                if (!nearbyPlayers.contains(key)) trigger(BehaviourEvent.PLAYER_APPROACH, instance, player);
+            }
+        }
+        for (ProximityKey key : nearbyPlayers) {
+            if (nowNearby.contains(key)) continue;
+            NpcInstance instance = activeInstances.get(key.instanceId());
+            if (instance != null) trigger(BehaviourEvent.PLAYER_LEAVES, instance, Bukkit.getPlayer(key.playerId()));
+        }
+        nearbyPlayers.clear();
+        nearbyPlayers.addAll(nowNearby);
     }
 
     private void sendDialog(NpcInstance instance, NpcDefinition definition, String line) {
@@ -201,4 +236,6 @@ public final class NpcBehaviourService implements Listener {
         try { return new Location(world, Double.parseDouble(parts[1]), Double.parseDouble(parts[2]), Double.parseDouble(parts[3])); }
         catch (NumberFormatException ignored) { return null; }
     }
+
+    private record ProximityKey(UUID instanceId, UUID playerId) { }
 }

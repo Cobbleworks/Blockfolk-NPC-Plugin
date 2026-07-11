@@ -160,7 +160,7 @@ public final class NpcCombatService implements Listener {
             }
         }
         event.setDroppedExp(0);
-        states.remove(instance.getId());
+        clearState(instance);
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (!instanceRegistry.deleteInstance(instance.getId()) || definition == null
                 || definition.getCombatProfile().respawnSeconds() == 0) {
@@ -370,8 +370,13 @@ public final class NpcCombatService implements Listener {
     }
 
     private void clearState(NpcInstance instance) {
-        if (states.remove(instance.getId()) != null) {
+        CombatState removed = states.remove(instance.getId());
+        if (removed != null) {
             instanceRegistry.stopNavigating(instance);
+            if (behaviourService != null) {
+                behaviourService.trigger(dev.easynpc.model.BehaviourEvent.COMBAT_EXITED,
+                    instance, Bukkit.getEntity(removed.entityId));
+            }
         }
     }
 
