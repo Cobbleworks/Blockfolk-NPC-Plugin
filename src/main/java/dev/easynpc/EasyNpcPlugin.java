@@ -11,6 +11,8 @@ import dev.easynpc.repository.NpcInstanceRepository;
 import dev.easynpc.repository.RouteRepository;
 import dev.easynpc.runtime.NpcInstanceRegistry;
 import dev.easynpc.runtime.NpcCombatService;
+import dev.easynpc.runtime.NpcBehaviourService;
+import dev.easynpc.model.BehaviourEvent;
 import dev.easynpc.runtime.NativeNpcNavigationService;
 import dev.easynpc.runtime.NpcRenderer;
 import dev.easynpc.runtime.PaperMannequinNpcRenderer;
@@ -38,6 +40,7 @@ public final class EasyNpcPlugin extends JavaPlugin {
     private RouteGuiService routeGuiService;
     private RouteMovementService routeMovementService;
     private NpcCombatService combatService;
+    private NpcBehaviourService behaviourService;
     private SkinResolver skinResolver;
 
     @Override
@@ -81,12 +84,21 @@ public final class EasyNpcPlugin extends JavaPlugin {
             routeGuiService::openRoutes
         );
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
+        behaviourService = new NpcBehaviourService(this, definitionRepository, instanceRegistry);
+        behaviourService.setCombatService(combatService);
+        combatService.setBehaviourService(behaviourService);
+        guiService.setBehaviourService(behaviourService);
+        instanceRegistry.setSpawnListener((instance, definition) -> {
+            behaviourService.forget(instance);
+            behaviourService.trigger(BehaviourEvent.SPAWN, instance, null);
+        });
         routeMovementService = new RouteMovementService(
             this,
             definitionRepository,
             routeRepository,
             instanceRegistry,
-            combatService
+            combatService,
+            behaviourService
         );
 
         routeRepository.loadAll();
@@ -107,6 +119,7 @@ public final class EasyNpcPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(routeGuiService, this);
         getServer().getPluginManager().registerEvents(chatInputService, this);
         getServer().getPluginManager().registerEvents(combatService, this);
+        getServer().getPluginManager().registerEvents(behaviourService, this);
 
         npcRenderer.start();
         dialogService.start();

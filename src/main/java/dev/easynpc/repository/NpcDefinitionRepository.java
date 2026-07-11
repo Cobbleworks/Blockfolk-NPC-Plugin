@@ -5,6 +5,9 @@ import dev.easynpc.model.AggressionLevel;
 import dev.easynpc.model.MovementProfile;
 import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.WalkingSpeed;
+import dev.easynpc.model.BehaviourAction;
+import dev.easynpc.model.BehaviourActionType;
+import dev.easynpc.model.BehaviourEvent;
 import dev.easynpc.util.LocationCodec;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -86,10 +89,19 @@ public final class NpcDefinitionRepository {
         configuration.set("combat.max-health", definition.getCombatProfile().maxHealth());
         configuration.set("combat.respawn-seconds", definition.getCombatProfile().respawnSeconds());
         configuration.set("combat.aggression", definition.getCombatProfile().aggressionLevel().name().toLowerCase(Locale.ROOT));
-        configuration.set("combat.shoutout", definition.getCombatProfile().shoutout());
-        configuration.set("movement.enabled", definition.getMovementProfile().enabled());
-        configuration.set("movement.route", definition.getMovementProfile().routeKey());
+        configuration.set("combat.shoutout", null);
+        configuration.set("movement.enabled", null);
+        configuration.set("movement.route", null);
         configuration.set("movement.speed", definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
+        for (BehaviourEvent event : BehaviourEvent.values()) {
+            List<Map<String, Object>> actions = definition.getBehaviourActions(event).stream().map(action -> {
+                Map<String, Object> stored = new LinkedHashMap<String, Object>();
+                stored.put("type", action.type().name().toLowerCase(Locale.ROOT));
+                if (action.value() != null) stored.put("value", action.value());
+                return stored;
+            }).toList();
+            configuration.set("behaviours." + event.name().toLowerCase(Locale.ROOT), actions.isEmpty() ? null : actions);
+        }
         try {
             configuration.save(file);
         } catch (IOException exception) {
@@ -139,6 +151,31 @@ public final class NpcDefinitionRepository {
             configuration.getString("movement.route"),
             WalkingSpeed.fromStored(configuration.getString("movement.speed"))
         ));
+        for (BehaviourEvent event : BehaviourEvent.values()) {
+            List<BehaviourAction> actions = new ArrayList<>();
+            for (Map<?, ?> entry : configuration.getMapList("behaviours." + event.name().toLowerCase(Locale.ROOT))) {
+                Object type = entry.get("type");
+                if (type == null) continue;
+                try {
+                    actions.add(new BehaviourAction(BehaviourActionType.fromStored(type.toString()),
+                        entry.get("value") == null ? null : entry.get("value").toString()));
+                } catch (IllegalArgumentException ignored) {
+                    plugin.getLogger().warning("Ignoring unknown behaviour action '" + type + "' in " + file.getName());
+                }
+            }
+            definition.setBehaviourActions(event, actions);
+        }
+        // One-time compatibility migration. New saves contain only behaviours for these features.
+        String legacyShoutout = configuration.getString("combat.shoutout");
+        if (legacyShoutout != null && definition.getBehaviourActions(BehaviourEvent.COMBAT_ENTERED).isEmpty()) {
+            definition.addBehaviourAction(BehaviourEvent.COMBAT_ENTERED,
+                new BehaviourAction(BehaviourActionType.SEND_DIALOG, legacyShoutout));
+        }
+        String legacyRoute = configuration.getString("movement.route");
+        if (legacyRoute != null && definition.getBehaviourActions(BehaviourEvent.SPAWN).isEmpty()) {
+            definition.addBehaviourAction(BehaviourEvent.SPAWN,
+                new BehaviourAction(BehaviourActionType.SET_ROUTE, legacyRoute));
+        }
         return definition;
     }
 

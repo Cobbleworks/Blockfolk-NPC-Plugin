@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 public final class NpcInstanceRegistry {
     private final NpcDefinitionRepository definitionRepository;
@@ -23,6 +24,11 @@ public final class NpcInstanceRegistry {
     private final NativeNpcNavigationService navigationService;
     private final DialogService dialogService;
     private final Map<UUID, NpcInstance> instances = new LinkedHashMap<>();
+    private BiConsumer<NpcInstance, NpcDefinition> spawnListener = (instance, definition) -> { };
+
+    public void setSpawnListener(BiConsumer<NpcInstance, NpcDefinition> spawnListener) {
+        this.spawnListener = spawnListener == null ? (instance, definition) -> { } : spawnListener;
+    }
 
     public NpcInstanceRegistry(
         NpcDefinitionRepository definitionRepository,
@@ -173,5 +179,6 @@ public final class NpcInstanceRegistry {
     private void spawnInstance(NpcInstance instance, NpcDefinition definition) {
         renderer.spawn(instance, definition);
         dialogService.attach(instance, definition);
+        spawnListener.accept(instance, definition);
     }
 }

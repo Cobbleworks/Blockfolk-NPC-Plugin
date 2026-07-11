@@ -9,7 +9,6 @@ import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcInstance;
 import dev.easynpc.model.WalkingSpeed;
 import dev.easynpc.repository.NpcDefinitionRepository;
-import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -40,7 +39,6 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class NpcCombatService implements Listener {
     private static final double SIGHT_RANGE = 16.0;
     private static final double MAX_CHASE_RANGE_SQUARED = 32.0 * 32.0;
-    private static final double SHOUT_RANGE_SQUARED = 12.0 * 12.0;
     private static final int FLEE_TICKS = 8 * 20;
 
     private final Plugin plugin;
@@ -50,6 +48,7 @@ public final class NpcCombatService implements Listener {
     private final NpcAttackSelector attackSelector = new NpcAttackSelector();
     private final Map<UUID, CombatState> states = new HashMap<>();
     private final Map<UUID, BukkitTask> pendingRespawns = new HashMap<>();
+    private NpcBehaviourService behaviourService;
     private BukkitTask task;
     private long currentTick;
 
@@ -87,6 +86,15 @@ public final class NpcCombatService implements Listener {
 
     public boolean isEngaged(NpcInstance instance) {
         return states.containsKey(instance.getId());
+    }
+
+    public void setBehaviourService(NpcBehaviourService behaviourService) { this.behaviourService = behaviourService; }
+
+    public void startCombat(NpcInstance instance, Entity target) {
+        if (!(target instanceof LivingEntity living) || !isAttackable(instance, living)) return;
+        NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
+        if (definition != null && !definition.getCombatProfile().invulnerable())
+            engage(instance, definition, CombatMode.FIGHT, living);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -307,7 +315,7 @@ public final class NpcCombatService implements Listener {
             currentTick
         ));
         if (enteringCombat) {
-            shout(instance, definition);
+            if (behaviourService != null) behaviourService.trigger(dev.easynpc.model.BehaviourEvent.COMBAT_ENTERED, instance, entity);
         }
     }
 
@@ -351,21 +359,6 @@ public final class NpcCombatService implements Listener {
             }
         }
         return null;
-    }
-
-    private void shout(NpcInstance instance, NpcDefinition definition) {
-        String shoutout = definition.getCombatProfile().shoutout();
-        if (shoutout == null) {
-            return;
-        }
-        Location location = instance.getLocation();
-        Component message = Component.text(definition.getDisplayName() + ": " + shoutout);
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.getWorld() == location.getWorld()
-                && player.getLocation().distanceSquared(location) <= SHOUT_RANGE_SQUARED) {
-                player.sendMessage(message);
-            }
-        }
     }
 
     private void face(LivingEntity npc, LivingEntity target) {

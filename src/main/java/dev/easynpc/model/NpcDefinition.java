@@ -5,6 +5,8 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -23,6 +25,7 @@ public final class NpcDefinition {
     private int secondsPerDialogLine;
     private CombatProfile combatProfile;
     private MovementProfile movementProfile;
+    private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
 
     public NpcDefinition(String key) {
         this.key = key;
@@ -33,6 +36,7 @@ public final class NpcDefinition {
         this.secondsPerDialogLine = 3;
         this.combatProfile = CombatProfile.disabled();
         this.movementProfile = MovementProfile.disabled();
+        this.behaviours = new EnumMap<>(BehaviourEvent.class);
     }
 
     public static NpcDefinition create(String displayName) {
@@ -155,6 +159,26 @@ public final class NpcDefinition {
 
     public void setMovementProfile(MovementProfile movementProfile) {
         this.movementProfile = movementProfile == null ? MovementProfile.disabled() : movementProfile;
+    }
+
+    public List<BehaviourAction> getBehaviourActions(BehaviourEvent event) {
+        return new ArrayList<>(behaviours.getOrDefault(event, List.of()));
+    }
+
+    public void setBehaviourActions(BehaviourEvent event, List<BehaviourAction> actions) {
+        if (actions == null || actions.isEmpty()) behaviours.remove(event);
+        else behaviours.put(event, new ArrayList<>(actions));
+    }
+
+    public void addBehaviourAction(BehaviourEvent event, BehaviourAction action) {
+        behaviours.computeIfAbsent(event, ignored -> new ArrayList<>()).add(action);
+    }
+
+    public void removeBehaviourAction(BehaviourEvent event, int index) {
+        List<BehaviourAction> actions = behaviours.get(event);
+        if (actions == null || index < 0 || index >= actions.size()) return;
+        actions.remove(index);
+        if (actions.isEmpty()) behaviours.remove(event);
     }
 
     private static ItemStack[] cloneArray(ItemStack[] source, int length) {

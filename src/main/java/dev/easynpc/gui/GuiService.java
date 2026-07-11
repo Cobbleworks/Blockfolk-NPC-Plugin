@@ -11,6 +11,10 @@ import dev.easynpc.model.NpcDefinition;
 import dev.easynpc.model.NpcInstance;
 import dev.easynpc.model.NpcRoute;
 import dev.easynpc.model.WalkingSpeed;
+import dev.easynpc.model.BehaviourAction;
+import dev.easynpc.model.BehaviourActionType;
+import dev.easynpc.model.BehaviourEvent;
+import dev.easynpc.runtime.NpcBehaviourService;
 import dev.easynpc.repository.NpcDefinitionRepository;
 import dev.easynpc.repository.RouteRepository;
 import dev.easynpc.runtime.NpcInstanceRegistry;
@@ -67,6 +71,7 @@ public final class GuiService implements Listener {
     private final DialogService dialogService;
     private final SkinResolver skinResolver;
     private final Consumer<Player> routeGuiOpener;
+    private NpcBehaviourService behaviourService;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
     private final Map<String, String> pendingSkinUrls = new HashMap<>();
 
@@ -89,6 +94,8 @@ public final class GuiService implements Listener {
         this.skinResolver = skinResolver;
         this.routeGuiOpener = routeGuiOpener;
     }
+
+    public void setBehaviourService(NpcBehaviourService behaviourService) { this.behaviourService = behaviourService; }
 
     public void openMain(Player player) {
         openMain(player, 0);
@@ -173,19 +180,12 @@ public final class GuiService implements Listener {
             ChatColor.GRAY + "" + instances + " spawned instance(s)",
             ChatColor.YELLOW + "Teleport to or remove copies"
         )));
-        String assignedRouteKey = definition.getMovementProfile().routeKey();
-        String routeName = assignedRouteKey == null ? "None" : routeRepository.find(assignedRouteKey)
-            .map(NpcRoute::getDisplayName)
-            .orElse("Missing route");
-        inventory.setItem(20, item(Material.RAIL, "Walking Route", List.of(
-            ChatColor.GRAY + "Assigned: " + ChatColor.WHITE + routeName,
-            ChatColor.YELLOW + "Click to assign or clear a route"
-        )));
-        WalkingSpeed walkingSpeed = definition.getMovementProfile().walkingSpeed();
-        inventory.setItem(21, item(Material.FEATHER, "Walking Speed", List.of(
-            ChatColor.GRAY + "Current: " + ChatColor.WHITE + walkingSpeed.displayName(),
-            ChatColor.GRAY + "" + walkingSpeed.blocksPerSecond() + " blocks/second",
-            ChatColor.YELLOW + "Click to cycle to " + walkingSpeed.next().displayName()
+        int behaviourCount = java.util.Arrays.stream(BehaviourEvent.values())
+            .mapToInt(event -> definition.getBehaviourActions(event).size()).sum();
+        inventory.setItem(20, item(Material.COMPARATOR, "Behaviour", List.of(
+            ChatColor.GRAY + "" + behaviourCount + " configured action(s)",
+            ChatColor.GRAY + "Build event-to-action sequences",
+            ChatColor.YELLOW + "Click to configure"
         )));
         inventory.setItem(22, item(Material.SUNFLOWER, "Refresh Instances", List.of(
             ChatColor.GRAY + "Re-applies name, skin, and equipment",
@@ -300,12 +300,53 @@ public final class GuiService implements Listener {
             aggressionDescription(combat.aggressionLevel()),
             ChatColor.YELLOW + "Click to cycle aggression level"
         )));
-        inventory.setItem(14, item(Material.WRITABLE_BOOK, "Combat Shoutout", List.of(
-            ChatColor.GRAY + (combat.shoutout() == null ? "No shoutout configured" : combat.shoutout()),
-            ChatColor.YELLOW + "Click to enter a custom shoutout",
-            ChatColor.DARK_GRAY + "Enter 'clear' to remove it"
-        )));
         inventory.setItem(23, item(Material.BARRIER, "Back", List.of()));
+        player.openInventory(inventory);
+    }
+
+    public void openBehaviours(Player player, NpcDefinition definition, int requestedPage) {
+        BehaviourEvent[] events = BehaviourEvent.values();
+        int pages = Math.max(1, (events.length + 4) / 5);
+        int page = Math.max(0, Math.min(requestedPage, pages - 1));
+        Inventory inventory = Bukkit.createInventory(new BehaviourHolder(definition.getKey(), page), 54,
+            Component.text("Behaviour: " + definition.getDisplayName()));
+        for (int row = 0; row < 5; row++) {
+            int eventIndex = page * 5 + row;
+            if (eventIndex >= events.length) break;
+            BehaviourEvent behaviourEvent = events[eventIndex];
+            inventory.setItem(row * 9, item(eventMaterial(behaviourEvent), behaviourEvent.displayName(), List.of(
+                ChatColor.GRAY + "Actions run from left to right"
+            )));
+            List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
+            for (int column = 0; column < 7; column++) {
+                int slot = row * 9 + column + 2;
+                if (column < actions.size()) {
+                    BehaviourAction action = actions.get(column);
+                    inventory.setItem(slot, item(actionMaterial(action.type()), (column + 1) + ". " + action.type().displayName(), List.of(
+                        ChatColor.GRAY + (action.value() == null ? "No setting required" : action.value()),
+                        ChatColor.YELLOW + "Left-click to replace",
+                        ChatColor.RED + "Right-click to remove"
+                    )));
+                } else if (column == actions.size()) {
+                    inventory.setItem(slot, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(ChatColor.YELLOW + "Click to append")));
+                }
+            }
+        }
+        if (page > 0) inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        if (page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        player.openInventory(inventory);
+    }
+
+    private void openActionPicker(Player player, NpcDefinition definition, BehaviourEvent event, int actionIndex, int page) {
+        Inventory inventory = Bukkit.createInventory(new ActionPickerHolder(definition.getKey(), event, actionIndex, page), 27,
+            Component.text("Choose Action"));
+        BehaviourActionType[] types = BehaviourActionType.values();
+        for (int index = 0; index < types.length; index++) {
+            BehaviourActionType type = types[index];
+            inventory.setItem(10 + index, item(actionMaterial(type), type.displayName(), List.of(ChatColor.YELLOW + "Click to configure")));
+        }
+        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
         player.openInventory(inventory);
     }
 
@@ -403,6 +444,10 @@ public final class GuiService implements Listener {
             handleInstancesClick(event, player, instancesHolder);
         } else if (holder instanceof RouteAssignmentHolder routeHolder) {
             handleRouteAssignmentClick(event, player, routeHolder);
+        } else if (holder instanceof BehaviourHolder behaviourHolder) {
+            handleBehaviourClick(event, player, behaviourHolder);
+        } else if (holder instanceof ActionPickerHolder pickerHolder) {
+            handleActionPickerClick(event, player, pickerHolder);
         } else if (holder instanceof ConfirmationHolder confirmationHolder) {
             handleConfirmationClick(event, player, confirmationHolder);
         }
@@ -422,6 +467,7 @@ public final class GuiService implements Listener {
         if (definition == null) {
             return;
         }
+        if (behaviourService != null) behaviourService.trigger(BehaviourEvent.RIGHT_CLICK, instance, event.getPlayer());
         if (event.getPlayer().isSneaking() && event.getPlayer().hasPermission("eznpc.admin")) {
             openEditor(event.getPlayer(), definition);
             return;
@@ -531,14 +577,7 @@ public final class GuiService implements Listener {
                 openEditor(player, definition);
             }
             case 16 -> openInstances(player, definition, 0);
-            case 20 -> openRouteAssignment(player, definition, 0);
-            case 21 -> {
-                WalkingSpeed speed = definition.getMovementProfile().walkingSpeed().next();
-                definition.setMovementProfile(definition.getMovementProfile().withWalkingSpeed(speed));
-                definitionRepository.save(definition);
-                player.sendMessage(Component.text("Walking speed set to " + speed.displayName() + "."));
-                openEditor(player, definition);
-            }
+            case 20 -> openBehaviours(player, definition, 0);
             case 22 -> {
                 instanceRegistry.refreshDefinition(definition);
                 player.sendMessage(Component.text("Refreshed " + instanceRegistry.findByDefinition(definition).size() + " instance(s)."));
@@ -635,12 +674,6 @@ public final class GuiService implements Listener {
                 player.sendMessage(Component.text("Aggression set to " + aggression.displayName() + "."));
                 openFightingEditor(player, definition);
             }
-            case 14 -> chatInputService.request(player, "Enter a combat shoutout, or 'clear':", value -> {
-                String shoutout = value.trim().equalsIgnoreCase("clear") ? null : value;
-                definition.setCombatProfile(definition.getCombatProfile().withShoutout(shoutout));
-                definitionRepository.save(definition);
-                openFightingEditor(player, definition);
-            });
             case 23 -> openEditor(player, definition);
             default -> {
             }
@@ -748,6 +781,70 @@ public final class GuiService implements Listener {
                 openEditor(player, definition);
             }
         }
+    }
+
+    private void handleBehaviourClick(InventoryClickEvent event, Player player, BehaviourHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
+        if (definition == null) { player.closeInventory(); return; }
+        int slot = event.getRawSlot();
+        if (slot == 45) { openBehaviours(player, definition, holder.page() - 1); return; }
+        if (slot == 49) { openEditor(player, definition); return; }
+        if (slot == 53) { openBehaviours(player, definition, holder.page() + 1); return; }
+        int row = slot / 9;
+        int column = slot % 9 - 2;
+        int eventIndex = holder.page() * 5 + row;
+        if (row >= 5 || column < 0 || column >= 7 || eventIndex >= BehaviourEvent.values().length) return;
+        BehaviourEvent behaviourEvent = BehaviourEvent.values()[eventIndex];
+        List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
+        if (column < actions.size() && event.isRightClick()) {
+            definition.removeBehaviourAction(behaviourEvent, column);
+            definitionRepository.save(definition);
+            openBehaviours(player, definition, holder.page());
+        } else if (column <= actions.size()) {
+            openActionPicker(player, definition, behaviourEvent, column, holder.page());
+        }
+    }
+
+    private void handleActionPickerClick(InventoryClickEvent event, Player player, ActionPickerHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
+        if (definition == null) { player.closeInventory(); return; }
+        if (event.getRawSlot() == 22) { openBehaviours(player, definition, holder.page()); return; }
+        int typeIndex = event.getRawSlot() - 10;
+        if (typeIndex < 0 || typeIndex >= BehaviourActionType.values().length) return;
+        BehaviourActionType type = BehaviourActionType.values()[typeIndex];
+        if (type == BehaviourActionType.START_NAVIGATION) {
+            Location location = player.getLocation();
+            setAction(definition, holder, type, location.getWorld().getName() + "," + location.getX() + "," + location.getY() + "," + location.getZ());
+            openBehaviours(player, definition, holder.page());
+        } else if (!type.requiresValue()) {
+            setAction(definition, holder, type, null);
+            openBehaviours(player, definition, holder.page());
+        } else {
+            String prompt = switch (type) {
+                case SEND_DIALOG -> "Enter the dialog line:";
+                case SET_ROUTE -> "Enter the route name or key:";
+                case RUN_CONSOLE_COMMAND -> "Enter the command without a leading slash:";
+                case SET_WALK_SPEED -> "Enter speed: slouch, slow, normal, fast, or very_fast:";
+                default -> "Enter the action value:";
+            };
+            chatInputService.request(player, prompt, value -> {
+                setAction(definition, holder, type, value);
+                openBehaviours(player, definition, holder.page());
+            });
+        }
+    }
+
+    private void setAction(NpcDefinition definition, ActionPickerHolder holder, BehaviourActionType type, String value) {
+        List<BehaviourAction> actions = definition.getBehaviourActions(holder.event());
+        BehaviourAction action = new BehaviourAction(type, value);
+        if (holder.actionIndex() < actions.size()) actions.set(holder.actionIndex(), action);
+        else if (actions.size() < 7) actions.add(action);
+        definition.setBehaviourActions(holder.event(), actions);
+        definitionRepository.save(definition);
     }
 
     private void handleConfirmationClick(InventoryClickEvent event, Player player, ConfirmationHolder holder) {
@@ -895,6 +992,8 @@ public final class GuiService implements Listener {
             || holder instanceof FightingHolder
             || holder instanceof InstancesHolder
             || holder instanceof RouteAssignmentHolder
+            || holder instanceof BehaviourHolder
+            || holder instanceof ActionPickerHolder
             || holder instanceof ConfirmationHolder;
     }
 
@@ -978,6 +1077,30 @@ public final class GuiService implements Listener {
         };
     }
 
+    private Material eventMaterial(BehaviourEvent event) {
+        return switch (event) {
+            case COMBAT_ENTERED -> Material.IRON_SWORD;
+            case LEFT_CLICK -> Material.WOODEN_SWORD;
+            case RIGHT_CLICK -> Material.LEVER;
+            case DEATH -> Material.SKELETON_SKULL;
+            case SPAWN -> Material.NETHER_STAR;
+            case DAMAGE_TAKEN -> Material.RED_DYE;
+            case LOW_HEALTH -> Material.GLISTERING_MELON_SLICE;
+        };
+    }
+
+    private Material actionMaterial(BehaviourActionType type) {
+        return switch (type) {
+            case SEND_DIALOG -> Material.WRITABLE_BOOK;
+            case SET_ROUTE -> Material.RAIL;
+            case RUN_CONSOLE_COMMAND -> Material.COMMAND_BLOCK;
+            case START_COMBAT -> Material.DIAMOND_SWORD;
+            case START_NAVIGATION -> Material.COMPASS;
+            case STOP_NAVIGATION -> Material.BARRIER;
+            case SET_WALK_SPEED -> Material.FEATHER;
+        };
+    }
+
     private String aggressionDescription(AggressionLevel aggressionLevel) {
         return switch (aggressionLevel) {
             case NONE -> ChatColor.GRAY + "Never reacts to nearby entities";
@@ -1042,6 +1165,15 @@ public final class GuiService implements Listener {
         public Inventory getInventory() {
             return null;
         }
+    }
+
+    private record BehaviourHolder(String key, int page) implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record ActionPickerHolder(String key, BehaviourEvent event, int actionIndex, int page)
+        implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
     }
 
     private record ConfirmationHolder(String key, ConfirmationAction action) implements InventoryHolder {

@@ -25,6 +25,7 @@ public final class RouteMovementService {
     private final RouteRepository routeRepository;
     private final NpcInstanceRegistry instanceRegistry;
     private final NpcCombatService combatService;
+    private final NpcBehaviourService behaviourService;
     private final Map<UUID, Progress> progressByInstance = new HashMap<>();
     private BukkitTask task;
 
@@ -33,13 +34,15 @@ public final class RouteMovementService {
         NpcDefinitionRepository definitionRepository,
         RouteRepository routeRepository,
         NpcInstanceRegistry instanceRegistry,
-        NpcCombatService combatService
+        NpcCombatService combatService,
+        NpcBehaviourService behaviourService
     ) {
         this.plugin = plugin;
         this.definitionRepository = definitionRepository;
         this.routeRepository = routeRepository;
         this.instanceRegistry = instanceRegistry;
         this.combatService = combatService;
+        this.behaviourService = behaviourService;
     }
 
     public void start() {
@@ -79,7 +82,7 @@ public final class RouteMovementService {
             stop(instance);
             return;
         }
-        MovementProfile movement = definition.getMovementProfile();
+        MovementProfile movement = behaviourService.movementFor(instance, definition);
         if (!movement.enabled()) {
             stop(instance);
             return;
