@@ -323,7 +323,9 @@ public final class GuiService implements Listener {
                 if (column < actions.size()) {
                     BehaviourAction action = actions.get(column);
                     inventory.setItem(slot, item(actionMaterial(action.type()), (column + 1) + ". " + action.type().displayName(), List.of(
-                        ChatColor.GRAY + (action.value() == null ? "No setting required" : action.value()),
+                        ChatColor.GRAY + (!action.type().requiresValue() || action.value() == null
+                            ? "No setting required"
+                            : action.value()),
                         ChatColor.YELLOW + "Left-click to replace",
                         ChatColor.RED + "Right-click to remove"
                     )));
@@ -869,10 +871,6 @@ public final class GuiService implements Listener {
             openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.ROUTE, 0);
         } else if (type == BehaviourActionType.SET_WALK_SPEED) {
             openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.WALK_SPEED, 0);
-        } else if (type == BehaviourActionType.START_NAVIGATION) {
-            Location location = player.getLocation();
-            setAction(definition, holder, type, location.getWorld().getName() + "," + location.getX() + "," + location.getY() + "," + location.getZ());
-            openBehaviours(player, definition, holder.page());
         } else if (!type.requiresValue()) {
             setAction(definition, holder, type, null);
             openBehaviours(player, definition, holder.page());
