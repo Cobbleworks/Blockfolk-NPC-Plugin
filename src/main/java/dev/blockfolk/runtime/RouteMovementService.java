@@ -108,18 +108,20 @@ public final class RouteMovementService {
         List<RoutePoint> sourcePoints = route.getPoints();
         if (progress == null || !progress.matches(route.getKey(), sourcePoints)) {
             List<RoutePoint> ordered = route.logicallyOrdered(instance.getLocation());
-            progress = new Progress(route.getKey(), sourcePoints, ordered, 0, 0L);
+            progress = new Progress(route.getKey(), sourcePoints, ordered, 0, false);
             progressByInstance.put(instance.getId(), progress);
         }
 
         RoutePoint targetPoint = progress.orderedPoints().get(progress.targetIndex());
-        if (progress.waitUntilNanos() > 0) {
-            if (System.nanoTime() < progress.waitUntilNanos()) {
+        if (progress.targetHandled()) {
+            // A one-point route has no different next index. Keep its action
+            // from firing every tick while the NPC remains on the point, but
+            // allow the route to bring the NPC back after it is displaced.
+            if (targetPoint.distanceSquared(current) <= 1.0) {
                 return;
             }
-            progress = progress.withTargetIndex((progress.targetIndex() + 1) % progress.orderedPoints().size());
+            progress = progress.withTargetPending();
             progressByInstance.put(instance.getId(), progress);
-            targetPoint = progress.orderedPoints().get(progress.targetIndex());
         }
         Location target = targetPoint.toWalkingLocation();
         if (target == null || !current.getWorld().equals(target.getWorld())) {
@@ -132,12 +134,12 @@ public final class RouteMovementService {
                 target,
                 movement.walkingSpeed()
         );
-        if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED && targetPoint.isWaitingPoint()) {
+        if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED) {
             instanceRegistry.stopNavigating(instance);
-            progressByInstance.put(instance.getId(), progress.withWaitUntilNanos(
-                    System.nanoTime() + targetPoint.waitMillis() * 1_000_000L));
-        } else if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED
-                || status == NativeNpcNavigationService.NavigationStatus.STALLED) {
+            int nextIndex = (progress.targetIndex() + 1) % progress.orderedPoints().size();
+            progressByInstance.put(instance.getId(), progress.withTargetIndex(nextIndex));
+            behaviourService.triggerWaypointActions(targetPoint.actions(), instance);
+        } else if (status == NativeNpcNavigationService.NavigationStatus.STALLED) {
             int nextIndex = (progress.targetIndex() + 1) % progress.orderedPoints().size();
             progressByInstance.put(instance.getId(), progress.withTargetIndex(nextIndex));
         }
@@ -154,7 +156,7 @@ public final class RouteMovementService {
             List<RoutePoint> sourcePoints,
             List<RoutePoint> orderedPoints,
             int targetIndex,
-            long waitUntilNanos
+            boolean targetHandled
             ) {
 
         private Progress {
@@ -167,11 +169,11 @@ public final class RouteMovementService {
         }
 
         Progress withTargetIndex(int targetIndex) {
-            return new Progress(routeKey, sourcePoints, orderedPoints, targetIndex, 0L);
+            return new Progress(routeKey, sourcePoints, orderedPoints, targetIndex, targetIndex == this.targetIndex);
         }
 
-        Progress withWaitUntilNanos(long waitUntilNanos) {
-            return new Progress(routeKey, sourcePoints, orderedPoints, targetIndex, waitUntilNanos);
+        Progress withTargetPending() {
+            return new Progress(routeKey, sourcePoints, orderedPoints, targetIndex, false);
         }
     }
 }

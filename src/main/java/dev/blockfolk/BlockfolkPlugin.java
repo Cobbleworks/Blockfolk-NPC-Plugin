@@ -85,6 +85,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 skinResolver,
                 routeGuiService::openRoutes
         );
+        routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
         behaviourService = new NpcBehaviourService(
                 this,

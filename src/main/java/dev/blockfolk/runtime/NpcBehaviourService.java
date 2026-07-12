@@ -3,6 +3,7 @@ package dev.blockfolk.runtime;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -107,6 +108,14 @@ public final class NpcBehaviourService implements Listener {
             return;
         }
         executeSequence(event, definition.getBehaviourActions(event), 0, instance, definition, actor);
+    }
+
+    public void triggerWaypointActions(List<BehaviourAction> actions, NpcInstance instance) {
+        NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+        if (definition == null || actions == null || actions.isEmpty()) {
+            return;
+        }
+        executeSequence(null, List.copyOf(actions), 0, instance, definition, null);
     }
 
     public void forget(NpcInstance instance) {

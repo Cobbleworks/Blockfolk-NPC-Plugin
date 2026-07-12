@@ -55,6 +55,7 @@ import dev.blockfolk.model.LootTier;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.NpcRoute;
+import dev.blockfolk.model.RoutePoint;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.RouteRepository;
@@ -102,6 +103,7 @@ public final class GuiService implements Listener {
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
     private final Map<String, String> pendingSkinUrls = new HashMap<>();
     private final Map<UUID, WaypointSession> waypointSessions = new HashMap<>();
+    private final Map<UUID, RouteActionWaypointSession> routeWaypointSessions = new HashMap<>();
 
     public GuiService(
             Plugin plugin,
@@ -137,6 +139,106 @@ public final class GuiService implements Listener {
             }
         }
         waypointSessions.clear();
+        for (UUID playerId : List.copyOf(routeWaypointSessions.keySet())) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                finishRouteWaypointSelection(player);
+            }
+        }
+        routeWaypointSessions.clear();
+    }
+
+    public void openWaypointActions(Player player, String routeKey, RoutePoint point) {
+        NpcRoute route = routeRepository.find(routeKey).orElse(null);
+        RoutePoint current = route == null ? null : route.findPoint(point).orElse(null);
+        if (current == null) {
+            player.sendMessage(Component.text("That route point no longer exists."));
+            player.closeInventory();
+            return;
+        }
+        Inventory inventory = Bukkit.createInventory(new RoutePointActionsHolder(route.getKey(), current), 27,
+                Component.text("Waypoint Actions"));
+        List<BehaviourAction> actions = current.actions();
+        for (int index = 0; index < 7; index++) {
+            int slot = 10 + index;
+            if (index < actions.size()) {
+                BehaviourAction action = actions.get(index);
+                inventory.setItem(slot, item(actionMaterial(action.type()), (index + 1) + ". " + action.type().displayName(), List.of(
+                        ChatColor.GRAY + actionValueDisplay(action),
+                        ChatColor.YELLOW + "Left-click to replace",
+                        ChatColor.RED + "Right-click to remove"
+                )));
+            } else if (index == actions.size()) {
+                inventory.setItem(slot, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
+                        ChatColor.YELLOW + "Click to append"
+                )));
+            }
+        }
+        inventory.setItem(22, item(Material.BARRIER, "Back to Route Editing", List.of(
+                ChatColor.GRAY + "Close this menu and keep editing points"
+        )));
+        player.openInventory(inventory);
+    }
+
+    private void openRoutePointActionPicker(Player player, RoutePointActionPickerHolder holder) {
+        Inventory inventory = Bukkit.createInventory(holder, 36, Component.text("Choose Waypoint Action"));
+        for (int index = 0; index < PRIMARY_ACTIONS.size(); index++) {
+            BehaviourActionType type = PRIMARY_ACTIONS.get(index);
+            inventory.setItem(9 + index, item(actionMaterial(type), type.displayName(), List.of(
+                    ChatColor.YELLOW + "Click to configure"
+            )));
+        }
+        inventory.setItem(31, item(Material.ARMOR_STAND, "Animations", List.of(
+                ChatColor.GRAY + "Poses, waving, and jumping",
+                ChatColor.YELLOW + "Click to choose an animation"
+        )));
+        inventory.setItem(35, item(Material.BARRIER, "Back", List.of()));
+        player.openInventory(inventory);
+    }
+
+    private void openRoutePointAnimationPicker(Player player, RoutePointActionPickerHolder action) {
+        Inventory inventory = Bukkit.createInventory(new RoutePointAnimationPickerHolder(
+                action.routeKey(), action.point(), action.actionIndex()), 27, Component.text("Choose Animation"));
+        int[] slots = {10, 11, 12, 13, 14, 15, 16};
+        for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
+            BehaviourActionType type = ANIMATION_ACTIONS.get(index);
+            inventory.setItem(slots[index], item(actionMaterial(type), type.displayName(), List.of(
+                    ChatColor.YELLOW + "Click to select"
+            )));
+        }
+        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
+        player.openInventory(inventory);
+    }
+
+    private void openRoutePointValuePicker(Player player, RoutePointActionPickerHolder action,
+            BehaviourValuePickerType pickerType, int requestedPage) {
+        List<BehaviourPickerOption> options = pickerOptions(pickerType);
+        int pages = Math.max(1, (options.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int page = Math.max(0, Math.min(requestedPage, pages - 1));
+        Inventory inventory = Bukkit.createInventory(new RoutePointValuePickerHolder(
+                action.routeKey(), action.point(), action.actionIndex(), pickerType, page), 54,
+                Component.text(pickerType.title()));
+        int from = page * PAGE_SIZE;
+        int to = Math.min(from + PAGE_SIZE, options.size());
+        for (int index = from; index < to; index++) {
+            BehaviourPickerOption option = options.get(index);
+            List<String> lore = new ArrayList<>(option.lore());
+            lore.add(ChatColor.YELLOW + "Click to select");
+            inventory.setItem(index - from, item(option.icon(), option.label(), lore));
+        }
+        if (options.isEmpty()) {
+            inventory.setItem(22, item(Material.BARRIER, "No Values Available", List.of(
+                    ChatColor.GRAY + pickerType.emptyMessage()
+            )));
+        }
+        if (page > 0) {
+            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+        }
+        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        if (page + 1 < pages) {
+            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        }
+        player.openInventory(inventory);
     }
 
     public void openMain(Player player) {
@@ -457,7 +559,7 @@ public final class GuiService implements Listener {
             BehaviourPickerOption option = options.get(index);
             List<String> lore = new ArrayList<>(option.lore());
             lore.add(ChatColor.YELLOW + "Click to select");
-            inventory.setItem(index - from, item(option.material(), option.label(), lore));
+            inventory.setItem(index - from, item(option.icon(), option.label(), lore));
         }
         if (options.isEmpty()) {
             inventory.setItem(22, item(Material.BARRIER, "No Values Available", List.of(
@@ -478,7 +580,7 @@ public final class GuiService implements Listener {
         return switch (pickerType) {
             case ROUTE ->
                 routeRepository.findAll().stream()
-                .map(route -> new BehaviourPickerOption(route.getKey(), route.getDisplayName(), Material.RAIL, List.of(
+                .map(route -> new BehaviourPickerOption(route.getKey(), route.getDisplayName(), routeIcon(route), List.of(
                 ChatColor.DARK_GRAY + "Key: " + route.getKey(),
                 ChatColor.GRAY + "" + route.getPoints().size() + " route point(s)"
                 )))
@@ -486,7 +588,7 @@ public final class GuiService implements Listener {
             case WALK_SPEED ->
                 java.util.Arrays.stream(WalkingSpeed.values())
                 .map(speed -> new BehaviourPickerOption(speed.name().toLowerCase(java.util.Locale.ROOT),
-                speed.displayName(), Material.FEATHER, List.of(
+                speed.displayName(), new ItemStack(Material.FEATHER), List.of(
                 ChatColor.GRAY + "" + speed.blocksPerSecond() + " blocks/second"
                 )))
                 .toList();
@@ -504,7 +606,7 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             NpcRoute route = routes.get(index);
             boolean selected = route.getKey().equals(definition.getMovementProfile().routeKey());
-            inventory.setItem(index - from, item(selected ? Material.POWERED_RAIL : Material.RAIL, route.getDisplayName(), List.of(
+            inventory.setItem(index - from, item(routeIcon(route), route.getDisplayName(), List.of(
                     ChatColor.DARK_GRAY + "Key: " + route.getKey(),
                     ChatColor.GRAY + "Key points: " + ChatColor.WHITE + route.getPoints().size(),
                     selected ? ChatColor.GREEN + "Currently assigned" : ChatColor.YELLOW + "Click to assign"
@@ -599,6 +701,14 @@ public final class GuiService implements Listener {
             handleAnimationPickerClick(event, player, animationHolder);
         } else if (holder instanceof BehaviourValuePickerHolder valuePickerHolder) {
             handleBehaviourValuePickerClick(event, player, valuePickerHolder);
+        } else if (holder instanceof RoutePointActionsHolder routePointHolder) {
+            handleRoutePointActionsClick(event, player, routePointHolder);
+        } else if (holder instanceof RoutePointActionPickerHolder routePointPicker) {
+            handleRoutePointActionPickerClick(event, player, routePointPicker);
+        } else if (holder instanceof RoutePointAnimationPickerHolder routePointAnimation) {
+            handleRoutePointAnimationPickerClick(event, player, routePointAnimation);
+        } else if (holder instanceof RoutePointValuePickerHolder routePointValuePicker) {
+            handleRoutePointValuePickerClick(event, player, routePointValuePicker);
         } else if (holder instanceof ConfirmationHolder confirmationHolder) {
             handleConfirmationClick(event, player, confirmationHolder);
         }
@@ -1025,6 +1135,215 @@ public final class GuiService implements Listener {
         }
     }
 
+    private void handleRoutePointActionsClick(InventoryClickEvent event, Player player, RoutePointActionsHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
+        RoutePoint current = currentRoutePoint(holder.routeKey(), holder.point());
+        if (current == null) {
+            player.closeInventory();
+            player.sendMessage(Component.text("That route point no longer exists."));
+            return;
+        }
+        if (event.getRawSlot() == 22) {
+            player.closeInventory();
+            return;
+        }
+        int index = event.getRawSlot() - 10;
+        if (index < 0 || index >= 7) {
+            return;
+        }
+        if (index < current.actions().size() && event.isRightClick()) {
+            List<BehaviourAction> actions = new ArrayList<>(current.actions());
+            actions.remove(index);
+            RoutePoint updated = saveRoutePointActions(holder.routeKey(), current, actions);
+            if (updated != null) {
+                openWaypointActions(player, holder.routeKey(), updated);
+            }
+        } else if (index <= current.actions().size()) {
+            openRoutePointActionPicker(player,
+                    new RoutePointActionPickerHolder(holder.routeKey(), current, index));
+        }
+    }
+
+    private void handleRoutePointActionPickerClick(InventoryClickEvent event, Player player,
+            RoutePointActionPickerHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
+        RoutePoint current = currentRoutePoint(holder.routeKey(), holder.point());
+        if (current == null) {
+            player.closeInventory();
+            return;
+        }
+        if (event.getRawSlot() == 35) {
+            openWaypointActions(player, holder.routeKey(), current);
+            return;
+        }
+        if (event.getRawSlot() == 31) {
+            openRoutePointAnimationPicker(player, new RoutePointActionPickerHolder(
+                    holder.routeKey(), current, holder.actionIndex()));
+            return;
+        }
+        int typeIndex = event.getRawSlot() - 9;
+        if (typeIndex < 0 || typeIndex >= PRIMARY_ACTIONS.size()) {
+            return;
+        }
+        RoutePointActionPickerHolder action = new RoutePointActionPickerHolder(
+                holder.routeKey(), current, holder.actionIndex());
+        BehaviourActionType type = PRIMARY_ACTIONS.get(typeIndex);
+        if (type == BehaviourActionType.SET_ROUTE) {
+            openRoutePointValuePicker(player, action, BehaviourValuePickerType.ROUTE, 0);
+        } else if (type == BehaviourActionType.SET_WALK_SPEED) {
+            openRoutePointValuePicker(player, action, BehaviourValuePickerType.WALK_SPEED, 0);
+        } else if (type == BehaviourActionType.MOVE_TO || type == BehaviourActionType.TELEPORT_TO) {
+            beginRouteWaypointSelection(player, action, type);
+        } else if (type == BehaviourActionType.WAIT) {
+            requestRouteWaitAction(player, action);
+        } else if (!type.requiresValue()) {
+            RoutePoint updated = setRoutePointAction(action, type, null);
+            if (updated != null) {
+                openWaypointActions(player, holder.routeKey(), updated);
+            }
+        } else {
+            String prompt = switch (type) {
+                case SEND_DIALOG -> "Enter the dialog line:";
+                case SHOW_HOLO_DIALOG -> "Enter the hologram dialog line:";
+                case RUN_CONSOLE_COMMAND -> "Enter the command without a leading slash:";
+                default -> "Enter the action value:";
+            };
+            chatInputService.request(player, prompt, value -> {
+                RoutePoint updated = setRoutePointAction(action, type, value);
+                if (updated != null) {
+                    openWaypointActions(player, action.routeKey(), updated);
+                }
+            });
+        }
+    }
+
+    private void handleRoutePointAnimationPickerClick(InventoryClickEvent event, Player player,
+            RoutePointAnimationPickerHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
+        RoutePoint current = currentRoutePoint(holder.routeKey(), holder.point());
+        if (current == null) {
+            player.closeInventory();
+            return;
+        }
+        RoutePointActionPickerHolder action = new RoutePointActionPickerHolder(
+                holder.routeKey(), current, holder.actionIndex());
+        if (event.getRawSlot() == 22) {
+            openRoutePointActionPicker(player, action);
+            return;
+        }
+        int index = event.getRawSlot() - 10;
+        if (index < 0 || index >= ANIMATION_ACTIONS.size()) {
+            return;
+        }
+        RoutePoint updated = setRoutePointAction(action, ANIMATION_ACTIONS.get(index), null);
+        if (updated != null) {
+            openWaypointActions(player, holder.routeKey(), updated);
+        }
+    }
+
+    private void handleRoutePointValuePickerClick(InventoryClickEvent event, Player player,
+            RoutePointValuePickerHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
+        RoutePoint current = currentRoutePoint(holder.routeKey(), holder.point());
+        if (current == null) {
+            player.closeInventory();
+            return;
+        }
+        RoutePointActionPickerHolder action = new RoutePointActionPickerHolder(
+                holder.routeKey(), current, holder.actionIndex());
+        int slot = event.getRawSlot();
+        if (slot == 45) {
+            openRoutePointValuePicker(player, action, holder.pickerType(), holder.page() - 1);
+            return;
+        }
+        if (slot == 49) {
+            openRoutePointActionPicker(player, action);
+            return;
+        }
+        if (slot == 53) {
+            openRoutePointValuePicker(player, action, holder.pickerType(), holder.page() + 1);
+            return;
+        }
+        List<BehaviourPickerOption> options = pickerOptions(holder.pickerType());
+        int index = holder.page() * PAGE_SIZE + slot;
+        if (slot >= PAGE_SIZE || index < 0 || index >= options.size()) {
+            return;
+        }
+        BehaviourPickerOption option = options.get(index);
+        RoutePoint updated = setRoutePointAction(action, holder.pickerType().actionType(), option.value());
+        if (updated != null) {
+            player.sendMessage(Component.text("Selected '" + option.label() + "'."));
+            openWaypointActions(player, holder.routeKey(), updated);
+        }
+    }
+
+    private void requestRouteWaitAction(Player player, RoutePointActionPickerHolder holder) {
+        chatInputService.request(player, "Enter the number of seconds to wait (decimals are allowed):", value -> {
+            String normalized;
+            try {
+                double seconds = Double.parseDouble(value.trim());
+                if (!Double.isFinite(seconds) || seconds <= 0.0 || seconds > Long.MAX_VALUE / 20.0) {
+                    throw new NumberFormatException();
+                }
+                normalized = Double.toString(seconds);
+            } catch (NullPointerException | NumberFormatException exception) {
+                player.sendMessage(Component.text("Enter a positive number of seconds, for example 5 or 1.5."));
+                requestRouteWaitAction(player, holder);
+                return;
+            }
+            RoutePoint updated = setRoutePointAction(holder, BehaviourActionType.WAIT, normalized);
+            if (updated != null) {
+                openWaypointActions(player, holder.routeKey(), updated);
+            }
+        });
+    }
+
+    private RoutePoint setRoutePointAction(RoutePointActionPickerHolder holder,
+            BehaviourActionType type, String value) {
+        RoutePoint current = currentRoutePoint(holder.routeKey(), holder.point());
+        if (current == null) {
+            return null;
+        }
+        List<BehaviourAction> actions = new ArrayList<>(current.actions());
+        BehaviourAction action = new BehaviourAction(type, value);
+        if (holder.actionIndex() < actions.size()) {
+            actions.set(holder.actionIndex(), action);
+        } else if (actions.size() < 7) {
+            actions.add(action);
+        }
+        return saveRoutePointActions(holder.routeKey(), current, actions);
+    }
+
+    private RoutePoint saveRoutePointActions(String routeKey, RoutePoint current, List<BehaviourAction> actions) {
+        NpcRoute route = routeRepository.find(routeKey).orElse(null);
+        RoutePoint latest = route == null ? null : route.findPoint(current).orElse(null);
+        if (latest == null) {
+            return null;
+        }
+        RoutePoint updated = latest.withActions(actions);
+        if (!route.replacePoint(latest, updated)) {
+            return null;
+        }
+        routeRepository.save(route);
+        return updated;
+    }
+
+    private RoutePoint currentRoutePoint(String routeKey, RoutePoint point) {
+        return routeRepository.find(routeKey).flatMap(route -> route.findPoint(point)).orElse(null);
+    }
+
     private void handleActionPickerClick(InventoryClickEvent event, Player player, ActionPickerHolder holder) {
         event.setCancelled(true);
         if (!isTopInventoryClick(event)) {
@@ -1098,6 +1417,7 @@ public final class GuiService implements Listener {
 
     private void beginWaypointSelection(Player player, ActionPickerHolder holder, BehaviourActionType type) {
         finishWaypointSelection(player);
+        finishRouteWaypointSelection(player);
         UUID token = UUID.randomUUID();
         WaypointSession session = new WaypointSession(holder, type, token);
         waypointSessions.put(player.getUniqueId(), session);
@@ -1138,6 +1458,20 @@ public final class GuiService implements Listener {
         Player player = event.getPlayer();
         WaypointSession session = validWaypointSession(player, event.getItem());
         if (session == null) {
+            RouteActionWaypointSession routeSession = validRouteWaypointSession(player, event.getItem());
+            if (routeSession == null) {
+                return;
+            }
+            event.setCancelled(true);
+            ActionLocation location = ActionLocation.above(event.getClickedBlock());
+            finishRouteWaypointSelection(player);
+            RoutePoint updated = setRoutePointAction(routeSession.action(), routeSession.type(), location.serialize());
+            if (updated == null) {
+                player.sendMessage(Component.text("That route point no longer exists."));
+                return;
+            }
+            player.sendMessage(Component.text(routeSession.type().displayName() + " set to " + location.display() + "."));
+            openWaypointActions(player, routeSession.action().routeKey(), updated);
             return;
         }
         event.setCancelled(true);
@@ -1158,6 +1492,21 @@ public final class GuiService implements Listener {
         Player player = event.getPlayer();
         WaypointSession session = validWaypointSession(player, event.getItemDrop().getItemStack());
         if (session == null) {
+            RouteActionWaypointSession routeSession = validRouteWaypointSession(player,
+                    event.getItemDrop().getItemStack());
+            if (routeSession == null) {
+                return;
+            }
+            event.getItemDrop().remove();
+            routeWaypointSessions.remove(player.getUniqueId());
+            player.sendMessage(Component.text("Waypoint selection cancelled."));
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                RoutePoint current = currentRoutePoint(routeSession.action().routeKey(), routeSession.action().point());
+                if (current != null) {
+                    openRoutePointActionPicker(player, new RoutePointActionPickerHolder(
+                            routeSession.action().routeKey(), current, routeSession.action().actionIndex()));
+                }
+            });
             return;
         }
         event.getItemDrop().remove();
@@ -1173,6 +1522,7 @@ public final class GuiService implements Listener {
     @EventHandler
     public void onWaypointPlayerQuit(PlayerQuitEvent event) {
         finishWaypointSelection(event.getPlayer());
+        finishRouteWaypointSelection(event.getPlayer());
     }
 
     private WaypointSession validWaypointSession(Player player, ItemStack item) {
@@ -1208,6 +1558,69 @@ public final class GuiService implements Listener {
                 .get(waypointActionKey, PersistentDataType.STRING))
                 && session.token().toString().equals(meta.getPersistentDataContainer()
                 .get(waypointTokenKey, PersistentDataType.STRING));
+    }
+
+    private void beginRouteWaypointSelection(Player player, RoutePointActionPickerHolder holder,
+            BehaviourActionType type) {
+        finishWaypointSelection(player);
+        finishRouteWaypointSelection(player);
+        UUID token = UUID.randomUUID();
+        RouteActionWaypointSession session = new RouteActionWaypointSession(holder, type, token);
+        routeWaypointSessions.put(player.getUniqueId(), session);
+        ItemStack held = player.getInventory().getItemInMainHand();
+        player.getInventory().setItemInMainHand(createRouteWaypointTool(session));
+        if (!held.getType().isAir()) {
+            player.getInventory().addItem(held).values().forEach(leftover
+                    -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
+        }
+        player.closeInventory();
+        player.sendMessage(Component.text("Right-click the block the NPC should "
+                + (type == BehaviourActionType.MOVE_TO ? "walk to" : "teleport onto")
+                + ". Drop the compass to cancel."));
+    }
+
+    private ItemStack createRouteWaypointTool(RouteActionWaypointSession session) {
+        ItemStack tool = new ItemStack(Material.RECOVERY_COMPASS);
+        ItemMeta meta = tool.getItemMeta();
+        meta.setDisplayName(ChatColor.AQUA + session.type().displayName() + " Waypoint Selector");
+        meta.setLore(List.of(
+                ChatColor.YELLOW + "Right-click a block to select it",
+                ChatColor.GRAY + "The NPC will stand on top of that block",
+                ChatColor.RED + "Drop this compass to cancel"
+        ));
+        meta.setEnchantmentGlintOverride(true);
+        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        meta.getPersistentDataContainer().set(waypointActionKey, PersistentDataType.STRING, session.type().name());
+        meta.getPersistentDataContainer().set(waypointTokenKey, PersistentDataType.STRING, session.token().toString());
+        tool.setItemMeta(meta);
+        return tool;
+    }
+
+    private RouteActionWaypointSession validRouteWaypointSession(Player player, ItemStack item) {
+        RouteActionWaypointSession session = routeWaypointSessions.get(player.getUniqueId());
+        if (session == null || item == null || item.getType() != Material.RECOVERY_COMPASS || !item.hasItemMeta()) {
+            return null;
+        }
+        ItemMeta meta = item.getItemMeta();
+        String type = meta.getPersistentDataContainer().get(waypointActionKey, PersistentDataType.STRING);
+        String token = meta.getPersistentDataContainer().get(waypointTokenKey, PersistentDataType.STRING);
+        return session.type().name().equals(type) && session.token().toString().equals(token) ? session : null;
+    }
+
+    private void finishRouteWaypointSelection(Player player) {
+        RouteActionWaypointSession session = routeWaypointSessions.remove(player.getUniqueId());
+        if (session == null) {
+            return;
+        }
+        ItemStack[] contents = player.getInventory().getContents();
+        for (int slot = 0; slot < contents.length; slot++) {
+            ItemStack item = contents[slot];
+            if (item != null && item.getType() == Material.RECOVERY_COMPASS && item.hasItemMeta()
+                    && session.token().toString().equals(item.getItemMeta().getPersistentDataContainer()
+                            .get(waypointTokenKey, PersistentDataType.STRING))) {
+                player.getInventory().setItem(slot, null);
+            }
+        }
     }
 
     private void handleAnimationPickerClick(
@@ -1437,6 +1850,10 @@ public final class GuiService implements Listener {
                 || holder instanceof ActionPickerHolder
                 || holder instanceof AnimationPickerHolder
                 || holder instanceof BehaviourValuePickerHolder
+                || holder instanceof RoutePointActionsHolder
+                || holder instanceof RoutePointActionPickerHolder
+                || holder instanceof RoutePointAnimationPickerHolder
+                || holder instanceof RoutePointValuePickerHolder
                 || holder instanceof ConfirmationHolder;
     }
 
@@ -1462,6 +1879,25 @@ public final class GuiService implements Listener {
             // A broken legacy skin value must never prevent the management GUI opening.
         }
         return head;
+    }
+
+    private ItemStack routeIcon(NpcRoute route) {
+        ItemStack icon = route.getIcon();
+        if (icon == null || icon.getType().isAir()) {
+            return new ItemStack(Material.RAIL);
+        }
+        icon.setAmount(1);
+        return icon;
+    }
+
+    private ItemStack item(ItemStack template, String name, List<String> lore) {
+        ItemStack result = template.clone();
+        result.setAmount(1);
+        ItemMeta meta = result.getItemMeta();
+        meta.setDisplayName(ChatColor.GOLD + name);
+        meta.setLore(lore);
+        result.setItemMeta(meta);
+        return result;
     }
 
     private ItemStack label(String name, Material material) {
@@ -1737,6 +2173,53 @@ public final class GuiService implements Listener {
     ) {
     }
 
+    private record RoutePointActionsHolder(String routeKey, RoutePoint point) implements InventoryHolder {
+
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
+    private record RoutePointActionPickerHolder(String routeKey, RoutePoint point, int actionIndex)
+            implements InventoryHolder {
+
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
+    private record RoutePointAnimationPickerHolder(String routeKey, RoutePoint point, int actionIndex)
+            implements InventoryHolder {
+
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
+    private record RoutePointValuePickerHolder(
+            String routeKey,
+            RoutePoint point,
+            int actionIndex,
+            BehaviourValuePickerType pickerType,
+            int page
+            ) implements InventoryHolder {
+
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
+    private record RouteActionWaypointSession(
+            RoutePointActionPickerHolder action,
+            BehaviourActionType type,
+            UUID token
+            ) {
+    }
+
     private record AnimationPickerHolder(String key, BehaviourEvent event, int actionIndex, int page)
             implements InventoryHolder {
 
@@ -1764,7 +2247,7 @@ public final class GuiService implements Listener {
     private record BehaviourPickerOption(
             String value,
             String label,
-            Material material,
+            ItemStack icon,
             List<String> lore
             ) {
 

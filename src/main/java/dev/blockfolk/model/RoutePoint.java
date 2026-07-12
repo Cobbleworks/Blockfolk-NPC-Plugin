@@ -1,5 +1,6 @@
 package dev.blockfolk.model;
 
+import java.util.List;
 import java.util.Objects;
 
 import org.bukkit.Bukkit;
@@ -7,33 +8,27 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 
-public record RoutePoint(String worldName, int x, int y, int z, long waitMillis) {
+public record RoutePoint(String worldName, int x, int y, int z, List<BehaviourAction> actions) {
 
     public RoutePoint {
         Objects.requireNonNull(worldName, "worldName");
-        if (waitMillis < 0) {
-            throw new IllegalArgumentException("Wait duration cannot be negative.");
-        }
+        actions = actions == null ? List.of() : List.copyOf(actions);
     }
 
     public RoutePoint(String worldName, int x, int y, int z) {
-        this(worldName, x, y, z, 0L);
+        this(worldName, x, y, z, List.of());
     }
 
     public static RoutePoint fromBlock(Block block) {
         return new RoutePoint(block.getWorld().getName(), block.getX(), block.getY(), block.getZ());
     }
 
-    public boolean isWaitingPoint() {
-        return waitMillis > 0;
-    }
-
     public boolean isSameBlock(RoutePoint other) {
         return worldName.equals(other.worldName) && x == other.x && y == other.y && z == other.z;
     }
 
-    public RoutePoint withWaitMillis(long waitMillis) {
-        return new RoutePoint(worldName, x, y, z, waitMillis);
+    public RoutePoint withActions(List<BehaviourAction> actions) {
+        return new RoutePoint(worldName, x, y, z, actions);
     }
 
     public Location toWalkingLocation() {

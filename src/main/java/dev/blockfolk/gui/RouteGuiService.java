@@ -4,11 +4,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.function.Consumer;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -50,8 +47,6 @@ import net.kyori.adventure.text.Component;
 public final class RouteGuiService implements Listener {
 
     private static final int PAGE_SIZE = 45;
-    private static final Pattern WAIT_INTERVAL = Pattern.compile("^(\\d+(?:\\.\\d+)?)\\s*(ms|s|m|h)$", Pattern.CASE_INSENSITIVE);
-
     private final JavaPlugin plugin;
     private final RouteRepository routeRepository;
     private final NpcDefinitionRepository definitionRepository;
@@ -61,6 +56,7 @@ public final class RouteGuiService implements Listener {
     private final NamespacedKey wandRouteKey;
     private final NamespacedKey wandTokenKey;
     private final Map<UUID, EditSession> editSessions = new HashMap<>();
+    private WaypointActionOpener waypointActionOpener;
     private BukkitTask markerTask;
 
     public RouteGuiService(
@@ -79,6 +75,10 @@ public final class RouteGuiService implements Listener {
         this.mainGuiOpener = mainGuiOpener;
         this.wandRouteKey = new NamespacedKey(plugin, "route-editor-route");
         this.wandTokenKey = new NamespacedKey(plugin, "route-editor-token");
+    }
+
+    public void setWaypointActionOpener(WaypointActionOpener waypointActionOpener) {
+        this.waypointActionOpener = waypointActionOpener;
     }
 
     public void openRoutes(Player player) {
@@ -206,7 +206,13 @@ public final class RouteGuiService implements Listener {
         if (action == Action.LEFT_CLICK_BLOCK) {
             try {
                 changed = route.addPoint(point);
-                player.sendMessage(Component.text(changed ? "Added route point " + route.getPoints().size() + "." : "That block is already a route point."));
+                if (changed) {
+                    player.sendMessage(Component.text("Added route point " + route.getPoints().size() + "."));
+                } else {
+                    RoutePoint existing = route.findPoint(point).orElseThrow();
+                    player.sendMessage(Component.text("That block is already a route point. Actions: "
+                            + actionSummary(existing) + "."));
+                }
             } catch (IllegalArgumentException exception) {
                 player.sendMessage(Component.text("A route cannot contain blocks from different worlds."));
                 return;
@@ -220,13 +226,12 @@ public final class RouteGuiService implements Listener {
                 player.sendMessage(Component.text("That block is not a route point."));
                 return;
             }
-            if (existing.isWaitingPoint()) {
-                changed = route.replacePoint(existing, existing.withWaitMillis(0L));
-                player.sendMessage(Component.text("Changed waiting point back to a regular route point."));
-            } else {
-                requestWaitInterval(player, session, existing);
+            if (waypointActionOpener == null) {
+                player.sendMessage(Component.text("The waypoint action editor is not available."));
                 return;
             }
+            waypointActionOpener.open(player, route.getKey(), existing);
+            return;
         }
         if (changed) {
             routeRepository.save(route);
@@ -348,7 +353,7 @@ public final class RouteGuiService implements Listener {
         }
         player.closeInventory();
         player.sendMessage(Component.text("Editing route '" + route.getDisplayName() + "'."));
-        player.sendMessage(Component.text("Left-click blocks to add, right-click to remove, shift-right-click to toggle waiting points, and drop the shard to save and finish."));
+        player.sendMessage(Component.text("Left-click blocks to add, right-click to remove, shift-right-click to edit waypoint actions, and drop the shard to save and finish."));
         showRoutePoints(player, route);
     }
 
@@ -360,7 +365,7 @@ public final class RouteGuiService implements Listener {
                 ChatColor.GRAY + "Unique editor: " + token.toString().substring(0, 8),
                 ChatColor.YELLOW + "Left-click a block: add point",
                 ChatColor.YELLOW + "Right-click: remove point",
-                ChatColor.GOLD + "Shift-right-click: toggle waiting point",
+                ChatColor.GOLD + "Shift-right-click: edit point actions",
                 ChatColor.LIGHT_PURPLE + "Points stay highlighted while editing",
                 ChatColor.GREEN + "Drop: save and finish"
         ));
@@ -432,59 +437,21 @@ public final class RouteGuiService implements Listener {
                 continue;
             }
             location.add(0.0, 0.1, 0.0);
-            Color color = point.isWaitingPoint() ? Color.fromRGB(255, 170, 30) : Color.fromRGB(190, 80, 255);
+            Color color = point.actions().isEmpty() ? Color.fromRGB(190, 80, 255) : Color.fromRGB(255, 170, 30);
             Particle.DustOptions dust = new Particle.DustOptions(color, 1.5f);
             player.spawnParticle(Particle.DUST, location, 5, 0.22, 0.08, 0.22, 0.0, dust);
         }
     }
 
-    private void requestWaitInterval(Player player, EditSession session, RoutePoint point) {
-        chatInputService.request(player, "Enter the waiting time (for example 10s, 500ms, 2m, or 1h):", value -> {
-            if (!session.equals(editSessions.get(player.getUniqueId()))) {
-                return;
-            }
-            OptionalLong interval = parseWaitInterval(value);
-            if (interval.isEmpty()) {
-                player.sendMessage(Component.text("Invalid interval. Use a positive value such as 10s, 500ms, 2m, or 1h."));
-                requestWaitInterval(player, session, point);
-                return;
-            }
-            NpcRoute route = routeRepository.find(session.routeKey()).orElse(null);
-            RoutePoint current = route == null ? null : route.findPoint(point).orElse(null);
-            if (current == null || current.isWaitingPoint()) {
-                player.sendMessage(Component.text("That route point is no longer available to change."));
-                return;
-            }
-            route.replacePoint(current, current.withWaitMillis(interval.getAsLong()));
-            routeRepository.save(route);
-            player.sendMessage(Component.text("Waiting point set to " + value.trim() + "."));
-            player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_PLACE, 0.7f, 1.4f);
-        });
-    }
-
-    static OptionalLong parseWaitInterval(String value) {
-        Matcher matcher = WAIT_INTERVAL.matcher(value == null ? "" : value.trim());
-        if (!matcher.matches()) {
-            return OptionalLong.empty();
+    private String actionSummary(RoutePoint point) {
+        if (point.actions().isEmpty()) {
+            return "none";
         }
-        double amount;
-        try {
-            amount = Double.parseDouble(matcher.group(1));
-        } catch (NumberFormatException exception) {
-            return OptionalLong.empty();
-        }
-        long multiplier = switch (matcher.group(2).toLowerCase()) {
-            case "ms" -> 1L;
-            case "s" -> 1_000L;
-            case "m" -> 60_000L;
-            case "h" -> 3_600_000L;
-            default -> throw new IllegalStateException();
-        };
-        double millis = amount * multiplier;
-        if (!Double.isFinite(millis) || millis < 1.0 || millis > Long.MAX_VALUE / 1_000_000L) {
-            return OptionalLong.empty();
-        }
-        return OptionalLong.of(Math.round(millis));
+        return point.actions().stream()
+                .map(action -> action.value() == null
+                ? action.type().displayName()
+                : action.type().displayName() + " (" + action.value() + ")")
+                .collect(java.util.stream.Collectors.joining(", "));
     }
 
     private ItemStack item(Material material, String name, List<String> lore) {
@@ -509,6 +476,12 @@ public final class RouteGuiService implements Listener {
 
     private record EditSession(String routeKey, UUID token) {
 
+    }
+
+    @FunctionalInterface
+    public interface WaypointActionOpener {
+
+        void open(Player player, String routeKey, RoutePoint point);
     }
 
     private record RoutesHolder(int page) implements InventoryHolder {

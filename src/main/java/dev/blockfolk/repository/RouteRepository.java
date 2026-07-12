@@ -2,9 +2,12 @@ package dev.blockfolk.repository;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -12,6 +15,8 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import dev.blockfolk.model.BehaviourAction;
+import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcRoute;
 import dev.blockfolk.model.RoutePoint;
@@ -48,12 +53,13 @@ public final class RouteRepository {
                         return;
                     }
                     try {
+                        List<BehaviourAction> actions = loadActions(point);
                         route.addPoint(new RoutePoint(
                                 point.getString("world"),
                                 point.getInt("x"),
                                 point.getInt("y"),
                                 point.getInt("z"),
-                                point.getLong("wait-millis", 0L)
+                                actions
                         ));
                     } catch (IllegalArgumentException ignored) {
                         // Ignore malformed cross-world or duplicate legacy points.
@@ -101,8 +107,16 @@ public final class RouteRepository {
                 point.set("x", routePoint.x());
                 point.set("y", routePoint.y());
                 point.set("z", routePoint.z());
-                if (routePoint.isWaitingPoint()) {
-                    point.set("wait-millis", routePoint.waitMillis());
+                if (!routePoint.actions().isEmpty()) {
+                    List<Map<String, Object>> actions = routePoint.actions().stream().map(action -> {
+                        Map<String, Object> stored = new LinkedHashMap<String, Object>();
+                        stored.put("type", action.type().name().toLowerCase(Locale.ROOT));
+                        if (action.value() != null) {
+                            stored.put("value", action.value());
+                        }
+                        return stored;
+                    }).toList();
+                    point.set("actions", actions);
                 }
             }
         }
@@ -111,6 +125,31 @@ public final class RouteRepository {
         } catch (IOException exception) {
             throw new IllegalStateException("Could not save NPC routes.", exception);
         }
+    }
+
+    private List<BehaviourAction> loadActions(ConfigurationSection point) {
+        List<BehaviourAction> actions = new ArrayList<>();
+        for (Map<?, ?> stored : point.getMapList("actions")) {
+            Object type = stored.get("type");
+            if (type == null) {
+                continue;
+            }
+            try {
+                Object value = stored.get("value");
+                actions.add(new BehaviourAction(BehaviourActionType.fromStored(type.toString()),
+                        value == null ? null : value.toString()));
+            } catch (IllegalArgumentException ignored) {
+                // Ignore unknown or malformed waypoint actions.
+            }
+        }
+        // Migrate the former dedicated waiting-point setting to the general
+        // action sequence. It is deliberately not written back on the next save.
+        long legacyWaitMillis = point.getLong("wait-millis", 0L);
+        if (actions.isEmpty() && legacyWaitMillis > 0L) {
+            actions.add(new BehaviourAction(BehaviourActionType.WAIT,
+                    Double.toString(legacyWaitMillis / 1_000.0)));
+        }
+        return actions;
     }
 
     private static int comparePointKeys(String first, String second) {

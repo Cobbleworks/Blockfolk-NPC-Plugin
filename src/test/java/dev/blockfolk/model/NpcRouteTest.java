@@ -39,21 +39,24 @@ class NpcRouteTest {
     }
 
     @Test
-    void identifiesPointsByBlockWhenWaitingMetadataChanges() {
+    void identifiesPointsByBlockWhenActionMetadataChanges() {
         NpcRoute route = NpcRoute.create("Patrol");
         RoutePoint regular = new RoutePoint("world", 1, 64, 1);
         route.addPoint(regular);
 
-        assertTrue(route.replacePoint(regular, regular.withWaitMillis(10_000L)));
-        assertEquals(10_000L, route.findPoint(regular).orElseThrow().waitMillis());
+        RoutePoint withAction = regular.withActions(List.of(
+                new BehaviourAction(BehaviourActionType.WAIT, "10.0")));
+        assertTrue(route.replacePoint(regular, withAction));
+        assertEquals(withAction.actions(), route.findPoint(regular).orElseThrow().actions());
         assertFalse(route.addPoint(regular));
         assertTrue(route.removePoint(regular));
     }
 
     @Test
-    void waitingMetadataDoesNotChangeRouteOrdering() {
+    void actionMetadataDoesNotChangeRouteOrdering() {
         NpcRoute route = NpcRoute.create("Patrol");
-        RoutePoint nearWaiting = new RoutePoint("world", 2, 64, 0, 10_000L);
+        RoutePoint nearWaiting = new RoutePoint("world", 2, 64, 0, List.of(
+                new BehaviourAction(BehaviourActionType.WAIT, "10.0")));
         RoutePoint middle = new RoutePoint("world", 5, 64, 0);
         RoutePoint far = new RoutePoint("world", 10, 64, 0);
         route.setPoints(List.of(far, nearWaiting, middle));
@@ -62,6 +65,19 @@ class NpcRouteTest {
                 List.of(nearWaiting, middle, far),
                 route.logicallyOrdered(new Location(world("world"), 2.5, 65.0, 0.5))
         );
+    }
+
+    @Test
+    void routePointDefensivelyCopiesWaypointActions() {
+        List<BehaviourAction> source = new java.util.ArrayList<>();
+        source.add(new BehaviourAction(BehaviourActionType.WAIT, "2.5"));
+        RoutePoint point = new RoutePoint("world", 1, 64, 1, source);
+
+        source.clear();
+
+        assertEquals(List.of(new BehaviourAction(BehaviourActionType.WAIT, "2.5")), point.actions());
+        assertThrows(UnsupportedOperationException.class,
+                () -> point.actions().add(new BehaviourAction(BehaviourActionType.JUMP, null)));
     }
 
     private World world(String name) {
