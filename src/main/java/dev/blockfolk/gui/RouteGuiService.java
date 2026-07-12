@@ -35,6 +35,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.Vector;
 
 import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.model.NpcDefinition;
@@ -48,6 +49,9 @@ import net.kyori.adventure.text.Component;
 public final class RouteGuiService implements Listener {
 
     private static final int PAGE_SIZE = 45;
+    private static final double PATH_PARTICLE_SPACING = 0.6;
+    private static final Color PATH_COLOR = Color.fromRGB(120, 210, 255);
+    private static final Color PATH_DIRECTION_COLOR = Color.fromRGB(255, 190, 45);
     private final JavaPlugin plugin;
     private final RouteRepository routeRepository;
     private final NpcDefinitionRepository definitionRepository;
@@ -417,7 +421,7 @@ public final class RouteGuiService implements Listener {
                 ChatColor.YELLOW + "Left-click a block: add point",
                 ChatColor.YELLOW + "Right-click: remove point",
                 ChatColor.GOLD + "Shift-right-click: edit point actions",
-                ChatColor.LIGHT_PURPLE + "Points stay highlighted while editing",
+                ChatColor.LIGHT_PURPLE + "Points and walking order stay highlighted",
                 ChatColor.GREEN + "Drop: save and finish"
         ));
         meta.setEnchantmentGlintOverride(true);
@@ -482,15 +486,63 @@ public final class RouteGuiService implements Listener {
     }
 
     private void showRoutePoints(Player player, NpcRoute route) {
-        for (RoutePoint point : route.getPoints()) {
+        List<RoutePoint> orderedPoints = route.logicallyOrdered(player.getLocation());
+        List<Location> locations = new ArrayList<>();
+        for (RoutePoint point : orderedPoints) {
             Location location = point.toWalkingLocation();
             if (location == null || location.getWorld() != player.getWorld()) {
                 continue;
             }
             location.add(0.0, 0.1, 0.0);
+            locations.add(location);
             Color color = point.actions().isEmpty() ? Color.fromRGB(190, 80, 255) : Color.fromRGB(255, 170, 30);
             Particle.DustOptions dust = new Particle.DustOptions(color, 1.5f);
             player.spawnParticle(Particle.DUST, location, 5, 0.22, 0.08, 0.22, 0.0, dust);
+        }
+        if (locations.size() < 2) {
+            return;
+        }
+        for (int index = 0; index < locations.size(); index++) {
+            Location from = locations.get(index);
+            Location to = locations.get((index + 1) % locations.size());
+            showPathSegment(player, from, to);
+        }
+    }
+
+    private void showPathSegment(Player player, Location from, Location to) {
+        Vector direction = to.toVector().subtract(from.toVector());
+        double distance = direction.length();
+        if (distance < 0.01) {
+            return;
+        }
+        Vector unit = direction.clone().multiply(1.0 / distance);
+        Particle.DustOptions pathDust = new Particle.DustOptions(PATH_COLOR, 0.75f);
+        int steps = Math.max(1, (int) Math.ceil(distance / PATH_PARTICLE_SPACING));
+        for (int step = 1; step < steps; step++) {
+            Location particle = from.clone().add(unit.clone().multiply(distance * step / steps));
+            player.spawnParticle(Particle.DUST, particle, 1, 0.0, 0.0, 0.0, 0.0, pathDust);
+        }
+
+        // Put a small chevron near the end of every segment so loops and
+        // crossing lines still communicate their direction clearly.
+        Location arrowTip = from.clone().add(unit.clone().multiply(distance * 0.72));
+        Vector side = new Vector(-unit.getZ(), 0.0, unit.getX());
+        if (side.lengthSquared() < 0.01) {
+            side = new Vector(1.0, 0.0, 0.0);
+        } else {
+            side.normalize();
+        }
+        Vector back = unit.clone().multiply(-0.45);
+        Particle.DustOptions directionDust = new Particle.DustOptions(PATH_DIRECTION_COLOR, 1.1f);
+        showShortParticleLine(player, arrowTip, arrowTip.clone().add(back).add(side.clone().multiply(0.25)), directionDust);
+        showShortParticleLine(player, arrowTip, arrowTip.clone().add(back).subtract(side.clone().multiply(0.25)), directionDust);
+    }
+
+    private void showShortParticleLine(Player player, Location from, Location to, Particle.DustOptions dust) {
+        Vector difference = to.toVector().subtract(from.toVector());
+        for (int step = 0; step <= 3; step++) {
+            Location particle = from.clone().add(difference.clone().multiply(step / 3.0));
+            player.spawnParticle(Particle.DUST, particle, 1, 0.0, 0.0, 0.0, 0.0, dust);
         }
     }
 
