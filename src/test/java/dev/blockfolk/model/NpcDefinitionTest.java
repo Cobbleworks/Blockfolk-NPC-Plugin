@@ -16,15 +16,6 @@ class NpcDefinitionTest {
     }
 
     @Test
-    void clampsDialogTimingToAtLeastOneSecond() {
-        NpcDefinition definition = NpcDefinition.create("Guard");
-
-        definition.setSecondsPerDialogLine(-4);
-
-        assertEquals(1, definition.getSecondsPerDialogLine());
-    }
-
-    @Test
     void returnsCopyOfDialogLines() {
         NpcDefinition definition = NpcDefinition.create("Guard");
         definition.setDialogLines(List.of("Hello"));

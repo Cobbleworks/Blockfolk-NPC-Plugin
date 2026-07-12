@@ -193,7 +193,7 @@ public final class GuiService implements Listener {
         )));
         int behaviourCount = java.util.Arrays.stream(BehaviourEvent.values())
                 .mapToInt(event -> definition.getBehaviourActions(event).size()).sum();
-        inventory.setItem(20, item(Material.COMPARATOR, "Behaviour", List.of(
+        inventory.setItem(20, item(Material.COMPARATOR, "Event Behaviour", List.of(
                 ChatColor.GRAY + "" + behaviourCount + " configured action(s)",
                 ChatColor.GRAY + "Build event-to-action sequences",
                 ChatColor.YELLOW + "Click to configure"
@@ -268,10 +268,6 @@ public final class GuiService implements Listener {
         inventory.setItem(10, item(Material.PAPER, "Set Lines", List.of(
                 ChatColor.GRAY + "Use | between multiple lines",
                 ChatColor.YELLOW + "Click to enter text"
-        )));
-        inventory.setItem(12, item(Material.CLOCK, "Seconds Per Line", List.of(
-                ChatColor.GRAY + String.valueOf(definition.getSecondsPerDialogLine()),
-                ChatColor.YELLOW + "Click to change"
         )));
         inventory.setItem(14, item(Material.BOOK, "Current Dialog", previewLines(definition)));
         inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
@@ -754,16 +750,6 @@ public final class GuiService implements Listener {
                             .filter(line -> !line.isBlank())
                             .toList());
                     saveRefresh(definition);
-                    openDialogEditor(player, definition);
-                });
-            case 12 ->
-                chatInputService.request(player, "Enter seconds per dialog line:", value -> {
-                    try {
-                        definition.setSecondsPerDialogLine(Integer.parseInt(value.trim()));
-                        saveRefresh(definition);
-                    } catch (NumberFormatException exception) {
-                        player.sendMessage(Component.text("Enter a whole number of seconds."));
-                    }
                     openDialogEditor(player, definition);
                 });
             case 22 ->

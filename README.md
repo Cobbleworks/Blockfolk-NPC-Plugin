@@ -11,6 +11,8 @@ All commands require the `blockfolk.admin` permission (granted to operators by d
 - `/bf create <name>` — create an NPC preset with the supplied name.
 - `/bf routes` — open the route manager.
 - `/bf npc <name>` — spawn a persistent copy of the selected NPC preset. NPC names are tab-completed.
+- `/bf npc <name> duplicate` — duplicate a preset with ` (copy)` appended to its display name.
+- `/bf config -seconds-per-line <seconds>` — set the global delay used for dialog lines and queued dialog actions.
 
 ## Building
 

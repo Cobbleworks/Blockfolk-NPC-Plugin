@@ -15,6 +15,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import dev.blockfolk.model.NpcDefinition;
@@ -35,6 +36,10 @@ public final class DialogService {
     public DialogService(Plugin plugin) {
         this.plugin = plugin;
         this.instanceKey = new NamespacedKey(plugin, "dialog-instance-id");
+    }
+
+    public int secondsPerLine() {
+        return Math.max(1, ((JavaPlugin) plugin).getConfig().getInt("seconds-per-line", 3));
     }
 
     public void start() {
@@ -62,7 +67,7 @@ public final class DialogService {
         TextDisplay display = (TextDisplay) instance.getLocation().getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
         display.text(Component.text(lines.getFirst()));
         configureDisplay(display, instance);
-        displays.put(instance.getId(), new DialogRuntime(display, lines, definition.getSecondsPerDialogLine()));
+        displays.put(instance.getId(), new DialogRuntime(display, lines, secondsPerLine()));
     }
 
     private void configureDisplay(TextDisplay display, NpcInstance instance) {
@@ -111,7 +116,7 @@ public final class DialogService {
                 instance.getLocation(),
                 definition.getDisplayName(),
                 lines,
-                definition.getSecondsPerDialogLine()
+                secondsPerLine()
         );
         chats.put(player.getUniqueId(), runtime);
         sendChatLine(player, runtime);
@@ -130,11 +135,11 @@ public final class DialogService {
             Location location = instance.getLocation().add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0);
             TextDisplay display = (TextDisplay) location.getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
             configureDisplay(display, instance);
-            runtime = new DialogRuntime(display, List.of(), definition.getSecondsPerDialogLine());
+            runtime = new DialogRuntime(display, List.of(), secondsPerLine());
             displays.put(instance.getId(), runtime);
         }
         runtime.display.text(Component.text(line));
-        runtime.overrideSeconds = definition.getSecondsPerDialogLine();
+        runtime.overrideSeconds = secondsPerLine();
     }
 
     private void removeTaggedDisplays(UUID instanceId) {

@@ -10,6 +10,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import dev.blockfolk.gui.GuiService;
 import dev.blockfolk.gui.RouteGuiService;
@@ -24,23 +25,41 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
     private final NpcInstanceRegistry instanceRegistry;
     private final GuiService guiService;
     private final RouteGuiService routeGuiService;
+    private final JavaPlugin plugin;
 
     public BlockfolkCommand(
             NpcDefinitionRepository definitionRepository,
             NpcInstanceRegistry instanceRegistry,
             GuiService guiService,
-            RouteGuiService routeGuiService
+            RouteGuiService routeGuiService,
+            JavaPlugin plugin
     ) {
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.guiService = guiService;
         this.routeGuiService = routeGuiService;
+        this.plugin = plugin;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("blockfolk.admin")) {
             sender.sendMessage(Component.text("You do not have permission to use Blockfolk."));
+            return true;
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("config")
+                && args[1].equalsIgnoreCase("-seconds-per-line")) {
+            try {
+                int seconds = Integer.parseInt(args[2]);
+                if (seconds < 1) {
+                    throw new NumberFormatException();
+                }
+                plugin.getConfig().set("seconds-per-line", seconds);
+                plugin.saveConfig();
+                sender.sendMessage(Component.text("Seconds per line set to " + seconds + "."));
+            } catch (NumberFormatException exception) {
+                sender.sendMessage(Component.text("Seconds per line must be a whole number of at least 1."));
+            }
             return true;
         }
         if (!(sender instanceof Player player)) {
@@ -86,7 +105,22 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(Component.text("Spawned NPC copy of " + definition.getDisplayName() + "."));
             return true;
         }
-        player.sendMessage(Component.text("Usage: /bf [create [name]|routes|npc <name>]"));
+        if (args.length == 3 && args[0].equalsIgnoreCase("npc") && args[2].equalsIgnoreCase("duplicate")) {
+            NpcDefinition source = definitionRepository.find(args[1]).orElse(null);
+            if (source == null) {
+                player.sendMessage(Component.text("Unknown NPC: " + args[1]));
+                return true;
+            }
+            NpcDefinition copy = duplicate(source);
+            if (definitionRepository.find(copy.getKey()).isPresent()) {
+                player.sendMessage(Component.text("A copy of this preset already exists."));
+                return true;
+            }
+            definitionRepository.save(copy);
+            player.sendMessage(Component.text("Duplicated " + source.getDisplayName() + " as " + copy.getDisplayName() + "."));
+            return true;
+        }
+        player.sendMessage(Component.text("Usage: /bf [create [name]|routes|npc <name> [duplicate]|config -seconds-per-line <seconds>]"));
         return true;
     }
 
@@ -100,6 +134,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             suggestions.add("create");
             suggestions.add("routes");
             suggestions.add("npc");
+            suggestions.add("config");
             return filter(suggestions, args[0]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("npc")) {
@@ -107,7 +142,30 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
                     .map(NpcDefinition::getKey)
                     .toList(), args[1]);
         }
+        if (args.length == 2 && args[0].equalsIgnoreCase("config")) {
+            return filter(List.of("-seconds-per-line"), args[1]);
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("npc")) {
+            return filter(List.of("duplicate"), args[2]);
+        }
         return List.of();
+    }
+
+    private NpcDefinition duplicate(NpcDefinition source) {
+        NpcDefinition copy = NpcDefinition.create(source.getDisplayName() + " (copy)");
+        copy.setResolvedSkin(source.getSkinUrl(), source.getSkinTextureValue(), source.getSkinTextureSignature());
+        copy.setSpawnpoint(source.getSpawnpoint());
+        copy.setInventoryContents(source.getInventoryContents());
+        copy.setArmorContents(source.getArmorContents());
+        copy.setMainHand(source.getMainHand());
+        copy.setOffHand(source.getOffHand());
+        copy.setDialogLines(source.getDialogLines());
+        copy.setCombatProfile(source.getCombatProfile());
+        copy.setMovementProfile(source.getMovementProfile());
+        for (dev.blockfolk.model.BehaviourEvent event : dev.blockfolk.model.BehaviourEvent.values()) {
+            copy.setBehaviourActions(event, source.getBehaviourActions(event));
+        }
+        return copy;
     }
 
     private List<String> filter(List<String> values, String prefix) {

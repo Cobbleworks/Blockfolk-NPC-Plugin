@@ -86,7 +86,6 @@ public final class NpcDefinitionRepository {
         configuration.set("inventory.main-hand", definition.getMainHand());
         configuration.set("inventory.off-hand", definition.getOffHand());
         configuration.set("dialog.lines", definition.getDialogLines());
-        configuration.set("dialog.seconds-per-line", definition.getSecondsPerDialogLine());
         configuration.set("combat.enabled", !definition.getCombatProfile().invulnerable());
         configuration.set("combat.max-health", definition.getCombatProfile().maxHealth());
         configuration.set("combat.respawn-seconds", definition.getCombatProfile().respawnSeconds());
@@ -148,7 +147,6 @@ public final class NpcDefinitionRepository {
         definition.setMainHand(configuration.getItemStack("inventory.main-hand"));
         definition.setOffHand(configuration.getItemStack("inventory.off-hand"));
         definition.setDialogLines(configuration.getStringList("dialog.lines"));
-        definition.setSecondsPerDialogLine(configuration.getInt("dialog.seconds-per-line", 3));
         int legacyHealth = configuration.getBoolean("combat.enabled", false) ? 20 : 0;
         AggressionLevel legacyAggression = AggressionLevel.fromStored(configuration.getString("combat.aggression"));
         boolean hasNewAggressionSettings = configuration.contains("combat.reaction-to-attacks")

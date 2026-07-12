@@ -85,8 +85,18 @@ public final class NpcBehaviourService implements Listener {
         if (definition == null) {
             return;
         }
+        long delayTicks = 0L;
         for (BehaviourAction action : definition.getBehaviourActions(event)) {
-            execute(event, action, instance, definition, actor);
+            if (delayTicks == 0L) {
+                execute(event, action, instance, definition, actor);
+            } else {
+                Bukkit.getScheduler().runTaskLater(plugin,
+                        () -> execute(event, action, instance, definition, actor), delayTicks);
+            }
+            if (action.type() == dev.blockfolk.model.BehaviourActionType.SEND_DIALOG
+                    || action.type() == dev.blockfolk.model.BehaviourActionType.SHOW_HOLO_DIALOG) {
+                delayTicks += dialogService.secondsPerLine() * 20L;
+            }
         }
     }
 

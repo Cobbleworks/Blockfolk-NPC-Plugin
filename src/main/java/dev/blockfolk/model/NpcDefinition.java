@@ -23,7 +23,6 @@ public final class NpcDefinition {
     private ItemStack mainHand;
     private ItemStack offHand;
     private List<String> dialogLines;
-    private int secondsPerDialogLine;
     private CombatProfile combatProfile;
     private MovementProfile movementProfile;
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
@@ -34,7 +33,6 @@ public final class NpcDefinition {
         this.inventoryContents = new ItemStack[36];
         this.armorContents = new ItemStack[4];
         this.dialogLines = new ArrayList<>();
-        this.secondsPerDialogLine = 3;
         this.combatProfile = CombatProfile.disabled();
         this.movementProfile = MovementProfile.disabled();
         this.behaviours = new EnumMap<>(BehaviourEvent.class);
@@ -136,14 +134,6 @@ public final class NpcDefinition {
 
     public void setDialogLines(List<String> dialogLines) {
         this.dialogLines = dialogLines == null ? new ArrayList<>() : new ArrayList<>(dialogLines);
-    }
-
-    public int getSecondsPerDialogLine() {
-        return secondsPerDialogLine;
-    }
-
-    public void setSecondsPerDialogLine(int secondsPerDialogLine) {
-        this.secondsPerDialogLine = Math.max(1, secondsPerDialogLine);
     }
 
     public CombatProfile getCombatProfile() {

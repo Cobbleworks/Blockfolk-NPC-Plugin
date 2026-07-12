@@ -3,17 +3,17 @@ package dev.blockfolk.model;
 import java.util.Locale;
 
 public enum BehaviourEvent {
-    COMBAT_ENTERED("On Combat Entered"),
-    COMBAT_EXITED("On Combat Exited"),
-    PLAYER_APPROACH("On Player Approach"),
-    PLAYER_LEAVES("On Player Leaves"),
+    SPAWN("On Spawn"),
     LEFT_CLICK("On Left-Click"),
     RIGHT_CLICK("On Right-Click"),
+    PLAYER_APPROACH("On Player Approach"),
+    PLAYER_LEAVES("On Player Leaves"),
     DEATH("On Death"),
-    SPAWN("On Spawn"),
     DAMAGE_TAKEN("On Damage Taken"),
+    LOW_HEALTH("On Low Health — 25% HP"),
     HEAL("On Heal — 2+ Hearts"),
-    LOW_HEALTH("On Low Health — 25% HP");
+    COMBAT_ENTERED("On Combat Entered"),
+    COMBAT_EXITED("On Combat Exited");
 
     private final String displayName;
 
