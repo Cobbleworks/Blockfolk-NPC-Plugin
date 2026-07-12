@@ -271,7 +271,8 @@ public final class GuiService implements Listener {
                     ChatColor.DARK_GRAY + "Key: " + definition.getKey(),
                     ChatColor.GRAY + "Instances: " + ChatColor.WHITE + instances,
                     statusLine(definition),
-                    ChatColor.YELLOW + "Click to manage"
+                    ChatColor.YELLOW + "Click to manage",
+                    ChatColor.RED + "Shift + right-click to delete"
             )));
         }
         inventory.setItem(45, item(Material.MAP, "Manage Routes", List.of(
@@ -368,10 +369,6 @@ public final class GuiService implements Listener {
                 ChatColor.GRAY + "Sight targets: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
                 ChatColor.GRAY + "Alliance: " + ChatColor.WHITE + allianceLabel(combat),
                 ChatColor.YELLOW + "Click to configure combat"
-        )));
-        inventory.setItem(24, item(Material.TNT, "Delete Preset", List.of(
-                ChatColor.RED + "Deletes this preset and all its copies",
-                ChatColor.YELLOW + "Shift-click for confirmation"
         )));
         inventory.setItem(31, item(Material.BARRIER, "Back to Presets", List.of()));
         player.openInventory(inventory);
@@ -856,7 +853,12 @@ public final class GuiService implements Listener {
         List<NpcDefinition> definitions = new ArrayList<>(definitionRepository.findAll());
         int index = page * PAGE_SIZE + event.getRawSlot();
         if (event.getRawSlot() < PAGE_SIZE && index >= 0 && index < definitions.size()) {
-            openEditor(player, definitions.get(index));
+            NpcDefinition definition = definitions.get(index);
+            if (event.getClick() == ClickType.SHIFT_RIGHT) {
+                openConfirmation(player, definition, ConfirmationAction.DELETE_DEFINITION, page);
+            } else {
+                openEditor(player, definition);
+            }
         }
     }
 
@@ -948,11 +950,6 @@ public final class GuiService implements Listener {
             }
             case 23 ->
                 openFightingEditor(player, definition);
-            case 24 -> {
-                if (event.isShiftClick()) {
-                    openConfirmation(player, definition, ConfirmationAction.DELETE_DEFINITION);
-                }
-            }
             case 31 ->
                 openMain(player);
             default -> {
@@ -1088,7 +1085,7 @@ public final class GuiService implements Listener {
             case 45 ->
                 openInstances(player, definition, holder.page() - 1);
             case 47 ->
-                openConfirmation(player, definition, ConfirmationAction.DELETE_INSTANCES);
+                openConfirmation(player, definition, ConfirmationAction.DELETE_INSTANCES, holder.page());
             case 49 ->
                 openEditor(player, definition);
             case 51 -> {
@@ -1834,9 +1831,9 @@ public final class GuiService implements Listener {
         }
         if (event.getRawSlot() == 15) {
             if (holder.action() == ConfirmationAction.DELETE_DEFINITION) {
-                openEditor(player, definition);
+                openMain(player, holder.returnPage());
             } else {
-                openInstances(player, definition, 0);
+                openInstances(player, definition, holder.returnPage());
             }
             return;
         }
@@ -1850,12 +1847,12 @@ public final class GuiService implements Listener {
             openMain(player);
         } else {
             player.sendMessage(Component.text("Removed " + removed + " instance(s)."));
-            openInstances(player, definition, 0);
+            openInstances(player, definition, holder.returnPage());
         }
     }
 
-    private void openConfirmation(Player player, NpcDefinition definition, ConfirmationAction action) {
-        Inventory inventory = Bukkit.createInventory(new ConfirmationHolder(definition.getKey(), action), 27,
+    private void openConfirmation(Player player, NpcDefinition definition, ConfirmationAction action, int returnPage) {
+        Inventory inventory = Bukkit.createInventory(new ConfirmationHolder(definition.getKey(), action, returnPage), 27,
                 Component.text("Confirm deletion"));
         String target = action == ConfirmationAction.DELETE_DEFINITION ? "preset and all instances" : "all instances";
         inventory.setItem(11, item(Material.LIME_CONCRETE, "Confirm", List.of(
@@ -2416,7 +2413,7 @@ public final class GuiService implements Listener {
         }
     }
 
-    private record ConfirmationHolder(String key, ConfirmationAction action) implements InventoryHolder {
+    private record ConfirmationHolder(String key, ConfirmationAction action, int returnPage) implements InventoryHolder {
 
         @Override
         public Inventory getInventory() {
