@@ -7,7 +7,7 @@ commands:
   blockfolk:
     aliases: [bf]
     description: Opens and controls Blockfolk.
-    usage: /bf [create [name]|routes|npc <name> [duplicate]|config -seconds-per-line <seconds>]
+    usage: /bf [create [name]|routes|events [trigger <event>]|npc <name> [duplicate]|config -seconds-per-line <seconds>]
     permission: blockfolk.admin
 permissions:
   blockfolk.admin:

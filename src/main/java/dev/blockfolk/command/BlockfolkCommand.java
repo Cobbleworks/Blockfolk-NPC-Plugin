@@ -13,9 +13,13 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import dev.blockfolk.gui.GuiService;
+import dev.blockfolk.gui.CustomEventGuiService;
 import dev.blockfolk.gui.RouteGuiService;
+import dev.blockfolk.model.CustomEvent;
 import dev.blockfolk.model.NpcDefinition;
+import dev.blockfolk.repository.CustomEventRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
+import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
 import net.kyori.adventure.text.Component;
 
@@ -25,6 +29,9 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
     private final NpcInstanceRegistry instanceRegistry;
     private final GuiService guiService;
     private final RouteGuiService routeGuiService;
+    private final CustomEventGuiService customEventGuiService;
+    private final CustomEventRepository customEventRepository;
+    private final NpcBehaviourService behaviourService;
     private final JavaPlugin plugin;
 
     public BlockfolkCommand(
@@ -32,12 +39,18 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             NpcInstanceRegistry instanceRegistry,
             GuiService guiService,
             RouteGuiService routeGuiService,
+            CustomEventGuiService customEventGuiService,
+            CustomEventRepository customEventRepository,
+            NpcBehaviourService behaviourService,
             JavaPlugin plugin
     ) {
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.guiService = guiService;
         this.routeGuiService = routeGuiService;
+        this.customEventGuiService = customEventGuiService;
+        this.customEventRepository = customEventRepository;
+        this.behaviourService = behaviourService;
         this.plugin = plugin;
     }
 
@@ -62,6 +75,17 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             }
             return true;
         }
+        if (args.length == 3 && args[0].equalsIgnoreCase("events")
+                && args[1].equalsIgnoreCase("trigger")) {
+            CustomEvent customEvent = customEventRepository.find(args[2]).orElse(null);
+            if (customEvent == null) {
+                sender.sendMessage(Component.text("Unknown custom event: " + args[2]));
+                return true;
+            }
+            behaviourService.emitCustomEvent(customEvent.getName(), sender instanceof Player player ? player : null);
+            sender.sendMessage(Component.text("Triggered custom event '" + customEvent.getName() + "'."));
+            return true;
+        }
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Component.text("Blockfolk is currently managed in-game."));
             return true;
@@ -72,6 +96,10 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("routes")) {
             routeGuiService.openRoutes(player);
+            return true;
+        }
+        if (args.length == 1 && args[0].equalsIgnoreCase("events")) {
+            customEventGuiService.open(player);
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("create")) {
@@ -120,7 +148,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(Component.text("Duplicated " + source.getDisplayName() + " as " + copy.getDisplayName() + "."));
             return true;
         }
-        player.sendMessage(Component.text("Usage: /bf [create [name]|routes|npc <name> [duplicate]|config -seconds-per-line <seconds>]"));
+        player.sendMessage(Component.text("Usage: /bf [create [name]|routes|events [trigger <event>]|npc <name> [duplicate]|config -seconds-per-line <seconds>]"));
         return true;
     }
 
@@ -133,6 +161,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             List<String> suggestions = new ArrayList<>();
             suggestions.add("create");
             suggestions.add("routes");
+            suggestions.add("events");
             suggestions.add("npc");
             suggestions.add("config");
             return filter(suggestions, args[0]);
@@ -144,6 +173,15 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("config")) {
             return filter(List.of("-seconds-per-line"), args[1]);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("events")) {
+            return filter(List.of("trigger"), args[1]);
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("events")
+                && args[1].equalsIgnoreCase("trigger")) {
+            return filter(customEventRepository.findAll().stream()
+                    .map(CustomEvent::getName)
+                    .toList(), args[2]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("npc")) {
             return filter(List.of("duplicate"), args[2]);
@@ -164,6 +202,9 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
         copy.setMovementProfile(source.getMovementProfile());
         for (dev.blockfolk.model.BehaviourEvent event : dev.blockfolk.model.BehaviourEvent.values()) {
             copy.setBehaviourActions(event, source.getBehaviourActions(event));
+        }
+        for (String eventName : source.getCustomEventNames()) {
+            copy.setCustomEventActions(eventName, source.getCustomEventActions(eventName));
         }
         return copy;
     }
