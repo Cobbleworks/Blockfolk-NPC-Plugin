@@ -98,9 +98,6 @@ public final class NpcCombatService implements Listener {
     }
 
     public void startCombat(NpcInstance instance, Entity target) {
-        if (behaviourService != null && behaviourService.isWaiting(instance)) {
-            return;
-        }
         if (!(target instanceof LivingEntity living) || !isAttackable(instance, living)) {
             return;
         }
@@ -204,10 +201,6 @@ public final class NpcCombatService implements Listener {
             LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
             if (definition == null || npc == null || !npc.isValid() || npc.isDead()) {
                 states.remove(instance.getId());
-                continue;
-            }
-            if (behaviourService != null && behaviourService.isWaiting(instance)) {
-                clearState(instance);
                 continue;
             }
             CombatProfile profile = definition.getCombatProfile();
@@ -323,9 +316,6 @@ public final class NpcCombatService implements Listener {
             CombatMode mode,
             LivingEntity entity
     ) {
-        if (behaviourService != null && behaviourService.isWaiting(instance)) {
-            return;
-        }
         CombatState previous = states.get(instance.getId());
         boolean enteringCombat = previous == null || previous.mode != mode || !previous.entityId.equals(entity.getUniqueId());
         states.put(instance.getId(), new CombatState(

@@ -10,6 +10,12 @@ import java.util.UUID;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.Tag;
+import org.bukkit.block.Block;
+import org.bukkit.block.TileState;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Powerable;
 import org.bukkit.entity.Pose;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -21,6 +27,7 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
+import org.bukkit.event.block.BlockRedstoneEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -57,7 +64,6 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, WalkingSpeed> speedOverrides = new HashMap<>();
     private final Set<UUID> routePaused = new HashSet<>();
     private final Map<UUID, Location> moveTargets = new HashMap<>();
-    private final Map<UUID, Long> waitingUntilTick = new HashMap<>();
     private final Map<UUID, FollowState> following = new HashMap<>();
     private final Map<UUID, Object> idleCycles = new HashMap<>();
     private final Set<ProximityKey> nearbyPlayers = new HashSet<>();
@@ -100,7 +106,6 @@ public final class NpcBehaviourService implements Listener {
         behaviourTask = null;
         routePaused.clear();
         moveTargets.clear();
-        waitingUntilTick.clear();
         following.clear();
         idleCycles.clear();
         nearbyPlayers.clear();
@@ -148,7 +153,6 @@ public final class NpcBehaviourService implements Listener {
         speedOverrides.remove(instance.getId());
         routePaused.remove(instance.getId());
         moveTargets.remove(instance.getId());
-        waitingUntilTick.remove(instance.getId());
         following.remove(instance.getId());
         idleCycles.remove(instance.getId());
         nearbyPlayers.removeIf(key -> key.instanceId().equals(instance.getId()));
@@ -158,7 +162,7 @@ public final class NpcBehaviourService implements Listener {
     public MovementProfile movementFor(NpcInstance instance, NpcDefinition definition) {
         String route = routeOverrides.get(instance.getId());
         WalkingSpeed speed = speedOverrides.getOrDefault(instance.getId(), definition.getMovementProfile().walkingSpeed());
-        if (routePaused.contains(instance.getId()) || isWaiting(instance)) {
+        if (routePaused.contains(instance.getId())) {
             return MovementProfile.disabled().withWalkingSpeed(speed);
         }
         return route == null ? definition.getMovementProfile().withWalkingSpeed(speed)
@@ -171,18 +175,6 @@ public final class NpcBehaviourService implements Listener {
 
     public boolean isMovingTo(NpcInstance instance) {
         return moveTargets.containsKey(instance.getId());
-    }
-
-    public boolean isWaiting(NpcInstance instance) {
-        Long until = waitingUntilTick.get(instance.getId());
-        if (until == null) {
-            return false;
-        }
-        if (until - currentTick > 0L) {
-            return true;
-        }
-        waitingUntilTick.remove(instance.getId(), until);
-        return false;
     }
 
     private void executeSequence(
@@ -363,16 +355,10 @@ public final class NpcBehaviourService implements Listener {
                         instances.stand(instance);
                         instances.move(instance, target);
                     });
-            case WAIT -> {
-                long ticks = secondsToTicks(action.value());
-                if (ticks > 0L) {
-                    waitingUntilTick.put(instance.getId(), currentTick + ticks);
-                    instances.stopNavigating(instance);
-                    if (combatService != null) {
-                        combatService.exitCombat(instance);
-                    }
-                }
-            }
+            // WAIT is handled by executeSequence: it only delays the next action.
+            case WAIT -> { }
+            case INTERACT -> interactWithNearbySwitches(instance);
+            case MINE_BLOCKS -> mineNearbyBlocks(instance);
             case EMIT_EVENT -> emitCustomEvent(action.value(), actor != null
                     ? actor : instances.findEntity(instance).orElse(null));
             case SLEEP -> instances.pose(instance, Pose.SLEEPING);
@@ -404,14 +390,13 @@ public final class NpcBehaviourService implements Listener {
         }
         routePaused.retainAll(active);
         moveTargets.keySet().retainAll(active);
-        waitingUntilTick.keySet().retainAll(active);
         following.keySet().retainAll(active);
         idleCycles.keySet().retainAll(active);
     }
 
     private void tickMoveTo(NpcInstance instance) {
         Location target = moveTargets.get(instance.getId());
-        if (target == null || isWaiting(instance) || combatService != null && combatService.isEngaged(instance)) {
+        if (target == null || combatService != null && combatService.isEngaged(instance)) {
             return;
         }
         Location current = instance.getLocation();
@@ -451,7 +436,7 @@ public final class NpcBehaviourService implements Listener {
 
     private void tickFollow(NpcInstance instance) {
         FollowState state = following.get(instance.getId());
-        if (state == null || isWaiting(instance) || combatService != null && combatService.isEngaged(instance)) {
+        if (state == null || combatService != null && combatService.isEngaged(instance)) {
             return;
         }
         Player player = state.playerId == null ? null : Bukkit.getPlayer(state.playerId);
@@ -487,6 +472,50 @@ public final class NpcBehaviourService implements Listener {
         WalkingSpeed speed = distanceSquared >= FOLLOW_CATCH_UP_RANGE_SQUARED
                 ? WalkingSpeed.VERY_FAST : WalkingSpeed.NORMAL;
         instances.navigate(instance, state.navigationTarget, speed);
+    }
+
+    private void interactWithNearbySwitches(NpcInstance instance) {
+        Location center = instance.getLocation();
+        if (center.getWorld() == null) return;
+        for (int x = -2; x <= 2; x++) {
+            for (int y = -2; y <= 2; y++) {
+                for (int z = -2; z <= 2; z++) {
+                    Block block = center.getBlock().getRelative(x, y, z);
+                    if (block.getType() != Material.LEVER && !Tag.BUTTONS.isTagged(block.getType())) continue;
+                    BlockData data = block.getBlockData();
+                    if (!(data instanceof Powerable powerable)) continue;
+                    int oldCurrent = powerable.isPowered() ? 15 : 0;
+                    BlockRedstoneEvent event = new BlockRedstoneEvent(block, oldCurrent, oldCurrent == 0 ? 15 : 0);
+                    Bukkit.getPluginManager().callEvent(event);
+                    powerable.setPowered(event.getNewCurrent() > 0);
+                    block.setBlockData(data, true);
+                }
+            }
+        }
+    }
+
+    private void mineNearbyBlocks(NpcInstance instance) {
+        Location feet = instance.getLocation();
+        if (feet.getWorld() == null) return;
+        LivingEntity entity = instances.findEntity(instance).orElse(null);
+        org.bukkit.inventory.ItemStack tool = entity == null || entity.getEquipment() == null
+                ? null : entity.getEquipment().getItemInMainHand();
+        boolean mined = false;
+        // The four layers begin at the NPC's feet. The supporting y - 1 layer is never visited.
+        for (int y = 0; y < 4; y++) {
+            for (int x = -2; x <= 2; x++) {
+                for (int z = -2; z <= 2; z++) {
+                    Block block = feet.getBlock().getRelative(x, y, z);
+                    if (!isMineable(block.getType()) || block.getState() instanceof TileState) continue;
+                    mined |= tool == null ? block.breakNaturally() : block.breakNaturally(tool);
+                }
+            }
+        }
+        if (mined && entity != null) entity.swingMainHand();
+    }
+
+    private static boolean isMineable(Material material) {
+        return Tag.MINEABLE_PICKAXE.isTagged(material);
     }
 
     private java.util.Optional<Player> nearestPlayer(NpcInstance instance) {

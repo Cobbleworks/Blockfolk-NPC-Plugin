@@ -2136,6 +2136,10 @@ public final class GuiService implements Listener {
                 Material.ENDER_PEARL;
             case WAIT ->
                 Material.CLOCK;
+            case INTERACT ->
+                Material.LEVER;
+            case MINE_BLOCKS ->
+                Material.IRON_PICKAXE;
             case EMIT_EVENT ->
                 Material.SCULK_SENSOR;
             case SLEEP ->
