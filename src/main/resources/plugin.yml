@@ -1,14 +1,15 @@
-name: EasyNPC
+name: Blockfolk
 version: ${project.version}
-main: dev.easynpc.EasyNpcPlugin
+main: dev.blockfolk.BlockfolkPlugin
 api-version: '1.21.11'
-author: EasyNPC
+author: Blockfolk
 commands:
-  eznpc:
-    description: Opens and controls EasyNPC.
-    usage: /eznpc [routes|create <name>|<name> spawn]
-    permission: eznpc.admin
+  blockfolk:
+    aliases: [bf]
+    description: Opens and controls Blockfolk.
+    usage: /bf [create [name]|routes|events [trigger <event>]|npc <name> [duplicate]|config -seconds-per-line <seconds>]
+    permission: blockfolk.admin
 permissions:
-  eznpc.admin:
-    description: Allows creating, editing, and spawning EasyNPC NPCs.
+  blockfolk.admin:
+    description: Allows creating, editing, and spawning Blockfolk NPCs.
     default: op

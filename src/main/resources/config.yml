@@ -1,4 +1,6 @@
-dialog-default-seconds-per-line: 3
+seconds-per-line: 3
 chat-input-timeout-seconds: 60
+# Prevent rapid On Player Approach/Leaves transitions while an NPC starts or stops moving.
+proximity-transition-cooldown-seconds: 3
 # Optional. External image URLs work without a key at MineSkin's public rate limit.
 mineskin-api-key: ""
