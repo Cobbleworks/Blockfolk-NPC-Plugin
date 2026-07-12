@@ -18,15 +18,15 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerDropItemEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
@@ -36,8 +36,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.inventory.meta.SkullMeta;
-import org.bukkit.plugin.Plugin;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.potion.PotionType;
 
 import com.destroystokyo.paper.profile.PlayerProfile;
@@ -45,8 +45,8 @@ import com.destroystokyo.paper.profile.ProfileProperty;
 
 import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.input.ChatInputService;
-import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.ActionLocation;
+import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
@@ -485,6 +485,9 @@ public final class GuiService implements Listener {
             inventory.setItem(row * 9, item(eventMaterial(behaviourEvent), behaviourEvent.displayName(), List.of(
                     ChatColor.GRAY + "Actions run from left to right"
             )));
+            inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
+                    ChatColor.YELLOW + "Click to append"
+            )));
             List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
             for (int column = 0; column < 7; column++) {
                 int slot = row * 9 + column + 2;
@@ -495,8 +498,6 @@ public final class GuiService implements Listener {
                             ChatColor.YELLOW + "Left-click to replace",
                             ChatColor.RED + "Right-click to remove"
                     )));
-                } else if (column == actions.size()) {
-                    inventory.setItem(slot, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(ChatColor.YELLOW + "Click to append")));
                 }
             }
         }
@@ -1121,12 +1122,17 @@ public final class GuiService implements Listener {
         int row = slot / 9;
         int column = slot % 9 - 2;
         int eventIndex = holder.page() * 5 + row;
-        if (row >= 5 || column < 0 || column >= 7 || eventIndex >= BehaviourEvent.values().length) {
+        if (row >= 5 || eventIndex >= BehaviourEvent.values().length) {
             return;
         }
         BehaviourEvent behaviourEvent = BehaviourEvent.values()[eventIndex];
         List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
-        if (column < actions.size() && event.isRightClick()) {
+        if (slot % 9 == 1) {
+            // "Add Action" button in column 1 — always appends at the end
+            openActionPicker(player, definition, behaviourEvent, actions.size(), holder.page());
+        } else if (column < 0 || column >= 7) {
+            return;
+        } else if (column < actions.size() && event.isRightClick()) {
             definition.removeBehaviourAction(behaviourEvent, column);
             definitionRepository.save(definition);
             openBehaviours(player, definition, holder.page());
@@ -1209,10 +1215,14 @@ public final class GuiService implements Listener {
             }
         } else {
             String prompt = switch (type) {
-                case SEND_DIALOG -> "Enter the dialog line:";
-                case SHOW_HOLO_DIALOG -> "Enter the hologram dialog line:";
-                case RUN_CONSOLE_COMMAND -> "Enter the command without a leading slash:";
-                default -> "Enter the action value:";
+                case SEND_DIALOG ->
+                    "Enter the dialog line:";
+                case SHOW_HOLO_DIALOG ->
+                    "Enter the hologram dialog line:";
+                case RUN_CONSOLE_COMMAND ->
+                    "Enter the command without a leading slash:";
+                default ->
+                    "Enter the action value:";
             };
             chatInputService.request(player, prompt, value -> {
                 RoutePoint updated = setRoutePointAction(action, type, value);
@@ -1557,7 +1567,7 @@ public final class GuiService implements Listener {
         return session.type().name().equals(meta.getPersistentDataContainer()
                 .get(waypointActionKey, PersistentDataType.STRING))
                 && session.token().toString().equals(meta.getPersistentDataContainer()
-                .get(waypointTokenKey, PersistentDataType.STRING));
+                        .get(waypointTokenKey, PersistentDataType.STRING));
     }
 
     private void beginRouteWaypointSelection(Player player, RoutePointActionPickerHolder holder,
@@ -2170,7 +2180,8 @@ public final class GuiService implements Listener {
             ActionPickerHolder action,
             BehaviourActionType type,
             UUID token
-    ) {
+            ) {
+
     }
 
     private record RoutePointActionsHolder(String routeKey, RoutePoint point) implements InventoryHolder {
@@ -2218,6 +2229,7 @@ public final class GuiService implements Listener {
             BehaviourActionType type,
             UUID token
             ) {
+
     }
 
     private record AnimationPickerHolder(String key, BehaviourEvent event, int actionIndex, int page)
