@@ -10,7 +10,16 @@ public enum BehaviourActionType {
     START_COMBAT("Start Combat", false),
     START_NAVIGATION("Start Navigation", false),
     STOP_NAVIGATION("Stop Navigation", false),
-    SET_WALK_SPEED("Set Walk Speed", true);
+    SET_WALK_SPEED("Set Walk Speed", true),
+    SLEEP("Sleeping", false),
+    SWIM("Swimming", false),
+    FALL_FLY("Fall Flying", false),
+    STAND("Standing", false),
+    SNEAK("Sneaking", false),
+    WAVE("Wave", false),
+    JUMP("Jump", false),
+    FOLLOW("Follow", false),
+    UNFOLLOW("Unfollow", false);
 
     private final String displayName;
     private final boolean requiresValue;
@@ -29,6 +38,9 @@ public enum BehaviourActionType {
     }
 
     public static BehaviourActionType fromStored(String value) {
-        return valueOf(value.trim().toUpperCase(Locale.ROOT).replace('-', '_'));
+        String normalized = value.trim().toUpperCase(Locale.ROOT).replace('-', '_');
+        // Sitting was briefly exposed before mannequin pose validation was
+        // added. Treat stored actions as Standing instead of dropping them.
+        return valueOf(normalized.equals("SIT") ? "STAND" : normalized);
     }
 }

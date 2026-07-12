@@ -13,10 +13,12 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
+import org.bukkit.entity.Pose;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
@@ -37,6 +39,11 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     private final Plugin plugin;
     private final NamespacedKey instanceKey;
     private final Map<UUID, UUID> entityIdsByInstance = new HashMap<>();
+    private final Map<UUID, Integer> jumpTicksByInstance = new HashMap<>();
+    private BukkitTask animationTask;
+
+    private static final int JUMP_DURATION_TICKS = 12;
+    private static final double JUMP_HEIGHT = 0.85;
 
     public PaperMannequinNpcRenderer(Plugin plugin) {
         this.plugin = plugin;
@@ -45,11 +52,19 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
 
     @Override
     public void start() {
-        // Native entities need no packet listener or renderer lifecycle.
+        if (animationTask != null) {
+            animationTask.cancel();
+        }
+        animationTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickJumps, 1L, 1L);
     }
 
     @Override
     public void stop() {
+        if (animationTask != null) {
+            animationTask.cancel();
+            animationTask = null;
+        }
+        jumpTicksByInstance.clear();
         entityIdsByInstance.clear();
     }
 
@@ -98,6 +113,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
             mannequin.remove();
         }
         entityIdsByInstance.remove(instance.getId());
+        jumpTicksByInstance.remove(instance.getId());
         instance.setEntityId(0);
     }
 
@@ -114,7 +130,8 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     @Override
     public boolean move(NpcInstance instance, Location location) {
         Mannequin mannequin = findEntity(instance);
-        if (mannequin == null || !mannequin.teleport(location)) {
+        Location renderedLocation = location.clone().add(0.0, jumpOffset(instance.getId()), 0.0);
+        if (mannequin == null || !mannequin.teleport(renderedLocation)) {
             return false;
         }
         mannequin.setRotation(location.getYaw(), location.getPitch());
@@ -126,6 +143,78 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     @Override
     public Optional<LivingEntity> findLivingEntity(NpcInstance instance) {
         return Optional.ofNullable(findEntity(instance));
+    }
+
+    @Override
+    public void pose(NpcInstance instance, Pose pose) {
+        Mannequin mannequin = findEntity(instance);
+        if (mannequin != null && Mannequin.validPoses().contains(pose)) {
+            mannequin.setPose(pose, pose != Pose.STANDING);
+        }
+    }
+
+    @Override
+    public void stand(NpcInstance instance) {
+        Mannequin mannequin = findEntity(instance);
+        if (mannequin != null) {
+            mannequin.setPose(Pose.STANDING, false);
+        }
+    }
+
+    @Override
+    public void wave(NpcInstance instance) {
+        for (long delay : new long[]{0L, 6L, 12L, 18L}) {
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                Mannequin mannequin = findEntity(instance);
+                if (mannequin != null && mannequin.isValid()) {
+                    mannequin.swingMainHand();
+                }
+            }, delay);
+        }
+    }
+
+    @Override
+    public void jump(NpcInstance instance) {
+        if (findEntity(instance) != null) {
+            jumpTicksByInstance.putIfAbsent(instance.getId(), 0);
+        }
+    }
+
+    private void tickJumps() {
+        jumpTicksByInstance.replaceAll((instanceId, elapsed) -> elapsed + 1);
+        jumpTicksByInstance.entrySet().removeIf(entry -> {
+            // The renderer deliberately does not own the instance registry, so
+            // use the tagged mannequin's current base location via the map below.
+            UUID entityId = entityIdsByInstance.get(entry.getKey());
+            if (entityId == null) {
+                return true;
+            }
+            org.bukkit.entity.Entity entity = Bukkit.getEntity(entityId);
+            if (!(entity instanceof Mannequin mannequin) || !mannequin.isValid()) {
+                return true;
+            }
+            if (entry.getValue() >= JUMP_DURATION_TICKS) {
+                Location landed = mannequin.getLocation().subtract(0.0, jumpOffset(entry.getValue() - 1), 0.0);
+                mannequin.teleport(landed);
+                return true;
+            }
+            double previousOffset = jumpOffset(entry.getValue() - 1);
+            double nextOffset = jumpOffset(entry.getValue());
+            mannequin.teleport(mannequin.getLocation().add(0.0, nextOffset - previousOffset, 0.0));
+            return false;
+        });
+    }
+
+    private double jumpOffset(UUID instanceId) {
+        Integer elapsed = jumpTicksByInstance.get(instanceId);
+        return elapsed == null ? 0.0 : jumpOffset(elapsed);
+    }
+
+    private double jumpOffset(int elapsed) {
+        if (elapsed <= 0 || elapsed >= JUMP_DURATION_TICKS) {
+            return 0.0;
+        }
+        return Math.sin(Math.PI * elapsed / JUMP_DURATION_TICKS) * JUMP_HEIGHT;
     }
 
     private Mannequin findEntity(NpcInstance instance) {

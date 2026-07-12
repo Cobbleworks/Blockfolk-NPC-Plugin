@@ -10,6 +10,7 @@ import java.util.function.BiConsumer;
 
 import org.bukkit.Location;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Pose;
 
 import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.model.NpcDefinition;
@@ -160,6 +161,22 @@ public final class NpcInstanceRegistry {
             return Optional.empty();
         }
         return renderer.findLivingEntity(instance);
+    }
+
+    public void pose(NpcInstance instance, Pose pose) {
+        renderer.pose(instance, pose);
+    }
+
+    public void stand(NpcInstance instance) {
+        renderer.stand(instance);
+    }
+
+    public void wave(NpcInstance instance) {
+        renderer.wave(instance);
+    }
+
+    public void jump(NpcInstance instance) {
+        renderer.jump(instance);
     }
 
     public Collection<NpcInstance> findByDefinition(NpcDefinition definition) {

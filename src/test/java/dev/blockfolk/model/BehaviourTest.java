@@ -13,6 +13,9 @@ class BehaviourTest {
     void parsesNewBehaviourTypesFromStoredNames() {
         assertEquals(BehaviourActionType.SHOW_HOLO_DIALOG,
             BehaviourActionType.fromStored("show-holo-dialog"));
+        assertEquals(BehaviourActionType.STAND, BehaviourActionType.fromStored("sit"));
+        assertEquals(BehaviourActionType.FALL_FLY, BehaviourActionType.fromStored("fall-fly"));
+        assertEquals(BehaviourActionType.UNFOLLOW, BehaviourActionType.fromStored("unfollow"));
         assertEquals(BehaviourEvent.HEAL, BehaviourEvent.fromStored("heal"));
     }
 

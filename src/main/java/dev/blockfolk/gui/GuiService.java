@@ -60,6 +60,18 @@ import net.kyori.adventure.text.Component;
 public final class GuiService implements Listener {
 
     private static final int PAGE_SIZE = 45;
+    private static final List<BehaviourActionType> ANIMATION_ACTIONS = List.of(
+            BehaviourActionType.SLEEP,
+            BehaviourActionType.SWIM,
+            BehaviourActionType.FALL_FLY,
+            BehaviourActionType.STAND,
+            BehaviourActionType.SNEAK,
+            BehaviourActionType.WAVE,
+            BehaviourActionType.JUMP
+    );
+    private static final List<BehaviourActionType> PRIMARY_ACTIONS = java.util.Arrays.stream(BehaviourActionType.values())
+            .filter(type -> !ANIMATION_ACTIONS.contains(type))
+            .toList();
     private static final Set<Integer> INVENTORY_EDIT_SLOTS = Set.of(
             1, 2, 3, 4, 5, 6, 7, 8,
             10, 11, 12, 13, 14, 15, 16, 17,
@@ -178,10 +190,7 @@ public final class GuiService implements Listener {
                 ChatColor.GRAY + "Armor, hands, and stored inventory",
                 ChatColor.YELLOW + "Click to edit"
         )));
-        inventory.setItem(14, item(Material.WRITABLE_BOOK, "Dialog", List.of(
-                ChatColor.GRAY + "" + definition.getDialogLines().size() + " configured line(s)",
-                ChatColor.YELLOW + "Click to edit"
-        )));
+        inventory.setItem(14, item(Material.WRITABLE_BOOK, "Chatter", chatterLore(definition)));
         inventory.setItem(15, item(Material.ARMOR_STAND, "Spawn Instance", List.of(
                 ChatColor.GRAY + "Creates a visible persistent NPC",
                 ChatColor.GRAY + "at the preset spawnpoint",
@@ -260,18 +269,6 @@ public final class GuiService implements Listener {
         inventory.setItem(53, item(Material.LIME_DYE, "Save Equipment", List.of(
                 ChatColor.GRAY + "Saves and refreshes every instance"
         )));
-        player.openInventory(inventory);
-    }
-
-    public void openDialogEditor(Player player, NpcDefinition definition) {
-        Inventory inventory = Bukkit.createInventory(new DialogHolder(definition.getKey()), 27,
-                Component.text("Dialog: " + definition.getDisplayName()));
-        inventory.setItem(10, item(Material.PAPER, "Set Lines", List.of(
-                ChatColor.GRAY + "Use | between multiple lines",
-                ChatColor.YELLOW + "Click to enter text"
-        )));
-        inventory.setItem(14, item(Material.BOOK, "Current Dialog", previewLines(definition)));
-        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
         player.openInventory(inventory);
     }
 
@@ -393,10 +390,28 @@ public final class GuiService implements Listener {
     private void openActionPicker(Player player, NpcDefinition definition, BehaviourEvent event, int actionIndex, int page) {
         Inventory inventory = Bukkit.createInventory(new ActionPickerHolder(definition.getKey(), event, actionIndex, page), 27,
                 Component.text("Choose Action"));
-        BehaviourActionType[] types = BehaviourActionType.values();
-        for (int index = 0; index < types.length; index++) {
-            BehaviourActionType type = types[index];
-            inventory.setItem(10 + index, item(actionMaterial(type), type.displayName(), List.of(ChatColor.YELLOW + "Click to configure")));
+        for (int index = 0; index < PRIMARY_ACTIONS.size(); index++) {
+            BehaviourActionType type = PRIMARY_ACTIONS.get(index);
+            inventory.setItem(9 + index, item(actionMaterial(type), type.displayName(), List.of(ChatColor.YELLOW + "Click to configure")));
+        }
+        inventory.setItem(20, item(Material.ARMOR_STAND, "Animations", List.of(
+                ChatColor.GRAY + "Poses, waving, and jumping",
+                ChatColor.YELLOW + "Click to choose an animation"
+        )));
+        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
+        player.openInventory(inventory);
+    }
+
+    private void openAnimationPicker(Player player, ActionPickerHolder action) {
+        Inventory inventory = Bukkit.createInventory(new AnimationPickerHolder(
+                action.key(), action.event(), action.actionIndex(), action.page()), 27,
+                Component.text("Choose Animation"));
+        int[] slots = {10, 11, 12, 13, 14, 15, 16};
+        for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
+            BehaviourActionType type = ANIMATION_ACTIONS.get(index);
+            inventory.setItem(slots[index], item(actionMaterial(type), type.displayName(), List.of(
+                    ChatColor.YELLOW + "Click to select"
+            )));
         }
         inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
         player.openInventory(inventory);
@@ -545,8 +560,6 @@ public final class GuiService implements Listener {
             handleMainClick(event, player, mainHolder.page());
         } else if (holder instanceof EditorHolder editorHolder) {
             handleEditorClick(event, player, editorHolder.key());
-        } else if (holder instanceof DialogHolder dialogHolder) {
-            handleDialogClick(event, player, dialogHolder.key());
         } else if (holder instanceof FightingHolder fightingHolder) {
             handleFightingClick(event, player, fightingHolder.key());
         } else if (holder instanceof TargetsHolder targetsHolder) {
@@ -561,6 +574,8 @@ public final class GuiService implements Listener {
             handleBehaviourClick(event, player, behaviourHolder);
         } else if (holder instanceof ActionPickerHolder pickerHolder) {
             handleActionPickerClick(event, player, pickerHolder);
+        } else if (holder instanceof AnimationPickerHolder animationHolder) {
+            handleAnimationPickerClick(event, player, animationHolder);
         } else if (holder instanceof BehaviourValuePickerHolder valuePickerHolder) {
             handleBehaviourValuePickerClick(event, player, valuePickerHolder);
         } else if (holder instanceof ConfirmationHolder confirmationHolder) {
@@ -691,7 +706,14 @@ public final class GuiService implements Listener {
             case 13 ->
                 openInventoryEditor(player, definition);
             case 14 ->
-                openDialogEditor(player, definition);
+                chatInputService.request(player, "Enter chatter lines separated with |:", value -> {
+                    definition.setDialogLines(java.util.Arrays.stream(value.split("\\|"))
+                            .map(String::trim)
+                            .filter(line -> !line.isBlank())
+                            .toList());
+                    saveRefresh(definition);
+                    openEditor(player, definition);
+                });
             case 15 -> {
                 if (definition.getSpawnpoint() == null) {
                     player.sendMessage(Component.text("Set a spawnpoint first."));
@@ -733,33 +755,6 @@ public final class GuiService implements Listener {
             }
             case 31 ->
                 openMain(player);
-            default -> {
-            }
-        }
-    }
-
-    private void handleDialogClick(InventoryClickEvent event, Player player, String key) {
-        event.setCancelled(true);
-        if (!isTopInventoryClick(event)) {
-            return;
-        }
-        NpcDefinition definition = definitionRepository.find(key).orElse(null);
-        if (definition == null) {
-            player.closeInventory();
-            return;
-        }
-        switch (event.getRawSlot()) {
-            case 10 ->
-                chatInputService.request(player, "Enter dialog lines separated with |:", value -> {
-                    definition.setDialogLines(List.of(value.split("\\|")).stream()
-                            .map(String::trim)
-                            .filter(line -> !line.isBlank())
-                            .toList());
-                    saveRefresh(definition);
-                    openDialogEditor(player, definition);
-                });
-            case 22 ->
-                openEditor(player, definition);
             default -> {
             }
         }
@@ -1023,11 +1018,15 @@ public final class GuiService implements Listener {
             openBehaviours(player, definition, holder.page());
             return;
         }
-        int typeIndex = event.getRawSlot() - 10;
-        if (typeIndex < 0 || typeIndex >= BehaviourActionType.values().length) {
+        if (event.getRawSlot() == 20) {
+            openAnimationPicker(player, holder);
             return;
         }
-        BehaviourActionType type = BehaviourActionType.values()[typeIndex];
+        int typeIndex = event.getRawSlot() - 9;
+        if (typeIndex < 0 || typeIndex >= PRIMARY_ACTIONS.size()) {
+            return;
+        }
+        BehaviourActionType type = PRIMARY_ACTIONS.get(typeIndex);
         if (type == BehaviourActionType.SET_ROUTE) {
             openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.ROUTE, 0);
         } else if (type == BehaviourActionType.SET_WALK_SPEED) {
@@ -1051,6 +1050,34 @@ public final class GuiService implements Listener {
                 openBehaviours(player, definition, holder.page());
             });
         }
+    }
+
+    private void handleAnimationPickerClick(
+            InventoryClickEvent event,
+            Player player,
+            AnimationPickerHolder holder
+    ) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
+        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
+        if (definition == null) {
+            player.closeInventory();
+            return;
+        }
+        ActionPickerHolder action = new ActionPickerHolder(
+                holder.key(), holder.event(), holder.actionIndex(), holder.page());
+        if (event.getRawSlot() == 22) {
+            openActionPicker(player, definition, holder.event(), holder.actionIndex(), holder.page());
+            return;
+        }
+        int animationIndex = event.getRawSlot() - 10;
+        if (animationIndex < 0 || animationIndex >= ANIMATION_ACTIONS.size()) {
+            return;
+        }
+        setAction(definition, action, ANIMATION_ACTIONS.get(animationIndex), null);
+        openBehaviours(player, definition, holder.page());
     }
 
     private void handleBehaviourValuePickerClick(
@@ -1245,12 +1272,12 @@ public final class GuiService implements Listener {
     private boolean isManagedHolder(InventoryHolder holder) {
         return holder instanceof MainHolder
                 || holder instanceof EditorHolder
-                || holder instanceof DialogHolder
                 || holder instanceof FightingHolder
                 || holder instanceof InstancesHolder
                 || holder instanceof RouteAssignmentHolder
                 || holder instanceof BehaviourHolder
                 || holder instanceof ActionPickerHolder
+                || holder instanceof AnimationPickerHolder
                 || holder instanceof BehaviourValuePickerHolder
                 || holder instanceof ConfirmationHolder;
     }
@@ -1302,14 +1329,17 @@ public final class GuiService implements Listener {
         return item;
     }
 
-    private List<String> previewLines(NpcDefinition definition) {
+    private List<String> chatterLore(NpcDefinition definition) {
+        List<String> lore = new ArrayList<>();
         if (definition.getDialogLines().isEmpty()) {
-            return List.of(ChatColor.GRAY + "No dialog lines set");
+            lore.add(ChatColor.GRAY + "No chatter lines configured");
+        } else {
+            lore.add(ChatColor.GRAY + "" + definition.getDialogLines().size() + " configured line(s):");
+            definition.getDialogLines().forEach(line -> lore.add(ChatColor.WHITE + "• " + line));
         }
-        return definition.getDialogLines().stream()
-                .limit(5)
-                .map(line -> ChatColor.GRAY + line)
-                .toList();
+        lore.add(ChatColor.DARK_GRAY + "Use | between multiple lines");
+        lore.add(ChatColor.YELLOW + "Click to edit directly");
+        return lore;
     }
 
     private String statusLine(NpcDefinition definition) {
@@ -1409,6 +1439,24 @@ public final class GuiService implements Listener {
                 Material.BARRIER;
             case SET_WALK_SPEED ->
                 Material.FEATHER;
+            case SLEEP ->
+                Material.RED_BED;
+            case SWIM ->
+                Material.WATER_BUCKET;
+            case FALL_FLY ->
+                Material.ELYTRA;
+            case STAND ->
+                Material.ARMOR_STAND;
+            case SNEAK ->
+                Material.LEATHER_BOOTS;
+            case WAVE ->
+                Material.BELL;
+            case JUMP ->
+                Material.SLIME_BLOCK;
+            case FOLLOW ->
+                Material.LEAD;
+            case UNFOLLOW ->
+                Material.SHEARS;
         };
     }
 
@@ -1440,14 +1488,6 @@ public final class GuiService implements Listener {
     }
 
     private record EditorHolder(String key) implements InventoryHolder {
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
-
-    private record DialogHolder(String key) implements InventoryHolder {
 
         @Override
         public Inventory getInventory() {
@@ -1504,6 +1544,15 @@ public final class GuiService implements Listener {
     }
 
     private record ActionPickerHolder(String key, BehaviourEvent event, int actionIndex, int page)
+            implements InventoryHolder {
+
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
+    private record AnimationPickerHolder(String key, BehaviourEvent event, int actionIndex, int page)
             implements InventoryHolder {
 
         @Override
