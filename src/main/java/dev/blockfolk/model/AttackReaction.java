@@ -5,7 +5,8 @@ import java.util.Locale;
 public enum AttackReaction {
     IGNORE("Ignore"),
     FIGHT_BACK("Fights Back"),
-    FLEE("Flee");
+    FLEE("Flee"),
+    HUNTING("Hunting");
 
     private final String displayName;
 

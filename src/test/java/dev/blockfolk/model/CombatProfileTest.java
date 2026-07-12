@@ -38,7 +38,19 @@ class CombatProfileTest {
         assertEquals(AttackReaction.FIGHT_BACK, AttackReaction.IGNORE.next());
         assertEquals(AttackReaction.FIGHT_BACK, AttackReaction.fromStored("fights-back"));
         assertEquals(AttackReaction.FLEE, AttackReaction.FIGHT_BACK.next());
-        assertEquals(AttackReaction.IGNORE, AttackReaction.FLEE.next());
+        assertEquals(AttackReaction.HUNTING, AttackReaction.FLEE.next());
+        assertEquals(AttackReaction.IGNORE, AttackReaction.HUNTING.next());
+    }
+
+    @Test
+    void fightOptionsRoundTripAndAcceptMonsterAlias() {
+        FightOptions options = FightOptions.fromStored("monsters, NPCs");
+
+        assertTrue(options.mobs());
+        assertTrue(options.npcs());
+        assertFalse(options.animals());
+        assertEquals("mobs,npcs", options.storedValue());
+        assertEquals(options, FightOptions.fromStored(options.storedValue()));
     }
 
     @Test

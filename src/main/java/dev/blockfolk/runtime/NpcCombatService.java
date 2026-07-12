@@ -40,6 +40,7 @@ import dev.blockfolk.combat.NpcAttack;
 import dev.blockfolk.combat.NpcAttackSelector;
 import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.CombatProfile;
+import dev.blockfolk.model.FightOptions;
 import dev.blockfolk.model.LootTier;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
@@ -61,6 +62,7 @@ public final class NpcCombatService implements Listener {
     private final Map<UUID, CombatState> states = new HashMap<>();
     private final Map<UUID, BukkitTask> pendingRespawns = new HashMap<>();
     private final Map<UUID, BossBar> bossBars = new HashMap<>();
+    private final Map<UUID, FightOptions> fightOptionsOverrides = new HashMap<>();
     private NpcBehaviourService behaviourService;
     private BukkitTask task;
     private long currentTick;
@@ -97,6 +99,7 @@ public final class NpcCombatService implements Listener {
         states.clear();
         bossBars.values().forEach(BossBar::removeAll);
         bossBars.clear();
+        fightOptionsOverrides.clear();
     }
 
     public boolean isEngaged(NpcInstance instance) {
@@ -118,6 +121,11 @@ public final class NpcCombatService implements Listener {
     }
 
     public void exitCombat(NpcInstance instance) {
+        clearState(instance);
+    }
+
+    public void changeFightOptions(NpcInstance instance, FightOptions options) {
+        fightOptionsOverrides.put(instance.getId(), options);
         clearState(instance);
     }
 
@@ -154,9 +162,10 @@ public final class NpcCombatService implements Listener {
             return;
         }
         AttackReaction reaction = definition.getCombatProfile().attackReaction();
-        if (reaction == AttackReaction.FLEE) {
+        boolean selectedTarget = isSelectedTarget(attacker, fightOptions(instance, definition.getCombatProfile()));
+        if (reaction == AttackReaction.FLEE && !selectedTarget) {
             engage(instance, definition, CombatMode.FLEE, attacker);
-        } else if (reaction == AttackReaction.FIGHT_BACK) {
+        } else if (reaction == AttackReaction.FIGHT_BACK || selectedTarget) {
             engage(instance, definition, CombatMode.FIGHT, attacker);
         }
     }
@@ -217,20 +226,21 @@ public final class NpcCombatService implements Listener {
             LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
             if (definition == null || npc == null || !npc.isValid() || npc.isDead()) {
                 states.remove(instance.getId());
+                fightOptionsOverrides.remove(instance.getId());
                 continue;
             }
             CombatProfile profile = definition.getCombatProfile();
+            FightOptions fightOptions = fightOptions(instance, profile);
             updateBossBar(instance, definition, npc, profile, activeBossBars);
-            if (profile.invulnerable() || (profile.attackReaction() == AttackReaction.IGNORE
-                    && !profile.hasSightTargets())) {
+            if (profile.invulnerable()) {
                 clearState(instance);
                 continue;
             }
 
             CombatState state = states.get(instance.getId());
-            if (state == null && profile.hasSightTargets()
+            if (state == null && profile.attackReaction() == AttackReaction.HUNTING
                     && currentTick % 10 == Math.floorMod(instance.getId().hashCode(), 10)) {
-                LivingEntity target = findNearestTarget(instance, npc, profile);
+                LivingEntity target = findNearestTarget(instance, npc, fightOptions);
                 if (target != null) {
                     engage(instance, definition, CombatMode.FIGHT, target);
                     state = states.get(instance.getId());
@@ -246,6 +256,8 @@ public final class NpcCombatService implements Listener {
             }
         }
         states.keySet().removeIf(id -> instanceRegistry.findAll().stream().noneMatch(instance -> instance.getId().equals(id)));
+        fightOptionsOverrides.keySet().removeIf(id -> instanceRegistry.findAll().stream()
+                .noneMatch(instance -> instance.getId().equals(id)));
         bossBars.entrySet().removeIf(entry -> {
             if (activeBossBars.contains(entry.getKey())) return false;
             entry.getValue().removeAll();
@@ -387,28 +399,32 @@ public final class NpcCombatService implements Listener {
         }
     }
 
-    private LivingEntity findNearestTarget(NpcInstance instance, LivingEntity npc, CombatProfile profile) {
+    private LivingEntity findNearestTarget(NpcInstance instance, LivingEntity npc, FightOptions options) {
         return npc.getNearbyEntities(SIGHT_RANGE, SIGHT_RANGE, SIGHT_RANGE).stream()
                 .filter(LivingEntity.class::isInstance)
                 .map(LivingEntity.class::cast)
                 .filter(target -> isAttackable(instance, target))
-                .filter(target -> isSightTarget(target, profile))
+                .filter(target -> isSelectedTarget(target, options))
                 .filter(npc::hasLineOfSight)
                 .min(Comparator.comparingDouble(target -> target.getLocation().distanceSquared(npc.getLocation())))
                 .orElse(null);
     }
 
-    private boolean isSightTarget(LivingEntity target, CombatProfile profile) {
+    private boolean isSelectedTarget(LivingEntity target, FightOptions options) {
         if (target instanceof Mannequin) {
-            return profile.targetNpcs();
+            return options.npcs();
         }
         if (target instanceof Player) {
-            return profile.targetPlayers();
+            return options.players();
         }
         if (target instanceof Animals) {
-            return profile.targetAnimals();
+            return options.animals();
         }
-        return target instanceof Mob && profile.targetMobs();
+        return target instanceof Mob && options.mobs();
+    }
+
+    private FightOptions fightOptions(NpcInstance instance, CombatProfile profile) {
+        return fightOptionsOverrides.getOrDefault(instance.getId(), FightOptions.from(profile));
     }
 
     private boolean isAttackable(NpcInstance attacker, LivingEntity target) {

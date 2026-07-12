@@ -89,7 +89,8 @@ public final class NpcDefinitionRepository {
         configuration.set("combat.max-health", definition.getCombatProfile().maxHealth());
         configuration.set("combat.respawn-seconds", definition.getCombatProfile().respawnSeconds());
         configuration.set("combat.aggression", null);
-        configuration.set("combat.reaction-to-attacks",
+        configuration.set("combat.reaction-to-attacks", null);
+        configuration.set("combat.aggression-level",
                 definition.getCombatProfile().attackReaction().name().toLowerCase(Locale.ROOT));
         configuration.set("combat.targets.mobs", definition.getCombatProfile().targetMobs());
         configuration.set("combat.targets.animals", definition.getCombatProfile().targetAnimals());
@@ -158,13 +159,16 @@ public final class NpcDefinitionRepository {
         definition.setOffHand(configuration.getItemStack("inventory.off-hand"));
         int legacyHealth = configuration.getBoolean("combat.enabled", false) ? 20 : 0;
         AggressionLevel legacyAggression = AggressionLevel.fromStored(configuration.getString("combat.aggression"));
-        boolean hasNewAggressionSettings = configuration.contains("combat.reaction-to-attacks")
+        boolean hasNewAggressionSettings = configuration.contains("combat.aggression-level")
+                || configuration.contains("combat.reaction-to-attacks")
                 || configuration.contains("combat.targets");
         AttackReaction attackReaction = hasNewAggressionSettings
-                ? AttackReaction.fromStored(configuration.getString("combat.reaction-to-attacks"))
+                ? AttackReaction.fromStored(configuration.getString("combat.aggression-level",
+                        configuration.getString("combat.reaction-to-attacks")))
                 : switch (legacyAggression) {
                     case FLEE -> AttackReaction.FLEE;
-                    case FIGHT_BACK, FIGHTS_ON_SIGHT -> AttackReaction.FIGHT_BACK;
+                    case FIGHT_BACK -> AttackReaction.FIGHT_BACK;
+                    case FIGHTS_ON_SIGHT -> AttackReaction.HUNTING;
                     case NONE -> AttackReaction.IGNORE;
                 };
         boolean legacySightTargeting = !hasNewAggressionSettings

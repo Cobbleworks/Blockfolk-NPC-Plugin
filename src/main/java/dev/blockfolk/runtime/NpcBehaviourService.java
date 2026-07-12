@@ -45,6 +45,7 @@ import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
+import dev.blockfolk.model.FightOptions;
 import dev.blockfolk.model.MovementProfile;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
@@ -338,6 +339,11 @@ public final class NpcBehaviourService implements Listener {
             case START_COMBAT -> {
                 if (combatService != null) {
                     combatService.startCombat(instance, actor);
+                }
+            }
+            case CHANGE_FIGHT_OPTIONS -> {
+                if (combatService != null) {
+                    combatService.changeFightOptions(instance, FightOptions.fromStored(action.value()));
                 }
             }
             case START_NAVIGATION -> {

@@ -89,6 +89,10 @@ public record CombatProfile(
         return targetMobs || targetAnimals || targetPlayers || targetNpcs;
     }
 
+    public boolean hasTargets() {
+        return hasSightTargets();
+    }
+
     public boolean alliedWith(CombatProfile other) {
         return other != null && alliance != null && alliance.equals(other.alliance);
     }

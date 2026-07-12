@@ -49,6 +49,7 @@ import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
+import dev.blockfolk.model.FightOptions;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.CustomEvent;
@@ -378,8 +379,8 @@ public final class GuiService implements Listener {
         inventory.setItem(23, item(Material.IRON_SWORD, "Fighting", List.of(
                 ChatColor.GRAY + "Health: " + ChatColor.WHITE + healthLabel(combat),
                 ChatColor.GRAY + "Respawn: " + ChatColor.WHITE + respawnLabel(combat),
-                ChatColor.GRAY + "Attack reaction: " + ChatColor.WHITE + combat.attackReaction().displayName(),
-                ChatColor.GRAY + "Sight targets: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
+                ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.attackReaction().displayName(),
+                ChatColor.GRAY + "Attack targets: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
                 ChatColor.GRAY + "Alliance: " + ChatColor.WHITE + allianceLabel(combat),
                 ChatColor.GRAY + "Boss bar: " + ChatColor.WHITE + (combat.showBossBar() ? "Shown nearby" : "Hidden"),
                 ChatColor.YELLOW + "Click to configure combat"
@@ -470,8 +471,8 @@ public final class GuiService implements Listener {
         inventory.setItem(12, toggleItem(Material.WITHER_SKELETON_SKULL, "Show Boss Bar", combat.showBossBar(),
                 "Shows current HP to players within 16 blocks"));
         inventory.setItem(5, item(Material.TARGET, "Targets & Behaviour", List.of(
-                ChatColor.GRAY + "Attack reaction: " + ChatColor.WHITE + combat.attackReaction().displayName(),
-                ChatColor.GRAY + "Sight targets enabled: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
+                ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.attackReaction().displayName(),
+                ChatColor.GRAY + "Attack targets enabled: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
                 ChatColor.YELLOW + "Click to configure"
         )));
         inventory.setItem(14, item(Material.NAME_TAG, "Alliance", List.of(
@@ -487,19 +488,19 @@ public final class GuiService implements Listener {
         CombatProfile combat = definition.getCombatProfile();
         Inventory inventory = Bukkit.createInventory(new TargetsHolder(definition.getKey()), 27,
                 Component.text("Targets & Behaviour: " + definition.getDisplayName()));
-        inventory.setItem(10, item(reactionMaterial(combat.attackReaction()), "Reaction to Attacks", List.of(
+        inventory.setItem(10, item(reactionMaterial(combat.attackReaction()), "Aggression Level", List.of(
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + combat.attackReaction().displayName(),
                 reactionDescription(combat.attackReaction()),
                 ChatColor.YELLOW + "Click to cycle"
         )));
         inventory.setItem(12, toggleItem(Material.ZOMBIE_HEAD, "Target Mobs", combat.targetMobs(),
-                "Attacks non-animal mobs on sight"));
+                "Allows attacks against non-animal mobs"));
         inventory.setItem(13, toggleItem(Material.PORKCHOP, "Target Animals", combat.targetAnimals(),
-                "Attacks animals on sight"));
+                "Allows attacks against animals"));
         inventory.setItem(14, toggleItem(Material.PLAYER_HEAD, "Target Players", combat.targetPlayers(),
-                "Attacks survival and adventure players on sight"));
+                "Allows attacks against survival and adventure players"));
         inventory.setItem(15, toggleItem(Material.ARMOR_STAND, "Target Other NPCs", combat.targetNpcs(),
-                "Attacks vulnerable NPCs on sight"));
+                "Allows attacks against vulnerable NPCs"));
         inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
         player.openInventory(inventory);
     }
@@ -1368,6 +1369,8 @@ public final class GuiService implements Listener {
             beginRouteWaypointSelection(player, action, type);
         } else if (type == BehaviourActionType.WAIT) {
             requestRouteWaitAction(player, action);
+        } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
+            requestRouteFightOptionsAction(player, action);
         } else if (!type.requiresValue()) {
             RoutePoint updated = setRoutePointAction(action, type, null);
             if (updated != null) {
@@ -1563,6 +1566,8 @@ public final class GuiService implements Listener {
             beginWaypointSelection(player, holder, type);
         } else if (type == BehaviourActionType.WAIT) {
             requestWaitAction(player, definition, holder);
+        } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
+            requestFightOptionsAction(player, definition, holder);
         } else if (!type.requiresValue()) {
             setAction(definition, holder, type, null);
             openBehaviourHome(player, definition, holder);
@@ -1600,6 +1605,25 @@ public final class GuiService implements Listener {
             }
             setAction(definition, holder, BehaviourActionType.WAIT, normalized);
             openBehaviourHome(player, definition, holder);
+        });
+    }
+
+    private void requestFightOptionsAction(Player player, NpcDefinition definition, ActionPickerHolder holder) {
+        chatInputService.request(player,
+                "Enter enabled targets separated by commas (mobs, animals, players, npcs), or 'none':", value -> {
+            FightOptions options = FightOptions.fromStored(value.equalsIgnoreCase("none") ? "" : value);
+            setAction(definition, holder, BehaviourActionType.CHANGE_FIGHT_OPTIONS, options.storedValue());
+            openBehaviourHome(player, definition, holder);
+        });
+    }
+
+    private void requestRouteFightOptionsAction(Player player, RoutePointActionPickerHolder holder) {
+        chatInputService.request(player,
+                "Enter enabled targets separated by commas (mobs, animals, players, npcs), or 'none':", value -> {
+            FightOptions options = FightOptions.fromStored(value.equalsIgnoreCase("none") ? "" : value);
+            RoutePoint updated = setRoutePointAction(holder, BehaviourActionType.CHANGE_FIGHT_OPTIONS,
+                    options.storedValue());
+            if (updated != null) openWaypointActions(player, holder.routeKey(), updated);
         });
     }
 
@@ -2178,6 +2202,8 @@ public final class GuiService implements Listener {
                 Material.RABBIT_FOOT;
             case FIGHT_BACK ->
                 Material.SHIELD;
+            case HUNTING ->
+                Material.IRON_SWORD;
         };
     }
 
@@ -2239,6 +2265,8 @@ public final class GuiService implements Listener {
                 Material.COMMAND_BLOCK;
             case START_COMBAT ->
                 Material.DIAMOND_SWORD;
+            case CHANGE_FIGHT_OPTIONS ->
+                Material.TARGET;
             case START_NAVIGATION ->
                 Material.COMPASS;
             case STOP_NAVIGATION ->
@@ -2297,6 +2325,9 @@ public final class GuiService implements Listener {
         if (action.type() == BehaviourActionType.WAIT) {
             return action.value() + " seconds";
         }
+        if (action.type() == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
+            return FightOptions.fromStored(action.value()).displayName();
+        }
         return action.value();
     }
 
@@ -2308,6 +2339,8 @@ public final class GuiService implements Listener {
                 ChatColor.GRAY + "Runs away after taking entity damage";
             case FIGHT_BACK ->
                 ChatColor.GRAY + "Attacks an entity that damages it";
+            case HUNTING ->
+                ChatColor.GRAY + "Actively hunts enabled attack targets";
         };
     }
 

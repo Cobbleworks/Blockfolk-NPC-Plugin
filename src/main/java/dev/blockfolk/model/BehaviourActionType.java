@@ -8,6 +8,7 @@ public enum BehaviourActionType {
     SET_ROUTE("Set Route", true),
     RUN_CONSOLE_COMMAND("Run Console Command", true),
     START_COMBAT("Start Combat", false),
+    CHANGE_FIGHT_OPTIONS("Change Fight Options", true),
     START_NAVIGATION("Start Navigation", false),
     STOP_NAVIGATION("Stop Navigation", false),
     SET_WALK_SPEED("Set Walk Speed", true),

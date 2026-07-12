@@ -32,6 +32,8 @@ class BehaviourTest {
         assertEquals(BehaviourActionType.SHOW_INVENTORY, BehaviourActionType.fromStored("show-inventory"));
         assertEquals(BehaviourActionType.DROP_INVENTORY, BehaviourActionType.fromStored("drop-inventory"));
         assertEquals(BehaviourActionType.HARVEST, BehaviourActionType.fromStored("harvest"));
+        assertEquals(BehaviourActionType.CHANGE_FIGHT_OPTIONS,
+                BehaviourActionType.fromStored("change-fight-options"));
         assertEquals(BehaviourEvent.HEAL, BehaviourEvent.fromStored("heal"));
     }
 
