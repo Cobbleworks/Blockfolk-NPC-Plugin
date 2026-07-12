@@ -112,6 +112,15 @@ public final class NpcDefinitionRepository {
             }).toList();
             configuration.set("behaviours." + event.name().toLowerCase(Locale.ROOT), actions.isEmpty() ? null : actions);
         }
+        for (String eventName : definition.getCustomEventNames()) {
+            List<Map<String, Object>> actions = definition.getCustomEventActions(eventName).stream().map(action -> {
+                Map<String, Object> stored = new LinkedHashMap<String, Object>();
+                stored.put("type", action.type().name().toLowerCase(Locale.ROOT));
+                if (action.value() != null) stored.put("value", action.value());
+                return stored;
+            }).toList();
+            configuration.set("custom-event-behaviours." + encodeEventName(eventName), actions);
+        }
         try {
             configuration.save(file);
         } catch (IOException exception) {
@@ -193,6 +202,31 @@ public final class NpcDefinitionRepository {
             }
             definition.setBehaviourActions(event, actions);
         }
+        ConfigurationSection custom = configuration.getConfigurationSection("custom-event-behaviours");
+        if (custom != null) {
+            for (String encodedName : custom.getKeys(false)) {
+                String eventName;
+                try {
+                    eventName = decodeEventName(encodedName);
+                } catch (IllegalArgumentException exception) {
+                    plugin.getLogger().warning("Ignoring malformed custom event name in " + file.getName());
+                    continue;
+                }
+                List<BehaviourAction> actions = new ArrayList<>();
+                for (Map<?, ?> entry : custom.getMapList(encodedName)) {
+                    Object type = entry.get("type");
+                    if (type == null) continue;
+                    try {
+                        Object value = entry.get("value");
+                        actions.add(new BehaviourAction(BehaviourActionType.fromStored(type.toString()),
+                                value == null ? null : value.toString()));
+                    } catch (IllegalArgumentException ignored) {
+                        plugin.getLogger().warning("Ignoring unknown custom-event action '" + type + "' in " + file.getName());
+                    }
+                }
+                definition.setCustomEventActions(eventName, actions);
+            }
+        }
         // One-time compatibility migration. New saves contain only behaviours for these features.
         String legacyShoutout = configuration.getString("combat.shoutout");
         if (legacyShoutout != null && definition.getBehaviourActions(BehaviourEvent.COMBAT_ENTERED).isEmpty()) {
@@ -205,6 +239,15 @@ public final class NpcDefinitionRepository {
                     new BehaviourAction(BehaviourActionType.SET_ROUTE, legacyRoute));
         }
         return definition;
+    }
+
+    private static String encodeEventName(String value) {
+        return java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private static String decodeEventName(String value) {
+        return new String(java.util.Base64.getUrlDecoder().decode(value), java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private ItemStack[] readItemArray(YamlConfiguration configuration, String path, int size) {

@@ -37,4 +37,18 @@ class NpcDefinitionTest {
         assertNull(definition.getSkinTextureValue());
         assertNull(definition.getSkinTextureSignature());
     }
+
+    @Test
+    void storesCustomEventActionsSeparatelyFromBuiltInEvents() {
+        NpcDefinition definition = NpcDefinition.create("Guard");
+        BehaviourAction action = new BehaviourAction(BehaviourActionType.WAVE, null);
+
+        definition.setCustomEventActions("jungle/idolWasStolen", List.of(action));
+        List<BehaviourAction> copy = definition.getCustomEventActions("jungle/idolWasStolen");
+        copy.clear();
+
+        assertEquals(List.of(action), definition.getCustomEventActions("jungle/idolWasStolen"));
+        assertEquals(1, definition.customEventActionCount());
+        assertEquals(List.of(), definition.getBehaviourActions(BehaviourEvent.SPAWN));
+    }
 }

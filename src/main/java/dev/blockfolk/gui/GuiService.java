@@ -51,6 +51,7 @@ import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
+import dev.blockfolk.model.CustomEvent;
 import dev.blockfolk.model.LootTier;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
@@ -58,6 +59,7 @@ import dev.blockfolk.model.NpcRoute;
 import dev.blockfolk.model.RoutePoint;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
+import dev.blockfolk.repository.CustomEventRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
@@ -97,6 +99,8 @@ public final class GuiService implements Listener {
     private final DialogService dialogService;
     private final SkinResolver skinResolver;
     private final Consumer<Player> routeGuiOpener;
+    private final CustomEventRepository customEventRepository;
+    private final Consumer<Player> customEventGuiOpener;
     private final NamespacedKey waypointActionKey;
     private final NamespacedKey waypointTokenKey;
     private NpcBehaviourService behaviourService;
@@ -113,7 +117,9 @@ public final class GuiService implements Listener {
             ChatInputService chatInputService,
             DialogService dialogService,
             SkinResolver skinResolver,
-            Consumer<Player> routeGuiOpener
+            Consumer<Player> routeGuiOpener,
+            CustomEventRepository customEventRepository,
+            Consumer<Player> customEventGuiOpener
     ) {
         this.plugin = plugin;
         this.definitionRepository = definitionRepository;
@@ -123,6 +129,8 @@ public final class GuiService implements Listener {
         this.dialogService = dialogService;
         this.skinResolver = skinResolver;
         this.routeGuiOpener = routeGuiOpener;
+        this.customEventRepository = customEventRepository;
+        this.customEventGuiOpener = customEventGuiOpener;
         this.waypointActionKey = new NamespacedKey(plugin, "behaviour-waypoint-action");
         this.waypointTokenKey = new NamespacedKey(plugin, "behaviour-waypoint-token");
     }
@@ -270,6 +278,10 @@ public final class GuiService implements Listener {
                 ChatColor.GRAY + "Create and edit NPC walking routes",
                 ChatColor.YELLOW + "Click to open route setup"
         )));
+        inventory.setItem(46, item(Material.BELL, "Custom Events", List.of(
+                ChatColor.GRAY + "Define events NPCs can emit and react to",
+                ChatColor.YELLOW + "Click to manage custom events"
+        )));
         if (page > 0) {
             inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of(ChatColor.GRAY + "Page " + page + " of " + pages)));
         }
@@ -330,6 +342,11 @@ public final class GuiService implements Listener {
         inventory.setItem(20, item(Material.COMPARATOR, "Event Behaviour", List.of(
                 ChatColor.GRAY + "" + behaviourCount + " configured action(s)",
                 ChatColor.GRAY + "Build event-to-action sequences",
+                ChatColor.YELLOW + "Click to configure"
+        )));
+        inventory.setItem(19, item(Material.BELL, "Custom Event Behaviour", List.of(
+                ChatColor.GRAY + "" + definition.customEventActionCount() + " configured action(s)",
+                ChatColor.GRAY + "React to globally emitted custom events",
                 ChatColor.YELLOW + "Click to configure"
         )));
         BehaviourAction spawnRoute = definition.getBehaviourActions(BehaviourEvent.SPAWN).stream()
@@ -511,8 +528,46 @@ public final class GuiService implements Listener {
         player.openInventory(inventory);
     }
 
+    public void openCustomBehaviours(Player player, NpcDefinition definition, int requestedPage) {
+        List<CustomEvent> events = new ArrayList<>(customEventRepository.findAll());
+        int pages = Math.max(1, (events.size() + 4) / 5);
+        int page = Math.max(0, Math.min(requestedPage, pages - 1));
+        Inventory inventory = Bukkit.createInventory(new CustomBehaviourHolder(definition.getKey(), page), 54,
+                Component.text("Custom Behaviour: " + definition.getDisplayName()));
+        for (int row = 0; row < 5; row++) {
+            int eventIndex = page * 5 + row;
+            if (eventIndex >= events.size()) break;
+            CustomEvent customEvent = events.get(eventIndex);
+            inventory.setItem(row * 9, item(customEventIcon(customEvent), customEvent.getName(), List.of(
+                    ChatColor.GRAY + (customEvent.getDescription().isBlank() ? "No description" : customEvent.getDescription()),
+                    ChatColor.GRAY + "Actions run from left to right")));
+            inventory.setItem(row * 9 + 1, item(Material.BLUE_STAINED_GLASS_PANE, "Add Action", List.of(
+                    ChatColor.YELLOW + "Click to append")));
+            List<BehaviourAction> actions = definition.getCustomEventActions(customEvent.getName());
+            for (int column = 0; column < Math.min(7, actions.size()); column++) {
+                BehaviourAction action = actions.get(column);
+                inventory.setItem(row * 9 + column + 2,
+                        item(actionMaterial(action.type()), (column + 1) + ". " + action.type().displayName(), List.of(
+                                ChatColor.GRAY + actionValueDisplay(action),
+                                ChatColor.YELLOW + "Left-click to replace",
+                                ChatColor.RED + "Right-click to remove")));
+            }
+        }
+        if (events.isEmpty()) inventory.setItem(22, item(Material.GRAY_DYE, "No Custom Events", List.of(
+                ChatColor.GRAY + "Create one from the Custom Events main menu")));
+        if (page > 0) inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        if (page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        player.openInventory(inventory);
+    }
+
     private void openActionPicker(Player player, NpcDefinition definition, BehaviourEvent event, int actionIndex, int page) {
-        Inventory inventory = Bukkit.createInventory(new ActionPickerHolder(definition.getKey(), event, actionIndex, page), 36,
+        openActionPicker(player, definition, event, null, actionIndex, page);
+    }
+
+    private void openActionPicker(Player player, NpcDefinition definition, BehaviourEvent event, String customEvent,
+            int actionIndex, int page) {
+        Inventory inventory = Bukkit.createInventory(new ActionPickerHolder(definition.getKey(), event, customEvent, actionIndex, page), 36,
                 Component.text("Choose Action"));
         for (int index = 0; index < PRIMARY_ACTIONS.size(); index++) {
             BehaviourActionType type = PRIMARY_ACTIONS.get(index);
@@ -528,7 +583,7 @@ public final class GuiService implements Listener {
 
     private void openAnimationPicker(Player player, ActionPickerHolder action) {
         Inventory inventory = Bukkit.createInventory(new AnimationPickerHolder(
-                action.key(), action.event(), action.actionIndex(), action.page()), 27,
+                action.key(), action.event(), action.customEvent(), action.actionIndex(), action.page()), 27,
                 Component.text("Choose Animation"));
         int[] slots = {10, 11, 12, 13, 14, 15, 16};
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
@@ -552,7 +607,7 @@ public final class GuiService implements Listener {
         int pages = Math.max(1, (options.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int valuePage = Math.max(0, Math.min(requestedValuePage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new BehaviourValuePickerHolder(
-                action.key(), action.event(), action.actionIndex(), action.page(), pickerType, valuePage), 54,
+                action.key(), action.event(), action.customEvent(), action.actionIndex(), action.page(), pickerType, valuePage), 54,
                 Component.text(pickerType.title()));
         int from = valuePage * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, options.size());
@@ -592,6 +647,11 @@ public final class GuiService implements Listener {
                 speed.displayName(), new ItemStack(Material.FEATHER), List.of(
                 ChatColor.GRAY + "" + speed.blocksPerSecond() + " blocks/second"
                 )))
+                .toList();
+            case CUSTOM_EVENT ->
+                customEventRepository.findAll().stream()
+                .map(event -> new BehaviourPickerOption(event.getName(), event.getName(), customEventIcon(event), List.of(
+                        ChatColor.GRAY + (event.getDescription().isBlank() ? "No description" : event.getDescription()))))
                 .toList();
         };
     }
@@ -696,6 +756,8 @@ public final class GuiService implements Listener {
             handleRouteAssignmentClick(event, player, routeHolder);
         } else if (holder instanceof BehaviourHolder behaviourHolder) {
             handleBehaviourClick(event, player, behaviourHolder);
+        } else if (holder instanceof CustomBehaviourHolder customBehaviourHolder) {
+            handleCustomBehaviourClick(event, player, customBehaviourHolder);
         } else if (holder instanceof ActionPickerHolder pickerHolder) {
             handleActionPickerClick(event, player, pickerHolder);
         } else if (holder instanceof AnimationPickerHolder animationHolder) {
@@ -773,6 +835,10 @@ public final class GuiService implements Listener {
         }
         if (event.getRawSlot() == 45) {
             routeGuiOpener.accept(player);
+            return;
+        }
+        if (event.getRawSlot() == 46) {
+            customEventGuiOpener.accept(player);
             return;
         }
         if (event.getRawSlot() == 47) {
@@ -859,6 +925,8 @@ public final class GuiService implements Listener {
                 openInstances(player, definition, 0);
             case 20 ->
                 openBehaviours(player, definition, 0);
+            case 19 ->
+                openCustomBehaviours(player, definition, 0);
             case 21 -> {
                 List<BehaviourAction> spawnActions = definition.getBehaviourActions(BehaviourEvent.SPAWN);
                 int routeIndex = -1;
@@ -873,7 +941,7 @@ public final class GuiService implements Listener {
                     return;
                 }
                 ActionPickerHolder action = new ActionPickerHolder(
-                        definition.getKey(), BehaviourEvent.SPAWN,
+                        definition.getKey(), BehaviourEvent.SPAWN, null,
                         routeIndex < 0 ? spawnActions.size() : routeIndex, 0
                 );
                 openBehaviourValuePicker(player, definition, action, BehaviourValuePickerType.ROUTE, 0);
@@ -1141,6 +1209,35 @@ public final class GuiService implements Listener {
         }
     }
 
+    private void handleCustomBehaviourClick(InventoryClickEvent event, Player player, CustomBehaviourHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
+        if (definition == null) { player.closeInventory(); return; }
+        int slot = event.getRawSlot();
+        if (slot == 45) { openCustomBehaviours(player, definition, holder.page() - 1); return; }
+        if (slot == 49) { openEditor(player, definition); return; }
+        if (slot == 53) { openCustomBehaviours(player, definition, holder.page() + 1); return; }
+        int row = slot / 9;
+        List<CustomEvent> customEvents = new ArrayList<>(customEventRepository.findAll());
+        int eventIndex = holder.page() * 5 + row;
+        if (row >= 5 || eventIndex < 0 || eventIndex >= customEvents.size()) return;
+        String eventName = customEvents.get(eventIndex).getName();
+        List<BehaviourAction> actions = definition.getCustomEventActions(eventName);
+        int column = slot % 9 - 2;
+        if (slot % 9 == 1) {
+            openActionPicker(player, definition, null, eventName, actions.size(), holder.page());
+        } else if (column < 0 || column >= 7) {
+            return;
+        } else if (column < actions.size() && event.isRightClick()) {
+            definition.removeCustomEventAction(eventName, column);
+            definitionRepository.save(definition);
+            openCustomBehaviours(player, definition, holder.page());
+        } else if (column <= actions.size()) {
+            openActionPicker(player, definition, null, eventName, column, holder.page());
+        }
+    }
+
     private void handleRoutePointActionsClick(InventoryClickEvent event, Player player, RoutePointActionsHolder holder) {
         event.setCancelled(true);
         if (!isTopInventoryClick(event)) {
@@ -1204,6 +1301,8 @@ public final class GuiService implements Listener {
             openRoutePointValuePicker(player, action, BehaviourValuePickerType.ROUTE, 0);
         } else if (type == BehaviourActionType.SET_WALK_SPEED) {
             openRoutePointValuePicker(player, action, BehaviourValuePickerType.WALK_SPEED, 0);
+        } else if (type == BehaviourActionType.EMIT_EVENT) {
+            openRoutePointValuePicker(player, action, BehaviourValuePickerType.CUSTOM_EVENT, 0);
         } else if (type == BehaviourActionType.MOVE_TO || type == BehaviourActionType.TELEPORT_TO) {
             beginRouteWaypointSelection(player, action, type);
         } else if (type == BehaviourActionType.WAIT) {
@@ -1365,7 +1464,7 @@ public final class GuiService implements Listener {
             return;
         }
         if (event.getRawSlot() == 35) {
-            openBehaviours(player, definition, holder.page());
+            openBehaviourHome(player, definition, holder);
             return;
         }
         if (event.getRawSlot() == 31) {
@@ -1381,13 +1480,15 @@ public final class GuiService implements Listener {
             openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.ROUTE, 0);
         } else if (type == BehaviourActionType.SET_WALK_SPEED) {
             openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.WALK_SPEED, 0);
+        } else if (type == BehaviourActionType.EMIT_EVENT) {
+            openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.CUSTOM_EVENT, 0);
         } else if (type == BehaviourActionType.MOVE_TO || type == BehaviourActionType.TELEPORT_TO) {
             beginWaypointSelection(player, holder, type);
         } else if (type == BehaviourActionType.WAIT) {
             requestWaitAction(player, definition, holder);
         } else if (!type.requiresValue()) {
             setAction(definition, holder, type, null);
-            openBehaviours(player, definition, holder.page());
+            openBehaviourHome(player, definition, holder);
         } else {
             String prompt = switch (type) {
                 case SEND_DIALOG ->
@@ -1401,7 +1502,7 @@ public final class GuiService implements Listener {
             };
             chatInputService.request(player, prompt, value -> {
                 setAction(definition, holder, type, value);
-                openBehaviours(player, definition, holder.page());
+                openBehaviourHome(player, definition, holder);
             });
         }
     }
@@ -1421,7 +1522,7 @@ public final class GuiService implements Listener {
                 return;
             }
             setAction(definition, holder, BehaviourActionType.WAIT, normalized);
-            openBehaviours(player, definition, holder.page());
+            openBehaviourHome(player, definition, holder);
         });
     }
 
@@ -1494,7 +1595,7 @@ public final class GuiService implements Listener {
         }
         setAction(definition, session.action(), session.type(), location.serialize());
         player.sendMessage(Component.text(session.type().displayName() + " set to " + location.display() + "."));
-        openBehaviours(player, definition, session.action().page());
+        openBehaviourHome(player, definition, session.action());
     }
 
     @EventHandler
@@ -1525,7 +1626,8 @@ public final class GuiService implements Listener {
         player.sendMessage(Component.text("Waypoint selection cancelled."));
         if (definition != null) {
             Bukkit.getScheduler().runTask(plugin, () -> openActionPicker(player, definition,
-                    session.action().event(), session.action().actionIndex(), session.action().page()));
+                    session.action().event(), session.action().customEvent(),
+                    session.action().actionIndex(), session.action().page()));
         }
     }
 
@@ -1648,9 +1750,9 @@ public final class GuiService implements Listener {
             return;
         }
         ActionPickerHolder action = new ActionPickerHolder(
-                holder.key(), holder.event(), holder.actionIndex(), holder.page());
+                holder.key(), holder.event(), holder.customEvent(), holder.actionIndex(), holder.page());
         if (event.getRawSlot() == 22) {
-            openActionPicker(player, definition, holder.event(), holder.actionIndex(), holder.page());
+            openActionPicker(player, definition, holder.event(), holder.customEvent(), holder.actionIndex(), holder.page());
             return;
         }
         int animationIndex = event.getRawSlot() - 10;
@@ -1658,7 +1760,7 @@ public final class GuiService implements Listener {
             return;
         }
         setAction(definition, action, ANIMATION_ACTIONS.get(animationIndex), null);
-        openBehaviours(player, definition, holder.page());
+        openBehaviourHome(player, definition, action);
     }
 
     private void handleBehaviourValuePickerClick(
@@ -1675,14 +1777,14 @@ public final class GuiService implements Listener {
             player.closeInventory();
             return;
         }
-        ActionPickerHolder action = new ActionPickerHolder(holder.key(), holder.event(), holder.actionIndex(), holder.behaviourPage());
+        ActionPickerHolder action = new ActionPickerHolder(holder.key(), holder.event(), holder.customEvent(), holder.actionIndex(), holder.behaviourPage());
         int slot = event.getRawSlot();
         if (slot == 45) {
             openBehaviourValuePicker(player, definition, action, holder.pickerType(), holder.valuePage() - 1);
             return;
         }
         if (slot == 49) {
-            openActionPicker(player, definition, holder.event(), holder.actionIndex(), holder.behaviourPage());
+            openActionPicker(player, definition, holder.event(), holder.customEvent(), holder.actionIndex(), holder.behaviourPage());
             return;
         }
         if (slot == 53) {
@@ -1697,19 +1799,27 @@ public final class GuiService implements Listener {
         BehaviourPickerOption option = options.get(index);
         setAction(definition, action, holder.pickerType().actionType(), option.value());
         player.sendMessage(Component.text("Selected '" + option.label() + "'."));
-        openBehaviours(player, definition, holder.behaviourPage());
+        openBehaviourHome(player, definition, action);
     }
 
     private void setAction(NpcDefinition definition, ActionPickerHolder holder, BehaviourActionType type, String value) {
-        List<BehaviourAction> actions = definition.getBehaviourActions(holder.event());
+        List<BehaviourAction> actions = holder.customEvent() == null
+                ? definition.getBehaviourActions(holder.event())
+                : definition.getCustomEventActions(holder.customEvent());
         BehaviourAction action = new BehaviourAction(type, value);
         if (holder.actionIndex() < actions.size()) {
             actions.set(holder.actionIndex(), action);
         } else if (actions.size() < 7) {
             actions.add(action);
         }
-        definition.setBehaviourActions(holder.event(), actions);
+        if (holder.customEvent() == null) definition.setBehaviourActions(holder.event(), actions);
+        else definition.setCustomEventActions(holder.customEvent(), actions);
         definitionRepository.save(definition);
+    }
+
+    private void openBehaviourHome(Player player, NpcDefinition definition, ActionPickerHolder holder) {
+        if (holder.customEvent() == null) openBehaviours(player, definition, holder.page());
+        else openCustomBehaviours(player, definition, holder.page());
     }
 
     private void handleConfirmationClick(InventoryClickEvent event, Player player, ConfirmationHolder holder) {
@@ -1857,6 +1967,7 @@ public final class GuiService implements Listener {
                 || holder instanceof InstancesHolder
                 || holder instanceof RouteAssignmentHolder
                 || holder instanceof BehaviourHolder
+                || holder instanceof CustomBehaviourHolder
                 || holder instanceof ActionPickerHolder
                 || holder instanceof AnimationPickerHolder
                 || holder instanceof BehaviourValuePickerHolder
@@ -1898,6 +2009,11 @@ public final class GuiService implements Listener {
         }
         icon.setAmount(1);
         return icon;
+    }
+
+    private ItemStack customEventIcon(CustomEvent event) {
+        ItemStack icon = event.getIcon();
+        return icon == null || icon.getType().isAir() ? new ItemStack(Material.BELL) : icon;
     }
 
     private ItemStack item(ItemStack template, String name, List<String> lore) {
@@ -2049,6 +2165,8 @@ public final class GuiService implements Listener {
                 Material.ENDER_PEARL;
             case WAIT ->
                 Material.CLOCK;
+            case EMIT_EVENT ->
+                Material.SCULK_SENSOR;
             case SLEEP ->
                 Material.RED_BED;
             case SWIM ->
@@ -2167,7 +2285,11 @@ public final class GuiService implements Listener {
         }
     }
 
-    private record ActionPickerHolder(String key, BehaviourEvent event, int actionIndex, int page)
+    private record CustomBehaviourHolder(String key, int page) implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record ActionPickerHolder(String key, BehaviourEvent event, String customEvent, int actionIndex, int page)
             implements InventoryHolder {
 
         @Override
@@ -2232,7 +2354,7 @@ public final class GuiService implements Listener {
 
     }
 
-    private record AnimationPickerHolder(String key, BehaviourEvent event, int actionIndex, int page)
+    private record AnimationPickerHolder(String key, BehaviourEvent event, String customEvent, int actionIndex, int page)
             implements InventoryHolder {
 
         @Override
@@ -2244,6 +2366,7 @@ public final class GuiService implements Listener {
     private record BehaviourValuePickerHolder(
             String key,
             BehaviourEvent event,
+            String customEvent,
             int actionIndex,
             int behaviourPage,
             BehaviourValuePickerType pickerType,
@@ -2267,7 +2390,8 @@ public final class GuiService implements Listener {
 
     private enum BehaviourValuePickerType {
         ROUTE(BehaviourActionType.SET_ROUTE, "Select Route", "Create a route from the main preset menu first"),
-        WALK_SPEED(BehaviourActionType.SET_WALK_SPEED, "Select Walk Speed", "No walking speeds are available");
+        WALK_SPEED(BehaviourActionType.SET_WALK_SPEED, "Select Walk Speed", "No walking speeds are available"),
+        CUSTOM_EVENT(BehaviourActionType.EMIT_EVENT, "Select Custom Event", "Create a custom event first");
 
         private final BehaviourActionType actionType;
         private final String title;

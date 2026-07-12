@@ -14,6 +14,7 @@ public enum BehaviourActionType {
     MOVE_TO("Move To", true),
     TELEPORT_TO("Teleport To", true),
     WAIT("Wait", true),
+    EMIT_EVENT("Emit Custom Event", true),
     SLEEP("Sleeping", false),
     SWIM("Swimming", false),
     FALL_FLY("Fall Flying", false),

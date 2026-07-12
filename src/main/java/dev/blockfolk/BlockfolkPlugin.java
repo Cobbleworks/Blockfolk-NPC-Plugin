@@ -10,11 +10,13 @@ import org.bukkit.plugin.java.JavaPlugin;
 import dev.blockfolk.command.BlockfolkCommand;
 import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.gui.GuiService;
+import dev.blockfolk.gui.CustomEventGuiService;
 import dev.blockfolk.gui.RouteGuiService;
 import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.repository.NpcDefinitionRepository;
+import dev.blockfolk.repository.CustomEventRepository;
 import dev.blockfolk.repository.NpcInstanceRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.runtime.NativeNpcNavigationService;
@@ -33,6 +35,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private NpcDefinitionRepository definitionRepository;
     private NpcInstanceRepository instanceRepository;
     private RouteRepository routeRepository;
+    private CustomEventRepository customEventRepository;
     private NpcInstanceRegistry instanceRegistry;
     private NpcRenderer npcRenderer;
     private NativeNpcNavigationService navigationService;
@@ -40,6 +43,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private ChatInputService chatInputService;
     private GuiService guiService;
     private RouteGuiService routeGuiService;
+    private CustomEventGuiService customEventGuiService;
     private RouteMovementService routeMovementService;
     private NpcCombatService combatService;
     private NpcBehaviourService behaviourService;
@@ -52,6 +56,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         definitionRepository = new NpcDefinitionRepository(this);
         instanceRepository = new NpcInstanceRepository(this);
         routeRepository = new RouteRepository(this);
+        customEventRepository = new CustomEventRepository(this);
         npcRenderer = new PaperMannequinNpcRenderer(this);
         navigationService = new NativeNpcNavigationService(this);
         dialogService = new DialogService(this);
@@ -75,6 +80,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 chatInputService,
                 this::openMainGui
         );
+        customEventGuiService = new CustomEventGuiService(
+                customEventRepository, definitionRepository, chatInputService, this::openMainGui);
         guiService = new GuiService(
                 this,
                 definitionRepository,
@@ -83,7 +90,9 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 chatInputService,
                 dialogService,
                 skinResolver,
-                routeGuiService::openRoutes
+                routeGuiService::openRoutes,
+                customEventRepository,
+                customEventGuiService::open
         );
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
@@ -111,6 +120,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         );
 
         routeRepository.loadAll();
+        customEventRepository.loadAll();
         definitionRepository.loadAll();
         instanceRegistry.loadPersistedInstances();
 
@@ -127,6 +137,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(guiService, this);
         getServer().getPluginManager().registerEvents(routeGuiService, this);
+        getServer().getPluginManager().registerEvents(customEventGuiService, this);
         getServer().getPluginManager().registerEvents(chatInputService, this);
         getServer().getPluginManager().registerEvents(combatService, this);
         getServer().getPluginManager().registerEvents(behaviourService, this);

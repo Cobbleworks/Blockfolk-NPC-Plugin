@@ -26,6 +26,7 @@ public final class NpcDefinition {
     private CombatProfile combatProfile;
     private MovementProfile movementProfile;
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
+    private Map<String, List<BehaviourAction>> customEventBehaviours;
 
     public NpcDefinition(String key) {
         this.key = key;
@@ -36,6 +37,7 @@ public final class NpcDefinition {
         this.combatProfile = CombatProfile.disabled();
         this.movementProfile = MovementProfile.disabled();
         this.behaviours = new EnumMap<>(BehaviourEvent.class);
+        this.customEventBehaviours = new java.util.LinkedHashMap<>();
     }
 
     public static NpcDefinition create(String displayName) {
@@ -178,6 +180,26 @@ public final class NpcDefinition {
             behaviours.remove(event);
         }
     }
+
+    public List<BehaviourAction> getCustomEventActions(String eventName) {
+        return new ArrayList<>(customEventBehaviours.getOrDefault(eventName, List.of()));
+    }
+
+    public void setCustomEventActions(String eventName, List<BehaviourAction> actions) {
+        if (actions == null || actions.isEmpty()) customEventBehaviours.remove(eventName);
+        else customEventBehaviours.put(eventName, new ArrayList<>(actions));
+    }
+
+    public void removeCustomEventAction(String eventName, int index) {
+        List<BehaviourAction> actions = customEventBehaviours.get(eventName);
+        if (actions == null || index < 0 || index >= actions.size()) return;
+        actions.remove(index);
+        if (actions.isEmpty()) customEventBehaviours.remove(eventName);
+    }
+
+    public void removeCustomEvent(String eventName) { customEventBehaviours.remove(eventName); }
+    public int customEventActionCount() { return customEventBehaviours.values().stream().mapToInt(List::size).sum(); }
+    public List<String> getCustomEventNames() { return new ArrayList<>(customEventBehaviours.keySet()); }
 
     private static ItemStack[] cloneArray(ItemStack[] source, int length) {
         ItemStack[] copy = new ItemStack[length];

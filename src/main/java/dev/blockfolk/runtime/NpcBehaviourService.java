@@ -65,6 +65,8 @@ public final class NpcBehaviourService implements Listener {
     private BukkitTask behaviourTask;
     private long currentTick;
     private int proximityTick;
+    private long customEmissionTick = -1L;
+    private int customEmissionsThisTick;
 
     public NpcBehaviourService(
             Plugin plugin,
@@ -116,6 +118,24 @@ public final class NpcBehaviourService implements Listener {
             return;
         }
         executeSequence(null, List.copyOf(actions), 0, instance, definition, null);
+    }
+
+    public void emitCustomEvent(String eventName, Entity actor) {
+        if (eventName == null || eventName.isBlank()) return;
+        if (customEmissionTick != currentTick) {
+            customEmissionTick = currentTick;
+            customEmissionsThisTick = 0;
+        }
+        if (++customEmissionsThisTick > 64) {
+            plugin.getLogger().warning("Stopped a custom NPC event chain after 64 emissions in one tick.");
+            return;
+        }
+        for (NpcInstance target : List.copyOf(instances.findAll())) {
+            NpcDefinition definition = definitions.find(target.getDefinitionKey()).orElse(null);
+            if (definition == null) continue;
+            List<BehaviourAction> actions = definition.getCustomEventActions(eventName);
+            if (!actions.isEmpty()) executeSequence(null, actions, 0, target, definition, actor);
+        }
     }
 
     public void forget(NpcInstance instance) {
@@ -324,6 +344,8 @@ public final class NpcBehaviourService implements Listener {
                     }
                 }
             }
+            case EMIT_EVENT -> emitCustomEvent(action.value(), actor != null
+                    ? actor : instances.findEntity(instance).orElse(null));
             case SLEEP -> instances.pose(instance, Pose.SLEEPING);
             case SWIM -> instances.pose(instance, Pose.SWIMMING);
             case FALL_FLY -> instances.pose(instance, Pose.FALL_FLYING);
