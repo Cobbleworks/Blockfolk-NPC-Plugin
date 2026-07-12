@@ -35,6 +35,8 @@ class BehaviourTest {
         assertEquals(BehaviourActionType.CHANGE_FIGHT_OPTIONS,
                 BehaviourActionType.fromStored("change-fight-options"));
         assertEquals(BehaviourEvent.HEAL, BehaviourEvent.fromStored("heal"));
+        assertEquals(BehaviourEvent.DROP_ITEM, BehaviourEvent.fromStored("drop-item"));
+        assertEquals(BehaviourEvent.RECEIVE_ITEM, BehaviourEvent.fromStored("receive-item"));
     }
 
     @Test

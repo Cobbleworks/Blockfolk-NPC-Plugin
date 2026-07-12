@@ -13,6 +13,8 @@ public enum BehaviourEvent {
     DAMAGE_TAKEN("On Damage Taken"),
     LOW_HEALTH("On Low Health — 25% HP"),
     HEAL("On Heal — 2+ Hearts"),
+    DROP_ITEM("On Drop Item"),
+    RECEIVE_ITEM("On Receive Item"),
     DAWN("At Dawn"),
     MORNING("In the Morning"),
     COMBAT_ENTERED("On Combat Entered"),

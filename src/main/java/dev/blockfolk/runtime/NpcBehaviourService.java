@@ -133,6 +133,37 @@ public final class NpcBehaviourService implements Listener {
         executeSequence(event, definition.getBehaviourActions(event), 0, instance, definition, actor, completion);
     }
 
+    /** Updates an instance inventory and emits events for items entering or leaving it. */
+    public void updateTemporaryInventory(NpcInstance instance, ItemStack[] contents, Entity actor) {
+        ItemStack[] before = instance.getTemporaryInventoryContents();
+        ItemStack[] after = contents == null ? new ItemStack[0] : contents;
+        boolean dropped = hasUnmatchedItems(before, after);
+        boolean received = hasUnmatchedItems(after, before);
+        instance.setTemporaryInventoryContents(after);
+        if (dropped) trigger(BehaviourEvent.DROP_ITEM, instance, actor);
+        if (received) trigger(BehaviourEvent.RECEIVE_ITEM, instance, actor);
+    }
+
+    private boolean hasUnmatchedItems(ItemStack[] source, ItemStack[] destination) {
+        java.util.List<ItemStack> remaining = new java.util.ArrayList<>();
+        for (ItemStack item : destination) {
+            if (item != null && !item.getType().isAir()) remaining.add(item.clone());
+        }
+        for (ItemStack item : source) {
+            if (item == null || item.getType().isAir()) continue;
+            int amount = item.getAmount();
+            for (ItemStack candidate : remaining) {
+                if (amount == 0) break;
+                if (!item.isSimilar(candidate) || candidate.getAmount() == 0) continue;
+                int matched = Math.min(amount, candidate.getAmount());
+                amount -= matched;
+                candidate.setAmount(candidate.getAmount() - matched);
+            }
+            if (amount > 0) return true;
+        }
+        return false;
+    }
+
     public void triggerWaypointActions(List<BehaviourAction> actions, NpcInstance instance) {
         NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
         if (definition == null || actions == null || actions.isEmpty()) {
@@ -615,7 +646,7 @@ public final class NpcBehaviourService implements Listener {
             if (moved <= 0) return;
             if (moved == item.getAmount()) source.setItem(slot, null);
             else item.setAmount(item.getAmount() - moved);
-            instance.setTemporaryInventoryContents(carried.getContents());
+            updateTemporaryInventory(instance, carried.getContents(), actor);
             return;
         }
     }
@@ -693,7 +724,7 @@ public final class NpcBehaviourService implements Listener {
         for (ItemStack item : carried.getContents()) {
             if (item != null && !item.getType().isAir()) center.getWorld().dropItemNaturally(center, item);
         }
-        instance.setTemporaryInventoryContents(new ItemStack[27]);
+        updateTemporaryInventory(instance, new ItemStack[27], null);
     }
 
     private void harvestNearbyCrops(NpcInstance instance) {
@@ -738,7 +769,7 @@ public final class NpcBehaviourService implements Listener {
                 }
             }
         }
-        instance.setTemporaryInventoryContents(carried.getContents());
+        updateTemporaryInventory(instance, carried.getContents(), null);
         if (worked && entity != null) entity.swingMainHand();
     }
 

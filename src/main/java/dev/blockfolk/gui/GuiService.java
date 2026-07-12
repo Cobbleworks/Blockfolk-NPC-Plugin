@@ -876,7 +876,14 @@ public final class GuiService implements Listener {
     public void onClose(InventoryCloseEvent event) {
         if (event.getInventory().getHolder() instanceof NpcInventoryHolder holder) {
             instanceRegistry.findById(holder.instanceId())
-                    .ifPresent(instance -> instance.setTemporaryInventoryContents(event.getInventory().getContents()));
+                    .ifPresent(instance -> {
+                        if (behaviourService != null) {
+                            behaviourService.updateTemporaryInventory(instance,
+                                    event.getInventory().getContents(), event.getPlayer());
+                        } else {
+                            instance.setTemporaryInventoryContents(event.getInventory().getContents());
+                        }
+                    });
             return;
         }
         if (!(event.getInventory().getHolder() instanceof EquipmentHolder holder)) {
@@ -938,6 +945,7 @@ public final class GuiService implements Listener {
             }
             definition.setSpawnpoint(player.getLocation());
             definitionRepository.save(definition);
+            instanceRegistry.spawnPersistent(definition, definition.getSpawnpoint());
             openEditor(player, definition);
         });
     }
@@ -2244,6 +2252,10 @@ public final class GuiService implements Listener {
                 Material.RED_DYE;
             case HEAL ->
                 Material.SPLASH_POTION;
+            case DROP_ITEM ->
+                Material.DROPPER;
+            case RECEIVE_ITEM ->
+                Material.HOPPER;
             case LOW_HEALTH ->
                 Material.GLISTERING_MELON_SLICE;
             case DAWN ->

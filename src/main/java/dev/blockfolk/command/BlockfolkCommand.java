@@ -115,6 +115,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             }
             definition.setSpawnpoint(player.getLocation());
             definitionRepository.save(definition);
+            instanceRegistry.spawnPersistent(definition, definition.getSpawnpoint());
             guiService.openEditor(player, definition);
             return true;
         }
