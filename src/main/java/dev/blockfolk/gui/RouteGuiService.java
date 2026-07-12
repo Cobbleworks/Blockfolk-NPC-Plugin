@@ -51,7 +51,7 @@ public final class RouteGuiService implements Listener {
     private static final int PAGE_SIZE = 45;
     private static final double PATH_PARTICLE_SPACING = 0.6;
     private static final Color PATH_COLOR = Color.fromRGB(120, 210, 255);
-    private static final Color PATH_DIRECTION_COLOR = Color.fromRGB(255, 190, 45);
+    private static final Color PATH_DIRECTION_COLOR = Color.fromRGB(75, 255, 145);
     private final JavaPlugin plugin;
     private final RouteRepository routeRepository;
     private final NpcDefinitionRepository definitionRepository;
