@@ -155,6 +155,10 @@ public final class NpcInstanceRegistry {
                 .findFirst();
     }
 
+    public Optional<NpcInstance> findById(UUID instanceId) {
+        return Optional.ofNullable(instances.get(instanceId));
+    }
+
     public Optional<LivingEntity> findEntity(NpcInstance instance) {
         if (!instances.containsKey(instance.getId())) {
             return Optional.empty();

@@ -28,6 +28,8 @@ class BehaviourTest {
         assertEquals(BehaviourActionType.WAIT, BehaviourActionType.fromStored("wait"));
         assertEquals(BehaviourActionType.INTERACT, BehaviourActionType.fromStored("interact"));
         assertEquals(BehaviourActionType.MINE_BLOCKS, BehaviourActionType.fromStored("mine-blocks"));
+        assertEquals(BehaviourActionType.TAKE_ITEM, BehaviourActionType.fromStored("take-item"));
+        assertEquals(BehaviourActionType.SHOW_INVENTORY, BehaviourActionType.fromStored("show-inventory"));
         assertEquals(BehaviourEvent.HEAL, BehaviourEvent.fromStored("heal"));
     }
 

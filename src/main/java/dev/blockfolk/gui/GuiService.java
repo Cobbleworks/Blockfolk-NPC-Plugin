@@ -62,6 +62,7 @@ import dev.blockfolk.repository.CustomEventRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
+import dev.blockfolk.runtime.NpcBehaviourService.NpcInventoryHolder;
 import dev.blockfolk.util.ResolvedSkin;
 import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
@@ -766,6 +767,8 @@ public final class GuiService implements Listener {
             handleRoutePointValuePickerClick(event, player, routePointValuePicker);
         } else if (holder instanceof ConfirmationHolder confirmationHolder) {
             handleConfirmationClick(event, player, confirmationHolder);
+        } else if (holder instanceof NpcInventoryHolder) {
+            // This is a real, editable container. Bukkit handles normal transfers.
         }
     }
 
@@ -807,6 +810,11 @@ public final class GuiService implements Listener {
 
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
+        if (event.getInventory().getHolder() instanceof NpcInventoryHolder holder) {
+            instanceRegistry.findById(holder.instanceId())
+                    .ifPresent(instance -> instance.setTemporaryInventoryContents(event.getInventory().getContents()));
+            return;
+        }
         if (!(event.getInventory().getHolder() instanceof EquipmentHolder holder)) {
             return;
         }
@@ -2140,6 +2148,10 @@ public final class GuiService implements Listener {
                 Material.LEVER;
             case MINE_BLOCKS ->
                 Material.IRON_PICKAXE;
+            case TAKE_ITEM ->
+                Material.HOPPER;
+            case SHOW_INVENTORY ->
+                Material.CHEST;
             case EMIT_EVENT ->
                 Material.SCULK_SENSOR;
             case SLEEP ->

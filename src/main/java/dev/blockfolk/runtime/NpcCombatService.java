@@ -173,6 +173,11 @@ public final class NpcCombatService implements Listener {
                 }
             }
         }
+        for (ItemStack item : instance.getTemporaryInventoryContents()) {
+            if (item != null && !item.getType().isAir() && item.getAmount() > 0) {
+                event.getDrops().add(item);
+            }
+        }
         event.setDroppedExp(0);
         clearState(instance);
         Bukkit.getScheduler().runTask(plugin, () -> {

@@ -26,4 +26,11 @@ class NpcInstanceTest {
 
         assertNotSame(location, instance.getLocation());
     }
+
+    @Test
+    void hasSeparateTemporaryInventory() {
+        NpcInstance instance = new NpcInstance(UUID.randomUUID(), "guard", new Location(null, 0, 0, 0));
+        assertEquals(27, instance.getTemporaryInventoryContents().length);
+        assertNotSame(instance.getTemporaryInventoryContents(), instance.getTemporaryInventoryContents());
+    }
 }

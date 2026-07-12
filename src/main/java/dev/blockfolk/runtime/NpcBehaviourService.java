@@ -14,12 +14,16 @@ import org.bukkit.Material;
 import org.bukkit.Tag;
 import org.bukkit.block.Block;
 import org.bukkit.block.TileState;
+import org.bukkit.block.Container;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Powerable;
 import org.bukkit.entity.Pose;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -359,6 +363,8 @@ public final class NpcBehaviourService implements Listener {
             case WAIT -> { }
             case INTERACT -> interactWithNearbySwitches(instance);
             case MINE_BLOCKS -> mineNearbyBlocks(instance);
+            case TAKE_ITEM -> takeNearbyItem(instance, actor);
+            case SHOW_INVENTORY -> showInventory(instance, actor);
             case EMIT_EVENT -> emitCustomEvent(action.value(), actor != null
                     ? actor : instances.findEntity(instance).orElse(null));
             case SLEEP -> instances.pose(instance, Pose.SLEEPING);
@@ -507,11 +513,89 @@ public final class NpcBehaviourService implements Listener {
                 for (int z = -2; z <= 2; z++) {
                     Block block = feet.getBlock().getRelative(x, y, z);
                     if (!isMineable(block.getType()) || block.getState() instanceof TileState) continue;
-                    mined |= tool == null ? block.breakNaturally() : block.breakNaturally(tool);
+                    ItemStack effectiveTool = tool == null ? new ItemStack(Material.AIR) : tool;
+                    java.util.Collection<ItemStack> drops = block.getDrops(effectiveTool, entity);
+                    if (drops.isEmpty() && block.getType().isItem()) {
+                        // Mining is an explicit NPC action: even an unarmed NPC
+                        // must leave the removed block behind instead of voiding it.
+                        drops = List.of(new ItemStack(block.getType()));
+                    }
+                    for (ItemStack drop : drops) {
+                        feet.getWorld().dropItemNaturally(block.getLocation(), drop);
+                    }
+                    block.setType(Material.AIR, true);
+                    mined = true;
                 }
             }
         }
         if (mined && entity != null) entity.swingMainHand();
+    }
+
+    private void takeNearbyItem(NpcInstance instance, Entity actor) {
+        Inventory source = nearbySourceInventory(instance, actor);
+        if (source == null) return;
+
+        Inventory carried = Bukkit.createInventory(null, 27);
+        carried.setContents(instance.getTemporaryInventoryContents());
+        for (int slot = 0; slot < source.getSize(); slot++) {
+            ItemStack item = source.getItem(slot);
+            if (item == null || item.getType().isAir()) continue;
+            ItemStack offered = item.clone();
+            Map<Integer, ItemStack> leftovers = carried.addItem(offered);
+            int remaining = leftovers.values().stream().mapToInt(ItemStack::getAmount).sum();
+            int moved = item.getAmount() - remaining;
+            if (moved <= 0) return;
+            if (moved == item.getAmount()) source.setItem(slot, null);
+            else item.setAmount(item.getAmount() - moved);
+            instance.setTemporaryInventoryContents(carried.getContents());
+            return;
+        }
+    }
+
+    private Inventory nearbySourceInventory(NpcInstance instance, Entity actor) {
+        Location center = instance.getLocation();
+        if (center.getWorld() == null) return null;
+        Inventory nearest = null;
+        double nearestDistance = Double.MAX_VALUE;
+        if (actor instanceof Player player && player.getWorld() == center.getWorld()
+                && player.getLocation().distanceSquared(center) <= 16.0) {
+            nearest = player.getInventory();
+            nearestDistance = player.getLocation().distanceSquared(center);
+        }
+        for (int x = -3; x <= 3; x++) {
+            for (int y = -3; y <= 3; y++) {
+                for (int z = -3; z <= 3; z++) {
+                    Block block = center.getBlock().getRelative(x, y, z);
+                    if (!(block.getState() instanceof Container container)) continue;
+                    double distance = block.getLocation().add(.5, .5, .5).distanceSquared(center);
+                    if (distance < nearestDistance) {
+                        nearest = container.getInventory();
+                        nearestDistance = distance;
+                    }
+                }
+            }
+        }
+        for (Player player : center.getWorld().getPlayers()) {
+            double distance = player.getLocation().distanceSquared(center);
+            if (distance <= 16.0 && distance < nearestDistance) {
+                nearest = player.getInventory();
+                nearestDistance = distance;
+            }
+        }
+        return nearest;
+    }
+
+    private void showInventory(NpcInstance instance, Entity actor) {
+        Player player = actor instanceof Player direct ? direct : nearestPlayer(instance).orElse(null);
+        if (player == null) return;
+        Inventory inventory = Bukkit.createInventory(new NpcInventoryHolder(instance.getId()), 27,
+                Component.text("NPC Inventory"));
+        inventory.setContents(instance.getTemporaryInventoryContents());
+        player.openInventory(inventory);
+    }
+
+    public record NpcInventoryHolder(UUID instanceId) implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
     }
 
     private static boolean isMineable(Material material) {

@@ -16,6 +16,8 @@ public enum BehaviourActionType {
     WAIT("Wait", true),
     INTERACT("Interact", false),
     MINE_BLOCKS("Mine Blocks", false),
+    TAKE_ITEM("Take Item", false),
+    SHOW_INVENTORY("Show Inventory", false),
     EMIT_EVENT("Emit Custom Event", true),
     SLEEP("Sleeping", false),
     SWIM("Swimming", false),
