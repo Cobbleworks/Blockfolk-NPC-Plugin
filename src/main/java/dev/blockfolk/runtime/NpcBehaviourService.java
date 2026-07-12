@@ -514,13 +514,7 @@ public final class NpcBehaviourService implements Listener {
                     Block block = feet.getBlock().getRelative(x, y, z);
                     if (!isMineable(block.getType()) || block.getState() instanceof TileState) continue;
                     ItemStack effectiveTool = tool == null ? new ItemStack(Material.AIR) : tool;
-                    java.util.Collection<ItemStack> drops = block.getDrops(effectiveTool, entity);
-                    if (drops.isEmpty() && block.getType().isItem()) {
-                        // Mining is an explicit NPC action: even an unarmed NPC
-                        // must leave the removed block behind instead of voiding it.
-                        drops = List.of(new ItemStack(block.getType()));
-                    }
-                    for (ItemStack drop : drops) {
+                    for (ItemStack drop : block.getDrops(effectiveTool, entity)) {
                         feet.getWorld().dropItemNaturally(block.getLocation(), drop);
                     }
                     block.setType(Material.AIR, true);
