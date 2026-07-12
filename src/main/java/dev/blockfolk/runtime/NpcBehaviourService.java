@@ -24,7 +24,9 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import dev.blockfolk.dialog.DialogService;
+import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.BehaviourAction;
+import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.MovementProfile;
 import dev.blockfolk.model.NpcDefinition;
@@ -52,10 +54,13 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, String> routeOverrides = new HashMap<>();
     private final Map<UUID, WalkingSpeed> speedOverrides = new HashMap<>();
     private final Set<UUID> routePaused = new HashSet<>();
+    private final Map<UUID, Location> moveTargets = new HashMap<>();
+    private final Map<UUID, Long> waitingUntilTick = new HashMap<>();
     private final Map<UUID, FollowState> following = new HashMap<>();
     private final Set<ProximityKey> nearbyPlayers = new HashSet<>();
     private NpcCombatService combatService;
     private BukkitTask behaviourTask;
+    private long currentTick;
     private int proximityTick;
 
     public NpcBehaviourService(
@@ -85,6 +90,8 @@ public final class NpcBehaviourService implements Listener {
         }
         behaviourTask = null;
         routePaused.clear();
+        moveTargets.clear();
+        waitingUntilTick.clear();
         following.clear();
         nearbyPlayers.clear();
     }
@@ -94,19 +101,7 @@ public final class NpcBehaviourService implements Listener {
         if (definition == null) {
             return;
         }
-        long delayTicks = 0L;
-        for (BehaviourAction action : definition.getBehaviourActions(event)) {
-            if (delayTicks == 0L) {
-                execute(event, action, instance, definition, actor);
-            } else {
-                Bukkit.getScheduler().runTaskLater(plugin,
-                        () -> execute(event, action, instance, definition, actor), delayTicks);
-            }
-            if (action.type() == dev.blockfolk.model.BehaviourActionType.SEND_DIALOG
-                    || action.type() == dev.blockfolk.model.BehaviourActionType.SHOW_HOLO_DIALOG) {
-                delayTicks += dialogService.secondsPerLine() * 20L;
-            }
-        }
+        executeSequence(event, definition.getBehaviourActions(event), 0, instance, definition, actor);
     }
 
     public void forget(NpcInstance instance) {
@@ -114,6 +109,8 @@ public final class NpcBehaviourService implements Listener {
         routeOverrides.remove(instance.getId());
         speedOverrides.remove(instance.getId());
         routePaused.remove(instance.getId());
+        moveTargets.remove(instance.getId());
+        waitingUntilTick.remove(instance.getId());
         following.remove(instance.getId());
         nearbyPlayers.removeIf(key -> key.instanceId().equals(instance.getId()));
     }
@@ -121,7 +118,7 @@ public final class NpcBehaviourService implements Listener {
     public MovementProfile movementFor(NpcInstance instance, NpcDefinition definition) {
         String route = routeOverrides.get(instance.getId());
         WalkingSpeed speed = speedOverrides.getOrDefault(instance.getId(), definition.getMovementProfile().walkingSpeed());
-        if (routePaused.contains(instance.getId())) {
+        if (routePaused.contains(instance.getId()) || isWaiting(instance)) {
             return MovementProfile.disabled().withWalkingSpeed(speed);
         }
         return route == null ? definition.getMovementProfile().withWalkingSpeed(speed)
@@ -130,6 +127,68 @@ public final class NpcBehaviourService implements Listener {
 
     public boolean isFollowing(NpcInstance instance) {
         return following.containsKey(instance.getId());
+    }
+
+    public boolean isMovingTo(NpcInstance instance) {
+        return moveTargets.containsKey(instance.getId());
+    }
+
+    public boolean isWaiting(NpcInstance instance) {
+        Long until = waitingUntilTick.get(instance.getId());
+        if (until == null) {
+            return false;
+        }
+        if (until - currentTick > 0L) {
+            return true;
+        }
+        waitingUntilTick.remove(instance.getId(), until);
+        return false;
+    }
+
+    private void executeSequence(
+            BehaviourEvent event,
+            java.util.List<BehaviourAction> actions,
+            int index,
+            NpcInstance instance,
+            NpcDefinition definition,
+            Entity actor
+    ) {
+        if (index >= actions.size() || instances.findAll().stream()
+                .noneMatch(candidate -> candidate.getId().equals(instance.getId()))) {
+            return;
+        }
+        BehaviourAction action = actions.get(index);
+        execute(event, action, instance, definition, actor);
+        long delayTicks = delayAfter(action);
+        if (delayTicks <= 0L) {
+            executeSequence(event, actions, index + 1, instance, definition, actor);
+        } else {
+            Bukkit.getScheduler().runTaskLater(plugin,
+                    () -> executeSequence(event, actions, index + 1, instance, definition, actor), delayTicks);
+        }
+    }
+
+    private long delayAfter(BehaviourAction action) {
+        if (action.type() == BehaviourActionType.WAIT) {
+            return secondsToTicks(action.value());
+        }
+        if (action.type() == BehaviourActionType.SEND_DIALOG
+                || action.type() == BehaviourActionType.SHOW_HOLO_DIALOG) {
+            return dialogService.secondsPerLine() * 20L;
+        }
+        return 0L;
+    }
+
+    static long secondsToTicks(String value) {
+        try {
+            double seconds = Double.parseDouble(value);
+            if (!Double.isFinite(seconds) || seconds <= 0.0) {
+                return 0L;
+            }
+            return Math.max(1L, Math.round(Math.min(seconds * 20.0, Long.MAX_VALUE / 2.0)));
+        } catch (NullPointerException | NumberFormatException exception) {
+            return 0L;
+        }
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -226,6 +285,30 @@ public final class NpcBehaviourService implements Listener {
             }
             case SET_WALK_SPEED ->
                 speedOverrides.put(instance.getId(), WalkingSpeed.fromStored(action.value()));
+            case MOVE_TO -> ActionLocation.parse(action.value()).map(ActionLocation::toLocation)
+                    .filter(java.util.Objects::nonNull).ifPresent(target -> {
+                        stopFollowing(instance);
+                        moveTargets.put(instance.getId(), target);
+                        instances.stand(instance);
+                        instances.stopNavigating(instance);
+                    });
+            case TELEPORT_TO -> ActionLocation.parse(action.value()).map(ActionLocation::toLocation)
+                    .filter(java.util.Objects::nonNull).ifPresent(target -> {
+                        stopFollowing(instance);
+                        moveTargets.remove(instance.getId());
+                        instances.stand(instance);
+                        instances.move(instance, target);
+                    });
+            case WAIT -> {
+                long ticks = secondsToTicks(action.value());
+                if (ticks > 0L) {
+                    waitingUntilTick.put(instance.getId(), currentTick + ticks);
+                    instances.stopNavigating(instance);
+                    if (combatService != null) {
+                        combatService.exitCombat(instance);
+                    }
+                }
+            }
             case SLEEP -> instances.pose(instance, Pose.SLEEPING);
             case SWIM -> instances.pose(instance, Pose.SWIMMING);
             case FALL_FLY -> instances.pose(instance, Pose.FALL_FLYING);
@@ -242,6 +325,7 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void tickBehaviour() {
+        currentTick++;
         if (++proximityTick >= 10) {
             proximityTick = 0;
             tickProximity();
@@ -249,10 +333,39 @@ public final class NpcBehaviourService implements Listener {
         Set<UUID> active = new HashSet<>();
         for (NpcInstance instance : instances.findAll()) {
             active.add(instance.getId());
+            tickMoveTo(instance);
             tickFollow(instance);
         }
         routePaused.retainAll(active);
+        moveTargets.keySet().retainAll(active);
+        waitingUntilTick.keySet().retainAll(active);
         following.keySet().retainAll(active);
+    }
+
+    private void tickMoveTo(NpcInstance instance) {
+        Location target = moveTargets.get(instance.getId());
+        if (target == null || isWaiting(instance) || combatService != null && combatService.isEngaged(instance)) {
+            return;
+        }
+        Location current = instance.getLocation();
+        if (current.getWorld() == null || target.getWorld() == null || current.getWorld() != target.getWorld()) {
+            moveTargets.remove(instance.getId());
+            instances.stopNavigating(instance);
+            return;
+        }
+        NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+        if (definition == null) {
+            moveTargets.remove(instance.getId());
+            return;
+        }
+        WalkingSpeed speed = speedOverrides.getOrDefault(instance.getId(),
+                definition.getMovementProfile().walkingSpeed());
+        NativeNpcNavigationService.NavigationStatus status = instances.navigate(instance, target, speed);
+        if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED
+                || status == NativeNpcNavigationService.NavigationStatus.STALLED) {
+            moveTargets.remove(instance.getId());
+            instances.stopNavigating(instance);
+        }
     }
 
     private void startFollowing(NpcInstance instance) {
@@ -271,7 +384,7 @@ public final class NpcBehaviourService implements Listener {
 
     private void tickFollow(NpcInstance instance) {
         FollowState state = following.get(instance.getId());
-        if (state == null || combatService != null && combatService.isEngaged(instance)) {
+        if (state == null || isWaiting(instance) || combatService != null && combatService.isEngaged(instance)) {
             return;
         }
         Player player = state.playerId == null ? null : Bukkit.getPlayer(state.playerId);

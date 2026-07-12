@@ -14,6 +14,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -22,15 +23,21 @@ import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionType;
 
 import com.destroystokyo.paper.profile.PlayerProfile;
@@ -39,6 +46,7 @@ import com.destroystokyo.paper.profile.ProfileProperty;
 import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.model.AttackReaction;
+import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
@@ -88,9 +96,12 @@ public final class GuiService implements Listener {
     private final DialogService dialogService;
     private final SkinResolver skinResolver;
     private final Consumer<Player> routeGuiOpener;
+    private final NamespacedKey waypointActionKey;
+    private final NamespacedKey waypointTokenKey;
     private NpcBehaviourService behaviourService;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
     private final Map<String, String> pendingSkinUrls = new HashMap<>();
+    private final Map<UUID, WaypointSession> waypointSessions = new HashMap<>();
 
     public GuiService(
             Plugin plugin,
@@ -110,10 +121,22 @@ public final class GuiService implements Listener {
         this.dialogService = dialogService;
         this.skinResolver = skinResolver;
         this.routeGuiOpener = routeGuiOpener;
+        this.waypointActionKey = new NamespacedKey(plugin, "behaviour-waypoint-action");
+        this.waypointTokenKey = new NamespacedKey(plugin, "behaviour-waypoint-token");
     }
 
     public void setBehaviourService(NpcBehaviourService behaviourService) {
         this.behaviourService = behaviourService;
+    }
+
+    public void stop() {
+        for (UUID playerId : List.copyOf(waypointSessions.keySet())) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                finishWaypointSelection(player);
+            }
+        }
+        waypointSessions.clear();
     }
 
     public void openMain(Player player) {
@@ -366,9 +389,7 @@ public final class GuiService implements Listener {
                 if (column < actions.size()) {
                     BehaviourAction action = actions.get(column);
                     inventory.setItem(slot, item(actionMaterial(action.type()), (column + 1) + ". " + action.type().displayName(), List.of(
-                            ChatColor.GRAY + (!action.type().requiresValue() || action.value() == null
-                            ? "No setting required"
-                            : action.value()),
+                            ChatColor.GRAY + actionValueDisplay(action),
                             ChatColor.YELLOW + "Left-click to replace",
                             ChatColor.RED + "Right-click to remove"
                     )));
@@ -388,17 +409,17 @@ public final class GuiService implements Listener {
     }
 
     private void openActionPicker(Player player, NpcDefinition definition, BehaviourEvent event, int actionIndex, int page) {
-        Inventory inventory = Bukkit.createInventory(new ActionPickerHolder(definition.getKey(), event, actionIndex, page), 27,
+        Inventory inventory = Bukkit.createInventory(new ActionPickerHolder(definition.getKey(), event, actionIndex, page), 36,
                 Component.text("Choose Action"));
         for (int index = 0; index < PRIMARY_ACTIONS.size(); index++) {
             BehaviourActionType type = PRIMARY_ACTIONS.get(index);
             inventory.setItem(9 + index, item(actionMaterial(type), type.displayName(), List.of(ChatColor.YELLOW + "Click to configure")));
         }
-        inventory.setItem(20, item(Material.ARMOR_STAND, "Animations", List.of(
+        inventory.setItem(31, item(Material.ARMOR_STAND, "Animations", List.of(
                 ChatColor.GRAY + "Poses, waving, and jumping",
                 ChatColor.YELLOW + "Click to choose an animation"
         )));
-        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(35, item(Material.BARRIER, "Back", List.of()));
         player.openInventory(inventory);
     }
 
@@ -1014,11 +1035,11 @@ public final class GuiService implements Listener {
             player.closeInventory();
             return;
         }
-        if (event.getRawSlot() == 22) {
+        if (event.getRawSlot() == 35) {
             openBehaviours(player, definition, holder.page());
             return;
         }
-        if (event.getRawSlot() == 20) {
+        if (event.getRawSlot() == 31) {
             openAnimationPicker(player, holder);
             return;
         }
@@ -1031,6 +1052,10 @@ public final class GuiService implements Listener {
             openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.ROUTE, 0);
         } else if (type == BehaviourActionType.SET_WALK_SPEED) {
             openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.WALK_SPEED, 0);
+        } else if (type == BehaviourActionType.MOVE_TO || type == BehaviourActionType.TELEPORT_TO) {
+            beginWaypointSelection(player, holder, type);
+        } else if (type == BehaviourActionType.WAIT) {
+            requestWaitAction(player, definition, holder);
         } else if (!type.requiresValue()) {
             setAction(definition, holder, type, null);
             openBehaviours(player, definition, holder.page());
@@ -1050,6 +1075,139 @@ public final class GuiService implements Listener {
                 openBehaviours(player, definition, holder.page());
             });
         }
+    }
+
+    private void requestWaitAction(Player player, NpcDefinition definition, ActionPickerHolder holder) {
+        chatInputService.request(player, "Enter the number of seconds to wait (decimals are allowed):", value -> {
+            String normalized;
+            try {
+                double seconds = Double.parseDouble(value.trim());
+                if (!Double.isFinite(seconds) || seconds <= 0.0 || seconds > Long.MAX_VALUE / 20.0) {
+                    throw new NumberFormatException();
+                }
+                normalized = Double.toString(seconds);
+            } catch (NullPointerException | NumberFormatException exception) {
+                player.sendMessage(Component.text("Enter a positive number of seconds, for example 5 or 1.5."));
+                requestWaitAction(player, definition, holder);
+                return;
+            }
+            setAction(definition, holder, BehaviourActionType.WAIT, normalized);
+            openBehaviours(player, definition, holder.page());
+        });
+    }
+
+    private void beginWaypointSelection(Player player, ActionPickerHolder holder, BehaviourActionType type) {
+        finishWaypointSelection(player);
+        UUID token = UUID.randomUUID();
+        WaypointSession session = new WaypointSession(holder, type, token);
+        waypointSessions.put(player.getUniqueId(), session);
+        ItemStack held = player.getInventory().getItemInMainHand();
+        player.getInventory().setItemInMainHand(createWaypointTool(session));
+        if (!held.getType().isAir()) {
+            player.getInventory().addItem(held).values().forEach(leftover
+                    -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
+        }
+        player.closeInventory();
+        player.sendMessage(Component.text("Right-click the block the NPC should "
+                + (type == BehaviourActionType.MOVE_TO ? "walk to" : "teleport onto") + ". Drop the compass to cancel."));
+    }
+
+    private ItemStack createWaypointTool(WaypointSession session) {
+        ItemStack tool = new ItemStack(Material.RECOVERY_COMPASS);
+        ItemMeta meta = tool.getItemMeta();
+        meta.setDisplayName(ChatColor.AQUA + session.type().displayName() + " Waypoint Selector");
+        meta.setLore(List.of(
+                ChatColor.YELLOW + "Right-click a block to select it",
+                ChatColor.GRAY + "The NPC will stand on top of that block",
+                ChatColor.RED + "Drop this compass to cancel"
+        ));
+        meta.setEnchantmentGlintOverride(true);
+        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        meta.getPersistentDataContainer().set(waypointActionKey, PersistentDataType.STRING, session.type().name());
+        meta.getPersistentDataContainer().set(waypointTokenKey, PersistentDataType.STRING, session.token().toString());
+        tool.setItemMeta(meta);
+        return tool;
+    }
+
+    @EventHandler
+    public void onWaypointClick(PlayerInteractEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND || event.getAction() != Action.RIGHT_CLICK_BLOCK
+                || event.getClickedBlock() == null) {
+            return;
+        }
+        Player player = event.getPlayer();
+        WaypointSession session = validWaypointSession(player, event.getItem());
+        if (session == null) {
+            return;
+        }
+        event.setCancelled(true);
+        NpcDefinition definition = definitionRepository.find(session.action().key()).orElse(null);
+        ActionLocation location = ActionLocation.above(event.getClickedBlock());
+        finishWaypointSelection(player);
+        if (definition == null) {
+            player.sendMessage(Component.text("That NPC preset no longer exists."));
+            return;
+        }
+        setAction(definition, session.action(), session.type(), location.serialize());
+        player.sendMessage(Component.text(session.type().displayName() + " set to " + location.display() + "."));
+        openBehaviours(player, definition, session.action().page());
+    }
+
+    @EventHandler
+    public void onWaypointToolDrop(PlayerDropItemEvent event) {
+        Player player = event.getPlayer();
+        WaypointSession session = validWaypointSession(player, event.getItemDrop().getItemStack());
+        if (session == null) {
+            return;
+        }
+        event.getItemDrop().remove();
+        waypointSessions.remove(player.getUniqueId());
+        NpcDefinition definition = definitionRepository.find(session.action().key()).orElse(null);
+        player.sendMessage(Component.text("Waypoint selection cancelled."));
+        if (definition != null) {
+            Bukkit.getScheduler().runTask(plugin, () -> openActionPicker(player, definition,
+                    session.action().event(), session.action().actionIndex(), session.action().page()));
+        }
+    }
+
+    @EventHandler
+    public void onWaypointPlayerQuit(PlayerQuitEvent event) {
+        finishWaypointSelection(event.getPlayer());
+    }
+
+    private WaypointSession validWaypointSession(Player player, ItemStack item) {
+        WaypointSession session = waypointSessions.get(player.getUniqueId());
+        if (session == null || item == null || item.getType() != Material.RECOVERY_COMPASS || !item.hasItemMeta()) {
+            return null;
+        }
+        ItemMeta meta = item.getItemMeta();
+        String type = meta.getPersistentDataContainer().get(waypointActionKey, PersistentDataType.STRING);
+        String token = meta.getPersistentDataContainer().get(waypointTokenKey, PersistentDataType.STRING);
+        return session.type().name().equals(type) && session.token().toString().equals(token) ? session : null;
+    }
+
+    private void finishWaypointSelection(Player player) {
+        WaypointSession session = waypointSessions.remove(player.getUniqueId());
+        if (session == null) {
+            return;
+        }
+        ItemStack[] contents = player.getInventory().getContents();
+        for (int slot = 0; slot < contents.length; slot++) {
+            if (matchesWaypointTool(contents[slot], session)) {
+                player.getInventory().setItem(slot, null);
+            }
+        }
+    }
+
+    private boolean matchesWaypointTool(ItemStack item, WaypointSession session) {
+        if (item == null || item.getType() != Material.RECOVERY_COMPASS || !item.hasItemMeta()) {
+            return false;
+        }
+        ItemMeta meta = item.getItemMeta();
+        return session.type().name().equals(meta.getPersistentDataContainer()
+                .get(waypointActionKey, PersistentDataType.STRING))
+                && session.token().toString().equals(meta.getPersistentDataContainer()
+                .get(waypointTokenKey, PersistentDataType.STRING));
     }
 
     private void handleAnimationPickerClick(
@@ -1439,6 +1597,12 @@ public final class GuiService implements Listener {
                 Material.BARRIER;
             case SET_WALK_SPEED ->
                 Material.FEATHER;
+            case MOVE_TO ->
+                Material.LEATHER_BOOTS;
+            case TELEPORT_TO ->
+                Material.ENDER_PEARL;
+            case WAIT ->
+                Material.CLOCK;
             case SLEEP ->
                 Material.RED_BED;
             case SWIM ->
@@ -1458,6 +1622,20 @@ public final class GuiService implements Listener {
             case UNFOLLOW ->
                 Material.SHEARS;
         };
+    }
+
+    private String actionValueDisplay(BehaviourAction action) {
+        if (!action.type().requiresValue() || action.value() == null) {
+            return "No setting required";
+        }
+        if (action.type() == BehaviourActionType.MOVE_TO
+                || action.type() == BehaviourActionType.TELEPORT_TO) {
+            return ActionLocation.parse(action.value()).map(ActionLocation::display).orElse("Invalid waypoint");
+        }
+        if (action.type() == BehaviourActionType.WAIT) {
+            return action.value() + " seconds";
+        }
+        return action.value();
     }
 
     private String reactionDescription(AttackReaction reaction) {
@@ -1550,6 +1728,13 @@ public final class GuiService implements Listener {
         public Inventory getInventory() {
             return null;
         }
+    }
+
+    private record WaypointSession(
+            ActionPickerHolder action,
+            BehaviourActionType type,
+            UUID token
+    ) {
     }
 
     private record AnimationPickerHolder(String key, BehaviourEvent event, int actionIndex, int page)

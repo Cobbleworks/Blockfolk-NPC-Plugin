@@ -16,6 +16,9 @@ class BehaviourTest {
         assertEquals(BehaviourActionType.STAND, BehaviourActionType.fromStored("sit"));
         assertEquals(BehaviourActionType.FALL_FLY, BehaviourActionType.fromStored("fall-fly"));
         assertEquals(BehaviourActionType.UNFOLLOW, BehaviourActionType.fromStored("unfollow"));
+        assertEquals(BehaviourActionType.MOVE_TO, BehaviourActionType.fromStored("move-to"));
+        assertEquals(BehaviourActionType.TELEPORT_TO, BehaviourActionType.fromStored("teleport-to"));
+        assertEquals(BehaviourActionType.WAIT, BehaviourActionType.fromStored("wait"));
         assertEquals(BehaviourEvent.HEAL, BehaviourEvent.fromStored("heal"));
     }
 

@@ -75,7 +75,8 @@ public final class RouteMovementService {
     }
 
     private void move(NpcInstance instance) {
-        if (combatService.isEngaged(instance) || behaviourService.isFollowing(instance)) {
+        if (combatService.isEngaged(instance) || behaviourService.isFollowing(instance)
+                || behaviourService.isMovingTo(instance) || behaviourService.isWaiting(instance)) {
             // Combat temporarily owns navigation. Keep the route target so the
             // NPC resumes toward the same waypoint instead of rebuilding the
             // route from its post-combat position.

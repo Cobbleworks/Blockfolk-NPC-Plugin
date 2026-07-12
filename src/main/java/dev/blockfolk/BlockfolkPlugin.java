@@ -137,6 +137,9 @@ public final class BlockfolkPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (guiService != null) {
+            guiService.stop();
+        }
         if (combatService != null) {
             combatService.stop();
         }
