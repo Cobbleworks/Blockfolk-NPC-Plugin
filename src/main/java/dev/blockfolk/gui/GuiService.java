@@ -364,6 +364,7 @@ public final class GuiService implements Listener {
                 ChatColor.GRAY + "Attack reaction: " + ChatColor.WHITE + combat.attackReaction().displayName(),
                 ChatColor.GRAY + "Sight targets: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
                 ChatColor.GRAY + "Alliance: " + ChatColor.WHITE + allianceLabel(combat),
+                ChatColor.GRAY + "Boss bar: " + ChatColor.WHITE + (combat.showBossBar() ? "Shown nearby" : "Hidden"),
                 ChatColor.YELLOW + "Click to configure combat"
         )));
         inventory.setItem(31, item(Material.BARRIER, "Back to Presets", List.of()));
@@ -413,7 +414,8 @@ public final class GuiService implements Listener {
                 Component.text("Fighting: " + definition.getDisplayName()));
         inventory.setItem(0, item(Material.LIME_DYE, "+ " + CombatProfile.HEALTH_STEP + " Health", List.of(
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + healthLabel(combat),
-                ChatColor.YELLOW + "Click to increase max health"
+                ChatColor.YELLOW + "Click to increase max health",
+                ChatColor.DARK_GRAY + "Shift-click for x10"
         )));
         inventory.setItem(9, combat.invulnerable()
                 ? item(Material.TOTEM_OF_UNDYING, "Max Health: " + healthLabel(combat), List.of(
@@ -426,11 +428,13 @@ public final class GuiService implements Listener {
                 )));
         inventory.setItem(18, item(Material.RED_DYE, "- " + CombatProfile.HEALTH_STEP + " Health", List.of(
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + healthLabel(combat),
-                ChatColor.YELLOW + "Click to decrease max health"
+                ChatColor.YELLOW + "Click to decrease max health",
+                ChatColor.DARK_GRAY + "Shift-click for x10"
         )));
         inventory.setItem(1, item(Material.LIME_DYE, "+ " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds", List.of(
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + respawnLabel(combat),
-                ChatColor.YELLOW + "Click to increase respawn time"
+                ChatColor.YELLOW + "Click to increase respawn time",
+                ChatColor.DARK_GRAY + "Shift-click for x10"
         )));
         inventory.setItem(10, item(combat.respawnSeconds() == 0 ? Material.BARRIER : Material.CLOCK,
                 "Respawn Time: " + respawnLabel(combat), List.of(
@@ -443,8 +447,11 @@ public final class GuiService implements Listener {
         )));
         inventory.setItem(19, item(Material.RED_DYE, "- " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds", List.of(
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + respawnLabel(combat),
-                ChatColor.YELLOW + "Click to decrease respawn time"
+                ChatColor.YELLOW + "Click to decrease respawn time",
+                ChatColor.DARK_GRAY + "Shift-click for x10"
         )));
+        inventory.setItem(12, toggleItem(Material.WITHER_SKELETON_SKULL, "Show Boss Bar", combat.showBossBar(),
+                "Shows current HP to players within 16 blocks"));
         inventory.setItem(5, item(Material.TARGET, "Targets & Behaviour", List.of(
                 ChatColor.GRAY + "Attack reaction: " + ChatColor.WHITE + combat.attackReaction().displayName(),
                 ChatColor.GRAY + "Sight targets enabled: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
@@ -961,20 +968,23 @@ public final class GuiService implements Listener {
             return;
         }
         CombatProfile combat = definition.getCombatProfile();
+        int multiplier = event.isShiftClick() ? 10 : 1;
         switch (event.getRawSlot()) {
             case 18 -> {
-                definition.setCombatProfile(combat.withMaxHealth(combat.maxHealth() - CombatProfile.HEALTH_STEP));
+                definition.setCombatProfile(combat.withMaxHealth(
+                        combat.maxHealth() - CombatProfile.HEALTH_STEP * multiplier));
                 saveRefresh(definition);
                 openFightingEditor(player, definition);
             }
             case 0 -> {
-                definition.setCombatProfile(combat.withMaxHealth(combat.maxHealth() + CombatProfile.HEALTH_STEP));
+                definition.setCombatProfile(combat.withMaxHealth(
+                        combat.maxHealth() + CombatProfile.HEALTH_STEP * multiplier));
                 saveRefresh(definition);
                 openFightingEditor(player, definition);
             }
             case 19 -> {
                 definition.setCombatProfile(combat.withRespawnSeconds(
-                        combat.respawnSeconds() - CombatProfile.RESPAWN_STEP_SECONDS
+                        combat.respawnSeconds() - CombatProfile.RESPAWN_STEP_SECONDS * multiplier
                 ));
                 definitionRepository.save(definition);
                 openFightingEditor(player, definition);
@@ -982,7 +992,7 @@ public final class GuiService implements Listener {
             case 1 -> {
                 int respawnSeconds = (int) Math.min(
                         Integer.MAX_VALUE,
-                        (long) combat.respawnSeconds() + CombatProfile.RESPAWN_STEP_SECONDS
+                        (long) combat.respawnSeconds() + CombatProfile.RESPAWN_STEP_SECONDS * multiplier
                 );
                 definition.setCombatProfile(combat.withRespawnSeconds(respawnSeconds));
                 definitionRepository.save(definition);
@@ -990,6 +1000,11 @@ public final class GuiService implements Listener {
             }
             case 5 -> {
                 openTargetsAndBehaviour(player, definition);
+            }
+            case 12 -> {
+                definition.setCombatProfile(combat.withShowBossBar(!combat.showBossBar()));
+                definitionRepository.save(definition);
+                openFightingEditor(player, definition);
             }
             case 14 ->
                 chatInputService.request(player, "Enter an alliance, or type clear to remove it:", value -> {
@@ -2117,6 +2132,10 @@ public final class GuiService implements Listener {
                 Material.SPLASH_POTION;
             case LOW_HEALTH ->
                 Material.GLISTERING_MELON_SLICE;
+            case DAWN ->
+                Material.ORANGE_DYE;
+            case MORNING ->
+                Material.SUNFLOWER;
         };
     }
 

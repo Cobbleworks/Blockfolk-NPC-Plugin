@@ -11,7 +11,8 @@ public record CombatProfile(
         boolean targetPlayers,
         boolean targetNpcs,
         String alliance,
-        String shoutout
+        String shoutout,
+        boolean showBossBar
 ) {
 
     public static final int HEALTH_STEP = 5;
@@ -27,7 +28,7 @@ public record CombatProfile(
     }
 
     public static CombatProfile disabled() {
-        return new CombatProfile(0, 0, AttackReaction.IGNORE, false, false, false, false, null, null);
+        return new CombatProfile(0, 0, AttackReaction.IGNORE, false, false, false, false, null, null, false);
     }
 
     public boolean invulnerable() {
@@ -36,47 +37,52 @@ public record CombatProfile(
 
     public CombatProfile withMaxHealth(int maxHealth) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
     }
 
     public CombatProfile withRespawnSeconds(int respawnSeconds) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
     }
 
     public CombatProfile withAttackReaction(AttackReaction attackReaction) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
     }
 
     public CombatProfile withTargetMobs(boolean targetMobs) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
     }
 
     public CombatProfile withTargetAnimals(boolean targetAnimals) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
     }
 
     public CombatProfile withTargetPlayers(boolean targetPlayers) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
     }
 
     public CombatProfile withTargetNpcs(boolean targetNpcs) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
     }
 
     public CombatProfile withAlliance(String alliance) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
     }
 
     public CombatProfile withShoutout(String shoutout) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
+    }
+
+    public CombatProfile withShowBossBar(boolean showBossBar) {
+        return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
     }
 
     public boolean hasSightTargets() {

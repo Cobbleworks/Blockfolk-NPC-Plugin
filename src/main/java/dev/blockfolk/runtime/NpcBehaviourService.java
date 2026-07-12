@@ -12,6 +12,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Tag;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.TileState;
 import org.bukkit.block.Container;
@@ -72,6 +73,7 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, Object> idleCycles = new HashMap<>();
     private final Set<ProximityKey> nearbyPlayers = new HashSet<>();
     private final Map<ProximityKey, Long> proximityCooldownUntilTick = new HashMap<>();
+    private final Map<UUID, Long> lastWorldTimes = new HashMap<>();
     private final long proximityCooldownTicks;
     private NpcCombatService combatService;
     private BukkitTask behaviourTask;
@@ -114,6 +116,7 @@ public final class NpcBehaviourService implements Listener {
         idleCycles.clear();
         nearbyPlayers.clear();
         proximityCooldownUntilTick.clear();
+        lastWorldTimes.clear();
     }
 
     public void trigger(BehaviourEvent event, NpcInstance instance, Entity actor) {
@@ -384,6 +387,7 @@ public final class NpcBehaviourService implements Listener {
 
     private void tickBehaviour() {
         currentTick++;
+        tickTimeEvents();
         if (++proximityTick >= 10) {
             proximityTick = 0;
             tickProximity();
@@ -398,6 +402,44 @@ public final class NpcBehaviourService implements Listener {
         moveTargets.keySet().retainAll(active);
         following.keySet().retainAll(active);
         idleCycles.keySet().retainAll(active);
+    }
+
+    private void tickTimeEvents() {
+        Set<UUID> activeWorlds = new HashSet<>();
+        for (World world : Bukkit.getWorlds()) {
+            UUID worldId = world.getUID();
+            activeWorlds.add(worldId);
+            long current = Math.floorMod(world.getTime(), 24000L);
+            Long previous = lastWorldTimes.put(worldId, current);
+            if (previous == null || previous == current) {
+                continue;
+            }
+            long elapsed = Math.floorMod(current - previous, 24000L);
+            // More than half a day backwards is most likely an administrative time change.
+            if (elapsed == 0L || elapsed > 12000L) {
+                continue;
+            }
+            if (crossedTime(previous, elapsed, 23000L)) {
+                triggerTimeEvent(world, BehaviourEvent.DAWN);
+            }
+            if (crossedTime(previous, elapsed, 0L)) {
+                triggerTimeEvent(world, BehaviourEvent.MORNING);
+            }
+        }
+        lastWorldTimes.keySet().retainAll(activeWorlds);
+    }
+
+    private boolean crossedTime(long previous, long elapsed, long threshold) {
+        long distance = Math.floorMod(threshold - previous, 24000L);
+        return distance > 0L && distance <= elapsed;
+    }
+
+    private void triggerTimeEvent(World world, BehaviourEvent event) {
+        for (NpcInstance instance : List.copyOf(instances.findAll())) {
+            if (instance.getLocation().getWorld() == world) {
+                trigger(event, instance, null);
+            }
+        }
     }
 
     private void tickMoveTo(NpcInstance instance) {
@@ -490,14 +532,34 @@ public final class NpcBehaviourService implements Listener {
                     if (block.getType() != Material.LEVER && !Tag.BUTTONS.isTagged(block.getType())) continue;
                     BlockData data = block.getBlockData();
                     if (!(data instanceof Powerable powerable)) continue;
+                    boolean button = Tag.BUTTONS.isTagged(block.getType());
+                    if (button && powerable.isPowered()) continue;
                     int oldCurrent = powerable.isPowered() ? 15 : 0;
                     BlockRedstoneEvent event = new BlockRedstoneEvent(block, oldCurrent, oldCurrent == 0 ? 15 : 0);
                     Bukkit.getPluginManager().callEvent(event);
                     powerable.setPowered(event.getNewCurrent() > 0);
                     block.setBlockData(data, true);
+                    if (button && powerable.isPowered()) {
+                        Material pressedType = block.getType();
+                        long releaseDelay = pressedType == Material.STONE_BUTTON
+                                || pressedType == Material.POLISHED_BLACKSTONE_BUTTON ? 20L : 30L;
+                        Location buttonLocation = block.getLocation();
+                        Bukkit.getScheduler().runTaskLater(plugin, () -> releaseButton(buttonLocation), releaseDelay);
+                    }
                 }
             }
         }
+    }
+
+    private void releaseButton(Location location) {
+        Block block = location.getBlock();
+        if (!Tag.BUTTONS.isTagged(block.getType())) return;
+        BlockData data = block.getBlockData();
+        if (!(data instanceof Powerable powerable) || !powerable.isPowered()) return;
+        BlockRedstoneEvent event = new BlockRedstoneEvent(block, 15, 0);
+        Bukkit.getPluginManager().callEvent(event);
+        powerable.setPowered(event.getNewCurrent() > 0);
+        block.setBlockData(data, true);
     }
 
     private void mineNearbyBlocks(NpcInstance instance) {

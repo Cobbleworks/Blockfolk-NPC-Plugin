@@ -20,7 +20,7 @@ class CombatProfileTest {
     @Test
     void clampsHealthAndNormalizesShoutout() {
         CombatProfile profile = new CombatProfile(
-                -5, -10, null, false, false, false, false, "  guards  ", "  Stand down!  "
+                -5, -10, null, false, false, false, false, "  guards  ", "  Stand down!  ", false
         );
 
         assertEquals(0, profile.maxHealth());
@@ -48,6 +48,15 @@ class CombatProfileTest {
         assertTrue(profile.targetAnimals());
         assertTrue(profile.targetNpcs());
         assertTrue(profile.hasSightTargets());
+    }
+
+    @Test
+    void bossBarToggleIsPreservedByOtherChanges() {
+        CombatProfile profile = CombatProfile.disabled().withShowBossBar(true).withMaxHealth(20);
+
+        assertTrue(profile.showBossBar());
+        assertTrue(profile.withAlliance("guards").showBossBar());
+        assertFalse(CombatProfile.disabled().showBossBar());
     }
 
     @Test

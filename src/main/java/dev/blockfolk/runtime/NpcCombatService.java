@@ -2,7 +2,10 @@ package dev.blockfolk.runtime;
 
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -25,6 +28,9 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.ChatColor;
+import org.bukkit.boss.BarColor;
+import org.bukkit.boss.BarStyle;
+import org.bukkit.boss.BossBar;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.scheduler.BukkitTask;
@@ -45,6 +51,7 @@ public final class NpcCombatService implements Listener {
     private static final double SIGHT_RANGE = 16.0;
     private static final double MAX_CHASE_RANGE_SQUARED = 32.0 * 32.0;
     private static final int FLEE_TICKS = 8 * 20;
+    private static final double BOSS_BAR_RANGE_SQUARED = 16.0 * 16.0;
 
     private final Plugin plugin;
     private final NpcDefinitionRepository definitionRepository;
@@ -53,6 +60,7 @@ public final class NpcCombatService implements Listener {
     private final NpcAttackSelector attackSelector = new NpcAttackSelector();
     private final Map<UUID, CombatState> states = new HashMap<>();
     private final Map<UUID, BukkitTask> pendingRespawns = new HashMap<>();
+    private final Map<UUID, BossBar> bossBars = new HashMap<>();
     private NpcBehaviourService behaviourService;
     private BukkitTask task;
     private long currentTick;
@@ -87,6 +95,8 @@ public final class NpcCombatService implements Listener {
         pendingRespawns.values().forEach(BukkitTask::cancel);
         pendingRespawns.clear();
         states.clear();
+        bossBars.values().forEach(BossBar::removeAll);
+        bossBars.clear();
     }
 
     public boolean isEngaged(NpcInstance instance) {
@@ -201,6 +211,7 @@ public final class NpcCombatService implements Listener {
 
     private void tick() {
         currentTick++;
+        Set<UUID> activeBossBars = new HashSet<>();
         for (NpcInstance instance : instanceRegistry.findAll()) {
             NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
             LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
@@ -209,6 +220,7 @@ public final class NpcCombatService implements Listener {
                 continue;
             }
             CombatProfile profile = definition.getCombatProfile();
+            updateBossBar(instance, definition, npc, profile, activeBossBars);
             if (profile.invulnerable() || (profile.attackReaction() == AttackReaction.IGNORE
                     && !profile.hasSightTargets())) {
                 clearState(instance);
@@ -234,6 +246,44 @@ public final class NpcCombatService implements Listener {
             }
         }
         states.keySet().removeIf(id -> instanceRegistry.findAll().stream().noneMatch(instance -> instance.getId().equals(id)));
+        bossBars.entrySet().removeIf(entry -> {
+            if (activeBossBars.contains(entry.getKey())) return false;
+            entry.getValue().removeAll();
+            return true;
+        });
+    }
+
+    private void updateBossBar(
+            NpcInstance instance,
+            NpcDefinition definition,
+            LivingEntity npc,
+            CombatProfile profile,
+            Set<UUID> activeBossBars
+    ) {
+        if (!profile.showBossBar() || profile.invulnerable()) {
+            return;
+        }
+        activeBossBars.add(instance.getId());
+        BossBar bossBar = bossBars.computeIfAbsent(instance.getId(), ignored ->
+                Bukkit.createBossBar(definition.getDisplayName(), BarColor.RED, BarStyle.SOLID));
+        bossBar.setTitle(definition.getDisplayName());
+        bossBar.setProgress(Math.max(0.0, Math.min(1.0, npc.getHealth() / profile.maxHealth())));
+
+        Set<Player> nearby = new HashSet<>();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getWorld() == npc.getWorld()
+                    && player.getLocation().distanceSquared(npc.getLocation()) <= BOSS_BAR_RANGE_SQUARED) {
+                nearby.add(player);
+                if (!bossBar.getPlayers().contains(player)) {
+                    bossBar.addPlayer(player);
+                }
+            }
+        }
+        for (Player viewer : List.copyOf(bossBar.getPlayers())) {
+            if (!nearby.contains(viewer)) {
+                bossBar.removePlayer(viewer);
+            }
+        }
     }
 
     private void flee(NpcInstance instance, LivingEntity npc, CombatState state) {
