@@ -2171,6 +2171,10 @@ public final class GuiService implements Listener {
                 Material.HOPPER;
             case SHOW_INVENTORY ->
                 Material.CHEST;
+            case DROP_INVENTORY ->
+                Material.DROPPER;
+            case HARVEST ->
+                Material.IRON_HOE;
             case EMIT_EVENT ->
                 Material.SCULK_SENSOR;
             case SLEEP ->

@@ -3,6 +3,9 @@ package dev.blockfolk.runtime;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,6 +20,7 @@ import org.bukkit.block.Block;
 import org.bukkit.block.TileState;
 import org.bukkit.block.Container;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Ageable;
 import org.bukkit.block.data.Powerable;
 import org.bukkit.entity.Pose;
 import org.bukkit.entity.Entity;
@@ -368,6 +372,8 @@ public final class NpcBehaviourService implements Listener {
             case MINE_BLOCKS -> mineNearbyBlocks(instance);
             case TAKE_ITEM -> takeNearbyItem(instance, actor);
             case SHOW_INVENTORY -> showInventory(instance, actor);
+            case DROP_INVENTORY -> dropInventory(instance);
+            case HARVEST -> harvestNearbyCrops(instance);
             case EMIT_EVENT -> emitCustomEvent(action.value(), actor != null
                     ? actor : instances.findEntity(instance).orElse(null));
             case SLEEP -> instances.pose(instance, Pose.SLEEPING);
@@ -649,6 +655,132 @@ public final class NpcBehaviourService implements Listener {
         inventory.setContents(instance.getTemporaryInventoryContents());
         player.openInventory(inventory);
     }
+
+    private void dropInventory(NpcInstance instance) {
+        Location center = instance.getLocation();
+        if (center.getWorld() == null) return;
+
+        Inventory carried = Bukkit.createInventory(null, 27);
+        carried.setContents(instance.getTemporaryInventoryContents());
+        List<Container> containers = new ArrayList<>();
+        for (int x = -3; x <= 3; x++) {
+            for (int y = -3; y <= 3; y++) {
+                for (int z = -3; z <= 3; z++) {
+                    Block block = center.getBlock().getRelative(x, y, z);
+                    if (block.getState() instanceof Container container) containers.add(container);
+                }
+            }
+        }
+        containers.sort(Comparator.comparingDouble(container ->
+                container.getLocation().add(.5, .5, .5).distanceSquared(center)));
+        Set<Inventory> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Container container : containers) {
+            Inventory destination = container.getInventory();
+            if (!visited.add(destination)) continue;
+            for (int slot = 0; slot < carried.getSize(); slot++) {
+                ItemStack item = carried.getItem(slot);
+                if (item == null || item.getType().isAir()) continue;
+                Map<Integer, ItemStack> leftovers = destination.addItem(item.clone());
+                carried.setItem(slot, leftovers.isEmpty() ? null : leftovers.values().iterator().next());
+            }
+        }
+        for (ItemStack item : carried.getContents()) {
+            if (item != null && !item.getType().isAir()) center.getWorld().dropItemNaturally(center, item);
+        }
+        instance.setTemporaryInventoryContents(new ItemStack[27]);
+    }
+
+    private void harvestNearbyCrops(NpcInstance instance) {
+        Location center = instance.getLocation();
+        if (center.getWorld() == null) return;
+        Inventory carried = Bukkit.createInventory(null, 27);
+        carried.setContents(instance.getTemporaryInventoryContents());
+        LivingEntity entity = instances.findEntity(instance).orElse(null);
+        boolean worked = false;
+
+        for (int y = -1; y <= 2; y++) {
+            for (int x = -3; x <= 3; x++) {
+                for (int z = -3; z <= 3; z++) {
+                    Block block = center.getBlock().getRelative(x, y, z);
+                    Planting planting = plantingForCrop(block.getType());
+                    if (planting == null || !(block.getBlockData() instanceof Ageable age)
+                            || age.getAge() < age.getMaximumAge()) continue;
+                    for (ItemStack drop : block.getDrops()) addHarvestDrop(carried, center, drop);
+                    if (consumeOne(carried, planting.item())) {
+                        block.setType(planting.crop(), false);
+                        Ageable replanted = (Ageable) block.getBlockData();
+                        replanted.setAge(0);
+                        block.setBlockData(replanted, true);
+                    } else {
+                        block.setType(Material.AIR, true);
+                    }
+                    worked = true;
+                }
+            }
+        }
+
+        for (int y = -1; y <= 1; y++) {
+            for (int x = -3; x <= 3; x++) {
+                for (int z = -3; z <= 3; z++) {
+                    Block soil = center.getBlock().getRelative(x, y, z);
+                    Block above = soil.getRelative(0, 1, 0);
+                    if (!above.getType().isAir()) continue;
+                    Planting planting = firstPlantingForSoil(carried, soil.getType());
+                    if (planting == null || !consumeOne(carried, planting.item())) continue;
+                    above.setType(planting.crop(), true);
+                    worked = true;
+                }
+            }
+        }
+        instance.setTemporaryInventoryContents(carried.getContents());
+        if (worked && entity != null) entity.swingMainHand();
+    }
+
+    private void addHarvestDrop(Inventory carried, Location fallback, ItemStack drop) {
+        for (ItemStack leftover : carried.addItem(drop).values()) {
+            fallback.getWorld().dropItemNaturally(fallback, leftover);
+        }
+    }
+
+    private boolean consumeOne(Inventory inventory, Material material) {
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            ItemStack item = inventory.getItem(slot);
+            if (item == null || item.getType() != material) continue;
+            if (item.getAmount() == 1) inventory.setItem(slot, null);
+            else item.setAmount(item.getAmount() - 1);
+            return true;
+        }
+        return false;
+    }
+
+    private Planting firstPlantingForSoil(Inventory inventory, Material soil) {
+        List<Planting> options = soil == Material.FARMLAND
+                ? List.of(new Planting(Material.WHEAT_SEEDS, Material.WHEAT),
+                        new Planting(Material.CARROT, Material.CARROTS),
+                        new Planting(Material.POTATO, Material.POTATOES),
+                        new Planting(Material.BEETROOT_SEEDS, Material.BEETROOTS),
+                        new Planting(Material.TORCHFLOWER_SEEDS, Material.TORCHFLOWER_CROP))
+                : soil == Material.SOUL_SAND
+                        ? List.of(new Planting(Material.NETHER_WART, Material.NETHER_WART)) : List.of();
+        for (Planting option : options) {
+            if (inventory.contains(option.item())) return option;
+        }
+        return null;
+    }
+
+    private Planting plantingForCrop(Material crop) {
+        return switch (crop) {
+            case WHEAT -> new Planting(Material.WHEAT_SEEDS, crop);
+            case CARROTS -> new Planting(Material.CARROT, crop);
+            case POTATOES -> new Planting(Material.POTATO, crop);
+            case BEETROOTS -> new Planting(Material.BEETROOT_SEEDS, crop);
+            case NETHER_WART -> new Planting(Material.NETHER_WART, crop);
+            case TORCHFLOWER_CROP -> new Planting(Material.TORCHFLOWER_SEEDS, crop);
+            default -> null;
+        };
+    }
+
+    private record Planting(Material item, Material crop) { }
 
     public record NpcInventoryHolder(UUID instanceId) implements InventoryHolder {
         @Override public Inventory getInventory() { return null; }

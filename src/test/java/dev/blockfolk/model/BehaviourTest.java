@@ -30,6 +30,8 @@ class BehaviourTest {
         assertEquals(BehaviourActionType.MINE_BLOCKS, BehaviourActionType.fromStored("mine-blocks"));
         assertEquals(BehaviourActionType.TAKE_ITEM, BehaviourActionType.fromStored("take-item"));
         assertEquals(BehaviourActionType.SHOW_INVENTORY, BehaviourActionType.fromStored("show-inventory"));
+        assertEquals(BehaviourActionType.DROP_INVENTORY, BehaviourActionType.fromStored("drop-inventory"));
+        assertEquals(BehaviourActionType.HARVEST, BehaviourActionType.fromStored("harvest"));
         assertEquals(BehaviourEvent.HEAL, BehaviourEvent.fromStored("heal"));
     }
 
