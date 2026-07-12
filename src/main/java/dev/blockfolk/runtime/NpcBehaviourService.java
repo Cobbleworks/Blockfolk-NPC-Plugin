@@ -54,7 +54,7 @@ public final class NpcBehaviourService implements Listener {
     private static final double FOLLOW_RESUME_RANGE_SQUARED = 5.0 * 5.0;
     private static final double FOLLOW_CATCH_UP_RANGE_SQUARED = 12.0 * 12.0;
     private static final int FOLLOW_REPATH_TICKS = 10;
-    private static final long IDLE_REPEAT_TICKS = 10L * 20L;
+    private static final long IDLE_REPEAT_TICKS = 1L * 20L;
     private final Plugin plugin;
     private final NpcDefinitionRepository definitions;
     private final NpcInstanceRegistry instances;
