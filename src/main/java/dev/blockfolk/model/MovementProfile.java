@@ -13,7 +13,7 @@ public record MovementProfile(boolean enabled, String routeKey, WalkingSpeed wal
     }
 
     public MovementProfile {
-        routeKey = routeKey == null || routeKey.isBlank() ? null : NpcDefinition.toKey(routeKey);
+        routeKey = routeKey == null || routeKey.isBlank() ? null : NpcRoute.normalizeKey(routeKey);
         enabled = enabled && routeKey != null;
         walkingSpeed = Objects.requireNonNullElse(walkingSpeed, WalkingSpeed.NORMAL);
     }

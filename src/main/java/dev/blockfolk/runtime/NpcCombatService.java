@@ -23,6 +23,8 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.ChatColor;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.scheduler.BukkitTask;
@@ -370,6 +372,11 @@ public final class NpcCombatService implements Listener {
             return false;
         }
         if (target instanceof Player player) {
+            NpcDefinition attackerDefinition = definitionRepository.find(attacker.getDefinitionKey()).orElse(null);
+            if (attackerDefinition != null && carriesAlliance(player,
+                    attackerDefinition.getCombatProfile().alliance())) {
+                return false;
+            }
             return player.getGameMode() == GameMode.SURVIVAL || player.getGameMode() == GameMode.ADVENTURE;
         }
         if (target instanceof Mannequin) {
@@ -385,6 +392,25 @@ public final class NpcCombatService implements Listener {
                             .alliedWith(targetDefinition.getCombatProfile()));
         }
         return target instanceof Mob;
+    }
+
+    private boolean carriesAlliance(Player player, String alliance) {
+        if (alliance == null) {
+            return false;
+        }
+        for (ItemStack item : player.getInventory().getContents()) {
+            if (item == null || item.getType().isAir() || !item.hasItemMeta()) {
+                continue;
+            }
+            ItemMeta meta = item.getItemMeta();
+            if (meta.hasDisplayName()) {
+                String name = ChatColor.stripColor(meta.getDisplayName());
+                if (name != null && alliance.equalsIgnoreCase(name.trim())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private LivingEntity resolveAttacker(Entity damager) {

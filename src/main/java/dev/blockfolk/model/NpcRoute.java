@@ -23,7 +23,7 @@ public final class NpcRoute {
     private final List<RoutePoint> points = new ArrayList<>();
 
     public NpcRoute(String key) {
-        this.key = NpcDefinition.toKey(key);
+        this.key = normalizeKey(key);
         this.displayName = this.key;
     }
 
@@ -31,6 +31,25 @@ public final class NpcRoute {
         NpcRoute route = new NpcRoute(displayName);
         route.setDisplayName(displayName);
         return route;
+    }
+
+    public static String normalizeKey(String value) {
+        String normalized = Objects.requireNonNull(value, "route name").trim();
+        if (normalized.isEmpty() || normalized.startsWith("/") || normalized.endsWith("/")
+                || normalized.contains("//")) {
+            throw new IllegalArgumentException(
+                    "Route names may contain letters, numbers, _ and -, with / between groups");
+        }
+        List<String> groups = new ArrayList<>();
+        for (String group : normalized.split("/")) {
+            String trimmed = group.trim();
+            if (trimmed.equals(".") || trimmed.equals("..")) {
+                throw new IllegalArgumentException(
+                        "Route names may contain letters, numbers, _ and -, with / between groups");
+            }
+            groups.add(NpcDefinition.toKey(trimmed));
+        }
+        return String.join("/", groups);
     }
 
     public String getKey() {

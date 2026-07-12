@@ -42,7 +42,12 @@ public final class RouteRepository {
             if (section == null) {
                 continue;
             }
-            NpcRoute route = new NpcRoute(NpcDefinition.toKey(storedKey));
+            NpcRoute route;
+            try {
+                route = new NpcRoute(storedKey);
+            } catch (IllegalArgumentException ignored) {
+                continue;
+            }
             route.setDisplayName(section.getString("display-name", route.getKey()));
             route.setIcon(section.getItemStack("icon"));
             ConfigurationSection points = section.getConfigurationSection("points");
@@ -71,7 +76,11 @@ public final class RouteRepository {
     }
 
     public Optional<NpcRoute> find(String keyOrName) {
-        return Optional.ofNullable(routes.get(NpcDefinition.toKey(keyOrName)));
+        try {
+            return Optional.ofNullable(routes.get(NpcRoute.normalizeKey(keyOrName)));
+        } catch (IllegalArgumentException exception) {
+            return Optional.empty();
+        }
     }
 
     public Collection<NpcRoute> findAll() {

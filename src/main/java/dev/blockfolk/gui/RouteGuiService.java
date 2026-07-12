@@ -2,6 +2,7 @@ package dev.blockfolk.gui;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -82,7 +83,7 @@ public final class RouteGuiService implements Listener {
     }
 
     public void openRoutes(Player player) {
-        openRoutes(player, 0);
+        openRoutes(player, "", 0);
     }
 
     public void start() {
@@ -93,15 +94,28 @@ public final class RouteGuiService implements Listener {
     }
 
     public void openRoutes(Player player, int requestedPage) {
+        openRoutes(player, "", requestedPage);
+    }
+
+    private void openRoutes(Player player, String folder, int requestedPage) {
         finishEditing(player, false);
-        List<NpcRoute> routes = new ArrayList<>(routeRepository.findAll());
-        int pages = Math.max(1, (routes.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        List<RouteEntry> entries = routeEntries(folder);
+        int pages = Math.max(1, (entries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(new RoutesHolder(page), 54, Component.text("Blockfolk Routes"));
+        String title = folder.isEmpty() ? "Blockfolk Routes" : "Routes: " + folder;
+        Inventory inventory = Bukkit.createInventory(new RoutesHolder(folder, page), 54, Component.text(title));
         int from = page * PAGE_SIZE;
-        int to = Math.min(from + PAGE_SIZE, routes.size());
+        int to = Math.min(from + PAGE_SIZE, entries.size());
         for (int index = from; index < to; index++) {
-            NpcRoute route = routes.get(index);
+            RouteEntry entry = entries.get(index);
+            if (entry.folder()) {
+                inventory.setItem(index - from, item(Material.CHEST, entry.label(), List.of(
+                        ChatColor.GRAY + "" + entry.childCount() + " route(s)",
+                        ChatColor.DARK_GRAY + entry.path(),
+                        ChatColor.YELLOW + "Click to open")));
+                continue;
+            }
+            NpcRoute route = entry.route();
             long assignments = definitionRepository.findAll().stream()
                     .filter(definition -> route.getKey().equals(definition.getMovementProfile().routeKey()))
                     .count();
@@ -114,21 +128,20 @@ public final class RouteGuiService implements Listener {
                     ChatColor.RED + "Shift-right-click: remove route"
             )));
         }
-        inventory.setItem(45, item(Material.PLAYER_HEAD, "Manage NPCs", List.of(
-                ChatColor.GRAY + "Return to the main NPC menu",
-                ChatColor.YELLOW + "Click to manage NPC presets"
-        )));
+        inventory.setItem(45, item(folder.isEmpty() ? Material.PLAYER_HEAD : Material.ARROW,
+                folder.isEmpty() ? "Manage NPCs" : "Up One Group", List.of()));
         if (page > 0) {
             inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
         }
         inventory.setItem(49, item(Material.COMPASS, "Route Overview", List.of(
-                ChatColor.GRAY + "Routes: " + ChatColor.WHITE + routes.size(),
+                ChatColor.GRAY + "Routes: " + ChatColor.WHITE + routeRepository.findAll().size(),
+                ChatColor.GRAY + "Group: " + ChatColor.WHITE + (folder.isEmpty() ? "Root" : folder),
                 ChatColor.GRAY + "NPCs start at their nearest point",
                 ChatColor.GRAY + "then follow nearest unvisited points in a loop"
         )));
         inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
-                ChatColor.GRAY + "Creates an empty route",
-                ChatColor.YELLOW + "Click, then enter its name in chat"
+                ChatColor.GRAY + "Use / in the name to create groups",
+                ChatColor.YELLOW + "Click, then enter the full route name"
         )));
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
@@ -161,7 +174,7 @@ public final class RouteGuiService implements Listener {
             if (!isTopInventoryClick(event)) {
                 return;
             }
-            handleRoutesClick(event, player, routesHolder.page());
+            handleRoutesClick(event, player, routesHolder);
         } else if (holder instanceof DeleteRouteHolder deleteHolder) {
             event.setCancelled(true);
             if (isTopInventoryClick(event)) {
@@ -257,45 +270,58 @@ public final class RouteGuiService implements Listener {
         finishEditing(event.getPlayer(), false);
     }
 
-    private void handleRoutesClick(InventoryClickEvent event, Player player, int page) {
+    private void handleRoutesClick(InventoryClickEvent event, Player player, RoutesHolder holder) {
+        String folder = holder.folder();
+        int page = holder.page();
         if (event.getRawSlot() == 45) {
-            mainGuiOpener.accept(player);
+            if (folder.isEmpty()) mainGuiOpener.accept(player);
+            else openRoutes(player, parent(folder), 0);
             return;
         }
         if (event.getRawSlot() == 47) {
-            openRoutes(player, page - 1);
+            openRoutes(player, folder, page - 1);
             return;
         }
         if (event.getRawSlot() == 51) {
-            chatInputService.request(player, "Enter a new route name:", value -> {
-                NpcRoute route = NpcRoute.create(value);
-                if (routeRepository.find(route.getKey()).isPresent()) {
-                    player.sendMessage(Component.text("A route with that key already exists."));
-                    openRoutes(player, page);
-                    return;
+            chatInputService.request(player, "Enter the full route name (use / for groups):", value -> {
+                try {
+                    NpcRoute route = NpcRoute.create(value);
+                    if (routeRepository.find(route.getKey()).isPresent()) {
+                        player.sendMessage(Component.text("A route with that key already exists."));
+                        openRoutes(player, folder, page);
+                        return;
+                    }
+                    routeRepository.save(route);
+                    beginEditing(player, route);
+                } catch (IllegalArgumentException exception) {
+                    player.sendMessage(Component.text(exception.getMessage()));
+                    openRoutes(player, folder, page);
                 }
-                routeRepository.save(route);
-                beginEditing(player, route);
             });
             return;
         }
         if (event.getRawSlot() == 53) {
-            openRoutes(player, page + 1);
+            openRoutes(player, folder, page + 1);
             return;
         }
-        List<NpcRoute> routes = new ArrayList<>(routeRepository.findAll());
+        List<RouteEntry> entries = routeEntries(folder);
         int index = page * PAGE_SIZE + event.getRawSlot();
-        if (event.getRawSlot() >= PAGE_SIZE || index < 0 || index >= routes.size()) {
+        if (event.getRawSlot() >= PAGE_SIZE || index < 0 || index >= entries.size()) {
             return;
         }
-        NpcRoute route = routes.get(index);
+        RouteEntry entry = entries.get(index);
+        if (entry.folder()) {
+            openRoutes(player, entry.path(), 0);
+            return;
+        }
+        NpcRoute route = entry.route();
         if (event.getClick() == ClickType.MIDDLE) {
             route.setIcon(player.getInventory().getItemInMainHand());
             routeRepository.save(route);
             player.sendMessage(Component.text(route.getIcon() == null ? "Route icon cleared." : "Route icon updated."));
-            openRoutes(player, page);
+            openRoutes(player, folder, page);
         } else if (event.isRightClick() && event.isShiftClick()) {
-            openDeleteConfirmation(player, route, page);
+            openDeleteConfirmation(player, route, folder, page);
         } else {
             beginEditing(player, route);
         }
@@ -303,7 +329,7 @@ public final class RouteGuiService implements Listener {
 
     private void handleDeleteClick(InventoryClickEvent event, Player player, DeleteRouteHolder holder) {
         if (event.getRawSlot() == 15) {
-            openRoutes(player, holder.page());
+            openRoutes(player, holder.folder(), holder.page());
             return;
         }
         if (event.getRawSlot() != 11) {
@@ -311,7 +337,7 @@ public final class RouteGuiService implements Listener {
         }
         NpcRoute route = routeRepository.find(holder.routeKey()).orElse(null);
         if (route == null) {
-            openRoutes(player, holder.page());
+            openRoutes(player, holder.folder(), holder.page());
             return;
         }
         int unassigned = 0;
@@ -326,11 +352,11 @@ public final class RouteGuiService implements Listener {
         }
         routeRepository.delete(route);
         player.sendMessage(Component.text("Deleted route and unassigned " + unassigned + " NPC preset(s)."));
-        openRoutes(player, holder.page());
+        openRoutes(player, holder.folder(), holder.page());
     }
 
-    private void openDeleteConfirmation(Player player, NpcRoute route, int page) {
-        Inventory inventory = Bukkit.createInventory(new DeleteRouteHolder(route.getKey(), page), 27,
+    private void openDeleteConfirmation(Player player, NpcRoute route, String folder, int page) {
+        Inventory inventory = Bukkit.createInventory(new DeleteRouteHolder(route.getKey(), folder, page), 27,
                 Component.text("Delete route: " + route.getDisplayName()));
         inventory.setItem(11, item(Material.LIME_CONCRETE, "Confirm", List.of(
                 ChatColor.RED + "Permanently delete this route",
@@ -338,6 +364,31 @@ public final class RouteGuiService implements Listener {
         )));
         inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel", List.of(ChatColor.GRAY + "Nothing will be changed")));
         player.openInventory(inventory);
+    }
+
+    private List<RouteEntry> routeEntries(String folder) {
+        String prefix = folder.isEmpty() ? "" : folder + "/";
+        Map<String, RouteEntry> result = new LinkedHashMap<>();
+        for (NpcRoute route : routeRepository.findAll()) {
+            if (!route.getKey().startsWith(prefix)) continue;
+            String rest = route.getKey().substring(prefix.length());
+            int slash = rest.indexOf('/');
+            if (slash >= 0) {
+                String label = rest.substring(0, slash);
+                String path = prefix + label;
+                RouteEntry old = result.get(path);
+                result.put(path, new RouteEntry(true, path, label,
+                        old == null ? 1 : old.childCount() + 1, null));
+            } else {
+                result.put(route.getKey(), new RouteEntry(false, route.getKey(), rest, 0, route));
+            }
+        }
+        return new ArrayList<>(result.values());
+    }
+
+    private static String parent(String path) {
+        int slash = path.lastIndexOf('/');
+        return slash < 0 ? "" : path.substring(0, slash);
     }
 
     private void beginEditing(Player player, NpcRoute route) {
@@ -484,7 +535,9 @@ public final class RouteGuiService implements Listener {
         void open(Player player, String routeKey, RoutePoint point);
     }
 
-    private record RoutesHolder(int page) implements InventoryHolder {
+    private record RouteEntry(boolean folder, String path, String label, int childCount, NpcRoute route) { }
+
+    private record RoutesHolder(String folder, int page) implements InventoryHolder {
 
         @Override
         public Inventory getInventory() {
@@ -492,7 +545,7 @@ public final class RouteGuiService implements Listener {
         }
     }
 
-    private record DeleteRouteHolder(String routeKey, int page) implements InventoryHolder {
+    private record DeleteRouteHolder(String routeKey, String folder, int page) implements InventoryHolder {
 
         @Override
         public Inventory getInventory() {

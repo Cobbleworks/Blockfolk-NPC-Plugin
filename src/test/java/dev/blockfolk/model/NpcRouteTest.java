@@ -80,6 +80,16 @@ class NpcRouteTest {
                 () -> point.actions().add(new BehaviourAction(BehaviourActionType.JUMP, null)));
     }
 
+    @Test
+    void acceptsGroupedRouteNamesAndRejectsMalformedGroups() {
+        NpcRoute route = NpcRoute.create("Village/Night_Patrol");
+
+        assertEquals("village/night_patrol", route.getKey());
+        assertEquals("Village/Night_Patrol", route.getDisplayName());
+        assertThrows(IllegalArgumentException.class, () -> NpcRoute.create("village//patrol"));
+        assertThrows(IllegalArgumentException.class, () -> NpcRoute.create("../patrol"));
+    }
+
     private World world(String name) {
         return (World) Proxy.newProxyInstance(
             World.class.getClassLoader(),
