@@ -90,6 +90,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 chatInputService,
                 skinResolver,
                 routeGuiService::openRoutes,
+                routeGuiService::createRoute,
                 customEventRepository,
                 customEventGuiService::open
         );

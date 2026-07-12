@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -98,6 +99,7 @@ public final class GuiService implements Listener {
     private final ChatInputService chatInputService;
     private final SkinResolver skinResolver;
     private final Consumer<Player> routeGuiOpener;
+    private final RouteCreator routeCreator;
     private final CustomEventRepository customEventRepository;
     private final Consumer<Player> customEventGuiOpener;
     private final NamespacedKey waypointActionKey;
@@ -116,6 +118,7 @@ public final class GuiService implements Listener {
             ChatInputService chatInputService,
             SkinResolver skinResolver,
             Consumer<Player> routeGuiOpener,
+            RouteCreator routeCreator,
             CustomEventRepository customEventRepository,
             Consumer<Player> customEventGuiOpener
     ) {
@@ -126,6 +129,7 @@ public final class GuiService implements Listener {
         this.chatInputService = chatInputService;
         this.skinResolver = skinResolver;
         this.routeGuiOpener = routeGuiOpener;
+        this.routeCreator = routeCreator;
         this.customEventRepository = customEventRepository;
         this.customEventGuiOpener = customEventGuiOpener;
         this.waypointActionKey = new NamespacedKey(plugin, "behaviour-waypoint-action");
@@ -217,18 +221,23 @@ public final class GuiService implements Listener {
 
     private void openRoutePointValuePicker(Player player, RoutePointActionPickerHolder action,
             BehaviourValuePickerType pickerType, int requestedPage) {
-        List<BehaviourPickerOption> options = pickerOptions(pickerType);
+        openRoutePointValuePicker(player, action, pickerType, "", requestedPage);
+    }
+
+    private void openRoutePointValuePicker(Player player, RoutePointActionPickerHolder action,
+            BehaviourValuePickerType pickerType, String folder, int requestedPage) {
+        List<BehaviourPickerOption> options = pickerOptions(pickerType, folder);
         int pages = Math.max(1, (options.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new RoutePointValuePickerHolder(
-                action.routeKey(), action.point(), action.actionIndex(), pickerType, page), 54,
+                action.routeKey(), action.point(), action.actionIndex(), pickerType, folder, page), 54,
                 Component.text(pickerType.title()));
         int from = page * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, options.size());
         for (int index = from; index < to; index++) {
             BehaviourPickerOption option = options.get(index);
             List<String> lore = new ArrayList<>(option.lore());
-            lore.add(ChatColor.YELLOW + "Click to select");
+            lore.add(ChatColor.YELLOW + (option.folder() ? "Click to open" : "Click to select"));
             inventory.setItem(index - from, item(option.icon(), option.label(), lore));
         }
         if (options.isEmpty()) {
@@ -237,9 +246,17 @@ public final class GuiService implements Listener {
             )));
         }
         if (page > 0) {
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
+        }
+        if (pickerType == BehaviourValuePickerType.ROUTE && !folder.isEmpty()) {
+            inventory.setItem(45, item(Material.ARROW, "Up One Group", List.of()));
         }
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        if (pickerType == BehaviourValuePickerType.ROUTE) {
+            inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
+                    ChatColor.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
+                    ChatColor.YELLOW + "Click, then enter its name")));
+        }
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
@@ -603,18 +620,23 @@ public final class GuiService implements Listener {
             BehaviourValuePickerType pickerType,
             int requestedValuePage
     ) {
-        List<BehaviourPickerOption> options = pickerOptions(pickerType);
+        openBehaviourValuePicker(player, definition, action, pickerType, "", requestedValuePage);
+    }
+
+    private void openBehaviourValuePicker(Player player, NpcDefinition definition, ActionPickerHolder action,
+            BehaviourValuePickerType pickerType, String folder, int requestedValuePage) {
+        List<BehaviourPickerOption> options = pickerOptions(pickerType, folder);
         int pages = Math.max(1, (options.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int valuePage = Math.max(0, Math.min(requestedValuePage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new BehaviourValuePickerHolder(
-                action.key(), action.event(), action.customEvent(), action.actionIndex(), action.page(), pickerType, valuePage), 54,
+                action.key(), action.event(), action.customEvent(), action.actionIndex(), action.page(), pickerType, folder, valuePage), 54,
                 Component.text(pickerType.title()));
         int from = valuePage * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, options.size());
         for (int index = from; index < to; index++) {
             BehaviourPickerOption option = options.get(index);
             List<String> lore = new ArrayList<>(option.lore());
-            lore.add(ChatColor.YELLOW + "Click to select");
+            lore.add(ChatColor.YELLOW + (option.folder() ? "Click to open" : "Click to select"));
             inventory.setItem(index - from, item(option.icon(), option.label(), lore));
         }
         if (options.isEmpty()) {
@@ -623,9 +645,17 @@ public final class GuiService implements Listener {
             )));
         }
         if (valuePage > 0) {
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
+        }
+        if (pickerType == BehaviourValuePickerType.ROUTE && !folder.isEmpty()) {
+            inventory.setItem(45, item(Material.ARROW, "Up One Group", List.of()));
         }
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        if (pickerType == BehaviourValuePickerType.ROUTE) {
+            inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
+                    ChatColor.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
+                    ChatColor.YELLOW + "Click, then enter its name")));
+        }
         if (valuePage + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
@@ -633,27 +663,53 @@ public final class GuiService implements Listener {
     }
 
     private List<BehaviourPickerOption> pickerOptions(BehaviourValuePickerType pickerType) {
+        return pickerOptions(pickerType, "");
+    }
+
+    private List<BehaviourPickerOption> pickerOptions(BehaviourValuePickerType pickerType, String folder) {
         return switch (pickerType) {
-            case ROUTE ->
-                routeRepository.findAll().stream()
-                .map(route -> new BehaviourPickerOption(route.getKey(), route.getDisplayName(), routeIcon(route), List.of(
-                ChatColor.DARK_GRAY + "Key: " + route.getKey(),
-                ChatColor.GRAY + "" + route.getPoints().size() + " route point(s)"
-                )))
-                .toList();
+            case ROUTE -> routePickerOptions(folder);
             case WALK_SPEED ->
                 java.util.Arrays.stream(WalkingSpeed.values())
                 .map(speed -> new BehaviourPickerOption(speed.name().toLowerCase(java.util.Locale.ROOT),
                 speed.displayName(), new ItemStack(Material.FEATHER), List.of(
                 ChatColor.GRAY + "" + speed.blocksPerSecond() + " blocks/second"
-                )))
+                ), false))
                 .toList();
             case CUSTOM_EVENT ->
                 customEventRepository.findAll().stream()
                 .map(event -> new BehaviourPickerOption(event.getName(), event.getName(), customEventIcon(event), List.of(
-                        ChatColor.GRAY + (event.getDescription().isBlank() ? "No description" : event.getDescription()))))
+                        ChatColor.GRAY + (event.getDescription().isBlank() ? "No description" : event.getDescription())), false))
                 .toList();
         };
+    }
+
+    private List<BehaviourPickerOption> routePickerOptions(String folder) {
+        String prefix = folder.isEmpty() ? "" : folder + "/";
+        Map<String, BehaviourPickerOption> options = new LinkedHashMap<>();
+        for (NpcRoute route : routeRepository.findAll()) {
+            if (!route.getKey().startsWith(prefix)) continue;
+            String rest = route.getKey().substring(prefix.length());
+            int slash = rest.indexOf('/');
+            if (slash >= 0) {
+                String label = rest.substring(0, slash);
+                String path = prefix + label;
+                BehaviourPickerOption old = options.get(path);
+                int count = old == null ? 1 : Integer.parseInt(old.lore().getFirst().split(" ")[0]) + 1;
+                options.put(path, new BehaviourPickerOption(path, label, new ItemStack(Material.CHEST),
+                        List.of(count + " route(s)", ChatColor.DARK_GRAY + path), true));
+            } else {
+                options.put(route.getKey(), new BehaviourPickerOption(route.getKey(), route.getDisplayName(), routeIcon(route), List.of(
+                        ChatColor.DARK_GRAY + "Key: " + route.getKey(),
+                        ChatColor.GRAY + "" + route.getPoints().size() + " route point(s)"), false));
+            }
+        }
+        return new ArrayList<>(options.values());
+    }
+
+    private static String parentFolder(String folder) {
+        int slash = folder.lastIndexOf('/');
+        return slash < 0 ? "" : folder.substring(0, slash);
     }
 
     public void openRouteAssignment(Player player, NpcDefinition definition, int requestedPage) {
@@ -1379,7 +1435,12 @@ public final class GuiService implements Listener {
                 holder.routeKey(), current, holder.actionIndex());
         int slot = event.getRawSlot();
         if (slot == 45) {
-            openRoutePointValuePicker(player, action, holder.pickerType(), holder.page() - 1);
+            if (holder.pickerType() == BehaviourValuePickerType.ROUTE && !holder.folder().isEmpty())
+                openRoutePointValuePicker(player, action, holder.pickerType(), parentFolder(holder.folder()), 0);
+            return;
+        }
+        if (slot == 47) {
+            openRoutePointValuePicker(player, action, holder.pickerType(), holder.folder(), holder.page() - 1);
             return;
         }
         if (slot == 49) {
@@ -1387,15 +1448,26 @@ public final class GuiService implements Listener {
             return;
         }
         if (slot == 53) {
-            openRoutePointValuePicker(player, action, holder.pickerType(), holder.page() + 1);
+            openRoutePointValuePicker(player, action, holder.pickerType(), holder.folder(), holder.page() + 1);
             return;
         }
-        List<BehaviourPickerOption> options = pickerOptions(holder.pickerType());
+        if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.ROUTE) {
+            routeCreator.create(player, holder.folder(), route -> {
+                RoutePoint updated = setRoutePointAction(action, BehaviourActionType.SET_ROUTE, route.getKey());
+                if (updated != null) player.sendMessage(Component.text("Created and selected '" + route.getDisplayName() + "'."));
+            });
+            return;
+        }
+        List<BehaviourPickerOption> options = pickerOptions(holder.pickerType(), holder.folder());
         int index = holder.page() * PAGE_SIZE + slot;
         if (slot >= PAGE_SIZE || index < 0 || index >= options.size()) {
             return;
         }
         BehaviourPickerOption option = options.get(index);
+        if (option.folder()) {
+            openRoutePointValuePicker(player, action, holder.pickerType(), option.value(), 0);
+            return;
+        }
         RoutePoint updated = setRoutePointAction(action, holder.pickerType().actionType(), option.value());
         if (updated != null) {
             player.sendMessage(Component.text("Selected '" + option.label() + "'."));
@@ -1785,7 +1857,12 @@ public final class GuiService implements Listener {
         ActionPickerHolder action = new ActionPickerHolder(holder.key(), holder.event(), holder.customEvent(), holder.actionIndex(), holder.behaviourPage());
         int slot = event.getRawSlot();
         if (slot == 45) {
-            openBehaviourValuePicker(player, definition, action, holder.pickerType(), holder.valuePage() - 1);
+            if (holder.pickerType() == BehaviourValuePickerType.ROUTE && !holder.folder().isEmpty())
+                openBehaviourValuePicker(player, definition, action, holder.pickerType(), parentFolder(holder.folder()), 0);
+            return;
+        }
+        if (slot == 47) {
+            openBehaviourValuePicker(player, definition, action, holder.pickerType(), holder.folder(), holder.valuePage() - 1);
             return;
         }
         if (slot == 49) {
@@ -1793,15 +1870,26 @@ public final class GuiService implements Listener {
             return;
         }
         if (slot == 53) {
-            openBehaviourValuePicker(player, definition, action, holder.pickerType(), holder.valuePage() + 1);
+            openBehaviourValuePicker(player, definition, action, holder.pickerType(), holder.folder(), holder.valuePage() + 1);
             return;
         }
-        List<BehaviourPickerOption> options = pickerOptions(holder.pickerType());
+        if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.ROUTE) {
+            routeCreator.create(player, holder.folder(), route -> {
+                setAction(definition, action, BehaviourActionType.SET_ROUTE, route.getKey());
+                player.sendMessage(Component.text("Created and selected '" + route.getDisplayName() + "'."));
+            });
+            return;
+        }
+        List<BehaviourPickerOption> options = pickerOptions(holder.pickerType(), holder.folder());
         int index = holder.valuePage() * PAGE_SIZE + slot;
         if (slot >= PAGE_SIZE || index < 0 || index >= options.size()) {
             return;
         }
         BehaviourPickerOption option = options.get(index);
+        if (option.folder()) {
+            openBehaviourValuePicker(player, definition, action, holder.pickerType(), option.value(), 0);
+            return;
+        }
         setAction(definition, action, holder.pickerType().actionType(), option.value());
         player.sendMessage(Component.text("Selected '" + option.label() + "'."));
         openBehaviourHome(player, definition, action);
@@ -2347,6 +2435,7 @@ public final class GuiService implements Listener {
             RoutePoint point,
             int actionIndex,
             BehaviourValuePickerType pickerType,
+            String folder,
             int page
             ) implements InventoryHolder {
 
@@ -2380,6 +2469,7 @@ public final class GuiService implements Listener {
             int actionIndex,
             int behaviourPage,
             BehaviourValuePickerType pickerType,
+            String folder,
             int valuePage
             ) implements InventoryHolder {
 
@@ -2393,9 +2483,15 @@ public final class GuiService implements Listener {
             String value,
             String label,
             ItemStack icon,
-            List<String> lore
+            List<String> lore,
+            boolean folder
             ) {
 
+    }
+
+    @FunctionalInterface
+    public interface RouteCreator {
+        void create(Player player, String folder, Consumer<NpcRoute> onCreated);
     }
 
     private enum BehaviourValuePickerType {

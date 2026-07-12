@@ -101,6 +101,26 @@ public final class RouteGuiService implements Listener {
         openRoutes(player, "", requestedPage);
     }
 
+    public void createRoute(Player player, String folder, Consumer<NpcRoute> onCreated) {
+        String normalizedFolder = folder == null ? "" : folder;
+        chatInputService.request(player, "Enter the full route name (use / for groups):", value -> {
+            try {
+                String name = normalizedFolder.isEmpty() || value.contains("/")
+                        ? value : normalizedFolder + "/" + value;
+                NpcRoute route = NpcRoute.create(name);
+                if (routeRepository.find(route.getKey()).isPresent()) {
+                    player.sendMessage(Component.text("A route with that key already exists."));
+                    return;
+                }
+                routeRepository.save(route);
+                onCreated.accept(route);
+                beginEditing(player, route);
+            } catch (IllegalArgumentException exception) {
+                player.sendMessage(Component.text(exception.getMessage()));
+            }
+        });
+    }
+
     private void openRoutes(Player player, String folder, int requestedPage) {
         finishEditing(player, false);
         List<RouteEntry> entries = routeEntries(folder);
@@ -568,7 +588,7 @@ public final class RouteGuiService implements Listener {
 
     private ItemStack routeItem(NpcRoute route, List<String> lore) {
         ItemStack icon = route.getIcon();
-        ItemStack result = icon == null ? new ItemStack(Material.AMETHYST_CLUSTER) : icon;
+        ItemStack result = icon == null ? new ItemStack(Material.RAIL) : icon;
         result.setAmount(1);
         ItemMeta meta = result.getItemMeta();
         meta.setDisplayName(ChatColor.GOLD + route.getDisplayName());
