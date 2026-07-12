@@ -215,6 +215,7 @@ public final class GuiService implements Listener {
                 ChatColor.GRAY + "Respawn: " + ChatColor.WHITE + respawnLabel(combat),
                 ChatColor.GRAY + "Attack reaction: " + ChatColor.WHITE + combat.attackReaction().displayName(),
                 ChatColor.GRAY + "Sight targets: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
+                ChatColor.GRAY + "Alliance: " + ChatColor.WHITE + allianceLabel(combat),
                 ChatColor.YELLOW + "Click to configure combat"
         )));
         inventory.setItem(24, item(Material.TNT, "Delete Preset", List.of(
@@ -316,6 +317,11 @@ public final class GuiService implements Listener {
                 ChatColor.GRAY + "Attack reaction: " + ChatColor.WHITE + combat.attackReaction().displayName(),
                 ChatColor.GRAY + "Sight targets enabled: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
                 ChatColor.YELLOW + "Click to configure"
+        )));
+        inventory.setItem(14, item(Material.NAME_TAG, "Alliance", List.of(
+                ChatColor.GRAY + "Current: " + ChatColor.WHITE + allianceLabel(combat),
+                ChatColor.GRAY + "NPCs with the same alliance will not fight",
+                ChatColor.YELLOW + "Click to enter text"
         )));
         inventory.setItem(23, item(Material.BARRIER, "Back", List.of()));
         player.openInventory(inventory);
@@ -800,6 +806,13 @@ public final class GuiService implements Listener {
             case 5 -> {
                 openTargetsAndBehaviour(player, definition);
             }
+            case 14 ->
+                chatInputService.request(player, "Enter an alliance, or type clear to remove it:", value -> {
+                    String alliance = value.equalsIgnoreCase("clear") ? null : value;
+                    definition.setCombatProfile(definition.getCombatProfile().withAlliance(alliance));
+                    saveRefresh(definition);
+                    openFightingEditor(player, definition);
+                });
             case 23 ->
                 openEditor(player, definition);
             default -> {
@@ -819,12 +832,18 @@ public final class GuiService implements Listener {
         }
         CombatProfile combat = definition.getCombatProfile();
         CombatProfile updated = switch (event.getRawSlot()) {
-            case 10 -> combat.withAttackReaction(combat.attackReaction().next());
-            case 12 -> combat.withTargetMobs(!combat.targetMobs());
-            case 13 -> combat.withTargetAnimals(!combat.targetAnimals());
-            case 14 -> combat.withTargetPlayers(!combat.targetPlayers());
-            case 15 -> combat.withTargetNpcs(!combat.targetNpcs());
-            default -> null;
+            case 10 ->
+                combat.withAttackReaction(combat.attackReaction().next());
+            case 12 ->
+                combat.withTargetMobs(!combat.targetMobs());
+            case 13 ->
+                combat.withTargetAnimals(!combat.targetAnimals());
+            case 14 ->
+                combat.withTargetPlayers(!combat.targetPlayers());
+            case 15 ->
+                combat.withTargetNpcs(!combat.targetNpcs());
+            default ->
+                null;
         };
         if (updated != null) {
             definition.setCombatProfile(updated);
@@ -1077,8 +1096,8 @@ public final class GuiService implements Listener {
         List<BehaviourAction> actions = definition.getBehaviourActions(holder.event());
         BehaviourAction action = new BehaviourAction(type, value);
         if (holder.actionIndex() < actions.size()) {
-            actions.set(holder.actionIndex(), action); 
-        }else if (actions.size() < 7) {
+            actions.set(holder.actionIndex(), action);
+        } else if (actions.size() < 7) {
             actions.add(action);
         }
         definition.setBehaviourActions(holder.event(), actions);
@@ -1315,6 +1334,10 @@ public final class GuiService implements Listener {
 
     private String respawnLabel(CombatProfile combat) {
         return combat.respawnSeconds() == 0 ? "Disabled (0 seconds)" : combat.respawnSeconds() + " seconds";
+    }
+
+    private String allianceLabel(CombatProfile combat) {
+        return combat.alliance() == null ? "None" : combat.alliance();
     }
 
     private Material reactionMaterial(AttackReaction reaction) {

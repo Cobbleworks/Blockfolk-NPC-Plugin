@@ -3,6 +3,7 @@ package dev.blockfolk.model;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -19,12 +20,13 @@ class CombatProfileTest {
     @Test
     void clampsHealthAndNormalizesShoutout() {
         CombatProfile profile = new CombatProfile(
-                -5, -10, null, false, false, false, false, "  Stand down!  "
+                -5, -10, null, false, false, false, false, "  guards  ", "  Stand down!  "
         );
 
         assertEquals(0, profile.maxHealth());
         assertEquals(0, profile.respawnSeconds());
         assertEquals(AttackReaction.IGNORE, profile.attackReaction());
+        assertEquals("guards", profile.alliance());
         assertEquals("Stand down!", profile.shoutout());
         assertNull(profile.withShoutout("   ").shoutout());
         assertEquals(CombatProfile.MAX_HEALTH, profile.withMaxHealth(Integer.MAX_VALUE).maxHealth());
@@ -46,5 +48,15 @@ class CombatProfileTest {
         assertTrue(profile.targetAnimals());
         assertTrue(profile.targetNpcs());
         assertTrue(profile.hasSightTargets());
+    }
+
+    @Test
+    void onlyNonEmptyMatchingAlliancesAreAllied() {
+        CombatProfile guards = CombatProfile.disabled().withAlliance(" guards ");
+
+        assertTrue(guards.alliedWith(CombatProfile.disabled().withAlliance("guards")));
+        assertFalse(guards.alliedWith(CombatProfile.disabled().withAlliance("raiders")));
+        assertFalse(CombatProfile.disabled().alliedWith(CombatProfile.disabled()));
+        assertNull(guards.withAlliance("   ").alliance());
     }
 }

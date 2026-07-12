@@ -10,6 +10,7 @@ public record CombatProfile(
         boolean targetAnimals,
         boolean targetPlayers,
         boolean targetNpcs,
+        String alliance,
         String shoutout
 ) {
 
@@ -21,11 +22,12 @@ public record CombatProfile(
         maxHealth = Math.max(0, Math.min(MAX_HEALTH, maxHealth));
         respawnSeconds = Math.max(0, respawnSeconds);
         attackReaction = Objects.requireNonNullElse(attackReaction, AttackReaction.IGNORE);
+        alliance = normalizeOptionalText(alliance);
         shoutout = shoutout == null || shoutout.isBlank() ? null : shoutout.trim();
     }
 
     public static CombatProfile disabled() {
-        return new CombatProfile(0, 0, AttackReaction.IGNORE, false, false, false, false, null);
+        return new CombatProfile(0, 0, AttackReaction.IGNORE, false, false, false, false, null, null);
     }
 
     public boolean invulnerable() {
@@ -34,45 +36,58 @@ public record CombatProfile(
 
     public CombatProfile withMaxHealth(int maxHealth) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
     }
 
     public CombatProfile withRespawnSeconds(int respawnSeconds) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
     }
 
     public CombatProfile withAttackReaction(AttackReaction attackReaction) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
     }
 
     public CombatProfile withTargetMobs(boolean targetMobs) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
     }
 
     public CombatProfile withTargetAnimals(boolean targetAnimals) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
     }
 
     public CombatProfile withTargetPlayers(boolean targetPlayers) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
     }
 
     public CombatProfile withTargetNpcs(boolean targetNpcs) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
+    }
+
+    public CombatProfile withAlliance(String alliance) {
+        return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
     }
 
     public CombatProfile withShoutout(String shoutout) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, shoutout);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout);
     }
 
     public boolean hasSightTargets() {
         return targetMobs || targetAnimals || targetPlayers || targetNpcs;
+    }
+
+    public boolean alliedWith(CombatProfile other) {
+        return other != null && alliance != null && alliance.equals(other.alliance);
+    }
+
+    private static String normalizeOptionalText(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

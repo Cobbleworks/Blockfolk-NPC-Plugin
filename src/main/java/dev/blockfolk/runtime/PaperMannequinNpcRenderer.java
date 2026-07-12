@@ -71,13 +71,14 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
             Mannequin mannequin = location.getWorld().spawn(location, Mannequin.class, spawned -> {
                 spawned.setPersistent(true);
                 spawned.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
-                // The native immovable flag also prevents projectile impacts from
-                // being processed. Use full knockback resistance instead so arrows
-                // still damage the NPC while route movement remains authoritative.
+                // Both the native immovable flag and Bukkit's non-collidable flag
+                // make the mannequin ineligible for projectile hit detection. Keep
+                // it hittable and use full knockback resistance plus authoritative
+                // route movement to hold it in place instead.
                 spawned.setImmovable(false);
                 spawned.setAI(false);
                 spawned.setGravity(false);
-                spawned.setCollidable(false);
+                spawned.setCollidable(true);
                 spawned.setInvulnerable(true);
                 spawned.setSilent(true);
                 spawned.setRemoveWhenFarAway(false);
@@ -175,6 +176,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         mannequin.setDescription(null);
         mannequin.setInvisible(false);
         mannequin.setImmovable(false);
+        mannequin.setCollidable(true);
         mannequin.setRotation(instance.getLocation().getYaw(), instance.getLocation().getPitch());
         mannequin.setProfile(createProfile(instance, definition));
         AttributeInstance knockbackResistance = mannequin.getAttribute(Attribute.KNOCKBACK_RESISTANCE);

@@ -96,6 +96,7 @@ public final class NpcDefinitionRepository {
         configuration.set("combat.targets.animals", definition.getCombatProfile().targetAnimals());
         configuration.set("combat.targets.players", definition.getCombatProfile().targetPlayers());
         configuration.set("combat.targets.npcs", definition.getCombatProfile().targetNpcs());
+        configuration.set("combat.alliance", definition.getCombatProfile().alliance());
         configuration.set("combat.shoutout", null);
         configuration.set("movement.enabled", null);
         configuration.set("movement.route", null);
@@ -168,6 +169,7 @@ public final class NpcDefinitionRepository {
                 configuration.getBoolean("combat.targets.animals", legacySightTargeting),
                 configuration.getBoolean("combat.targets.players", legacySightTargeting),
                 configuration.getBoolean("combat.targets.npcs", legacySightTargeting),
+                configuration.getString("combat.alliance"),
                 configuration.getString("combat.shoutout")
         ));
         definition.setMovementProfile(new MovementProfile(

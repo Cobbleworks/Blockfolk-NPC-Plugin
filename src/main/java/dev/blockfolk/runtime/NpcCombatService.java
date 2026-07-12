@@ -364,7 +364,11 @@ public final class NpcCombatService implements Listener {
                 return false;
             }
             NpcDefinition targetDefinition = definitionRepository.find(targetInstance.getDefinitionKey()).orElse(null);
-            return targetDefinition != null && !targetDefinition.getCombatProfile().invulnerable();
+            NpcDefinition attackerDefinition = definitionRepository.find(attacker.getDefinitionKey()).orElse(null);
+            return targetDefinition != null
+                    && !targetDefinition.getCombatProfile().invulnerable()
+                    && (attackerDefinition == null || !attackerDefinition.getCombatProfile()
+                            .alliedWith(targetDefinition.getCombatProfile()));
         }
         return target instanceof Mob;
     }
