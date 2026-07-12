@@ -327,6 +327,7 @@ public final class NpcCombatService implements Listener {
             clearState(instance);
             return;
         }
+        makeMobFightBack(target, npc);
         state.lastKnownLocation = target.getLocation();
         NpcAttack attack = attackSelector.select(npc.getEquipment().getItemInMainHand());
         double distanceSquared = npc.getLocation().distanceSquared(target.getLocation());
@@ -385,6 +386,10 @@ public final class NpcCombatService implements Listener {
     ) {
         CombatState previous = states.get(instance.getId());
         boolean enteringCombat = previous == null || previous.mode != mode || !previous.entityId.equals(entity.getUniqueId());
+        if (previous != null && previous.mode == CombatMode.FIGHT
+                && (mode != CombatMode.FIGHT || !previous.entityId.equals(entity.getUniqueId()))) {
+            releaseMobTarget(instance, previous);
+        }
         states.put(instance.getId(), new CombatState(
                 mode,
                 entity.getUniqueId(),
@@ -392,6 +397,9 @@ public final class NpcCombatService implements Listener {
                 currentTick + (mode == CombatMode.FLEE ? FLEE_TICKS : Long.MAX_VALUE),
                 currentTick
         ));
+        if (mode == CombatMode.FIGHT) {
+            instanceRegistry.findEntity(instance).ifPresent(npc -> makeMobFightBack(entity, npc));
+        }
         if (enteringCombat) {
             if (behaviourService != null) {
                 behaviourService.trigger(dev.blockfolk.model.BehaviourEvent.COMBAT_ENTERED, instance, entity);
@@ -498,11 +506,28 @@ public final class NpcCombatService implements Listener {
     private void clearState(NpcInstance instance) {
         CombatState removed = states.remove(instance.getId());
         if (removed != null) {
+            releaseMobTarget(instance, removed);
             instanceRegistry.stopNavigating(instance);
             if (behaviourService != null) {
                 behaviourService.trigger(dev.blockfolk.model.BehaviourEvent.COMBAT_EXITED,
                         instance, Bukkit.getEntity(removed.entityId));
             }
+        }
+    }
+
+    private void makeMobFightBack(LivingEntity target, LivingEntity npc) {
+        if (target instanceof Mob mob && (mob.getTarget() == null
+                || !mob.getTarget().getUniqueId().equals(npc.getUniqueId()))) {
+            mob.setTarget(npc);
+        }
+    }
+
+    private void releaseMobTarget(NpcInstance instance, CombatState state) {
+        Entity target = Bukkit.getEntity(state.entityId);
+        LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
+        if (target instanceof Mob mob && npc != null && mob.getTarget() != null
+                && mob.getTarget().getUniqueId().equals(npc.getUniqueId())) {
+            mob.setTarget(null);
         }
     }
 
