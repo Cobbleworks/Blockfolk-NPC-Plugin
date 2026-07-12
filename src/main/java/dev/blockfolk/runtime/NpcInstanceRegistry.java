@@ -76,7 +76,6 @@ public final class NpcInstanceRegistry {
         for (NpcInstance instance : instances.values()) {
             if (instance.getDefinitionKey().equals(definition.getKey())) {
                 renderer.refresh(instance, definition);
-                dialogService.attach(instance, definition);
             }
         }
     }
@@ -198,8 +197,10 @@ public final class NpcInstanceRegistry {
     }
 
     private void spawnInstance(NpcInstance instance, NpcDefinition definition) {
+        // Clear any tagged dialog display left by an earlier server run,
+        // including displays from the removed chatter system.
+        dialogService.detach(instance.getId());
         renderer.spawn(instance, definition);
-        dialogService.attach(instance, definition);
         spawnListener.accept(instance, definition);
     }
 }

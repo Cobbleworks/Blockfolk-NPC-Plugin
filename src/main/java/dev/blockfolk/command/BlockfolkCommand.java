@@ -197,7 +197,6 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
         copy.setArmorContents(source.getArmorContents());
         copy.setMainHand(source.getMainHand());
         copy.setOffHand(source.getOffHand());
-        copy.setDialogLines(source.getDialogLines());
         copy.setCombatProfile(source.getCombatProfile());
         copy.setMovementProfile(source.getMovementProfile());
         for (dev.blockfolk.model.BehaviourEvent event : dev.blockfolk.model.BehaviourEvent.values()) {

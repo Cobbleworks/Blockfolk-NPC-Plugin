@@ -4,6 +4,7 @@ import java.util.Locale;
 
 public enum BehaviourEvent {
     SPAWN("On Spawn"),
+    IDLE("On Idle"),
     LEFT_CLICK("On Left-Click"),
     RIGHT_CLICK("On Right-Click"),
     PLAYER_APPROACH("On Player Approach"),

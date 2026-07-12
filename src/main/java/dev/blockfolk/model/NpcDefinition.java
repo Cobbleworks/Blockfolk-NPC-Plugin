@@ -22,7 +22,6 @@ public final class NpcDefinition {
     private ItemStack[] armorContents;
     private ItemStack mainHand;
     private ItemStack offHand;
-    private List<String> dialogLines;
     private CombatProfile combatProfile;
     private MovementProfile movementProfile;
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
@@ -33,7 +32,6 @@ public final class NpcDefinition {
         this.displayName = key;
         this.inventoryContents = new ItemStack[36];
         this.armorContents = new ItemStack[4];
-        this.dialogLines = new ArrayList<>();
         this.combatProfile = CombatProfile.disabled();
         this.movementProfile = MovementProfile.disabled();
         this.behaviours = new EnumMap<>(BehaviourEvent.class);
@@ -128,14 +126,6 @@ public final class NpcDefinition {
 
     public void setOffHand(ItemStack offHand) {
         this.offHand = offHand == null ? null : offHand.clone();
-    }
-
-    public List<String> getDialogLines() {
-        return new ArrayList<>(dialogLines);
-    }
-
-    public void setDialogLines(List<String> dialogLines) {
-        this.dialogLines = dialogLines == null ? new ArrayList<>() : new ArrayList<>(dialogLines);
     }
 
     public CombatProfile getCombatProfile() {

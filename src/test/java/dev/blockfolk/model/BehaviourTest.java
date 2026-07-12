@@ -8,6 +8,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BehaviourTest {
+    @Test
+    void idleIsStoredAndDisplayedAsABuiltInEvent() {
+        assertEquals(BehaviourEvent.IDLE, BehaviourEvent.fromStored("idle"));
+        assertEquals("On Idle", BehaviourEvent.IDLE.displayName());
+        assertEquals(BehaviourEvent.IDLE, BehaviourEvent.values()[1]);
+    }
+
 
     @Test
     void parsesNewBehaviourTypesFromStoredNames() {

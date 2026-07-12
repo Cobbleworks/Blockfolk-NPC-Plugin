@@ -43,7 +43,6 @@ import org.bukkit.potion.PotionType;
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
 
-import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.AttackReaction;
@@ -96,7 +95,6 @@ public final class GuiService implements Listener {
     private final RouteRepository routeRepository;
     private final NpcInstanceRegistry instanceRegistry;
     private final ChatInputService chatInputService;
-    private final DialogService dialogService;
     private final SkinResolver skinResolver;
     private final Consumer<Player> routeGuiOpener;
     private final CustomEventRepository customEventRepository;
@@ -115,7 +113,6 @@ public final class GuiService implements Listener {
             RouteRepository routeRepository,
             NpcInstanceRegistry instanceRegistry,
             ChatInputService chatInputService,
-            DialogService dialogService,
             SkinResolver skinResolver,
             Consumer<Player> routeGuiOpener,
             CustomEventRepository customEventRepository,
@@ -126,7 +123,6 @@ public final class GuiService implements Listener {
         this.routeRepository = routeRepository;
         this.instanceRegistry = instanceRegistry;
         this.chatInputService = chatInputService;
-        this.dialogService = dialogService;
         this.skinResolver = skinResolver;
         this.routeGuiOpener = routeGuiOpener;
         this.customEventRepository = customEventRepository;
@@ -328,7 +324,6 @@ public final class GuiService implements Listener {
                 ChatColor.GRAY + "Armor, hands, and stored inventory",
                 ChatColor.YELLOW + "Click to edit"
         )));
-        inventory.setItem(14, item(Material.WRITABLE_BOOK, "Chatter", chatterLore(definition)));
         inventory.setItem(15, item(Material.ARMOR_STAND, "Spawn Instance", List.of(
                 ChatColor.GRAY + "Creates a visible persistent NPC",
                 ChatColor.GRAY + "at the preset spawnpoint",
@@ -795,7 +790,6 @@ public final class GuiService implements Listener {
             openEditor(event.getPlayer(), definition);
             return;
         }
-        dialogService.startChat(event.getPlayer(), instance, definition);
     }
 
     @EventHandler
@@ -905,15 +899,6 @@ public final class GuiService implements Listener {
             }
             case 13 ->
                 openInventoryEditor(player, definition);
-            case 14 ->
-                chatInputService.request(player, "Enter chatter lines separated with |:", value -> {
-                    definition.setDialogLines(java.util.Arrays.stream(value.split("\\|"))
-                            .map(String::trim)
-                            .filter(line -> !line.isBlank())
-                            .toList());
-                    saveRefresh(definition);
-                    openEditor(player, definition);
-                });
             case 15 -> {
                 if (definition.getSpawnpoint() == null) {
                     player.sendMessage(Component.text("Set a spawnpoint first."));
@@ -2046,19 +2031,6 @@ public final class GuiService implements Listener {
         return item;
     }
 
-    private List<String> chatterLore(NpcDefinition definition) {
-        List<String> lore = new ArrayList<>();
-        if (definition.getDialogLines().isEmpty()) {
-            lore.add(ChatColor.GRAY + "No chatter lines configured");
-        } else {
-            lore.add(ChatColor.GRAY + "" + definition.getDialogLines().size() + " configured line(s):");
-            definition.getDialogLines().forEach(line -> lore.add(ChatColor.WHITE + "• " + line));
-        }
-        lore.add(ChatColor.DARK_GRAY + "Use | between multiple lines");
-        lore.add(ChatColor.YELLOW + "Click to edit directly");
-        return lore;
-    }
-
     private String statusLine(NpcDefinition definition) {
         if (definition.getSpawnpoint() == null) {
             return ChatColor.RED + "Spawnpoint not set";
@@ -2129,6 +2101,8 @@ public final class GuiService implements Listener {
                 Material.SKELETON_SKULL;
             case SPAWN ->
                 Material.NETHER_STAR;
+            case IDLE ->
+                Material.CLOCK;
             case DAMAGE_TAKEN ->
                 Material.RED_DYE;
             case HEAL ->

@@ -47,6 +47,7 @@ public final class NpcBehaviourService implements Listener {
     private static final double FOLLOW_RESUME_RANGE_SQUARED = 5.0 * 5.0;
     private static final double FOLLOW_CATCH_UP_RANGE_SQUARED = 12.0 * 12.0;
     private static final int FOLLOW_REPATH_TICKS = 10;
+    private static final long IDLE_REPEAT_TICKS = 10L * 20L;
     private final Plugin plugin;
     private final NpcDefinitionRepository definitions;
     private final NpcInstanceRegistry instances;
@@ -58,6 +59,7 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, Location> moveTargets = new HashMap<>();
     private final Map<UUID, Long> waitingUntilTick = new HashMap<>();
     private final Map<UUID, FollowState> following = new HashMap<>();
+    private final Map<UUID, Object> idleCycles = new HashMap<>();
     private final Set<ProximityKey> nearbyPlayers = new HashSet<>();
     private final Map<ProximityKey, Long> proximityCooldownUntilTick = new HashMap<>();
     private final long proximityCooldownTicks;
@@ -100,6 +102,7 @@ public final class NpcBehaviourService implements Listener {
         moveTargets.clear();
         waitingUntilTick.clear();
         following.clear();
+        idleCycles.clear();
         nearbyPlayers.clear();
         proximityCooldownUntilTick.clear();
     }
@@ -109,7 +112,8 @@ public final class NpcBehaviourService implements Listener {
         if (definition == null) {
             return;
         }
-        executeSequence(event, definition.getBehaviourActions(event), 0, instance, definition, actor);
+        Runnable completion = event == BehaviourEvent.SPAWN ? () -> startIdle(instance) : () -> { };
+        executeSequence(event, definition.getBehaviourActions(event), 0, instance, definition, actor, completion);
     }
 
     public void triggerWaypointActions(List<BehaviourAction> actions, NpcInstance instance) {
@@ -117,7 +121,7 @@ public final class NpcBehaviourService implements Listener {
         if (definition == null || actions == null || actions.isEmpty()) {
             return;
         }
-        executeSequence(null, List.copyOf(actions), 0, instance, definition, null);
+        executeSequence(null, List.copyOf(actions), 0, instance, definition, null, () -> { });
     }
 
     public void emitCustomEvent(String eventName, Entity actor) {
@@ -134,7 +138,7 @@ public final class NpcBehaviourService implements Listener {
             NpcDefinition definition = definitions.find(target.getDefinitionKey()).orElse(null);
             if (definition == null) continue;
             List<BehaviourAction> actions = definition.getCustomEventActions(eventName);
-            if (!actions.isEmpty()) executeSequence(null, actions, 0, target, definition, actor);
+            if (!actions.isEmpty()) executeSequence(null, actions, 0, target, definition, actor, () -> { });
         }
     }
 
@@ -146,6 +150,7 @@ public final class NpcBehaviourService implements Listener {
         moveTargets.remove(instance.getId());
         waitingUntilTick.remove(instance.getId());
         following.remove(instance.getId());
+        idleCycles.remove(instance.getId());
         nearbyPlayers.removeIf(key -> key.instanceId().equals(instance.getId()));
         proximityCooldownUntilTick.keySet().removeIf(key -> key.instanceId().equals(instance.getId()));
     }
@@ -186,21 +191,45 @@ public final class NpcBehaviourService implements Listener {
             int index,
             NpcInstance instance,
             NpcDefinition definition,
-            Entity actor
+            Entity actor,
+            Runnable completion
     ) {
-        if (index >= actions.size() || instances.findAll().stream()
-                .noneMatch(candidate -> candidate.getId().equals(instance.getId()))) {
+        if (instances.findAll().stream().noneMatch(candidate -> candidate.getId().equals(instance.getId()))) {
+            return;
+        }
+        if (index >= actions.size()) {
+            completion.run();
             return;
         }
         BehaviourAction action = actions.get(index);
         execute(event, action, instance, definition, actor);
         long delayTicks = delayAfter(action);
         if (delayTicks <= 0L) {
-            executeSequence(event, actions, index + 1, instance, definition, actor);
+            executeSequence(event, actions, index + 1, instance, definition, actor, completion);
         } else {
             Bukkit.getScheduler().runTaskLater(plugin,
-                    () -> executeSequence(event, actions, index + 1, instance, definition, actor), delayTicks);
+                    () -> executeSequence(event, actions, index + 1, instance, definition, actor, completion), delayTicks);
         }
+    }
+
+    private void startIdle(NpcInstance instance) {
+        Object token = new Object();
+        idleCycles.put(instance.getId(), token);
+        runIdleCycle(instance, token);
+    }
+
+    private void runIdleCycle(NpcInstance instance, Object token) {
+        if (idleCycles.get(instance.getId()) != token) {
+            return;
+        }
+        NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+        if (definition == null) {
+            idleCycles.remove(instance.getId(), token);
+            return;
+        }
+        executeSequence(BehaviourEvent.IDLE, definition.getBehaviourActions(BehaviourEvent.IDLE), 0,
+                instance, definition, null, () -> Bukkit.getScheduler().runTaskLater(plugin,
+                        () -> runIdleCycle(instance, token), IDLE_REPEAT_TICKS));
     }
 
     private long delayAfter(BehaviourAction action) {
@@ -377,6 +406,7 @@ public final class NpcBehaviourService implements Listener {
         moveTargets.keySet().retainAll(active);
         waitingUntilTick.keySet().retainAll(active);
         following.keySet().retainAll(active);
+        idleCycles.keySet().retainAll(active);
     }
 
     private void tickMoveTo(NpcInstance instance) {
