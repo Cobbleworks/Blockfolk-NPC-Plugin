@@ -4,8 +4,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -47,6 +50,7 @@ import net.kyori.adventure.text.Component;
 public final class RouteGuiService implements Listener {
 
     private static final int PAGE_SIZE = 45;
+    private static final Pattern WAIT_INTERVAL = Pattern.compile("^(\\d+(?:\\.\\d+)?)\\s*(ms|s|m|h)$", Pattern.CASE_INSENSITIVE);
 
     private final JavaPlugin plugin;
     private final RouteRepository routeRepository;
@@ -185,13 +189,8 @@ public final class RouteGuiService implements Listener {
             return;
         }
         Action action = event.getAction();
-        if (action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
-            event.setCancelled(true);
-            finishEditing(player, true);
-            Bukkit.getScheduler().runTask(plugin, () -> openRoutes(player));
-            return;
-        }
-        if (action != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) {
+        if (event.getClickedBlock() == null
+                || (action != Action.LEFT_CLICK_BLOCK && action != Action.RIGHT_CLICK_BLOCK)) {
             return;
         }
         event.setCancelled(true);
@@ -203,11 +202,8 @@ public final class RouteGuiService implements Listener {
         }
 
         RoutePoint point = RoutePoint.fromBlock(event.getClickedBlock());
-        boolean changed;
-        if (player.isSneaking()) {
-            changed = route.removePoint(point);
-            player.sendMessage(Component.text(changed ? "Removed route point." : "That block is not a route point."));
-        } else {
+        boolean changed = false;
+        if (action == Action.LEFT_CLICK_BLOCK) {
             try {
                 changed = route.addPoint(point);
                 player.sendMessage(Component.text(changed ? "Added route point " + route.getPoints().size() + "." : "That block is already a route point."));
@@ -215,11 +211,27 @@ public final class RouteGuiService implements Listener {
                 player.sendMessage(Component.text("A route cannot contain blocks from different worlds."));
                 return;
             }
+        } else if (!player.isSneaking()) {
+            changed = route.removePoint(point);
+            player.sendMessage(Component.text(changed ? "Removed route point." : "That block is not a route point."));
+        } else {
+            RoutePoint existing = route.findPoint(point).orElse(null);
+            if (existing == null) {
+                player.sendMessage(Component.text("That block is not a route point."));
+                return;
+            }
+            if (existing.isWaitingPoint()) {
+                changed = route.replacePoint(existing, existing.withWaitMillis(0L));
+                player.sendMessage(Component.text("Changed waiting point back to a regular route point."));
+            } else {
+                requestWaitInterval(player, session, existing);
+                return;
+            }
         }
         if (changed) {
             routeRepository.save(route);
             player.spawnParticle(Particle.END_ROD, point.x() + 0.5, point.y() + 1.1, point.z() + 0.5, 8, 0.2, 0.2, 0.2, 0.0);
-            player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_PLACE, 0.7f, player.isSneaking() ? 0.7f : 1.2f);
+            player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_PLACE, 0.7f, action == Action.RIGHT_CLICK_BLOCK ? 0.7f : 1.2f);
         }
     }
 
@@ -336,7 +348,7 @@ public final class RouteGuiService implements Listener {
         }
         player.closeInventory();
         player.sendMessage(Component.text("Editing route '" + route.getDisplayName() + "'."));
-        player.sendMessage(Component.text("Right-click blocks to add, sneak-right-click to remove, and left-click or drop the shard to finish."));
+        player.sendMessage(Component.text("Left-click blocks to add, right-click to remove, shift-right-click to toggle waiting points, and drop the shard to save and finish."));
         showRoutePoints(player, route);
     }
 
@@ -346,10 +358,11 @@ public final class RouteGuiService implements Listener {
         meta.setDisplayName(ChatColor.LIGHT_PURPLE + "Route Editor: " + route.getDisplayName());
         meta.setLore(List.of(
                 ChatColor.GRAY + "Unique editor: " + token.toString().substring(0, 8),
-                ChatColor.YELLOW + "Right-click a block: add point",
-                ChatColor.YELLOW + "Sneak-right-click: remove point",
+                ChatColor.YELLOW + "Left-click a block: add point",
+                ChatColor.YELLOW + "Right-click: remove point",
+                ChatColor.GOLD + "Shift-right-click: toggle waiting point",
                 ChatColor.LIGHT_PURPLE + "Points stay highlighted while editing",
-                ChatColor.GREEN + "Left-click or drop: finish"
+                ChatColor.GREEN + "Drop: save and finish"
         ));
         meta.setEnchantmentGlintOverride(true);
         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
@@ -375,6 +388,7 @@ public final class RouteGuiService implements Listener {
         if (session == null) {
             return;
         }
+        chatInputService.cancel(player);
         ItemStack[] contents = player.getInventory().getContents();
         for (int slot = 0; slot < contents.length; slot++) {
             ItemStack item = contents[slot];
@@ -412,15 +426,65 @@ public final class RouteGuiService implements Listener {
     }
 
     private void showRoutePoints(Player player, NpcRoute route) {
-        Particle.DustOptions dust = new Particle.DustOptions(Color.fromRGB(190, 80, 255), 1.5f);
         for (RoutePoint point : route.getPoints()) {
             Location location = point.toWalkingLocation();
             if (location == null || location.getWorld() != player.getWorld()) {
                 continue;
             }
             location.add(0.0, 0.1, 0.0);
+            Color color = point.isWaitingPoint() ? Color.fromRGB(255, 170, 30) : Color.fromRGB(190, 80, 255);
+            Particle.DustOptions dust = new Particle.DustOptions(color, 1.5f);
             player.spawnParticle(Particle.DUST, location, 5, 0.22, 0.08, 0.22, 0.0, dust);
         }
+    }
+
+    private void requestWaitInterval(Player player, EditSession session, RoutePoint point) {
+        chatInputService.request(player, "Enter the waiting time (for example 10s, 500ms, 2m, or 1h):", value -> {
+            if (!session.equals(editSessions.get(player.getUniqueId()))) {
+                return;
+            }
+            OptionalLong interval = parseWaitInterval(value);
+            if (interval.isEmpty()) {
+                player.sendMessage(Component.text("Invalid interval. Use a positive value such as 10s, 500ms, 2m, or 1h."));
+                requestWaitInterval(player, session, point);
+                return;
+            }
+            NpcRoute route = routeRepository.find(session.routeKey()).orElse(null);
+            RoutePoint current = route == null ? null : route.findPoint(point).orElse(null);
+            if (current == null || current.isWaitingPoint()) {
+                player.sendMessage(Component.text("That route point is no longer available to change."));
+                return;
+            }
+            route.replacePoint(current, current.withWaitMillis(interval.getAsLong()));
+            routeRepository.save(route);
+            player.sendMessage(Component.text("Waiting point set to " + value.trim() + "."));
+            player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_PLACE, 0.7f, 1.4f);
+        });
+    }
+
+    static OptionalLong parseWaitInterval(String value) {
+        Matcher matcher = WAIT_INTERVAL.matcher(value == null ? "" : value.trim());
+        if (!matcher.matches()) {
+            return OptionalLong.empty();
+        }
+        double amount;
+        try {
+            amount = Double.parseDouble(matcher.group(1));
+        } catch (NumberFormatException exception) {
+            return OptionalLong.empty();
+        }
+        long multiplier = switch (matcher.group(2).toLowerCase()) {
+            case "ms" -> 1L;
+            case "s" -> 1_000L;
+            case "m" -> 60_000L;
+            case "h" -> 3_600_000L;
+            default -> throw new IllegalStateException();
+        };
+        double millis = amount * multiplier;
+        if (!Double.isFinite(millis) || millis < 1.0 || millis > Long.MAX_VALUE / 1_000_000L) {
+            return OptionalLong.empty();
+        }
+        return OptionalLong.of(Math.round(millis));
     }
 
     private ItemStack item(Material material, String name, List<String> lore) {

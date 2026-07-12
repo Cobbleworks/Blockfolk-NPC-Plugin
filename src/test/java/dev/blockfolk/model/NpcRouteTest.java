@@ -38,6 +38,32 @@ class NpcRouteTest {
             () -> route.addPoint(new RoutePoint("nether", 1, 64, 1)));
     }
 
+    @Test
+    void identifiesPointsByBlockWhenWaitingMetadataChanges() {
+        NpcRoute route = NpcRoute.create("Patrol");
+        RoutePoint regular = new RoutePoint("world", 1, 64, 1);
+        route.addPoint(regular);
+
+        assertTrue(route.replacePoint(regular, regular.withWaitMillis(10_000L)));
+        assertEquals(10_000L, route.findPoint(regular).orElseThrow().waitMillis());
+        assertFalse(route.addPoint(regular));
+        assertTrue(route.removePoint(regular));
+    }
+
+    @Test
+    void waitingMetadataDoesNotChangeRouteOrdering() {
+        NpcRoute route = NpcRoute.create("Patrol");
+        RoutePoint nearWaiting = new RoutePoint("world", 2, 64, 0, 10_000L);
+        RoutePoint middle = new RoutePoint("world", 5, 64, 0);
+        RoutePoint far = new RoutePoint("world", 10, 64, 0);
+        route.setPoints(List.of(far, nearWaiting, middle));
+
+        assertEquals(
+                List.of(nearWaiting, middle, far),
+                route.logicallyOrdered(new Location(world("world"), 2.5, 65.0, 0.5))
+        );
+    }
+
     private World world(String name) {
         return (World) Proxy.newProxyInstance(
             World.class.getClassLoader(),

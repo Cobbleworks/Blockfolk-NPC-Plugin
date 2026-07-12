@@ -52,7 +52,8 @@ public final class RouteRepository {
                                 point.getString("world"),
                                 point.getInt("x"),
                                 point.getInt("y"),
-                                point.getInt("z")
+                                point.getInt("z"),
+                                point.getLong("wait-millis", 0L)
                         ));
                     } catch (IllegalArgumentException ignored) {
                         // Ignore malformed cross-world or duplicate legacy points.
@@ -100,6 +101,9 @@ public final class RouteRepository {
                 point.set("x", routePoint.x());
                 point.set("y", routePoint.y());
                 point.set("z", routePoint.z());
+                if (routePoint.isWaitingPoint()) {
+                    point.set("wait-millis", routePoint.waitMillis());
+                }
             }
         }
         try {

@@ -76,7 +76,9 @@ public final class RouteMovementService {
 
     private void move(NpcInstance instance) {
         if (combatService.isEngaged(instance)) {
-            progressByInstance.remove(instance.getId());
+            // Combat temporarily owns navigation. Keep the route target so the
+            // NPC resumes toward the same waypoint instead of rebuilding the
+            // route from its post-combat position.
             return;
         }
         NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
@@ -105,11 +107,19 @@ public final class RouteMovementService {
         List<RoutePoint> sourcePoints = route.getPoints();
         if (progress == null || !progress.matches(route.getKey(), sourcePoints)) {
             List<RoutePoint> ordered = route.logicallyOrdered(instance.getLocation());
-            progress = new Progress(route.getKey(), sourcePoints, ordered, 0);
+            progress = new Progress(route.getKey(), sourcePoints, ordered, 0, 0L);
             progressByInstance.put(instance.getId(), progress);
         }
 
         RoutePoint targetPoint = progress.orderedPoints().get(progress.targetIndex());
+        if (progress.waitUntilNanos() > 0) {
+            if (System.nanoTime() < progress.waitUntilNanos()) {
+                return;
+            }
+            progress = progress.withTargetIndex((progress.targetIndex() + 1) % progress.orderedPoints().size());
+            progressByInstance.put(instance.getId(), progress);
+            targetPoint = progress.orderedPoints().get(progress.targetIndex());
+        }
         Location target = targetPoint.toWalkingLocation();
         if (target == null || !current.getWorld().equals(target.getWorld())) {
             stop(instance);
@@ -121,7 +131,11 @@ public final class RouteMovementService {
                 target,
                 movement.walkingSpeed()
         );
-        if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED
+        if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED && targetPoint.isWaitingPoint()) {
+            instanceRegistry.stopNavigating(instance);
+            progressByInstance.put(instance.getId(), progress.withWaitUntilNanos(
+                    System.nanoTime() + targetPoint.waitMillis() * 1_000_000L));
+        } else if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED
                 || status == NativeNpcNavigationService.NavigationStatus.STALLED) {
             int nextIndex = (progress.targetIndex() + 1) % progress.orderedPoints().size();
             progressByInstance.put(instance.getId(), progress.withTargetIndex(nextIndex));
@@ -138,7 +152,8 @@ public final class RouteMovementService {
             String routeKey,
             List<RoutePoint> sourcePoints,
             List<RoutePoint> orderedPoints,
-            int targetIndex
+            int targetIndex,
+            long waitUntilNanos
             ) {
 
         private Progress {
@@ -151,7 +166,11 @@ public final class RouteMovementService {
         }
 
         Progress withTargetIndex(int targetIndex) {
-            return new Progress(routeKey, sourcePoints, orderedPoints, targetIndex);
+            return new Progress(routeKey, sourcePoints, orderedPoints, targetIndex, 0L);
+        }
+
+        Progress withWaitUntilNanos(long waitUntilNanos) {
+            return new Progress(routeKey, sourcePoints, orderedPoints, targetIndex, waitUntilNanos);
         }
     }
 }

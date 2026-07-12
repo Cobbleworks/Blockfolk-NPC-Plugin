@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.bukkit.Location;
 import org.bukkit.inventory.ItemStack;
@@ -74,7 +75,7 @@ public final class NpcRoute {
         if (!points.isEmpty() && !points.getFirst().worldName().equals(point.worldName())) {
             throw new IllegalArgumentException("All route points must be in the same world.");
         }
-        if (points.contains(point)) {
+        if (findPoint(point).isPresent()) {
             return false;
         }
         points.add(point);
@@ -82,7 +83,20 @@ public final class NpcRoute {
     }
 
     public boolean removePoint(RoutePoint point) {
-        return points.remove(point);
+        return points.removeIf(existing -> existing.isSameBlock(point));
+    }
+
+    public Optional<RoutePoint> findPoint(RoutePoint point) {
+        return points.stream().filter(existing -> existing.isSameBlock(point)).findFirst();
+    }
+
+    public boolean replacePoint(RoutePoint existing, RoutePoint replacement) {
+        int index = points.indexOf(existing);
+        if (index < 0 || !existing.isSameBlock(replacement)) {
+            return false;
+        }
+        points.set(index, replacement);
+        return true;
     }
 
     /**

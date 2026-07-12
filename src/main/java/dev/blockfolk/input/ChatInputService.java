@@ -47,6 +47,10 @@ public final class ChatInputService implements Listener {
         pendingInputs.clear();
     }
 
+    public void cancel(Player player) {
+        cancel(player.getUniqueId(), false);
+    }
+
     @EventHandler
     public void onChat(AsyncPlayerChatEvent event) {
         PendingInput input = pendingInputs.remove(event.getPlayer().getUniqueId());

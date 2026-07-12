@@ -89,7 +89,7 @@ public final class NativeNpcNavigationService {
         }
         boolean stuck = state.stationaryTicks >= STUCK_TICKS;
         return new NavigationUpdate(
-                !stuck && navigator.getPathfinder().hasPath() ? NavigationStatus.MOVING : NavigationStatus.STALLED,
+                stuck ? NavigationStatus.STALLED : NavigationStatus.MOVING,
                 current
         );
     }
