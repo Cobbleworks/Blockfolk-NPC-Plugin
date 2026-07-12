@@ -14,6 +14,9 @@ All commands require the `blockfolk.admin` permission (granted to operators by d
 - `/bf npc <name> duplicate` — duplicate a preset with ` (copy)` appended to its display name.
 - `/bf config -seconds-per-line <seconds>` — set the global delay used for dialog lines and queued dialog actions.
 
+Proximity enter/leave transitions are debounced for 3 seconds by default. Adjust
+`proximity-transition-cooldown-seconds` in `config.yml` if needed.
+
 ## Building
 
 Blockfolk requires Java 21 and targets Paper 1.21.11.

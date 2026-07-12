@@ -86,7 +86,13 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 routeGuiService::openRoutes
         );
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
-        behaviourService = new NpcBehaviourService(this, definitionRepository, instanceRegistry, dialogService);
+        behaviourService = new NpcBehaviourService(
+                this,
+                definitionRepository,
+                instanceRegistry,
+                dialogService,
+                getConfig().getInt("proximity-transition-cooldown-seconds", 3)
+        );
         behaviourService.setCombatService(combatService);
         combatService.setBehaviourService(behaviourService);
         guiService.setBehaviourService(behaviourService);

@@ -58,6 +58,8 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, Long> waitingUntilTick = new HashMap<>();
     private final Map<UUID, FollowState> following = new HashMap<>();
     private final Set<ProximityKey> nearbyPlayers = new HashSet<>();
+    private final Map<ProximityKey, Long> proximityCooldownUntilTick = new HashMap<>();
+    private final long proximityCooldownTicks;
     private NpcCombatService combatService;
     private BukkitTask behaviourTask;
     private long currentTick;
@@ -67,12 +69,14 @@ public final class NpcBehaviourService implements Listener {
             Plugin plugin,
             NpcDefinitionRepository definitions,
             NpcInstanceRegistry instances,
-            DialogService dialogService
+            DialogService dialogService,
+            int proximityCooldownSeconds
     ) {
         this.plugin = plugin;
         this.definitions = definitions;
         this.instances = instances;
         this.dialogService = dialogService;
+        this.proximityCooldownTicks = Math.max(0L, proximityCooldownSeconds) * 20L;
     }
 
     public void setCombatService(NpcCombatService combatService) {
@@ -94,6 +98,7 @@ public final class NpcBehaviourService implements Listener {
         waitingUntilTick.clear();
         following.clear();
         nearbyPlayers.clear();
+        proximityCooldownUntilTick.clear();
     }
 
     public void trigger(BehaviourEvent event, NpcInstance instance, Entity actor) {
@@ -113,6 +118,7 @@ public final class NpcBehaviourService implements Listener {
         waitingUntilTick.remove(instance.getId());
         following.remove(instance.getId());
         nearbyPlayers.removeIf(key -> key.instanceId().equals(instance.getId()));
+        proximityCooldownUntilTick.keySet().removeIf(key -> key.instanceId().equals(instance.getId()));
     }
 
     public MovementProfile movementFor(NpcInstance instance, NpcDefinition definition) {
@@ -441,6 +447,7 @@ public final class NpcBehaviourService implements Listener {
 
     private void tickProximity() {
         Set<ProximityKey> nowNearby = new HashSet<>();
+        Set<ProximityKey> evaluated = new HashSet<>();
         Map<UUID, NpcInstance> activeInstances = new HashMap<>();
         for (NpcInstance instance : instances.findAll()) {
             activeInstances.put(instance.getId(), instance);
@@ -450,30 +457,64 @@ public final class NpcBehaviourService implements Listener {
             }
             for (Player player : Bukkit.getOnlinePlayers()) {
                 ProximityKey key = new ProximityKey(instance.getId(), player.getUniqueId());
-                if (player.getWorld() != npcLocation.getWorld()) {
+                evaluated.add(key);
+                boolean wasNearby = nearbyPlayers.contains(key);
+                double range = wasNearby ? LEAVE_RANGE_SQUARED : APPROACH_RANGE_SQUARED;
+                boolean withinRange = player.getWorld() == npcLocation.getWorld()
+                        && player.getLocation().distanceSquared(npcLocation) <= range;
+                if (withinRange == wasNearby) {
+                    if (wasNearby) {
+                        nowNearby.add(key);
+                    }
                     continue;
                 }
-                double range = nearbyPlayers.contains(key) ? LEAVE_RANGE_SQUARED : APPROACH_RANGE_SQUARED;
-                if (player.getLocation().distanceSquared(npcLocation) > range) {
+                if (isProximityCoolingDown(key)) {
+                    // Preserve the last logical state and retry after the
+                    // debounce. This prevents NPC movement caused by the first
+                    // action from immediately firing its opposite event.
+                    if (wasNearby) {
+                        nowNearby.add(key);
+                    }
                     continue;
                 }
-                nowNearby.add(key);
-                if (!nearbyPlayers.contains(key)) {
+                markProximityTransition(key);
+                if (withinRange) {
+                    nowNearby.add(key);
                     trigger(BehaviourEvent.PLAYER_APPROACH, instance, player);
+                } else {
+                    trigger(BehaviourEvent.PLAYER_LEAVES, instance, player);
                 }
             }
         }
         for (ProximityKey key : nearbyPlayers) {
-            if (nowNearby.contains(key)) {
+            if (evaluated.contains(key)) {
                 continue;
             }
             NpcInstance instance = activeInstances.get(key.instanceId());
-            if (instance != null) {
+            if (instance == null) {
+                continue;
+            }
+            if (isProximityCoolingDown(key)) {
+                nowNearby.add(key);
+            } else {
+                markProximityTransition(key);
                 trigger(BehaviourEvent.PLAYER_LEAVES, instance, Bukkit.getPlayer(key.playerId()));
             }
         }
         nearbyPlayers.clear();
         nearbyPlayers.addAll(nowNearby);
+        proximityCooldownUntilTick.entrySet().removeIf(entry -> entry.getValue() <= currentTick
+                && !nearbyPlayers.contains(entry.getKey()));
+    }
+
+    private boolean isProximityCoolingDown(ProximityKey key) {
+        return currentTick < proximityCooldownUntilTick.getOrDefault(key, 0L);
+    }
+
+    private void markProximityTransition(ProximityKey key) {
+        if (proximityCooldownTicks > 0L) {
+            proximityCooldownUntilTick.put(key, currentTick + proximityCooldownTicks);
+        }
     }
 
     private void sendDialog(
