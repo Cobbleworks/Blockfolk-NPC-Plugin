@@ -1,4 +1,8 @@
-# Blockfolk
+<p align="center">
+  <img src="docs/icon.png" alt="Blockfolk icon" width="160">
+</p>
+
+<h1 align="center">Blockfolk</h1>
 
 Blockfolk is a GUI-driven fake-player NPC system for Paper servers. It supports reusable NPC presets, persistent instances, skins, equipment, dialog, combat behaviour, and walking routes.
 
@@ -26,3 +30,15 @@ mvn clean test package
 ```
 
 The plugin jar is written to `target/Blockfolk.jar`.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/blockfolk-gui-npcs.png" alt="Blockfolk NPC overview"></td>
+    <td><img src="docs/screenshots/blockfolk-gui-npcs-details.png" alt="Blockfolk NPC details"></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/blockfolk-gui-npc-behaviour.png" alt="Blockfolk NPC behaviour editor"></td>
+  </tr>
+</table>

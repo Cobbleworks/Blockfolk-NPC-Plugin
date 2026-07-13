@@ -17,6 +17,7 @@ public enum BehaviourEvent {
     RECEIVE_ITEM("On Receive Item"),
     DAWN("At Dawn"),
     MORNING("In the Morning"),
+    MIDDAY("At Midday / Lunch"),
     COMBAT_ENTERED("On Combat Entered"),
     COMBAT_EXITED("On Combat Exited");
 

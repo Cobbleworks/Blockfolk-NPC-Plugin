@@ -468,6 +468,9 @@ public final class NpcBehaviourService implements Listener {
             if (crossedTime(previous, elapsed, 0L)) {
                 triggerTimeEvent(world, BehaviourEvent.MORNING);
             }
+            if (crossedTime(previous, elapsed, 6000L)) {
+                triggerTimeEvent(world, BehaviourEvent.MIDDAY);
+            }
         }
         lastWorldTimes.keySet().retainAll(activeWorlds);
     }

@@ -2262,6 +2262,8 @@ public final class GuiService implements Listener {
                 Material.ORANGE_DYE;
             case MORNING ->
                 Material.SUNFLOWER;
+            case MIDDAY ->
+                Material.COOKED_BEEF;
         };
     }
 

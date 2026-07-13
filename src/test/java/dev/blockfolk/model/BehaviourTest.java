@@ -37,6 +37,8 @@ class BehaviourTest {
         assertEquals(BehaviourEvent.HEAL, BehaviourEvent.fromStored("heal"));
         assertEquals(BehaviourEvent.DROP_ITEM, BehaviourEvent.fromStored("drop-item"));
         assertEquals(BehaviourEvent.RECEIVE_ITEM, BehaviourEvent.fromStored("receive-item"));
+        assertEquals(BehaviourEvent.MIDDAY, BehaviourEvent.fromStored("midday"));
+        assertEquals("At Midday / Lunch", BehaviourEvent.MIDDAY.displayName());
     }
 
     @Test
