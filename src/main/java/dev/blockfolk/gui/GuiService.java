@@ -103,6 +103,7 @@ public final class GuiService implements Listener {
     private final RouteCreator routeCreator;
     private final CustomEventRepository customEventRepository;
     private final Consumer<Player> customEventGuiOpener;
+    private final CustomEventCreator customEventCreator;
     private final NamespacedKey waypointActionKey;
     private final NamespacedKey waypointTokenKey;
     private NpcBehaviourService behaviourService;
@@ -121,7 +122,8 @@ public final class GuiService implements Listener {
             Consumer<Player> routeGuiOpener,
             RouteCreator routeCreator,
             CustomEventRepository customEventRepository,
-            Consumer<Player> customEventGuiOpener
+            Consumer<Player> customEventGuiOpener,
+            CustomEventCreator customEventCreator
     ) {
         this.plugin = plugin;
         this.definitionRepository = definitionRepository;
@@ -133,6 +135,7 @@ public final class GuiService implements Listener {
         this.routeCreator = routeCreator;
         this.customEventRepository = customEventRepository;
         this.customEventGuiOpener = customEventGuiOpener;
+        this.customEventCreator = customEventCreator;
         this.waypointActionKey = new NamespacedKey(plugin, "behaviour-waypoint-action");
         this.waypointTokenKey = new NamespacedKey(plugin, "behaviour-waypoint-token");
     }
@@ -187,23 +190,23 @@ public final class GuiService implements Listener {
         inventory.setItem(22, item(Material.BARRIER, "Back to Route Editing", List.of(
                 ChatColor.GRAY + "Close this menu and keep editing points"
         )));
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     private void openRoutePointActionPicker(Player player, RoutePointActionPickerHolder holder) {
         Inventory inventory = Bukkit.createInventory(holder, 36, Component.text("Choose Waypoint Action"));
         for (int index = 0; index < PRIMARY_ACTIONS.size(); index++) {
             BehaviourActionType type = PRIMARY_ACTIONS.get(index);
-            inventory.setItem(9 + index, item(actionMaterial(type), type.displayName(), List.of(
+            inventory.setItem(index, item(actionMaterial(type), type.displayName(), List.of(
                     ChatColor.YELLOW + "Click to configure"
             )));
         }
-        inventory.setItem(31, item(Material.ARMOR_STAND, "Animations", List.of(
+        inventory.setItem(22, item(Material.ARMOR_STAND, "Animations", List.of(
                 ChatColor.GRAY + "Poses, waving, and jumping",
                 ChatColor.YELLOW + "Click to choose an animation"
         )));
-        inventory.setItem(35, item(Material.BARRIER, "Back", List.of()));
-        player.openInventory(inventory);
+        inventory.setItem(31, item(Material.BARRIER, "Back", List.of()));
+        openInventory(player, inventory);
     }
 
     private void openRoutePointAnimationPicker(Player player, RoutePointActionPickerHolder action) {
@@ -217,7 +220,7 @@ public final class GuiService implements Listener {
             )));
         }
         inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     private void openRoutePointValuePicker(Player player, RoutePointActionPickerHolder action,
@@ -257,11 +260,15 @@ public final class GuiService implements Listener {
             inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
                     ChatColor.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
                     ChatColor.YELLOW + "Click, then enter its name")));
+        } else if (pickerType == BehaviourValuePickerType.CUSTOM_EVENT) {
+            inventory.setItem(51, item(Material.EMERALD, "Create New Event", List.of(
+                    ChatColor.GRAY + "Creates and selects a custom event",
+                    ChatColor.YELLOW + "Click, then enter its name")));
         }
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     public void openMain(Player player) {
@@ -313,7 +320,7 @@ public final class GuiService implements Listener {
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of(ChatColor.GRAY + "Page " + (page + 2) + " of " + pages)));
         }
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     public void openEditor(Player player, NpcDefinition definition) {
@@ -386,7 +393,7 @@ public final class GuiService implements Listener {
                 ChatColor.YELLOW + "Click to configure combat"
         )));
         inventory.setItem(31, item(Material.BARRIER, "Back to Presets", List.of()));
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     public void openInventoryEditor(Player player, NpcDefinition definition) {
@@ -423,19 +430,19 @@ public final class GuiService implements Listener {
         inventory.setItem(53, item(Material.LIME_DYE, "Save Equipment", List.of(
                 ChatColor.GRAY + "Saves and refreshes every instance"
         )));
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     public void openFightingEditor(Player player, NpcDefinition definition) {
         CombatProfile combat = definition.getCombatProfile();
-        Inventory inventory = Bukkit.createInventory(new FightingHolder(definition.getKey()), 27,
+        Inventory inventory = Bukkit.createInventory(new FightingHolder(definition.getKey()), 36,
                 Component.text("Fighting: " + definition.getDisplayName()));
-        inventory.setItem(0, item(Material.LIME_DYE, "+ " + CombatProfile.HEALTH_STEP + " Health", List.of(
+        inventory.setItem(1, item(Material.LIME_DYE, "+ " + CombatProfile.HEALTH_STEP + " Health", List.of(
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + healthLabel(combat),
                 ChatColor.YELLOW + "Click to increase max health",
                 ChatColor.DARK_GRAY + "Shift-click for x10"
         )));
-        inventory.setItem(9, combat.invulnerable()
+        inventory.setItem(10, combat.invulnerable()
                 ? item(Material.TOTEM_OF_UNDYING, "Max Health: " + healthLabel(combat), List.of(
                         ChatColor.GREEN + "This NPC cannot be damaged",
                         ChatColor.DARK_GRAY + "Set health to 0 for invulnerability"
@@ -444,17 +451,17 @@ public final class GuiService implements Listener {
                         ChatColor.GRAY + "The NPC is removed when killed",
                         ChatColor.DARK_GRAY + "Set health to 0 for invulnerability"
                 )));
-        inventory.setItem(18, item(Material.RED_DYE, "- " + CombatProfile.HEALTH_STEP + " Health", List.of(
+        inventory.setItem(19, item(Material.RED_DYE, "- " + CombatProfile.HEALTH_STEP + " Health", List.of(
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + healthLabel(combat),
                 ChatColor.YELLOW + "Click to decrease max health",
                 ChatColor.DARK_GRAY + "Shift-click for x10"
         )));
-        inventory.setItem(1, item(Material.LIME_DYE, "+ " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds", List.of(
+        inventory.setItem(3, item(Material.LIME_DYE, "+ " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds", List.of(
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + respawnLabel(combat),
                 ChatColor.YELLOW + "Click to increase respawn time",
                 ChatColor.DARK_GRAY + "Shift-click for x10"
         )));
-        inventory.setItem(10, item(combat.respawnSeconds() == 0 ? Material.BARRIER : Material.CLOCK,
+        inventory.setItem(12, item(combat.respawnSeconds() == 0 ? Material.BARRIER : Material.CLOCK,
                 "Respawn Time: " + respawnLabel(combat), List.of(
                 combat.respawnSeconds() == 0
                 ? ChatColor.GRAY + "Killed NPCs will not respawn"
@@ -463,25 +470,25 @@ public final class GuiService implements Listener {
                 ? ChatColor.RED + "A preset spawn point is required"
                 : ChatColor.DARK_GRAY + "Preset spawn point is configured"
         )));
-        inventory.setItem(19, item(Material.RED_DYE, "- " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds", List.of(
+        inventory.setItem(21, item(Material.RED_DYE, "- " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds", List.of(
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + respawnLabel(combat),
                 ChatColor.YELLOW + "Click to decrease respawn time",
                 ChatColor.DARK_GRAY + "Shift-click for x10"
         )));
-        inventory.setItem(12, toggleItem(Material.WITHER_SKELETON_SKULL, "Show Boss Bar", combat.showBossBar(),
+        inventory.setItem(15, toggleItem(Material.WITHER_SKELETON_SKULL, "Show Boss Bar", combat.showBossBar(),
                 "Shows current HP to players within 16 blocks"));
-        inventory.setItem(5, item(Material.TARGET, "Targets & Behaviour", List.of(
+        inventory.setItem(14, item(Material.TARGET, "Targets & Behaviour", List.of(
                 ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.attackReaction().displayName(),
                 ChatColor.GRAY + "Attack targets enabled: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
                 ChatColor.YELLOW + "Click to configure"
         )));
-        inventory.setItem(14, item(Material.NAME_TAG, "Alliance", List.of(
+        inventory.setItem(16, item(Material.NAME_TAG, "Alliance", List.of(
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + allianceLabel(combat),
                 ChatColor.GRAY + "NPCs with the same alliance will not fight",
                 ChatColor.YELLOW + "Click to enter text"
         )));
-        inventory.setItem(23, item(Material.BARRIER, "Back", List.of()));
-        player.openInventory(inventory);
+        inventory.setItem(31, item(Material.BARRIER, "Back", List.of()));
+        openInventory(player, inventory);
     }
 
     public void openTargetsAndBehaviour(Player player, NpcDefinition definition) {
@@ -502,7 +509,7 @@ public final class GuiService implements Listener {
         inventory.setItem(15, toggleItem(Material.ARMOR_STAND, "Target Other NPCs", combat.targetNpcs(),
                 "Allows attacks against vulnerable NPCs"));
         inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     public void openBehaviours(Player player, NpcDefinition definition, int requestedPage) {
@@ -543,7 +550,7 @@ public final class GuiService implements Listener {
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     public void openCustomBehaviours(Player player, NpcDefinition definition, int requestedPage) {
@@ -559,7 +566,7 @@ public final class GuiService implements Listener {
             inventory.setItem(row * 9, item(customEventIcon(customEvent), customEvent.getName(), List.of(
                     ChatColor.GRAY + (customEvent.getDescription().isBlank() ? "No description" : customEvent.getDescription()),
                     ChatColor.GRAY + "Actions run from left to right")));
-            inventory.setItem(row * 9 + 1, item(Material.BLUE_STAINED_GLASS_PANE, "Add Action", List.of(
+            inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
                     ChatColor.YELLOW + "Click to append")));
             List<BehaviourAction> actions = definition.getCustomEventActions(customEvent.getName());
             for (int column = 0; column < Math.min(7, actions.size()); column++) {
@@ -576,7 +583,7 @@ public final class GuiService implements Listener {
         if (page > 0) inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         if (page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     private void openActionPicker(Player player, NpcDefinition definition, BehaviourEvent event, int actionIndex, int page) {
@@ -589,14 +596,14 @@ public final class GuiService implements Listener {
                 Component.text("Choose Action"));
         for (int index = 0; index < PRIMARY_ACTIONS.size(); index++) {
             BehaviourActionType type = PRIMARY_ACTIONS.get(index);
-            inventory.setItem(9 + index, item(actionMaterial(type), type.displayName(), List.of(ChatColor.YELLOW + "Click to configure")));
+            inventory.setItem(index, item(actionMaterial(type), type.displayName(), List.of(ChatColor.YELLOW + "Click to configure")));
         }
-        inventory.setItem(31, item(Material.ARMOR_STAND, "Animations", List.of(
+        inventory.setItem(22, item(Material.ARMOR_STAND, "Animations", List.of(
                 ChatColor.GRAY + "Poses, waving, and jumping",
                 ChatColor.YELLOW + "Click to choose an animation"
         )));
-        inventory.setItem(35, item(Material.BARRIER, "Back", List.of()));
-        player.openInventory(inventory);
+        inventory.setItem(31, item(Material.BARRIER, "Back", List.of()));
+        openInventory(player, inventory);
     }
 
     private void openAnimationPicker(Player player, ActionPickerHolder action) {
@@ -611,7 +618,7 @@ public final class GuiService implements Listener {
             )));
         }
         inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     private void openBehaviourValuePicker(
@@ -656,11 +663,15 @@ public final class GuiService implements Listener {
             inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
                     ChatColor.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
                     ChatColor.YELLOW + "Click, then enter its name")));
+        } else if (pickerType == BehaviourValuePickerType.CUSTOM_EVENT) {
+            inventory.setItem(51, item(Material.EMERALD, "Create New Event", List.of(
+                    ChatColor.GRAY + "Creates and selects a custom event",
+                    ChatColor.YELLOW + "Click, then enter its name")));
         }
         if (valuePage + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     private List<BehaviourPickerOption> pickerOptions(BehaviourValuePickerType pickerType) {
@@ -745,7 +756,7 @@ public final class GuiService implements Listener {
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     public void openInstances(Player player, NpcDefinition definition, int requestedPage) {
@@ -788,7 +799,7 @@ public final class GuiService implements Listener {
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     @EventHandler
@@ -1035,26 +1046,26 @@ public final class GuiService implements Listener {
         CombatProfile combat = definition.getCombatProfile();
         int multiplier = event.isShiftClick() ? 10 : 1;
         switch (event.getRawSlot()) {
-            case 18 -> {
+            case 19 -> {
                 definition.setCombatProfile(combat.withMaxHealth(
                         combat.maxHealth() - CombatProfile.HEALTH_STEP * multiplier));
                 saveRefresh(definition);
                 openFightingEditor(player, definition);
             }
-            case 0 -> {
+            case 1 -> {
                 definition.setCombatProfile(combat.withMaxHealth(
                         combat.maxHealth() + CombatProfile.HEALTH_STEP * multiplier));
                 saveRefresh(definition);
                 openFightingEditor(player, definition);
             }
-            case 19 -> {
+            case 21 -> {
                 definition.setCombatProfile(combat.withRespawnSeconds(
                         combat.respawnSeconds() - CombatProfile.RESPAWN_STEP_SECONDS * multiplier
                 ));
                 definitionRepository.save(definition);
                 openFightingEditor(player, definition);
             }
-            case 1 -> {
+            case 3 -> {
                 int respawnSeconds = (int) Math.min(
                         Integer.MAX_VALUE,
                         (long) combat.respawnSeconds() + CombatProfile.RESPAWN_STEP_SECONDS * multiplier
@@ -1063,22 +1074,22 @@ public final class GuiService implements Listener {
                 definitionRepository.save(definition);
                 openFightingEditor(player, definition);
             }
-            case 5 -> {
+            case 14 -> {
                 openTargetsAndBehaviour(player, definition);
             }
-            case 12 -> {
+            case 15 -> {
                 definition.setCombatProfile(combat.withShowBossBar(!combat.showBossBar()));
                 definitionRepository.save(definition);
                 openFightingEditor(player, definition);
             }
-            case 14 ->
+            case 16 ->
                 chatInputService.request(player, "Enter an alliance, or type clear to remove it:", value -> {
                     String alliance = value.equalsIgnoreCase("clear") ? null : value;
                     definition.setCombatProfile(definition.getCombatProfile().withAlliance(alliance));
                     saveRefresh(definition);
                     openFightingEditor(player, definition);
                 });
-            case 23 ->
+            case 31 ->
                 openEditor(player, definition);
             default -> {
             }
@@ -1351,16 +1362,16 @@ public final class GuiService implements Listener {
             player.closeInventory();
             return;
         }
-        if (event.getRawSlot() == 35) {
+        if (event.getRawSlot() == 31) {
             openWaypointActions(player, holder.routeKey(), current);
             return;
         }
-        if (event.getRawSlot() == 31) {
+        if (event.getRawSlot() == 22) {
             openRoutePointAnimationPicker(player, new RoutePointActionPickerHolder(
                     holder.routeKey(), current, holder.actionIndex()));
             return;
         }
-        int typeIndex = event.getRawSlot() - 9;
+        int typeIndex = event.getRawSlot();
         if (typeIndex < 0 || typeIndex >= PRIMARY_ACTIONS.size()) {
             return;
         }
@@ -1469,6 +1480,16 @@ public final class GuiService implements Listener {
             });
             return;
         }
+        if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.CUSTOM_EVENT) {
+            customEventCreator.create(player, holder.folder(), customEvent -> {
+                RoutePoint updated = setRoutePointAction(action, BehaviourActionType.EMIT_EVENT, customEvent.getName());
+                if (updated != null) {
+                    player.sendMessage(Component.text("Created and selected '" + customEvent.getName() + "'."));
+                    openWaypointActions(player, holder.routeKey(), updated);
+                }
+            }, () -> openRoutePointValuePicker(player, action, holder.pickerType(), holder.folder(), holder.page()));
+            return;
+        }
         List<BehaviourPickerOption> options = pickerOptions(holder.pickerType(), holder.folder());
         int index = holder.page() * PAGE_SIZE + slot;
         if (slot >= PAGE_SIZE || index < 0 || index >= options.size()) {
@@ -1551,15 +1572,15 @@ public final class GuiService implements Listener {
             player.closeInventory();
             return;
         }
-        if (event.getRawSlot() == 35) {
+        if (event.getRawSlot() == 31) {
             openBehaviourHome(player, definition, holder);
             return;
         }
-        if (event.getRawSlot() == 31) {
+        if (event.getRawSlot() == 22) {
             openAnimationPicker(player, holder);
             return;
         }
-        int typeIndex = event.getRawSlot() - 9;
+        int typeIndex = event.getRawSlot();
         if (typeIndex < 0 || typeIndex >= PRIMARY_ACTIONS.size()) {
             return;
         }
@@ -1912,6 +1933,14 @@ public final class GuiService implements Listener {
             });
             return;
         }
+        if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.CUSTOM_EVENT) {
+            customEventCreator.create(player, holder.folder(), customEvent -> {
+                setAction(definition, action, BehaviourActionType.EMIT_EVENT, customEvent.getName());
+                player.sendMessage(Component.text("Created and selected '" + customEvent.getName() + "'."));
+                openBehaviourHome(player, definition, action);
+            }, () -> openBehaviourValuePicker(player, definition, action, holder.pickerType(), holder.folder(), holder.valuePage()));
+            return;
+        }
         List<BehaviourPickerOption> options = pickerOptions(holder.pickerType(), holder.folder());
         int index = holder.valuePage() * PAGE_SIZE + slot;
         if (slot >= PAGE_SIZE || index < 0 || index >= options.size()) {
@@ -1987,7 +2016,7 @@ public final class GuiService implements Listener {
                 ChatColor.RED + "Permanently delete " + target
         )));
         inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel", List.of(ChatColor.GRAY + "Nothing will be changed")));
-        player.openInventory(inventory);
+        openInventory(player, inventory);
     }
 
     private void readEquipmentEditor(Inventory inventory, NpcDefinition definition) {
@@ -2083,6 +2112,12 @@ public final class GuiService implements Listener {
     private boolean isTopInventoryClick(InventoryClickEvent event) {
         int slot = event.getRawSlot();
         return slot >= 0 && slot < event.getView().getTopInventory().getSize();
+    }
+
+    private void openInventory(Player player, Inventory inventory) {
+        // The equipment editor uses its last row for actual item storage rather than navigation.
+        if (!(inventory.getHolder() instanceof EquipmentHolder)) GuiLayout.fillMainBar(inventory);
+        player.openInventory(inventory);
     }
 
     private boolean isManagedHolder(InventoryHolder holder) {
@@ -2539,6 +2574,11 @@ public final class GuiService implements Listener {
     @FunctionalInterface
     public interface RouteCreator {
         void create(Player player, String folder, Consumer<NpcRoute> onCreated);
+    }
+
+    @FunctionalInterface
+    public interface CustomEventCreator {
+        void create(Player player, String folder, Consumer<CustomEvent> onCreated, Runnable onFailure);
     }
 
     private enum BehaviourValuePickerType {

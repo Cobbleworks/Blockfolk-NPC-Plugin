@@ -170,6 +170,7 @@ public final class RouteGuiService implements Listener {
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
+        GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
 
@@ -387,6 +388,7 @@ public final class RouteGuiService implements Listener {
                 ChatColor.GRAY + "NPC presets using it will be unassigned"
         )));
         inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel", List.of(ChatColor.GRAY + "Nothing will be changed")));
+        GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
 

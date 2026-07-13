@@ -44,6 +44,27 @@ public final class CustomEventGuiService implements Listener {
 
     public void open(Player player) { open(player, "", 0); }
 
+    public void createEvent(Player player, String folder, Consumer<CustomEvent> onCreated, Runnable onFailure) {
+        String normalizedFolder = folder == null ? "" : folder;
+        chatInput.request(player, "Enter the full custom event name (use / for groups):", value -> {
+            try {
+                String name = normalizedFolder.isEmpty() || value.contains("/")
+                        ? value : normalizedFolder + "/" + value;
+                CustomEvent event = new CustomEvent(name);
+                if (events.find(event.getName()).isPresent()) {
+                    player.sendMessage(Component.text("A custom event with that name already exists."));
+                    onFailure.run();
+                    return;
+                }
+                events.save(event);
+                onCreated.accept(event);
+            } catch (IllegalArgumentException exception) {
+                player.sendMessage(Component.text(exception.getMessage()));
+                onFailure.run();
+            }
+        });
+    }
+
     private void open(Player player, String folder, int requestedPage) {
         List<Entry> entries = entries(folder);
         int pages = Math.max(1, (entries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
@@ -70,6 +91,7 @@ public final class CustomEventGuiService implements Listener {
                 ChatColor.GRAY + "Use / in the name to create groups",
                 ChatColor.YELLOW + "Click, then enter the full event name")));
         if (page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
 
@@ -125,21 +147,8 @@ public final class CustomEventGuiService implements Listener {
     }
 
     private void requestName(Player player, EventsHolder holder) {
-        chatInput.request(player, "Enter the full custom event name (use / for groups):", value -> {
-            try {
-                CustomEvent event = new CustomEvent(value);
-                if (events.find(event.getName()).isPresent()) {
-                    player.sendMessage(Component.text("A custom event with that name already exists."));
-                    open(player, holder.folder(), holder.page());
-                    return;
-                }
-                events.save(event);
-                open(player, parent(event.getName()), 0);
-            } catch (IllegalArgumentException exception) {
-                player.sendMessage(Component.text(exception.getMessage()));
-                open(player, holder.folder(), holder.page());
-            }
-        });
+        createEvent(player, "", event -> open(player, parent(event.getName()), 0),
+                () -> open(player, holder.folder(), holder.page()));
     }
 
     private void openDelete(Player player, CustomEvent event, EventsHolder back) {
@@ -149,6 +158,7 @@ public final class CustomEventGuiService implements Listener {
                 ChatColor.RED + "Permanently delete this event",
                 ChatColor.GRAY + "NPC reactions to it will also be removed")));
         inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel", List.of()));
+        GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
 

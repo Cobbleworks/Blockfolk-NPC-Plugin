@@ -92,7 +92,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 routeGuiService::openRoutes,
                 routeGuiService::createRoute,
                 customEventRepository,
-                customEventGuiService::open
+                customEventGuiService::open,
+                customEventGuiService::createEvent
         );
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
