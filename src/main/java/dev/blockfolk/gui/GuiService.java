@@ -527,13 +527,12 @@ public final class GuiService implements Listener {
                 break;
             }
             BehaviourEvent behaviourEvent = events[eventIndex];
-            inventory.setItem(row * 9, item(eventMaterial(behaviourEvent), behaviourEvent.displayName(), List.of(
-                    ChatColor.GRAY + "Actions run from left to right"
-            )));
+            List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
+            inventory.setItem(row * 9, item(eventMaterial(behaviourEvent), behaviourEvent.displayName(),
+                    actionSummaryLore(List.of(ChatColor.GRAY + "Actions run from left to right"), actions)));
             inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
                     ChatColor.YELLOW + "Click to append"
             )));
-            List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
             for (int column = 0; column < 7; column++) {
                 int slot = row * 9 + column + 2;
                 if (column < actions.size()) {
@@ -566,12 +565,12 @@ public final class GuiService implements Listener {
             int eventIndex = page * 5 + row;
             if (eventIndex >= events.size()) break;
             CustomEvent customEvent = events.get(eventIndex);
-            inventory.setItem(row * 9, item(customEventIcon(customEvent), customEvent.getName(), List.of(
+            List<BehaviourAction> actions = definition.getCustomEventActions(customEvent.getName());
+            inventory.setItem(row * 9, item(customEventIcon(customEvent), customEvent.getName(), actionSummaryLore(List.of(
                     ChatColor.GRAY + (customEvent.getDescription().isBlank() ? "No description" : customEvent.getDescription()),
-                    ChatColor.GRAY + "Actions run from left to right")));
+                    ChatColor.GRAY + "Actions run from left to right"), actions)));
             inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
                     ChatColor.YELLOW + "Click to append")));
-            List<BehaviourAction> actions = definition.getCustomEventActions(customEvent.getName());
             for (int column = 0; column < Math.min(7, actions.size()); column++) {
                 BehaviourAction action = actions.get(column);
                 inventory.setItem(row * 9 + column + 2,
@@ -2393,6 +2392,25 @@ public final class GuiService implements Listener {
             return FightOptions.fromStored(action.value()).displayName();
         }
         return action.value();
+    }
+
+    private List<String> actionSummaryLore(List<String> introduction, List<BehaviourAction> actions) {
+        List<String> lore = new ArrayList<>(introduction);
+        lore.add("");
+        if (actions.isEmpty()) {
+            lore.add(ChatColor.DARK_GRAY + "No actions configured");
+            return lore;
+        }
+        for (int index = 0; index < actions.size(); index++) {
+            BehaviourAction action = actions.get(index);
+            String summary = ChatColor.GRAY + Integer.toString(index + 1) + ". "
+                    + ChatColor.WHITE + action.type().displayName();
+            if (action.type().requiresValue()) {
+                summary += ChatColor.GRAY + ": " + ChatColor.WHITE + actionValueDisplay(action);
+            }
+            lore.add(summary);
+        }
+        return lore;
     }
 
     private String reactionDescription(AttackReaction reaction) {
