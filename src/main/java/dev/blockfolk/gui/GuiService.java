@@ -1945,14 +1945,29 @@ public final class GuiService implements Listener {
                 ? definition.getBehaviourActions(holder.event())
                 : definition.getCustomEventActions(holder.customEvent());
         BehaviourAction action = new BehaviourAction(type, value);
+        boolean actionSet = false;
         if (holder.actionIndex() < actions.size()) {
             actions.set(holder.actionIndex(), action);
+            actionSet = true;
         } else if (actions.size() < 7) {
             actions.add(action);
+            actionSet = true;
         }
         if (holder.customEvent() == null) definition.setBehaviourActions(holder.event(), actions);
         else definition.setCustomEventActions(holder.customEvent(), actions);
         definitionRepository.save(definition);
+        if (actionSet && type == BehaviourActionType.EMIT_EVENT) {
+            setDefaultEventIconFromNpc(definition, value);
+        }
+    }
+
+    private void setDefaultEventIconFromNpc(NpcDefinition definition, String eventName) {
+        if (eventName == null) return;
+        customEventRepository.find(eventName).ifPresent(customEvent -> {
+            if (customEvent.getIcon() != null) return;
+            customEvent.setIcon(definitionIcon(definition, List.of()));
+            customEventRepository.save(customEvent);
+        });
     }
 
     private void openBehaviourHome(Player player, NpcDefinition definition, ActionPickerHolder holder) {
@@ -2077,7 +2092,9 @@ public final class GuiService implements Listener {
         if (current == null) {
             return;
         }
-        current.setResolvedSkin(resolved.url(), resolved.textureValue(), resolved.textureSignature());
+        // Keep the URL entered by the user for the menu and future re-resolution.
+        // The signed texture data is the part supplied by MineSkin for rendering.
+        current.setResolvedSkin(requestedUrl, resolved.textureValue(), resolved.textureSignature());
         saveRefresh(current);
         if (player.isOnline()) {
             player.sendMessage(Component.text("Skin processed and updated."));

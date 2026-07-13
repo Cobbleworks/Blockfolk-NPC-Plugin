@@ -228,7 +228,9 @@ public final class BlockfolkPlugin extends JavaPlugin {
             if (!requestedUrl.equals(definition.getSkinUrl())) {
                 return;
             }
-            definition.setResolvedSkin(resolved.url(), resolved.textureValue(), resolved.textureSignature());
+            // Preserve the configured source URL; only the resolved texture data
+            // needs to come from MineSkin.
+            definition.setResolvedSkin(requestedUrl, resolved.textureValue(), resolved.textureSignature());
             definitionRepository.save(definition);
             instanceRegistry.refreshDefinition(definition);
             getLogger().info("Processed the external skin for NPC " + definitionKey + ".");
