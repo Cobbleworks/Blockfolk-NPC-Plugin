@@ -294,7 +294,6 @@ public final class GuiService implements Listener {
                     ChatColor.GRAY + "Instances: " + ChatColor.WHITE + instances,
                     statusLine(definition),
                     ChatColor.YELLOW + "Click to manage",
-                    ChatColor.AQUA + "Shift + left-click to spawn a copy here",
                     ChatColor.RED + "Shift + right-click to delete"
             )));
         }
@@ -949,11 +948,6 @@ public final class GuiService implements Listener {
             NpcDefinition definition = definitions.get(index);
             if (event.getClick() == ClickType.SHIFT_RIGHT) {
                 openConfirmation(player, definition, ConfirmationAction.DELETE_DEFINITION, page);
-            } else if (event.getClick() == ClickType.SHIFT_LEFT) {
-                instanceRegistry.spawnPersistent(definition, player.getLocation());
-                player.sendMessage(Component.text("Spawned NPC copy of " + definition.getDisplayName()
-                        + " at your location."));
-                openMain(player, page);
             } else {
                 openEditor(player, definition);
             }
