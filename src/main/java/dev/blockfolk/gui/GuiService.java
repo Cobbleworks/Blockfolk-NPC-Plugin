@@ -350,15 +350,18 @@ public final class GuiService implements Listener {
                 ChatColor.GRAY + "Armor, hands, and stored inventory",
                 ChatColor.YELLOW + "Click to edit"
         )));
-        inventory.setItem(15, item(Material.ARMOR_STAND, "Spawn Instance", List.of(
-                ChatColor.GRAY + "Creates a visible persistent NPC",
-                ChatColor.GRAY + "at the preset spawnpoint",
-                ChatColor.YELLOW + "Click to spawn"
-        )));
-        inventory.setItem(16, item(Material.ENDER_EYE, "Manage Instances", List.of(
-                ChatColor.GRAY + "" + instances + " spawned instance(s)",
-                ChatColor.YELLOW + "Teleport to or remove copies"
-        )));
+        if (instances == 0) {
+            inventory.setItem(15, item(Material.ARMOR_STAND, "Spawn NPC", List.of(
+                    ChatColor.GRAY + "Creates the first visible NPC",
+                    ChatColor.GRAY + "at the preset spawnpoint",
+                    ChatColor.YELLOW + "Click to spawn"
+            )));
+        } else {
+            inventory.setItem(15, item(Material.ENDER_EYE, "Manage Instances", List.of(
+                    ChatColor.GRAY + "" + instances + " spawned instance(s)",
+                    ChatColor.YELLOW + "Teleport, move, remove, or spawn copies"
+            )));
+        }
         int behaviourCount = java.util.Arrays.stream(BehaviourEvent.values())
                 .mapToInt(event -> definition.getBehaviourActions(event).size()).sum();
         inventory.setItem(20, item(Material.COMPARATOR, "Event Behaviour", List.of(
@@ -779,7 +782,7 @@ public final class GuiService implements Listener {
         }
         if (instances.isEmpty()) {
             inventory.setItem(22, item(Material.GRAY_DYE, "No Instances", List.of(
-                    ChatColor.GRAY + "Return to the preset editor to spawn one."
+                    ChatColor.GRAY + "Use Spawn Another Here below to create one."
             )));
         }
         if (page > 0) {
@@ -796,6 +799,11 @@ public final class GuiService implements Listener {
             )));
         }
         inventory.setItem(49, item(Material.BARRIER, "Back to Preset", List.of()));
+        inventory.setItem(50, item(Material.ARMOR_STAND, "Spawn Another Here", List.of(
+                ChatColor.GRAY + "Creates another visible persistent NPC",
+                ChatColor.GRAY + "at your current location",
+                ChatColor.YELLOW + "Click to spawn"
+        )));
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
@@ -991,16 +999,18 @@ public final class GuiService implements Listener {
             case 13 ->
                 openInventoryEditor(player, definition);
             case 15 -> {
-                if (definition.getSpawnpoint() == null) {
-                    player.sendMessage(Component.text("Set a spawnpoint first."));
+                if (instanceRegistry.findByDefinition(definition).isEmpty()) {
+                    if (definition.getSpawnpoint() == null) {
+                        player.sendMessage(Component.text("Set a spawnpoint first."));
+                    } else {
+                        instanceRegistry.spawnPersistent(definition, definition.getSpawnpoint());
+                        player.sendMessage(Component.text("Spawned a visible NPC instance."));
+                    }
+                    openEditor(player, definition);
                 } else {
-                    instanceRegistry.spawnPersistent(definition, definition.getSpawnpoint());
-                    player.sendMessage(Component.text("Spawned a visible NPC instance."));
+                    openInstances(player, definition, 0);
                 }
-                openEditor(player, definition);
             }
-            case 16 ->
-                openInstances(player, definition, 0);
             case 20 ->
                 openBehaviours(player, definition, 0);
             case 19 ->
@@ -1172,6 +1182,11 @@ public final class GuiService implements Listener {
                 openConfirmation(player, definition, ConfirmationAction.DELETE_INSTANCES, holder.page());
             case 49 ->
                 openEditor(player, definition);
+            case 50 -> {
+                instanceRegistry.spawnPersistent(definition, player.getLocation());
+                player.sendMessage(Component.text("Spawned another NPC instance at your location."));
+                openInstances(player, definition, holder.page());
+            }
             case 51 -> {
                 instanceRegistry.refreshDefinition(definition);
                 player.sendMessage(Component.text("Refreshed " + instanceRegistry.findByDefinition(definition).size() + " instance(s)."));
