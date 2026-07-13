@@ -346,47 +346,36 @@ public final class GuiService implements Listener {
                 ChatColor.GRAY + formatLocation(definition.getSpawnpoint()),
                 ChatColor.YELLOW + "Click to use your current location"
         )));
-        inventory.setItem(13, item(Material.CHEST, "Equipment", List.of(
+        inventory.setItem(14, item(Material.CHEST, "Equipment", List.of(
                 ChatColor.GRAY + "Armor, hands, and stored inventory",
                 ChatColor.YELLOW + "Click to edit"
         )));
         if (instances == 0) {
-            inventory.setItem(15, item(Material.ARMOR_STAND, "Spawn NPC", List.of(
+            inventory.setItem(16, item(Material.ARMOR_STAND, "Spawn NPC", List.of(
                     ChatColor.GRAY + "Creates the first visible NPC",
                     ChatColor.GRAY + "at the preset spawnpoint",
                     ChatColor.YELLOW + "Click to spawn"
             )));
         } else {
-            inventory.setItem(15, item(Material.ENDER_EYE, "Manage Instances", List.of(
+            inventory.setItem(16, item(Material.ENDER_EYE, "Manage Instances", List.of(
                     ChatColor.GRAY + "" + instances + " spawned instance(s)",
                     ChatColor.YELLOW + "Teleport, move, remove, or spawn copies"
             )));
         }
         int behaviourCount = java.util.Arrays.stream(BehaviourEvent.values())
                 .mapToInt(event -> definition.getBehaviourActions(event).size()).sum();
-        inventory.setItem(20, item(Material.COMPARATOR, "Event Behaviour", List.of(
+        inventory.setItem(13, item(Material.COMMAND_BLOCK, "Event Behaviour", List.of(
                 ChatColor.GRAY + "" + behaviourCount + " configured action(s)",
                 ChatColor.GRAY + "Build event-to-action sequences",
                 ChatColor.YELLOW + "Click to configure"
         )));
-        inventory.setItem(19, item(Material.BELL, "Custom Event Behaviour", List.of(
+        inventory.setItem(22, item(Material.BELL, "Custom Event Behaviour", List.of(
                 ChatColor.GRAY + "" + definition.customEventActionCount() + " configured action(s)",
                 ChatColor.GRAY + "React to globally emitted custom events",
                 ChatColor.YELLOW + "Click to configure"
         )));
-        BehaviourAction spawnRoute = definition.getBehaviourActions(BehaviourEvent.SPAWN).stream()
-                .filter(action -> action.type() == BehaviourActionType.SET_ROUTE)
-                .findFirst()
-                .orElse(null);
-        String spawnRouteName = spawnRoute == null ? "Not configured" : routeRepository.find(spawnRoute.value())
-                .map(NpcRoute::getDisplayName)
-                .orElse(spawnRoute.value());
-        inventory.setItem(21, item(Material.POWERED_RAIL, "Start Route", List.of(
-                ChatColor.GRAY + "Spawn → Set Route: " + ChatColor.WHITE + spawnRouteName,
-                ChatColor.YELLOW + "Click to select a route"
-        )));
         CombatProfile combat = definition.getCombatProfile();
-        inventory.setItem(14, item(Material.IRON_SWORD, "Fighting", List.of(
+        inventory.setItem(15, item(Material.IRON_SWORD, "Fighting", List.of(
                 ChatColor.GRAY + "Health: " + ChatColor.WHITE + healthLabel(combat),
                 ChatColor.GRAY + "Respawn: " + ChatColor.WHITE + respawnLabel(combat),
                 ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.attackReaction().displayName(),
@@ -995,9 +984,9 @@ public final class GuiService implements Listener {
                 player.sendMessage(Component.text("Preset spawnpoint updated. Existing instances were not moved."));
                 openEditor(player, definition);
             }
-            case 13 ->
+            case 14 ->
                 openInventoryEditor(player, definition);
-            case 15 -> {
+            case 16 -> {
                 if (instanceRegistry.findByDefinition(definition).isEmpty()) {
                     if (definition.getSpawnpoint() == null) {
                         player.sendMessage(Component.text("Set a spawnpoint first."));
@@ -1010,30 +999,11 @@ public final class GuiService implements Listener {
                     openInstances(player, definition, 0);
                 }
             }
-            case 20 ->
+            case 13 ->
                 openBehaviours(player, definition, 0);
-            case 19 ->
+            case 22 ->
                 openCustomBehaviours(player, definition, 0);
-            case 21 -> {
-                List<BehaviourAction> spawnActions = definition.getBehaviourActions(BehaviourEvent.SPAWN);
-                int routeIndex = -1;
-                for (int index = 0; index < spawnActions.size(); index++) {
-                    if (spawnActions.get(index).type() == BehaviourActionType.SET_ROUTE) {
-                        routeIndex = index;
-                        break;
-                    }
-                }
-                if (routeIndex < 0 && spawnActions.size() >= 7) {
-                    player.sendMessage(Component.text("The Spawn event already has the maximum of 7 actions."));
-                    return;
-                }
-                ActionPickerHolder action = new ActionPickerHolder(
-                        definition.getKey(), BehaviourEvent.SPAWN, null,
-                        routeIndex < 0 ? spawnActions.size() : routeIndex, 0
-                );
-                openBehaviourValuePicker(player, definition, action, BehaviourValuePickerType.ROUTE, 0);
-            }
-            case 14 ->
+            case 15 ->
                 openFightingEditor(player, definition);
             case 31 ->
                 openMain(player);

@@ -17,11 +17,13 @@ import org.bukkit.Material;
 import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.TileState;
 import org.bukkit.block.Container;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Ageable;
 import org.bukkit.block.data.Powerable;
+import org.bukkit.block.data.type.Switch;
 import org.bukkit.entity.Pose;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -86,6 +88,7 @@ public final class NpcBehaviourService implements Listener {
     private int proximityTick;
     private long customEmissionTick = -1L;
     private int customEmissionsThisTick;
+    private boolean redstonePhysicsWarningLogged;
 
     public NpcBehaviourService(
             Plugin plugin,
@@ -585,6 +588,7 @@ public final class NpcBehaviourService implements Listener {
                     Bukkit.getPluginManager().callEvent(event);
                     powerable.setPowered(event.getNewCurrent() > 0);
                     block.setBlockData(data, true);
+                    notifyAttachedBlockNeighbors(block, (Switch) data);
                     if (button && powerable.isPowered()) {
                         Material pressedType = block.getType();
                         long releaseDelay = pressedType == Material.STONE_BUTTON
@@ -606,6 +610,35 @@ public final class NpcBehaviourService implements Listener {
         Bukkit.getPluginManager().callEvent(event);
         powerable.setPowered(event.getNewCurrent() > 0);
         block.setBlockData(data, true);
+        notifyAttachedBlockNeighbors(block, (Switch) data);
+    }
+
+    private void notifyAttachedBlockNeighbors(Block block, Switch switchData) {
+        BlockFace supportFace = switch (switchData.getAttachedFace()) {
+            case FLOOR -> BlockFace.DOWN;
+            case CEILING -> BlockFace.UP;
+            case WALL -> switchData.getFacing().getOppositeFace();
+        };
+        Block support = block.getRelative(supportFace);
+        try {
+            Object level = block.getWorld().getClass().getMethod("getHandle").invoke(block.getWorld());
+            Class<?> blockPosType = Class.forName("net.minecraft.core.BlockPos");
+            Object supportPos = blockPosType.getConstructor(int.class, int.class, int.class)
+                    .newInstance(support.getX(), support.getY(), support.getZ());
+            Object switchPos = blockPosType.getConstructor(int.class, int.class, int.class)
+                    .newInstance(block.getX(), block.getY(), block.getZ());
+            Object blockState = level.getClass().getMethod("getBlockState", blockPosType).invoke(level, switchPos);
+            Object sourceBlock = blockState.getClass().getMethod("getBlock").invoke(blockState);
+            Class<?> nativeBlockType = Class.forName("net.minecraft.world.level.block.Block");
+            level.getClass().getMethod("updateNeighborsAt", blockPosType, nativeBlockType)
+                    .invoke(level, supportPos, sourceBlock);
+        } catch (ReflectiveOperationException exception) {
+            if (!redstonePhysicsWarningLogged) {
+                redstonePhysicsWarningLogged = true;
+                plugin.getLogger().warning("Could not propagate NPC switch redstone physics: "
+                        + exception.getClass().getSimpleName() + ": " + exception.getMessage());
+            }
+        }
     }
 
     private void mineNearbyBlocks(NpcInstance instance) {
