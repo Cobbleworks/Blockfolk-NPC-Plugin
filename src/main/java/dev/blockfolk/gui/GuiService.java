@@ -376,7 +376,7 @@ public final class GuiService implements Listener {
                 ChatColor.YELLOW + "Click to select a route"
         )));
         CombatProfile combat = definition.getCombatProfile();
-        inventory.setItem(23, item(Material.IRON_SWORD, "Fighting", List.of(
+        inventory.setItem(14, item(Material.IRON_SWORD, "Fighting", List.of(
                 ChatColor.GRAY + "Health: " + ChatColor.WHITE + healthLabel(combat),
                 ChatColor.GRAY + "Respawn: " + ChatColor.WHITE + respawnLabel(combat),
                 ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.attackReaction().displayName(),
@@ -1013,7 +1013,7 @@ public final class GuiService implements Listener {
                 );
                 openBehaviourValuePicker(player, definition, action, BehaviourValuePickerType.ROUTE, 0);
             }
-            case 23 ->
+            case 14 ->
                 openFightingEditor(player, definition);
             case 31 ->
                 openMain(player);
