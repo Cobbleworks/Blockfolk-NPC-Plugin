@@ -82,9 +82,35 @@ public final class GuiService implements Listener {
             BehaviourActionType.WAVE,
             BehaviourActionType.JUMP
     );
-    private static final List<BehaviourActionType> PRIMARY_ACTIONS = java.util.Arrays.stream(BehaviourActionType.values())
-            .filter(type -> !ANIMATION_ACTIONS.contains(type))
-            .toList();
+    private static final Map<Integer, BehaviourActionType> ACTION_PICKER_ACTIONS = Map.ofEntries(
+            // Dialogue and scripting
+            Map.entry(1, BehaviourActionType.SEND_DIALOG),
+            Map.entry(2, BehaviourActionType.SHOW_HOLO_DIALOG),
+            Map.entry(4, BehaviourActionType.EMIT_EVENT),
+            Map.entry(5, BehaviourActionType.RUN_CONSOLE_COMMAND),
+            Map.entry(7, BehaviourActionType.WAIT),
+            // Movement and navigation
+            Map.entry(10, BehaviourActionType.SET_ROUTE),
+            Map.entry(11, BehaviourActionType.START_NAVIGATION),
+            Map.entry(12, BehaviourActionType.STOP_NAVIGATION),
+            Map.entry(13, BehaviourActionType.SET_WALK_SPEED),
+            Map.entry(14, BehaviourActionType.MOVE_TO),
+            Map.entry(15, BehaviourActionType.TELEPORT_TO),
+            Map.entry(16, BehaviourActionType.FOLLOW),
+            Map.entry(17, BehaviourActionType.UNFOLLOW),
+            // World and inventory interaction
+            Map.entry(19, BehaviourActionType.INTERACT),
+            Map.entry(20, BehaviourActionType.MINE_BLOCKS),
+            Map.entry(21, BehaviourActionType.TAKE_ITEM),
+            Map.entry(22, BehaviourActionType.SHOW_INVENTORY),
+            Map.entry(23, BehaviourActionType.DROP_INVENTORY),
+            Map.entry(24, BehaviourActionType.HARVEST),
+            // Combat
+            Map.entry(28, BehaviourActionType.START_COMBAT),
+            Map.entry(29, BehaviourActionType.CHANGE_FIGHT_OPTIONS)
+    );
+    private static final int ACTION_PICKER_ANIMATIONS_SLOT = 32;
+    private static final int ACTION_PICKER_BACK_SLOT = 49;
     private static final Set<Integer> INVENTORY_EDIT_SLOTS = Set.of(
             1, 2, 3, 4, 5, 6, 7, 8,
             10, 11, 12, 13, 14, 15, 16, 17,
@@ -194,18 +220,18 @@ public final class GuiService implements Listener {
     }
 
     private void openRoutePointActionPicker(Player player, RoutePointActionPickerHolder holder) {
-        Inventory inventory = Bukkit.createInventory(holder, 36, Component.text("Choose Waypoint Action"));
-        for (int index = 0; index < PRIMARY_ACTIONS.size(); index++) {
-            BehaviourActionType type = PRIMARY_ACTIONS.get(index);
-            inventory.setItem(index, item(actionMaterial(type), type.displayName(), List.of(
+        Inventory inventory = Bukkit.createInventory(holder, 54, Component.text("Choose Waypoint Action"));
+        for (Map.Entry<Integer, BehaviourActionType> entry : ACTION_PICKER_ACTIONS.entrySet()) {
+            BehaviourActionType type = entry.getValue();
+            inventory.setItem(entry.getKey(), item(actionMaterial(type), type.displayName(), List.of(
                     ChatColor.YELLOW + "Click to configure"
             )));
         }
-        inventory.setItem(22, item(Material.ARMOR_STAND, "Animations", List.of(
+        inventory.setItem(ACTION_PICKER_ANIMATIONS_SLOT, item(Material.ARMOR_STAND, "Animations", List.of(
                 ChatColor.GRAY + "Poses, waving, and jumping",
                 ChatColor.YELLOW + "Click to choose an animation"
         )));
-        inventory.setItem(31, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(ACTION_PICKER_BACK_SLOT, item(Material.BARRIER, "Back", List.of()));
         openInventory(player, inventory);
     }
 
@@ -583,17 +609,17 @@ public final class GuiService implements Listener {
 
     private void openActionPicker(Player player, NpcDefinition definition, BehaviourEvent event, String customEvent,
             int actionIndex, int page) {
-        Inventory inventory = Bukkit.createInventory(new ActionPickerHolder(definition.getKey(), event, customEvent, actionIndex, page), 36,
+        Inventory inventory = Bukkit.createInventory(new ActionPickerHolder(definition.getKey(), event, customEvent, actionIndex, page), 54,
                 Component.text("Choose Action"));
-        for (int index = 0; index < PRIMARY_ACTIONS.size(); index++) {
-            BehaviourActionType type = PRIMARY_ACTIONS.get(index);
-            inventory.setItem(index, item(actionMaterial(type), type.displayName(), List.of(ChatColor.YELLOW + "Click to configure")));
+        for (Map.Entry<Integer, BehaviourActionType> entry : ACTION_PICKER_ACTIONS.entrySet()) {
+            BehaviourActionType type = entry.getValue();
+            inventory.setItem(entry.getKey(), item(actionMaterial(type), type.displayName(), List.of(ChatColor.YELLOW + "Click to configure")));
         }
-        inventory.setItem(22, item(Material.ARMOR_STAND, "Animations", List.of(
+        inventory.setItem(ACTION_PICKER_ANIMATIONS_SLOT, item(Material.ARMOR_STAND, "Animations", List.of(
                 ChatColor.GRAY + "Poses, waving, and jumping",
                 ChatColor.YELLOW + "Click to choose an animation"
         )));
-        inventory.setItem(31, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(ACTION_PICKER_BACK_SLOT, item(Material.BARRIER, "Back", List.of()));
         openInventory(player, inventory);
     }
 
@@ -1346,22 +1372,21 @@ public final class GuiService implements Listener {
             player.closeInventory();
             return;
         }
-        if (event.getRawSlot() == 31) {
+        if (event.getRawSlot() == ACTION_PICKER_BACK_SLOT) {
             openWaypointActions(player, holder.routeKey(), current);
             return;
         }
-        if (event.getRawSlot() == 22) {
+        if (event.getRawSlot() == ACTION_PICKER_ANIMATIONS_SLOT) {
             openRoutePointAnimationPicker(player, new RoutePointActionPickerHolder(
                     holder.routeKey(), current, holder.actionIndex()));
             return;
         }
-        int typeIndex = event.getRawSlot();
-        if (typeIndex < 0 || typeIndex >= PRIMARY_ACTIONS.size()) {
+        BehaviourActionType type = ACTION_PICKER_ACTIONS.get(event.getRawSlot());
+        if (type == null) {
             return;
         }
         RoutePointActionPickerHolder action = new RoutePointActionPickerHolder(
                 holder.routeKey(), current, holder.actionIndex());
-        BehaviourActionType type = PRIMARY_ACTIONS.get(typeIndex);
         if (type == BehaviourActionType.SET_ROUTE) {
             openRoutePointValuePicker(player, action, BehaviourValuePickerType.ROUTE, 0);
         } else if (type == BehaviourActionType.SET_WALK_SPEED) {
@@ -1556,19 +1581,18 @@ public final class GuiService implements Listener {
             player.closeInventory();
             return;
         }
-        if (event.getRawSlot() == 31) {
+        if (event.getRawSlot() == ACTION_PICKER_BACK_SLOT) {
             openBehaviourHome(player, definition, holder);
             return;
         }
-        if (event.getRawSlot() == 22) {
+        if (event.getRawSlot() == ACTION_PICKER_ANIMATIONS_SLOT) {
             openAnimationPicker(player, holder);
             return;
         }
-        int typeIndex = event.getRawSlot();
-        if (typeIndex < 0 || typeIndex >= PRIMARY_ACTIONS.size()) {
+        BehaviourActionType type = ACTION_PICKER_ACTIONS.get(event.getRawSlot());
+        if (type == null) {
             return;
         }
-        BehaviourActionType type = PRIMARY_ACTIONS.get(typeIndex);
         if (type == BehaviourActionType.SET_ROUTE) {
             openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.ROUTE, 0);
         } else if (type == BehaviourActionType.SET_WALK_SPEED) {
