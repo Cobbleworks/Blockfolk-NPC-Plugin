@@ -857,12 +857,12 @@ public final class GuiService implements Listener {
         if (definition == null) {
             return;
         }
-        if (behaviourService != null) {
-            behaviourService.trigger(BehaviourEvent.RIGHT_CLICK, instance, event.getPlayer());
-        }
         if (event.getPlayer().isSneaking() && event.getPlayer().hasPermission("blockfolk.admin")) {
             openEditor(event.getPlayer(), definition);
             return;
+        }
+        if (behaviourService != null) {
+            behaviourService.trigger(BehaviourEvent.RIGHT_CLICK, instance, event.getPlayer());
         }
     }
 
