@@ -28,6 +28,28 @@ class NpcInstanceTest {
     }
 
     @Test
+    void keepsSpawnLocationSeparateFromCurrentLocation() {
+        Location spawnLocation = new Location(null, 1.0, 2.0, 3.0);
+        NpcInstance instance = new NpcInstance(UUID.randomUUID(), "guard", spawnLocation);
+
+        instance.setLocation(new Location(null, 10.0, 20.0, 30.0));
+
+        assertEquals(spawnLocation, instance.getSpawnLocation());
+        assertNotSame(spawnLocation, instance.getSpawnLocation());
+    }
+
+    @Test
+    void canRelocateSpawnLocationIndependently() {
+        NpcInstance instance = new NpcInstance(UUID.randomUUID(), "guard", new Location(null, 1.0, 2.0, 3.0));
+        Location relocatedSpawn = new Location(null, 4.0, 5.0, 6.0);
+
+        instance.setSpawnLocation(relocatedSpawn);
+
+        assertEquals(relocatedSpawn, instance.getSpawnLocation());
+        assertNotSame(relocatedSpawn, instance.getSpawnLocation());
+    }
+
+    @Test
     void hasSeparateTemporaryInventory() {
         NpcInstance instance = new NpcInstance(UUID.randomUUID(), "guard", new Location(null, 0, 0, 0));
         assertEquals(27, instance.getTemporaryInventoryContents().length);

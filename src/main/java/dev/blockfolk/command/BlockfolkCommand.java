@@ -125,12 +125,17 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
                 player.sendMessage(Component.text("Unknown NPC: " + args[1]));
                 return true;
             }
-            Location spawnpoint = definition.getSpawnpoint();
-            if (spawnpoint == null) {
-                player.sendMessage(Component.text("Set a spawnpoint for this NPC first."));
-                return true;
+            Location spawnLocation;
+            if (instanceRegistry.findByDefinition(definition).isEmpty()) {
+                spawnLocation = definition.getSpawnpoint();
+                if (spawnLocation == null) {
+                    player.sendMessage(Component.text("Set a spawnpoint for this NPC first."));
+                    return true;
+                }
+            } else {
+                spawnLocation = player.getLocation();
             }
-            instanceRegistry.spawnPersistent(definition, spawnpoint);
+            instanceRegistry.spawnPersistent(definition, spawnLocation);
             player.sendMessage(Component.text("Spawned NPC copy of " + definition.getDisplayName() + "."));
             return true;
         }

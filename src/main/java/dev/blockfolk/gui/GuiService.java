@@ -1203,8 +1203,8 @@ public final class GuiService implements Listener {
                 NpcInstance instance = instances.get(index);
                 if (event.getClick() == ClickType.MIDDLE) {
                     Location destination = player.getLocation();
-                    if (instanceRegistry.move(instance, destination)) {
-                        player.sendMessage(Component.text("Moved NPC instance to your location."));
+                    if (instanceRegistry.relocate(instance, destination)) {
+                        player.sendMessage(Component.text("Moved NPC instance and its spawn location to you."));
                     } else {
                         player.sendMessage(Component.text("Could not move the NPC instance."));
                     }

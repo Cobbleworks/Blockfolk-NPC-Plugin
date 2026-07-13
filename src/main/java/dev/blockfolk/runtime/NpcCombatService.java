@@ -199,6 +199,7 @@ public final class NpcCombatService implements Listener {
         }
         event.setDroppedExp(0);
         clearState(instance);
+        Location respawnLocation = instance.getSpawnLocation();
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (!instanceRegistry.deleteInstance(instance.getId()) || definition == null
                     || definition.getCombatProfile().respawnSeconds() == 0) {
@@ -208,9 +209,8 @@ public final class NpcCombatService implements Listener {
             BukkitTask respawnTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 pendingRespawns.remove(instance.getId());
                 definitionRepository.find(instance.getDefinitionKey()).ifPresent(currentDefinition -> {
-                    Location spawnpoint = currentDefinition.getSpawnpoint();
-                    if (currentDefinition.getCombatProfile().respawnSeconds() > 0 && spawnpoint != null) {
-                        instanceRegistry.spawnPersistent(currentDefinition, spawnpoint);
+                    if (currentDefinition.getCombatProfile().respawnSeconds() > 0) {
+                        instanceRegistry.spawnPersistent(currentDefinition, respawnLocation);
                     }
                 });
             }, delayTicks);

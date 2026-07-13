@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
+import org.bukkit.Location;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -38,13 +39,16 @@ public final class NpcInstanceRepository {
             if (definitionKey == null) {
                 continue;
             }
-            if (LocationCodec.read(section.getConfigurationSection("location")) == null) {
+            Location location = LocationCodec.read(section.getConfigurationSection("location"));
+            if (location == null) {
                 continue;
             }
+            Location spawnLocation = LocationCodec.read(section.getConfigurationSection("spawn-location"));
             instances.add(new NpcInstance(
                     UUID.fromString(key),
                     definitionKey,
-                    LocationCodec.read(section.getConfigurationSection("location"))
+                    location,
+                    spawnLocation == null ? location : spawnLocation
             ));
         }
         return instances;
@@ -57,6 +61,7 @@ public final class NpcInstanceRepository {
             ConfigurationSection section = root.createSection(instance.getId().toString());
             section.set("definition", instance.getDefinitionKey());
             LocationCodec.write(section.createSection("location"), instance.getLocation());
+            LocationCodec.write(section.createSection("spawn-location"), instance.getSpawnLocation());
         }
         try {
             configuration.save(file);

@@ -114,6 +114,14 @@ public final class NpcInstanceRegistry {
     }
 
     public boolean move(NpcInstance instance, Location location) {
+        return move(instance, location, false);
+    }
+
+    public boolean relocate(NpcInstance instance, Location location) {
+        return move(instance, location, true);
+    }
+
+    private boolean move(NpcInstance instance, Location location, boolean updateSpawnLocation) {
         if (!instances.containsKey(instance.getId())) {
             return false;
         }
@@ -124,6 +132,9 @@ public final class NpcInstanceRegistry {
         navigationService.destroy(instance);
         if (!renderer.move(instance, location)) {
             return false;
+        }
+        if (updateSpawnLocation) {
+            instance.setSpawnLocation(location);
         }
         dialogService.move(instance);
         instanceRepository.saveAll(instances.values());

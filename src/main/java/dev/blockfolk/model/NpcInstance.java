@@ -10,13 +10,19 @@ public final class NpcInstance {
     private final UUID id;
     private final String definitionKey;
     private Location location;
+    private Location spawnLocation;
     private int entityId;
     private final ItemStack[] temporaryInventory = new ItemStack[27];
 
     public NpcInstance(UUID id, String definitionKey, Location location) {
+        this(id, definitionKey, location, location);
+    }
+
+    public NpcInstance(UUID id, String definitionKey, Location location, Location spawnLocation) {
         this.id = id;
         this.definitionKey = definitionKey;
         this.location = location.clone();
+        this.spawnLocation = spawnLocation.clone();
     }
 
     public UUID getId() {
@@ -33,6 +39,14 @@ public final class NpcInstance {
 
     public void setLocation(Location location) {
         this.location = location.clone();
+    }
+
+    public Location getSpawnLocation() {
+        return spawnLocation.clone();
+    }
+
+    public void setSpawnLocation(Location spawnLocation) {
+        this.spawnLocation = spawnLocation.clone();
     }
 
     public int getEntityId() {
