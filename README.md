@@ -16,7 +16,9 @@ All commands require the `blockfolk.admin` permission (granted to operators by d
 - `/bf routes` — open the route manager.
 - `/bf npc <name>` — spawn a persistent copy of the selected NPC preset. NPC names are tab-completed.
 - `/bf npc <name> duplicate` — duplicate a preset with ` (copy)` appended to its display name.
-- `/bf config -seconds-per-line <seconds>` — set the global delay used for dialog lines and queued dialog actions.
+
+Dialog line duration is calculated automatically from the text length at 15 characters
+per second, with a minimum duration of 3 seconds.
 
 Proximity enter/leave transitions are debounced for 3 seconds by default. Adjust
 `proximity-transition-cooldown-seconds` in `config.yml` if needed.

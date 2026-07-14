@@ -276,7 +276,7 @@ public final class NpcBehaviourService implements Listener {
         }
         if (action.type() == BehaviourActionType.SEND_DIALOG
                 || action.type() == BehaviourActionType.SHOW_HOLO_DIALOG) {
-            return dialogService.secondsPerLine() * 20L;
+            return DialogService.lineDurationSeconds(action.value()) * 20L;
         }
         return 0L;
     }

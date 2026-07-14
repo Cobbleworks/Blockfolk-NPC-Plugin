@@ -133,7 +133,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         }
         BlockfolkCommand executor = new BlockfolkCommand(
                 definitionRepository, instanceRegistry, guiService, routeGuiService,
-                customEventGuiService, customEventRepository, behaviourService, this);
+                customEventGuiService, customEventRepository, behaviourService);
         command.setExecutor(executor);
         command.setTabCompleter(executor);
 

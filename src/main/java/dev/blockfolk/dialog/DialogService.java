@@ -13,7 +13,6 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import dev.blockfolk.model.NpcDefinition;
@@ -23,6 +22,8 @@ import net.kyori.adventure.text.Component;
 public final class DialogService {
 
     private static final double DIALOG_DISPLAY_Y_OFFSET = 2.4;
+    private static final int MINIMUM_LINE_DURATION_SECONDS = 3;
+    private static final int CHARACTERS_PER_SECOND = 15;
 
     private final Plugin plugin;
     private final NamespacedKey instanceKey;
@@ -34,8 +35,13 @@ public final class DialogService {
         this.instanceKey = new NamespacedKey(plugin, "dialog-instance-id");
     }
 
-    public int secondsPerLine() {
-        return Math.max(1, ((JavaPlugin) plugin).getConfig().getInt("seconds-per-line", 3));
+    public static int lineDurationSeconds(String line) {
+        if (line == null) {
+            return MINIMUM_LINE_DURATION_SECONDS;
+        }
+        int characterCount = line.codePointCount(0, line.length());
+        int readingSeconds = (characterCount + CHARACTERS_PER_SECOND - 1) / CHARACTERS_PER_SECOND;
+        return Math.max(MINIMUM_LINE_DURATION_SECONDS, readingSeconds);
     }
 
     public void start() {
@@ -81,8 +87,8 @@ public final class DialogService {
     }
 
     /**
-     * Shows one behaviour-supplied hologram line for the preset's normal line
-     * duration.
+     * Shows one behaviour-supplied hologram line for a duration based on its
+     * text length.
      */
     public void showHologram(NpcInstance instance, NpcDefinition definition, String line) {
         if (line == null || line.isBlank() || instance.getLocation().getWorld() == null) {
@@ -97,7 +103,7 @@ public final class DialogService {
             displays.put(instance.getId(), runtime);
         }
         runtime.display.text(Component.text(line));
-        runtime.overrideSeconds = secondsPerLine();
+        runtime.overrideSeconds = lineDurationSeconds(line);
     }
 
     private void removeTaggedDisplays(UUID instanceId) {

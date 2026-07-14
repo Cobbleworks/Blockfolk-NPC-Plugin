@@ -10,7 +10,6 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
 
 import dev.blockfolk.gui.GuiService;
 import dev.blockfolk.gui.CustomEventGuiService;
@@ -32,7 +31,6 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
     private final CustomEventGuiService customEventGuiService;
     private final CustomEventRepository customEventRepository;
     private final NpcBehaviourService behaviourService;
-    private final JavaPlugin plugin;
 
     public BlockfolkCommand(
             NpcDefinitionRepository definitionRepository,
@@ -41,8 +39,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             RouteGuiService routeGuiService,
             CustomEventGuiService customEventGuiService,
             CustomEventRepository customEventRepository,
-            NpcBehaviourService behaviourService,
-            JavaPlugin plugin
+            NpcBehaviourService behaviourService
     ) {
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
@@ -51,28 +48,12 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
         this.customEventGuiService = customEventGuiService;
         this.customEventRepository = customEventRepository;
         this.behaviourService = behaviourService;
-        this.plugin = plugin;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("blockfolk.admin")) {
             sender.sendMessage(Component.text("You do not have permission to use Blockfolk."));
-            return true;
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("config")
-                && args[1].equalsIgnoreCase("-seconds-per-line")) {
-            try {
-                int seconds = Integer.parseInt(args[2]);
-                if (seconds < 1) {
-                    throw new NumberFormatException();
-                }
-                plugin.getConfig().set("seconds-per-line", seconds);
-                plugin.saveConfig();
-                sender.sendMessage(Component.text("Seconds per line set to " + seconds + "."));
-            } catch (NumberFormatException exception) {
-                sender.sendMessage(Component.text("Seconds per line must be a whole number of at least 1."));
-            }
             return true;
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("events")
@@ -154,7 +135,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(Component.text("Duplicated " + source.getDisplayName() + " as " + copy.getDisplayName() + "."));
             return true;
         }
-        player.sendMessage(Component.text("Usage: /bf [create [name]|routes|events [trigger <event>]|npc <name> [duplicate]|config -seconds-per-line <seconds>]"));
+        player.sendMessage(Component.text("Usage: /bf [create [name]|routes|events [trigger <event>]|npc <name> [duplicate]]"));
         return true;
     }
 
@@ -169,16 +150,12 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             suggestions.add("routes");
             suggestions.add("events");
             suggestions.add("npc");
-            suggestions.add("config");
             return filter(suggestions, args[0]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("npc")) {
             return filter(definitionRepository.findAll().stream()
                     .map(NpcDefinition::getKey)
                     .toList(), args[1]);
-        }
-        if (args.length == 2 && args[0].equalsIgnoreCase("config")) {
-            return filter(List.of("-seconds-per-line"), args[1]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("events")) {
             return filter(List.of("trigger"), args[1]);
