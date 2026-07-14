@@ -29,6 +29,7 @@ import dev.blockfolk.model.CustomEvent;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.repository.CustomEventRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
+import dev.blockfolk.util.UiText;
 import net.kyori.adventure.text.Component;
 
 public final class CustomEventGuiService implements Listener {
@@ -58,14 +59,14 @@ public final class CustomEventGuiService implements Listener {
                         ? value : normalizedFolder + "/" + value;
                 CustomEvent event = new CustomEvent(name);
                 if (events.find(event.getName()).isPresent()) {
-                    player.sendMessage(Component.text("A custom event with that name already exists."));
+                    player.sendMessage(UiText.error("A custom event with that name already exists."));
                     onFailure.run();
                     return;
                 }
                 events.save(event);
                 onCreated.accept(event);
             } catch (IllegalArgumentException exception) {
-                player.sendMessage(Component.text(exception.getMessage()));
+                player.sendMessage(UiText.error(exception.getMessage()));
                 onFailure.run();
             }
         });
@@ -76,7 +77,7 @@ public final class CustomEventGuiService implements Listener {
         int pages = Math.max(1, (entries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         String title = folder.isEmpty() ? "Custom Events" : "Events: " + folder;
-        Inventory inventory = Bukkit.createInventory(new EventsHolder(folder, page), 54, Component.text(title));
+        Inventory inventory = Bukkit.createInventory(new EventsHolder(folder, page), 54, UiText.title(title));
         int from = page * PAGE_SIZE;
         for (int index = from; index < Math.min(from + PAGE_SIZE, entries.size()); index++) {
             Entry entry = entries.get(index);
@@ -110,7 +111,7 @@ public final class CustomEventGuiService implements Listener {
     private void openReorder(Player player, ReorderEventsHolder holder, int requestedPage) {
         int pages = Math.max(1, (holder.names.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         holder.page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(holder, 54, Component.text("Reorder Custom Events"));
+        Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Reorder Custom Events"));
         renderReorder(inventory, holder);
         player.openInventory(inventory);
         restoreReorderCursor(player, holder);
@@ -199,7 +200,7 @@ public final class CustomEventGuiService implements Listener {
         if (click.getClick() == ClickType.MIDDLE) {
             customEvent.setIcon(player.getInventory().getItemInMainHand());
             events.save(customEvent);
-            player.sendMessage(Component.text(customEvent.getIcon() == null ? "Event icon cleared." : "Event icon updated."));
+            player.sendMessage(UiText.info(customEvent.getIcon() == null ? "Event icon cleared." : "Event icon updated."));
             open(player, holder.folder(), holder.page());
         } else if (click.isRightClick() && click.isShiftClick()) {
             openDelete(player, customEvent, holder);
@@ -228,10 +229,10 @@ public final class CustomEventGuiService implements Listener {
             clearReorderSelection(player, holder);
             try {
                 events.reorder(holder.names);
-                player.sendMessage(Component.text("Custom event order saved."));
+                player.sendMessage(UiText.success("Custom event order saved."));
                 open(player, holder.returnFolder, holder.returnPage);
             } catch (IllegalArgumentException exception) {
-                player.sendMessage(Component.text(
+                player.sendMessage(UiText.info(
                         "The custom event list changed while you were editing. Please reorder it again."));
                 openReorder(player, holder.returnFolder, holder.returnPage);
             }
@@ -291,7 +292,7 @@ public final class CustomEventGuiService implements Listener {
 
     private void openDelete(Player player, CustomEvent event, EventsHolder back) {
         Inventory inventory = Bukkit.createInventory(new DeleteHolder(event.getName(), back.folder(), back.page()), 27,
-                Component.text("Delete event: " + event.getName()));
+                UiText.title("Delete Event", event.getName()));
         inventory.setItem(11, item(Material.LIME_CONCRETE, "Confirm", List.of(
                 ChatColor.RED + "Permanently delete this event",
                 ChatColor.GRAY + "NPC reactions to it will also be removed")));
@@ -312,7 +313,7 @@ public final class CustomEventGuiService implements Listener {
                 }
             }
             events.delete(event);
-            player.sendMessage(Component.text("Deleted custom event '" + event.getName() + "'."));
+            player.sendMessage(UiText.success("Deleted custom event '" + event.getName() + "'."));
         }
         open(player, holder.folder(), holder.page());
     }

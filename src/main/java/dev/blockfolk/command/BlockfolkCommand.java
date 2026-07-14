@@ -20,7 +20,7 @@ import dev.blockfolk.repository.CustomEventRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
-import net.kyori.adventure.text.Component;
+import dev.blockfolk.util.UiText;
 
 public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
 
@@ -53,22 +53,22 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("blockfolk.admin")) {
-            sender.sendMessage(Component.text("You do not have permission to use Blockfolk."));
+            sender.sendMessage(UiText.error("You do not have permission to use Blockfolk."));
             return true;
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("events")
                 && args[1].equalsIgnoreCase("trigger")) {
             CustomEvent customEvent = customEventRepository.find(args[2]).orElse(null);
             if (customEvent == null) {
-                sender.sendMessage(Component.text("Unknown custom event: " + args[2]));
+                sender.sendMessage(UiText.error("Unknown custom event: " + args[2]));
                 return true;
             }
             behaviourService.emitCustomEvent(customEvent.getName(), sender instanceof Player player ? player : null);
-            sender.sendMessage(Component.text("Triggered custom event '" + customEvent.getName() + "'."));
+            sender.sendMessage(UiText.success("Triggered custom event '" + customEvent.getName() + "'."));
             return true;
         }
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Blockfolk is currently managed in-game."));
+            sender.sendMessage(UiText.warning("Blockfolk is currently managed in-game."));
             return true;
         }
         if (args.length == 0) {
@@ -91,7 +91,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             String name = String.join(" ", List.of(args).subList(1, args.length));
             NpcDefinition definition = NpcDefinition.create(name);
             if (definitionRepository.find(definition.getKey()).isPresent()) {
-                player.sendMessage(Component.text("An NPC with that key already exists."));
+                player.sendMessage(UiText.error("An NPC with that key already exists."));
                 return true;
             }
             definition.setSpawnpoint(player.getLocation());
@@ -100,51 +100,51 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             guiService.openEditor(player, definition);
             return true;
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("edit")) {
+        if (args.length == 2 && args[0].equalsIgnoreCase("npc")) {
             NpcDefinition definition = definitionRepository.find(args[1]).orElse(null);
             if (definition == null) {
-                player.sendMessage(Component.text("Unknown NPC: " + args[1]));
+                player.sendMessage(UiText.error("Unknown NPC: " + args[1]));
                 return true;
             }
             guiService.openEditor(player, definition);
             return true;
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("npc")) {
+        if (args.length == 3 && args[0].equalsIgnoreCase("npc") && args[2].equalsIgnoreCase("spawn")) {
             NpcDefinition definition = definitionRepository.find(args[1]).orElse(null);
             if (definition == null) {
-                player.sendMessage(Component.text("Unknown NPC: " + args[1]));
+                player.sendMessage(UiText.error("Unknown NPC: " + args[1]));
                 return true;
             }
             Location spawnLocation;
             if (instanceRegistry.findByDefinition(definition).isEmpty()) {
                 spawnLocation = definition.getSpawnpoint();
                 if (spawnLocation == null) {
-                    player.sendMessage(Component.text("Set a spawnpoint for this NPC first."));
+                    player.sendMessage(UiText.warning("Set a spawnpoint for this NPC first."));
                     return true;
                 }
             } else {
                 spawnLocation = player.getLocation();
             }
             instanceRegistry.spawnPersistent(definition, spawnLocation);
-            player.sendMessage(Component.text("Spawned NPC copy of " + definition.getDisplayName() + "."));
+            player.sendMessage(UiText.success("Spawned NPC copy of " + definition.getDisplayName() + "."));
             return true;
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("npc") && args[2].equalsIgnoreCase("duplicate")) {
             NpcDefinition source = definitionRepository.find(args[1]).orElse(null);
             if (source == null) {
-                player.sendMessage(Component.text("Unknown NPC: " + args[1]));
+                player.sendMessage(UiText.error("Unknown NPC: " + args[1]));
                 return true;
             }
             NpcDefinition copy = duplicate(source);
             if (definitionRepository.find(copy.getKey()).isPresent()) {
-                player.sendMessage(Component.text("A copy of this preset already exists."));
+                player.sendMessage(UiText.error("A copy of this preset already exists."));
                 return true;
             }
             definitionRepository.save(copy);
-            player.sendMessage(Component.text("Duplicated " + source.getDisplayName() + " as " + copy.getDisplayName() + "."));
+            player.sendMessage(UiText.success("Duplicated " + source.getDisplayName() + " as " + copy.getDisplayName() + "."));
             return true;
         }
-        player.sendMessage(Component.text("Usage: /bf [create [name]|edit <name>|routes|events [trigger <event>]|npc <name> [duplicate]]"));
+        player.sendMessage(UiText.info("Usage: /bf [create [name]|routes|events [trigger <event>]|npc <name> [spawn|duplicate]]"));
         return true;
     }
 
@@ -158,11 +158,10 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             suggestions.add("create");
             suggestions.add("routes");
             suggestions.add("events");
-            suggestions.add("edit");
             suggestions.add("npc");
             return filter(suggestions, args[0]);
         }
-        if (args.length == 2 && (args[0].equalsIgnoreCase("npc") || args[0].equalsIgnoreCase("edit"))) {
+        if (args.length == 2 && args[0].equalsIgnoreCase("npc")) {
             return filter(definitionRepository.findAll().stream()
                     .map(NpcDefinition::getKey)
                     .toList(), args[1]);
@@ -177,7 +176,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
                     .toList(), args[2]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("npc")) {
-            return filter(List.of("duplicate"), args[2]);
+            return filter(List.of("spawn", "duplicate"), args[2]);
         }
         return List.of();
     }

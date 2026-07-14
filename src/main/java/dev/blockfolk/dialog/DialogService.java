@@ -23,7 +23,7 @@ public final class DialogService {
 
     private static final double DIALOG_DISPLAY_Y_OFFSET = 2.4;
     private static final int MINIMUM_LINE_DURATION_SECONDS = 3;
-    private static final int CHARACTERS_PER_SECOND = 15;
+    private static final int CHARACTERS_PER_SECOND = 12;
 
     private final Plugin plugin;
     private final NamespacedKey instanceKey;

@@ -70,6 +70,7 @@ import dev.blockfolk.runtime.NpcBehaviourService.NpcInventoryHolder;
 import dev.blockfolk.util.ResolvedSkin;
 import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
+import dev.blockfolk.util.UiText;
 import net.kyori.adventure.text.Component;
 
 public final class GuiService implements Listener {
@@ -197,12 +198,12 @@ public final class GuiService implements Listener {
         NpcRoute route = routeRepository.find(routeKey).orElse(null);
         RoutePoint current = route == null ? null : route.findPoint(point).orElse(null);
         if (current == null) {
-            player.sendMessage(Component.text("That route point no longer exists."));
+            player.sendMessage(UiText.error("That route point no longer exists."));
             player.closeInventory();
             return;
         }
         Inventory inventory = Bukkit.createInventory(new RoutePointActionsHolder(route.getKey(), current), 27,
-                Component.text("Waypoint Actions"));
+                UiText.title("Waypoint Actions"));
         List<BehaviourAction> actions = current.actions();
         for (int index = 0; index < 7; index++) {
             int slot = 10 + index;
@@ -226,7 +227,7 @@ public final class GuiService implements Listener {
     }
 
     private void openRoutePointActionPicker(Player player, RoutePointActionPickerHolder holder) {
-        Inventory inventory = Bukkit.createInventory(holder, 54, Component.text("Choose Waypoint Action"));
+        Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Choose Waypoint Action"));
         for (Map.Entry<Integer, BehaviourActionType> entry : ACTION_PICKER_ACTIONS.entrySet()) {
             BehaviourActionType type = entry.getValue();
             inventory.setItem(entry.getKey(), item(actionMaterial(type), type.displayName(), List.of(
@@ -243,7 +244,7 @@ public final class GuiService implements Listener {
 
     private void openRoutePointAnimationPicker(Player player, RoutePointActionPickerHolder action) {
         Inventory inventory = Bukkit.createInventory(new RoutePointAnimationPickerHolder(
-                action.routeKey(), action.point(), action.actionIndex()), 27, Component.text("Choose Animation"));
+                action.routeKey(), action.point(), action.actionIndex()), 27, UiText.title("Choose Animation"));
         int[] slots = {10, 11, 12, 13, 14, 15, 16};
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
             BehaviourActionType type = ANIMATION_ACTIONS.get(index);
@@ -267,7 +268,7 @@ public final class GuiService implements Listener {
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new RoutePointValuePickerHolder(
                 action.routeKey(), action.point(), action.actionIndex(), pickerType, folder, page), 54,
-                Component.text(pickerType.title()));
+                UiText.title(pickerType.title()));
         int from = page * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, options.size());
         for (int index = from; index < to; index++) {
@@ -315,7 +316,7 @@ public final class GuiService implements Listener {
         List<NpcDefinition> definitions = new ArrayList<>(definitionRepository.findAll());
         int pages = Math.max(1, (definitions.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(new MainHolder(page), 54, Component.text("Blockfolk Presets"));
+        Inventory inventory = Bukkit.createInventory(new MainHolder(page), 54, UiText.title("Blockfolk Presets"));
         int from = page * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, definitions.size());
         for (int index = from; index < to; index++) {
@@ -364,7 +365,7 @@ public final class GuiService implements Listener {
     private void openReorder(Player player, ReorderHolder holder, int requestedPage) {
         int pages = Math.max(1, (holder.keys.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         holder.page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(holder, 54, Component.text("Reorder NPC Presets"));
+        Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Reorder NPC Presets"));
         renderReorder(inventory, holder);
         openInventory(player, inventory);
         restoreReorderCursor(player, holder);
@@ -414,7 +415,7 @@ public final class GuiService implements Listener {
     public void openEditor(Player player, NpcDefinition definition) {
         int instances = instanceRegistry.findByDefinition(definition).size();
         Inventory inventory = Bukkit.createInventory(new EditorHolder(definition.getKey()), 36,
-                Component.text("Manage: " + definition.getDisplayName()));
+                UiText.title("Manage", definition.getDisplayName()));
         inventory.setItem(4, definitionIcon(definition, List.of(
                 ChatColor.DARK_GRAY + "Key: " + definition.getKey(),
                 ChatColor.GRAY + "Instances: " + ChatColor.WHITE + instances,
@@ -478,7 +479,7 @@ public final class GuiService implements Listener {
 
     public void openInventoryEditor(Player player, NpcDefinition definition) {
         Inventory inventory = Bukkit.createInventory(new EquipmentHolder(definition.getKey()), 54,
-                Component.text("Equipment: " + definition.getDisplayName()));
+                UiText.title("Equipment", definition.getDisplayName()));
         ItemStack[] contents = definition.getInventoryContents();
         for (int index = 0; index < contents.length; index++) {
             if (!LootTier.isRowStarterSlot(index)) {
@@ -516,7 +517,7 @@ public final class GuiService implements Listener {
     public void openFightingEditor(Player player, NpcDefinition definition) {
         CombatProfile combat = definition.getCombatProfile();
         Inventory inventory = Bukkit.createInventory(new FightingHolder(definition.getKey()), 36,
-                Component.text("Fighting: " + definition.getDisplayName()));
+                UiText.title("Fighting", definition.getDisplayName()));
         inventory.setItem(1, item(Material.LIME_DYE, "+ " + CombatProfile.HEALTH_STEP + " Health", List.of(
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + healthLabel(combat),
                 ChatColor.YELLOW + "Click to increase max health",
@@ -574,7 +575,7 @@ public final class GuiService implements Listener {
     public void openTargetsAndBehaviour(Player player, NpcDefinition definition) {
         CombatProfile combat = definition.getCombatProfile();
         Inventory inventory = Bukkit.createInventory(new TargetsHolder(definition.getKey()), 27,
-                Component.text("Targets & Behaviour: " + definition.getDisplayName()));
+                UiText.title("Targets & Behaviour", definition.getDisplayName()));
         inventory.setItem(10, item(reactionMaterial(combat.attackReaction()), "Aggression Level", List.of(
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + combat.attackReaction().displayName(),
                 reactionDescription(combat.attackReaction()),
@@ -597,7 +598,7 @@ public final class GuiService implements Listener {
         int pages = Math.max(1, (events.length + 4) / 5);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new BehaviourHolder(definition.getKey(), page), 54,
-                Component.text("Behaviour: " + definition.getDisplayName()));
+                UiText.title("Behaviour", definition.getDisplayName()));
         for (int row = 0; row < 5; row++) {
             int eventIndex = page * 5 + row;
             if (eventIndex >= events.length) {
@@ -640,7 +641,7 @@ public final class GuiService implements Listener {
         int pages = Math.max(1, (events.size() + 4) / 5);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new CustomBehaviourHolder(definition.getKey(), page), 54,
-                Component.text("Custom Behaviour: " + definition.getDisplayName()));
+                UiText.title("Custom Behaviour", definition.getDisplayName()));
         for (int row = 0; row < 5; row++) {
             int eventIndex = page * 5 + row;
             if (eventIndex >= events.size()) break;
@@ -677,7 +678,7 @@ public final class GuiService implements Listener {
     private void openActionPicker(Player player, NpcDefinition definition, BehaviourEvent event, String customEvent,
             int actionIndex, int page) {
         Inventory inventory = Bukkit.createInventory(new ActionPickerHolder(definition.getKey(), event, customEvent, actionIndex, page), 54,
-                Component.text("Choose Action"));
+                UiText.title("Choose Action"));
         populateActionPicker(inventory, true);
         openInventory(player, inventory);
     }
@@ -698,7 +699,7 @@ public final class GuiService implements Listener {
     private void openAnimationPicker(Player player, ActionPickerHolder action) {
         Inventory inventory = Bukkit.createInventory(new AnimationPickerHolder(
                 action.key(), action.event(), action.customEvent(), action.actionIndex(), action.page()), 27,
-                Component.text("Choose Animation"));
+                UiText.title("Choose Animation"));
         int[] slots = {10, 11, 12, 13, 14, 15, 16};
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
             BehaviourActionType type = ANIMATION_ACTIONS.get(index);
@@ -727,7 +728,7 @@ public final class GuiService implements Listener {
         int valuePage = Math.max(0, Math.min(requestedValuePage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new BehaviourValuePickerHolder(
                 action.key(), action.event(), action.customEvent(), action.actionIndex(), action.page(), pickerType, folder, valuePage), 54,
-                Component.text(pickerType.title()));
+                UiText.title(pickerType.title()));
         int from = valuePage * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, options.size());
         for (int index = from; index < to; index++) {
@@ -818,7 +819,7 @@ public final class GuiService implements Listener {
         int pages = Math.max(1, (routes.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new RouteAssignmentHolder(definition.getKey(), page), 54,
-                Component.text("Route: " + definition.getDisplayName()));
+                UiText.title("Route", definition.getDisplayName()));
         int from = page * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, routes.size());
         for (int index = from; index < to; index++) {
@@ -853,7 +854,7 @@ public final class GuiService implements Listener {
         int pages = Math.max(1, (instances.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new InstancesHolder(definition.getKey(), page), 54,
-                Component.text("Instances: " + definition.getDisplayName()));
+                UiText.title("Instances", definition.getDisplayName()));
         int from = page * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, instances.size());
         for (int index = from; index < to; index++) {
@@ -1074,10 +1075,10 @@ public final class GuiService implements Listener {
             clearReorderSelection(player, holder);
             try {
                 definitionRepository.reorder(holder.keys);
-                player.sendMessage(Component.text("NPC preset order saved."));
+                player.sendMessage(UiText.success("NPC preset order saved."));
                 openMain(player, holder.returnPage);
             } catch (IllegalArgumentException exception) {
-                player.sendMessage(Component.text(
+                player.sendMessage(UiText.info(
                         "The preset list changed while you were editing. Please reorder it again."));
                 openReorder(player, holder.returnPage);
             }
@@ -1147,7 +1148,7 @@ public final class GuiService implements Listener {
         chatInputService.request(player, "Enter a new NPC name:", value -> {
             NpcDefinition definition = NpcDefinition.create(value);
             if (definitionRepository.find(definition.getKey()).isPresent()) {
-                player.sendMessage(Component.text("An NPC with that key already exists."));
+                player.sendMessage(UiText.error("An NPC with that key already exists."));
                 openMain(player, returnPage);
                 return;
             }
@@ -1182,7 +1183,7 @@ public final class GuiService implements Listener {
             case 12 -> {
                 definition.setSpawnpoint(player.getLocation());
                 definitionRepository.save(definition);
-                player.sendMessage(Component.text("Preset spawnpoint updated. Existing instances were not moved."));
+                player.sendMessage(UiText.success("Preset spawnpoint updated. Existing instances were not moved."));
                 openEditor(player, definition);
             }
             case 14 ->
@@ -1190,10 +1191,10 @@ public final class GuiService implements Listener {
             case 16 -> {
                 if (instanceRegistry.findByDefinition(definition).isEmpty()) {
                     if (definition.getSpawnpoint() == null) {
-                        player.sendMessage(Component.text("Set a spawnpoint first."));
+                        player.sendMessage(UiText.warning("Set a spawnpoint first."));
                     } else {
                         instanceRegistry.spawnPersistent(definition, definition.getSpawnpoint());
-                        player.sendMessage(Component.text("Spawned a visible NPC instance."));
+                        player.sendMessage(UiText.success("Spawned a visible NPC instance."));
                     }
                     openEditor(player, definition);
                 } else {
@@ -1354,12 +1355,12 @@ public final class GuiService implements Listener {
                 openEditor(player, definition);
             case 50 -> {
                 instanceRegistry.spawnPersistent(definition, player.getLocation());
-                player.sendMessage(Component.text("Spawned another NPC instance at your location."));
+                player.sendMessage(UiText.success("Spawned another NPC instance at your location."));
                 openInstances(player, definition, holder.page());
             }
             case 51 -> {
                 instanceRegistry.refreshDefinition(definition);
-                player.sendMessage(Component.text("Refreshed " + instanceRegistry.findByDefinition(definition).size() + " instance(s)."));
+                player.sendMessage(UiText.success("Refreshed " + instanceRegistry.findByDefinition(definition).size() + " instance(s)."));
                 openInstances(player, definition, holder.page());
             }
             case 53 ->
@@ -1374,19 +1375,19 @@ public final class GuiService implements Listener {
                 if (event.getClick() == ClickType.MIDDLE) {
                     Location destination = player.getLocation();
                     if (instanceRegistry.relocate(instance, destination)) {
-                        player.sendMessage(Component.text("Moved NPC instance and its spawn location to you."));
+                        player.sendMessage(UiText.success("Moved NPC instance and its spawn location to you."));
                     } else {
-                        player.sendMessage(Component.text("Could not move the NPC instance."));
+                        player.sendMessage(UiText.error("Could not move the NPC instance."));
                     }
                     openInstances(player, definition, holder.page());
                 } else if (event.isRightClick()) {
                     instanceRegistry.deleteInstance(instance.getId());
-                    player.sendMessage(Component.text("Removed NPC instance."));
+                    player.sendMessage(UiText.success("Removed NPC instance."));
                     openInstances(player, definition, holder.page());
                 } else {
                     player.closeInventory();
                     player.teleport(instance.getLocation());
-                    player.sendMessage(Component.text("Teleported to NPC instance."));
+                    player.sendMessage(UiText.success("Teleported to NPC instance."));
                 }
             }
         }
@@ -1410,7 +1411,7 @@ public final class GuiService implements Listener {
             case 49 -> {
                 definition.setMovementProfile(definition.getMovementProfile().withoutRoute());
                 saveRefresh(definition);
-                player.sendMessage(Component.text("Walking route cleared."));
+                player.sendMessage(UiText.success("Walking route cleared."));
                 openEditor(player, definition);
             }
             case 53 ->
@@ -1424,7 +1425,7 @@ public final class GuiService implements Listener {
                 NpcRoute route = routes.get(index);
                 definition.setMovementProfile(definition.getMovementProfile().withRoute(route.getKey()));
                 saveRefresh(definition);
-                player.sendMessage(Component.text("Assigned route '" + route.getDisplayName() + "'."));
+                player.sendMessage(UiText.success("Assigned route '" + route.getDisplayName() + "'."));
                 openEditor(player, definition);
             }
         }
@@ -1532,7 +1533,7 @@ public final class GuiService implements Listener {
         RoutePoint current = currentRoutePoint(holder.routeKey(), holder.point());
         if (current == null) {
             player.closeInventory();
-            player.sendMessage(Component.text("That route point no longer exists."));
+            player.sendMessage(UiText.error("That route point no longer exists."));
             return;
         }
         if (event.getRawSlot() == 22) {
@@ -1686,7 +1687,7 @@ public final class GuiService implements Listener {
         if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.ROUTE) {
             routeCreator.create(player, holder.folder(), route -> {
                 RoutePoint updated = setRoutePointAction(action, BehaviourActionType.SET_ROUTE, route.getKey());
-                if (updated != null) player.sendMessage(Component.text("Created and selected '" + route.getDisplayName() + "'."));
+                if (updated != null) player.sendMessage(UiText.success("Created and selected '" + route.getDisplayName() + "'."));
             });
             return;
         }
@@ -1694,7 +1695,7 @@ public final class GuiService implements Listener {
             customEventCreator.create(player, holder.folder(), customEvent -> {
                 RoutePoint updated = setRoutePointAction(action, BehaviourActionType.EMIT_EVENT, customEvent.getName());
                 if (updated != null) {
-                    player.sendMessage(Component.text("Created and selected '" + customEvent.getName() + "'."));
+                    player.sendMessage(UiText.success("Created and selected '" + customEvent.getName() + "'."));
                     openWaypointActions(player, holder.routeKey(), updated);
                 }
             }, () -> openRoutePointValuePicker(player, action, holder.pickerType(), holder.folder(), holder.page()));
@@ -1712,7 +1713,7 @@ public final class GuiService implements Listener {
         }
         RoutePoint updated = setRoutePointAction(action, holder.pickerType().actionType(), option.value());
         if (updated != null) {
-            player.sendMessage(Component.text("Selected '" + option.label() + "'."));
+            player.sendMessage(UiText.success("Selected '" + option.label() + "'."));
             openWaypointActions(player, holder.routeKey(), updated);
         }
     }
@@ -1727,7 +1728,7 @@ public final class GuiService implements Listener {
                 }
                 normalized = Double.toString(seconds);
             } catch (NullPointerException | NumberFormatException exception) {
-                player.sendMessage(Component.text("Enter a positive number of seconds, for example 5 or 1.5."));
+                player.sendMessage(UiText.error("Enter a positive number of seconds, for example 5 or 1.5."));
                 requestRouteWaitAction(player, holder);
                 return;
             }
@@ -1842,7 +1843,7 @@ public final class GuiService implements Listener {
                 }
                 normalized = Double.toString(seconds);
             } catch (NullPointerException | NumberFormatException exception) {
-                player.sendMessage(Component.text("Enter a positive number of seconds, for example 5 or 1.5."));
+                player.sendMessage(UiText.error("Enter a positive number of seconds, for example 5 or 1.5."));
                 requestWaitAction(player, definition, holder);
                 return;
             }
@@ -1900,7 +1901,7 @@ public final class GuiService implements Listener {
                     -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
         }
         player.closeInventory();
-        player.sendMessage(Component.text("Right-click the block the NPC should "
+        player.sendMessage(UiText.prompt("Right-click the block the NPC should "
                 + (type == BehaviourActionType.MOVE_TO ? "walk to" : "teleport onto") + ". Drop the compass to cancel."));
     }
 
@@ -1939,10 +1940,10 @@ public final class GuiService implements Listener {
             finishRouteWaypointSelection(player);
             RoutePoint updated = setRoutePointAction(routeSession.action(), routeSession.type(), location.serialize());
             if (updated == null) {
-                player.sendMessage(Component.text("That route point no longer exists."));
+                player.sendMessage(UiText.error("That route point no longer exists."));
                 return;
             }
-            player.sendMessage(Component.text(routeSession.type().displayName() + " set to " + location.display() + "."));
+            player.sendMessage(UiText.success(routeSession.type().displayName() + " set to " + location.display() + "."));
             openWaypointActions(player, routeSession.action().routeKey(), updated);
             return;
         }
@@ -1951,11 +1952,11 @@ public final class GuiService implements Listener {
         ActionLocation location = ActionLocation.above(event.getClickedBlock());
         finishWaypointSelection(player);
         if (definition == null) {
-            player.sendMessage(Component.text("That NPC preset no longer exists."));
+            player.sendMessage(UiText.error("That NPC preset no longer exists."));
             return;
         }
         setAction(definition, session.action(), session.type(), location.serialize());
-        player.sendMessage(Component.text(session.type().displayName() + " set to " + location.display() + "."));
+        player.sendMessage(UiText.success(session.type().displayName() + " set to " + location.display() + "."));
         openBehaviourHome(player, definition, session.action());
     }
 
@@ -1971,7 +1972,7 @@ public final class GuiService implements Listener {
             }
             event.getItemDrop().remove();
             routeWaypointSessions.remove(player.getUniqueId());
-            player.sendMessage(Component.text("Waypoint selection cancelled."));
+            player.sendMessage(UiText.warning("Waypoint selection cancelled."));
             Bukkit.getScheduler().runTask(plugin, () -> {
                 RoutePoint current = currentRoutePoint(routeSession.action().routeKey(), routeSession.action().point());
                 if (current != null) {
@@ -1984,7 +1985,7 @@ public final class GuiService implements Listener {
         event.getItemDrop().remove();
         waypointSessions.remove(player.getUniqueId());
         NpcDefinition definition = definitionRepository.find(session.action().key()).orElse(null);
-        player.sendMessage(Component.text("Waypoint selection cancelled."));
+        player.sendMessage(UiText.warning("Waypoint selection cancelled."));
         if (definition != null) {
             Bukkit.getScheduler().runTask(plugin, () -> openActionPicker(player, definition,
                     session.action().event(), session.action().customEvent(),
@@ -2004,7 +2005,7 @@ public final class GuiService implements Listener {
         UUID playerId = player.getUniqueId();
         if (event.getClick() == ClickType.SHIFT_LEFT) {
             behaviourClipboards.put(playerId, List.copyOf(rowActions));
-            player.sendMessage(Component.text("Copied behaviour row with " + rowActions.size() + " action(s)."));
+            player.sendMessage(UiText.success("Copied behaviour row with " + rowActions.size() + " action(s)."));
             return true;
         }
         if (event.getClick() != ClickType.SHIFT_RIGHT) {
@@ -2012,11 +2013,11 @@ public final class GuiService implements Listener {
         }
         List<BehaviourAction> clipboard = behaviourClipboards.get(playerId);
         if (clipboard == null) {
-            player.sendMessage(Component.text("Copy a behaviour row first with shift-left-click."));
+            player.sendMessage(UiText.warning("Copy a behaviour row first with shift-left-click."));
             return true;
         }
         pasteAction.accept(new ArrayList<>(clipboard));
-        player.sendMessage(Component.text("Pasted behaviour row with " + clipboard.size() + " action(s)."));
+        player.sendMessage(UiText.success("Pasted behaviour row with " + clipboard.size() + " action(s)."));
         return true;
     }
 
@@ -2069,7 +2070,7 @@ public final class GuiService implements Listener {
                     -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
         }
         player.closeInventory();
-        player.sendMessage(Component.text("Right-click the block the NPC should "
+        player.sendMessage(UiText.prompt("Right-click the block the NPC should "
                 + (type == BehaviourActionType.MOVE_TO ? "walk to" : "teleport onto")
                 + ". Drop the compass to cancel."));
     }
@@ -2182,14 +2183,14 @@ public final class GuiService implements Listener {
         if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.ROUTE) {
             routeCreator.create(player, holder.folder(), route -> {
                 setAction(definition, action, BehaviourActionType.SET_ROUTE, route.getKey());
-                player.sendMessage(Component.text("Created and selected '" + route.getDisplayName() + "'."));
+                player.sendMessage(UiText.success("Created and selected '" + route.getDisplayName() + "'."));
             });
             return;
         }
         if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.CUSTOM_EVENT) {
             customEventCreator.create(player, holder.folder(), customEvent -> {
                 setAction(definition, action, BehaviourActionType.EMIT_EVENT, customEvent.getName());
-                player.sendMessage(Component.text("Created and selected '" + customEvent.getName() + "'."));
+                player.sendMessage(UiText.success("Created and selected '" + customEvent.getName() + "'."));
                 openBehaviourHome(player, definition, action);
             }, () -> openBehaviourValuePicker(player, definition, action, holder.pickerType(), holder.folder(), holder.valuePage()));
             return;
@@ -2205,7 +2206,7 @@ public final class GuiService implements Listener {
             return;
         }
         setAction(definition, action, holder.pickerType().actionType(), option.value());
-        player.sendMessage(Component.text("Selected '" + option.label() + "'."));
+        player.sendMessage(UiText.success("Selected '" + option.label() + "'."));
         openBehaviourHome(player, definition, action);
     }
 
@@ -2252,7 +2253,7 @@ public final class GuiService implements Listener {
         if (action == null) { openQuestionParent(player, target); return; }
         NpcQuestion question = action.question();
         Inventory inventory = Bukkit.createInventory(new QuestionEditorHolder(target), 54,
-                Component.text("Question Editor"));
+                UiText.title("Question Editor"));
         for (int row = 0; row < 5; row++) {
             boolean cancelBranch = row == NpcQuestion.MAX_OPTIONS;
             int optionIndex = row;
@@ -2336,7 +2337,7 @@ public final class GuiService implements Listener {
                     options.set(optionIndex, new QuestionOption(label, branchActions));
                     updateQuestion(holder.target(), question.withOptions(options));
                 } catch (IllegalArgumentException exception) {
-                    player.sendMessage(Component.text(exception.getMessage()));
+                    player.sendMessage(UiText.error(exception.getMessage()));
                 }
                 openQuestionEditor(player, holder.target());
             });
@@ -2359,7 +2360,7 @@ public final class GuiService implements Listener {
 
     private void openQuestionBranchPicker(Player player, QuestionTarget target, int optionIndex, int actionIndex) {
         Inventory inventory = Bukkit.createInventory(new QuestionBranchPickerHolder(target, optionIndex, actionIndex),
-                54, Component.text("Choose Action"));
+                54, UiText.title("Choose Action"));
         populateActionPicker(inventory, false);
         openInventory(player, inventory);
     }
@@ -2415,7 +2416,7 @@ public final class GuiService implements Listener {
     private void openQuestionBranchAnimationPicker(Player player, QuestionBranchPickerHolder action) {
         Inventory inventory = Bukkit.createInventory(new QuestionBranchAnimationPickerHolder(
                 action.target(), action.optionIndex(), action.actionIndex()), 27,
-                Component.text("Choose Animation"));
+                UiText.title("Choose Animation"));
         int[] slots = {10, 11, 12, 13, 14, 15, 16};
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
             BehaviourActionType type = ANIMATION_ACTIONS.get(index);
@@ -2470,7 +2471,7 @@ public final class GuiService implements Listener {
             }
             return value;
         } catch (RuntimeException exception) {
-            player.sendMessage(Component.text("That value is not valid for " + type.displayName() + "."));
+            player.sendMessage(UiText.error("That value is not valid for " + type.displayName() + "."));
             return null;
         }
     }
@@ -2575,17 +2576,17 @@ public final class GuiService implements Listener {
         int removed = instanceRegistry.deleteInstances(definition);
         if (holder.action() == ConfirmationAction.DELETE_DEFINITION) {
             definitionRepository.delete(definition);
-            player.sendMessage(Component.text("Deleted preset and " + removed + " instance(s)."));
+            player.sendMessage(UiText.success("Deleted preset and " + removed + " instance(s)."));
             openMain(player);
         } else {
-            player.sendMessage(Component.text("Removed " + removed + " instance(s)."));
+            player.sendMessage(UiText.success("Removed " + removed + " instance(s)."));
             openInstances(player, definition, holder.returnPage());
         }
     }
 
     private void openConfirmation(Player player, NpcDefinition definition, ConfirmationAction action, int returnPage) {
         Inventory inventory = Bukkit.createInventory(new ConfirmationHolder(definition.getKey(), action, returnPage), 27,
-                Component.text("Confirm deletion"));
+                UiText.title("Confirm Deletion"));
         String target = action == ConfirmationAction.DELETE_DEFINITION ? "preset and all instances" : "all instances";
         inventory.setItem(11, item(Material.LIME_CONCRETE, "Confirm", List.of(
                 ChatColor.RED + "Permanently delete " + target
@@ -2622,7 +2623,7 @@ public final class GuiService implements Listener {
         try {
             normalized = SkinTextureUtil.normalizeTextureUrl(input);
         } catch (IllegalArgumentException exception) {
-            player.sendMessage(Component.text(exception.getMessage()));
+            player.sendMessage(UiText.error(exception.getMessage()));
             openEditor(player, definition);
             return;
         }
@@ -2631,12 +2632,12 @@ public final class GuiService implements Listener {
             pendingSkinUrls.remove(definition.getKey());
             definition.setSkinUrl(normalized);
             saveRefresh(definition);
-            player.sendMessage(Component.text(normalized == null ? "Using the default skin." : "Skin updated."));
+            player.sendMessage(UiText.info(normalized == null ? "Using the default skin." : "Skin updated."));
             openEditor(player, definition);
             return;
         }
 
-        player.sendMessage(Component.text("Processing the skin image. This can take a few seconds..."));
+        player.sendMessage(UiText.info("Processing the skin image. This can take a few seconds..."));
         pendingSkinUrls.put(definition.getKey(), normalized);
         skinResolver.resolve(normalized).whenComplete((resolved, error)
                 -> Bukkit.getScheduler().runTask(plugin,
@@ -2658,7 +2659,7 @@ public final class GuiService implements Listener {
         NpcDefinition current = definitionRepository.find(definitionKey).orElse(null);
         if (error != null) {
             if (player.isOnline()) {
-                player.sendMessage(Component.text(rootMessage(error)));
+                player.sendMessage(UiText.error(rootMessage(error)));
                 if (current != null) {
                     openEditor(player, current);
                 }
@@ -2673,7 +2674,7 @@ public final class GuiService implements Listener {
         current.setResolvedSkin(requestedUrl, resolved.textureValue(), resolved.textureSignature());
         saveRefresh(current);
         if (player.isOnline()) {
-            player.sendMessage(Component.text("Skin processed and updated."));
+            player.sendMessage(UiText.success("Skin processed and updated."));
             openEditor(player, current);
         }
     }

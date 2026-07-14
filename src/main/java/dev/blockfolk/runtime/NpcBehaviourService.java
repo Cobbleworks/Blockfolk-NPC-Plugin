@@ -43,6 +43,7 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import dev.blockfolk.dialog.DialogService;
+import dev.blockfolk.util.UiText;
 import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
@@ -760,7 +761,7 @@ public final class NpcBehaviourService implements Listener {
         Player player = actor instanceof Player direct ? direct : nearestPlayer(instance).orElse(null);
         if (player == null) return;
         Inventory inventory = Bukkit.createInventory(new NpcInventoryHolder(instance.getId()), 27,
-                Component.text("NPC Inventory"));
+                UiText.title("NPC Inventory"));
         inventory.setContents(instance.getTemporaryInventoryContents());
         player.openInventory(inventory);
     }
@@ -998,7 +999,7 @@ public final class NpcBehaviourService implements Listener {
         if (line == null) {
             return;
         }
-        Component message = Component.text(definition.getDisplayName() + ": " + line);
+        Component message = UiText.npcDialog(definition.getDisplayName(), line);
         if ((event == BehaviourEvent.PLAYER_APPROACH || event == BehaviourEvent.PLAYER_LEAVES)
                 && actor instanceof Player player && player.isOnline()) {
             player.sendMessage(message);

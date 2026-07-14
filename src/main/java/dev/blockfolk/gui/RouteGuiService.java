@@ -45,6 +45,7 @@ import dev.blockfolk.model.RoutePoint;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
+import dev.blockfolk.util.UiText;
 import net.kyori.adventure.text.Component;
 
 public final class RouteGuiService implements Listener {
@@ -112,14 +113,14 @@ public final class RouteGuiService implements Listener {
                         ? value : normalizedFolder + "/" + value;
                 NpcRoute route = NpcRoute.create(name);
                 if (routeRepository.find(route.getKey()).isPresent()) {
-                    player.sendMessage(Component.text("A route with that key already exists."));
+                    player.sendMessage(UiText.error("A route with that key already exists."));
                     return;
                 }
                 routeRepository.save(route);
                 onCreated.accept(route);
                 beginEditing(player, route);
             } catch (IllegalArgumentException exception) {
-                player.sendMessage(Component.text(exception.getMessage()));
+                player.sendMessage(UiText.error(exception.getMessage()));
             }
         });
     }
@@ -130,7 +131,7 @@ public final class RouteGuiService implements Listener {
         int pages = Math.max(1, (entries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         String title = folder.isEmpty() ? "Blockfolk Routes" : "Routes: " + folder;
-        Inventory inventory = Bukkit.createInventory(new RoutesHolder(folder, page), 54, Component.text(title));
+        Inventory inventory = Bukkit.createInventory(new RoutesHolder(folder, page), 54, UiText.title(title));
         int from = page * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, entries.size());
         for (int index = from; index < to; index++) {
@@ -186,7 +187,7 @@ public final class RouteGuiService implements Listener {
     private void openReorder(Player player, ReorderRoutesHolder holder, int requestedPage) {
         int pages = Math.max(1, (holder.keys.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         holder.page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(holder, 54, Component.text("Reorder Routes"));
+        Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Reorder Routes"));
         renderReorder(inventory, holder);
         player.openInventory(inventory);
         restoreReorderCursor(player, holder);
@@ -295,7 +296,7 @@ public final class RouteGuiService implements Listener {
         NpcRoute route = routeRepository.find(session.routeKey()).orElse(null);
         if (route == null) {
             finishEditing(player, false);
-            player.sendMessage(Component.text("That route no longer exists."));
+            player.sendMessage(UiText.error("That route no longer exists."));
             return;
         }
 
@@ -305,27 +306,27 @@ public final class RouteGuiService implements Listener {
             try {
                 changed = route.addPoint(point);
                 if (changed) {
-                    player.sendMessage(Component.text("Added route point " + route.getPoints().size() + "."));
+                    player.sendMessage(UiText.success("Added route point " + route.getPoints().size() + "."));
                 } else {
                     RoutePoint existing = route.findPoint(point).orElseThrow();
-                    player.sendMessage(Component.text("That block is already a route point. Actions: "
+                    player.sendMessage(UiText.warning("That block is already a route point. Actions: "
                             + actionSummary(existing) + "."));
                 }
             } catch (IllegalArgumentException exception) {
-                player.sendMessage(Component.text("A route cannot contain blocks from different worlds."));
+                player.sendMessage(UiText.error("A route cannot contain blocks from different worlds."));
                 return;
             }
         } else if (!player.isSneaking()) {
             changed = route.removePoint(point);
-            player.sendMessage(Component.text(changed ? "Removed route point." : "That block is not a route point."));
+            player.sendMessage(UiText.info(changed ? "Removed route point." : "That block is not a route point."));
         } else {
             RoutePoint existing = route.findPoint(point).orElse(null);
             if (existing == null) {
-                player.sendMessage(Component.text("That block is not a route point."));
+                player.sendMessage(UiText.warning("That block is not a route point."));
                 return;
             }
             if (waypointActionOpener == null) {
-                player.sendMessage(Component.text("The waypoint action editor is not available."));
+                player.sendMessage(UiText.error("The waypoint action editor is not available."));
                 return;
             }
             waypointActionOpener.open(player, route.getKey(), existing);
@@ -346,7 +347,7 @@ public final class RouteGuiService implements Listener {
         }
         event.getItemDrop().remove();
         editSessions.remove(player.getUniqueId());
-        player.sendMessage(Component.text("Finished editing the route."));
+        player.sendMessage(UiText.success("Finished editing the route."));
         Bukkit.getScheduler().runTask(plugin, () -> openRoutes(player));
     }
 
@@ -376,14 +377,14 @@ public final class RouteGuiService implements Listener {
                 try {
                     NpcRoute route = NpcRoute.create(value);
                     if (routeRepository.find(route.getKey()).isPresent()) {
-                        player.sendMessage(Component.text("A route with that key already exists."));
+                        player.sendMessage(UiText.error("A route with that key already exists."));
                         openRoutes(player, folder, page);
                         return;
                     }
                     routeRepository.save(route);
                     beginEditing(player, route);
                 } catch (IllegalArgumentException exception) {
-                    player.sendMessage(Component.text(exception.getMessage()));
+                    player.sendMessage(UiText.error(exception.getMessage()));
                     openRoutes(player, folder, page);
                 }
             });
@@ -407,7 +408,7 @@ public final class RouteGuiService implements Listener {
         if (event.getClick() == ClickType.MIDDLE) {
             route.setIcon(player.getInventory().getItemInMainHand());
             routeRepository.save(route);
-            player.sendMessage(Component.text(route.getIcon() == null ? "Route icon cleared." : "Route icon updated."));
+            player.sendMessage(UiText.info(route.getIcon() == null ? "Route icon cleared." : "Route icon updated."));
             openRoutes(player, folder, page);
         } else if (event.isRightClick() && event.isShiftClick()) {
             openDeleteConfirmation(player, route, folder, page);
@@ -432,10 +433,10 @@ public final class RouteGuiService implements Listener {
             clearReorderSelection(player, holder);
             try {
                 routeRepository.reorder(holder.keys);
-                player.sendMessage(Component.text("Route order saved."));
+                player.sendMessage(UiText.success("Route order saved."));
                 openRoutes(player, holder.returnFolder, holder.returnPage);
             } catch (IllegalArgumentException exception) {
-                player.sendMessage(Component.text(
+                player.sendMessage(UiText.info(
                         "The route list changed while you were editing. Please reorder it again."));
                 openReorder(player, holder.returnFolder, holder.returnPage);
             }
@@ -514,13 +515,13 @@ public final class RouteGuiService implements Listener {
             unassigned++;
         }
         routeRepository.delete(route);
-        player.sendMessage(Component.text("Deleted route and unassigned " + unassigned + " NPC preset(s)."));
+        player.sendMessage(UiText.success("Deleted route and unassigned " + unassigned + " NPC preset(s)."));
         openRoutes(player, holder.folder(), holder.page());
     }
 
     private void openDeleteConfirmation(Player player, NpcRoute route, String folder, int page) {
         Inventory inventory = Bukkit.createInventory(new DeleteRouteHolder(route.getKey(), folder, page), 27,
-                Component.text("Delete route: " + route.getDisplayName()));
+                UiText.title("Delete Route", route.getDisplayName()));
         inventory.setItem(11, item(Material.LIME_CONCRETE, "Confirm", List.of(
                 ChatColor.RED + "Permanently delete this route",
                 ChatColor.GRAY + "NPC presets using it will be unassigned"
@@ -567,8 +568,8 @@ public final class RouteGuiService implements Listener {
                     -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
         }
         player.closeInventory();
-        player.sendMessage(Component.text("Editing route '" + route.getDisplayName() + "'."));
-        player.sendMessage(Component.text("Left-click blocks to add, right-click to remove, shift-right-click to edit waypoint actions, and drop the shard to save and finish."));
+        player.sendMessage(UiText.info("Editing route '" + route.getDisplayName() + "'."));
+        player.sendMessage(UiText.prompt("Left-click blocks to add, right-click to remove, shift-right-click to edit waypoint actions, and drop the shard to save and finish."));
         showRoutePoints(player, route);
     }
 
@@ -617,7 +618,7 @@ public final class RouteGuiService implements Listener {
             }
         }
         if (notify) {
-            player.sendMessage(Component.text("Finished editing the route."));
+            player.sendMessage(UiText.success("Finished editing the route."));
         }
     }
 

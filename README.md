@@ -13,12 +13,12 @@ All commands require the `blockfolk.admin` permission (granted to operators by d
 - `/bf` or `/blockfolk` — open the Blockfolk preset UI.
 - `/bf create` — start creating an NPC and enter its name in chat.
 - `/bf create <name>` — create an NPC preset with the supplied name.
-- `/bf edit <name>` — open the editor for an NPC preset. NPC names are tab-completed.
+- `/bf npc <name>` — open the editor for an NPC preset. NPC names are tab-completed.
 - `/bf routes` — open the route manager.
-- `/bf npc <name>` — spawn a persistent copy of the selected NPC preset. NPC names are tab-completed.
+- `/bf npc <name> spawn` — spawn a persistent copy of the selected NPC preset.
 - `/bf npc <name> duplicate` — duplicate a preset with ` (copy)` appended to its display name.
 
-Dialog line duration is calculated automatically from the text length at 15 characters
+Dialog line duration is calculated automatically from the text length at 12 characters
 per second, with a minimum duration of 3 seconds.
 
 Proximity enter/leave transitions are debounced for 3 seconds by default. Adjust

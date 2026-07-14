@@ -25,6 +25,7 @@ import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.NpcQuestion;
 import dev.blockfolk.model.QuestionOption;
 import dev.blockfolk.input.ChatInputService;
+import dev.blockfolk.util.UiText;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -142,8 +143,7 @@ public final class NpcQuestionService implements Listener {
     }
 
     private void show(Player player, Request request) {
-        player.sendMessage(Component.text(request.npcName + ": ", NamedTextColor.GOLD)
-                .append(Component.text(request.question.prompt(), NamedTextColor.WHITE)));
+        player.sendMessage(UiText.npcDialog(request.npcName, request.question.prompt()));
         List<QuestionOption> configuredOptions = request.question.configuredOptions();
         for (int index = 0; index < configuredOptions.size(); index++) {
             int optionIndex = index;

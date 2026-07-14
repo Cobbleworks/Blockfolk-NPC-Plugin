@@ -16,7 +16,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
-import net.kyori.adventure.text.Component;
+import dev.blockfolk.util.UiText;
 
 public final class ChatInputService implements Listener {
 
@@ -38,11 +38,11 @@ public final class ChatInputService implements Listener {
             beforeRequest.accept(player);
             cancel(playerId, false);
             player.closeInventory();
-            player.sendMessage(Component.text(prompt));
-            player.sendMessage(Component.text("Type cancel to stop."));
+            player.sendMessage(UiText.prompt(prompt));
+            player.sendMessage(UiText.info("Type 'cancel' to stop."));
             BukkitTask timeout = Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (pendingInputs.remove(playerId) != null && player.isOnline()) {
-                    player.sendMessage(Component.text("Input timed out."));
+                    player.sendMessage(UiText.warning("Input timed out."));
                 }
             }, timeoutSeconds * 20L);
             pendingInputs.put(playerId, new PendingInput(consumer, timeout));
@@ -81,7 +81,7 @@ public final class ChatInputService implements Listener {
         input.timeout.cancel();
         String message = event.getMessage();
         if (message.equalsIgnoreCase("cancel")) {
-            Bukkit.getScheduler().runTask(plugin, () -> event.getPlayer().sendMessage(Component.text("Input cancelled.")));
+            Bukkit.getScheduler().runTask(plugin, () -> event.getPlayer().sendMessage(UiText.warning("Input cancelled.")));
             return;
         }
         Bukkit.getScheduler().runTask(plugin, () -> input.consumer.accept(message));
