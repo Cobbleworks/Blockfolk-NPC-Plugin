@@ -2067,7 +2067,7 @@ public final class GuiService implements Listener {
             List<BehaviourAction> branchActions = cancelBranch
                     ? question.cancelActions() : question.options().get(optionIndex).actions();
             if (cancelBranch) {
-                inventory.setItem(row * 9, item(Material.BARRIER, "Cancel / Timeout",
+                inventory.setItem(row * 9, item(Material.RED_DYE, "Cancel / Timeout",
                         actionSummaryLore(List.of(
                                 ChatColor.GRAY + "Runs when the player cancels or cannot answer",
                                 ChatColor.YELLOW + "Click to open branch details"), branchActions)));
@@ -2093,7 +2093,7 @@ public final class GuiService implements Listener {
         inventory.setItem(46, item(Material.WRITABLE_BOOK, "Edit Prompt", List.of(
                 ChatColor.WHITE + question.prompt(), ChatColor.YELLOW + "Click to edit")));
         if (page > 0) inventory.setItem(47, item(Material.ARROW, "Previous Answers", List.of()));
-        inventory.setItem(49, item(Material.ARROW, "Back", List.of()));
+        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         if (question.options().size() < NpcQuestion.MAX_OPTIONS) {
             inventory.setItem(51, item(Material.EMERALD, "Add Answer", List.of(
                     ChatColor.GRAY + "Answers: " + ChatColor.WHITE + question.options().size()
