@@ -22,6 +22,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -60,6 +61,7 @@ public final class RouteGuiService implements Listener {
     private final Consumer<Player> mainGuiOpener;
     private final NamespacedKey wandRouteKey;
     private final NamespacedKey wandTokenKey;
+    private final NamespacedKey reorderRouteKey;
     private final Map<UUID, EditSession> editSessions = new HashMap<>();
     private WaypointActionOpener waypointActionOpener;
     private BukkitTask markerTask;
@@ -80,6 +82,7 @@ public final class RouteGuiService implements Listener {
         this.mainGuiOpener = mainGuiOpener;
         this.wandRouteKey = new NamespacedKey(plugin, "route-editor-route");
         this.wandTokenKey = new NamespacedKey(plugin, "route-editor-token");
+        this.reorderRouteKey = new NamespacedKey(plugin, "reorder-route");
     }
 
     public void setWaypointActionOpener(WaypointActionOpener waypointActionOpener) {
@@ -161,7 +164,8 @@ public final class RouteGuiService implements Listener {
                 ChatColor.GRAY + "Routes: " + ChatColor.WHITE + routeRepository.findAll().size(),
                 ChatColor.GRAY + "Group: " + ChatColor.WHITE + (folder.isEmpty() ? "Root" : folder),
                 ChatColor.GRAY + "NPCs start at their nearest point",
-                ChatColor.GRAY + "then follow nearest unvisited points in a loop"
+                ChatColor.GRAY + "then follow nearest unvisited points in a loop",
+                ChatColor.YELLOW + "Click to reorder routes"
         )));
         inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
                 ChatColor.GRAY + "Use / in the name to create groups",
@@ -172,6 +176,51 @@ public final class RouteGuiService implements Listener {
         }
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
+    }
+
+    private void openReorder(Player player, String returnFolder, int returnPage) {
+        List<String> keys = routeRepository.findAll().stream().map(NpcRoute::getKey).toList();
+        openReorder(player, new ReorderRoutesHolder(new ArrayList<>(keys), returnFolder, returnPage), 0);
+    }
+
+    private void openReorder(Player player, ReorderRoutesHolder holder, int requestedPage) {
+        int pages = Math.max(1, (holder.keys.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        holder.page = Math.max(0, Math.min(requestedPage, pages - 1));
+        Inventory inventory = Bukkit.createInventory(holder, 54, Component.text("Reorder Routes"));
+        renderReorder(inventory, holder);
+        player.openInventory(inventory);
+        restoreReorderCursor(player, holder);
+    }
+
+    private void renderReorder(Inventory inventory, ReorderRoutesHolder holder) {
+        inventory.clear();
+        int pages = Math.max(1, (holder.keys.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int from = holder.page * PAGE_SIZE;
+        int to = Math.min(from + PAGE_SIZE, holder.keys.size());
+        for (int index = from; index < to; index++) {
+            String key = holder.keys.get(index);
+            if (key.equals(holder.selectedKey)) continue;
+            NpcRoute route = routeRepository.find(key).orElse(null);
+            if (route != null) inventory.setItem(index - from, reorderItem(route, index));
+        }
+        if (holder.page > 0) inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+        inventory.setItem(48, item(Material.LIME_CONCRETE, "Save Order", List.of(
+                ChatColor.GRAY + "Apply this order to the routes browser")));
+        inventory.setItem(50, item(Material.RED_CONCRETE, "Cancel", List.of(
+                ChatColor.GRAY + "Discard all ordering changes")));
+        if (holder.page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        GuiLayout.fillMainBar(inventory);
+    }
+
+    private ItemStack reorderItem(NpcRoute route, int index) {
+        ItemStack icon = routeItem(route, List.of(
+                ChatColor.DARK_GRAY + route.getKey(),
+                ChatColor.GRAY + "Position: " + ChatColor.WHITE + (index + 1),
+                ChatColor.YELLOW + "Pick up and drop to move"));
+        ItemMeta meta = icon.getItemMeta();
+        meta.getPersistentDataContainer().set(reorderRouteKey, PersistentDataType.STRING, route.getKey());
+        icon.setItemMeta(meta);
+        return icon;
     }
 
     public void stop() {
@@ -200,6 +249,9 @@ public final class RouteGuiService implements Listener {
                 return;
             }
             handleRoutesClick(event, player, routesHolder);
+        } else if (holder instanceof ReorderRoutesHolder reorderHolder) {
+            event.setCancelled(true);
+            handleReorderClick(event, player, reorderHolder);
         } else if (holder instanceof DeleteRouteHolder deleteHolder) {
             event.setCancelled(true);
             if (isTopInventoryClick(event)) {
@@ -211,8 +263,16 @@ public final class RouteGuiService implements Listener {
     @EventHandler
     public void onInventoryDrag(InventoryDragEvent event) {
         InventoryHolder holder = event.getView().getTopInventory().getHolder();
-        if (holder instanceof RoutesHolder || holder instanceof DeleteRouteHolder) {
+        if (holder instanceof RoutesHolder || holder instanceof ReorderRoutesHolder
+                || holder instanceof DeleteRouteHolder) {
             event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        if (event.getInventory().getHolder() instanceof ReorderRoutesHolder) {
+            clearReorderCursor(event.getPlayer());
         }
     }
 
@@ -307,6 +367,10 @@ public final class RouteGuiService implements Listener {
             openRoutes(player, folder, page - 1);
             return;
         }
+        if (event.getRawSlot() == 49) {
+            openReorder(player, folder, page);
+            return;
+        }
         if (event.getRawSlot() == 51) {
             chatInputService.request(player, "Enter the full route name (use / for groups):", value -> {
                 try {
@@ -350,6 +414,80 @@ public final class RouteGuiService implements Listener {
         } else {
             beginEditing(player, route);
         }
+    }
+
+    private void handleReorderClick(InventoryClickEvent event, Player player, ReorderRoutesHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        int slot = event.getRawSlot();
+        if (slot == 45 && holder.page > 0) {
+            openReorder(player, holder, holder.page - 1);
+            return;
+        }
+        if (slot == 53 && (holder.page + 1) * PAGE_SIZE < holder.keys.size()) {
+            openReorder(player, holder, holder.page + 1);
+            return;
+        }
+        if (slot == 48) {
+            clearReorderSelection(player, holder);
+            try {
+                routeRepository.reorder(holder.keys);
+                player.sendMessage(Component.text("Route order saved."));
+                openRoutes(player, holder.returnFolder, holder.returnPage);
+            } catch (IllegalArgumentException exception) {
+                player.sendMessage(Component.text(
+                        "The route list changed while you were editing. Please reorder it again."));
+                openReorder(player, holder.returnFolder, holder.returnPage);
+            }
+            return;
+        }
+        if (slot == 50) {
+            clearReorderSelection(player, holder);
+            openRoutes(player, holder.returnFolder, holder.returnPage);
+            return;
+        }
+        if (slot < 0 || slot >= PAGE_SIZE) return;
+        int targetIndex = Math.min(holder.page * PAGE_SIZE + slot, holder.keys.size() - 1);
+        if (targetIndex < 0) return;
+        if (holder.selectedKey == null) {
+            int sourceIndex = holder.page * PAGE_SIZE + slot;
+            if (sourceIndex >= holder.keys.size() || !isEmpty(player.getItemOnCursor())) return;
+            holder.selectedKey = holder.keys.get(sourceIndex);
+            event.getView().getTopInventory().setItem(slot, null);
+            restoreReorderCursor(player, holder);
+            return;
+        }
+        int sourceIndex = holder.keys.indexOf(holder.selectedKey);
+        if (sourceIndex >= 0 && sourceIndex != targetIndex) {
+            String moved = holder.keys.remove(sourceIndex);
+            holder.keys.add(targetIndex, moved);
+        }
+        clearReorderSelection(player, holder);
+        renderReorder(event.getView().getTopInventory(), holder);
+    }
+
+    private void restoreReorderCursor(Player player, ReorderRoutesHolder holder) {
+        if (holder.selectedKey == null) return;
+        routeRepository.find(holder.selectedKey).ifPresent(route ->
+                player.setItemOnCursor(reorderItem(route, holder.keys.indexOf(holder.selectedKey))));
+    }
+
+    private void clearReorderSelection(Player player, ReorderRoutesHolder holder) {
+        holder.selectedKey = null;
+        clearReorderCursor(player);
+    }
+
+    private void clearReorderCursor(org.bukkit.entity.HumanEntity player) {
+        ItemStack cursor = player.getItemOnCursor();
+        if (!isEmpty(cursor) && cursor.hasItemMeta()
+                && cursor.getItemMeta().getPersistentDataContainer()
+                        .has(reorderRouteKey, PersistentDataType.STRING)) {
+            player.setItemOnCursor(null);
+        }
+    }
+
+    private boolean isEmpty(ItemStack item) {
+        return item == null || item.getType().isAir();
     }
 
     private void handleDeleteClick(InventoryClickEvent event, Player player, DeleteRouteHolder holder) {
@@ -617,6 +755,23 @@ public final class RouteGuiService implements Listener {
         public Inventory getInventory() {
             return null;
         }
+    }
+
+    private static final class ReorderRoutesHolder implements InventoryHolder {
+        private final List<String> keys;
+        private final String returnFolder;
+        private final int returnPage;
+        private int page;
+        private String selectedKey;
+
+        private ReorderRoutesHolder(List<String> keys, String returnFolder, int returnPage) {
+            this.keys = keys;
+            this.returnFolder = returnFolder;
+            this.returnPage = returnPage;
+        }
+
+        @Override
+        public Inventory getInventory() { return null; }
     }
 
     private record DeleteRouteHolder(String routeKey, String folder, int page) implements InventoryHolder {

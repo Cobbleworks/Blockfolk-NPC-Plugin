@@ -135,6 +135,7 @@ public final class GuiService implements Listener {
     private final CustomEventCreator customEventCreator;
     private final NamespacedKey waypointActionKey;
     private final NamespacedKey waypointTokenKey;
+    private final NamespacedKey reorderIconKey;
     private NpcBehaviourService behaviourService;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
     private final Map<String, String> pendingSkinUrls = new HashMap<>();
@@ -168,6 +169,7 @@ public final class GuiService implements Listener {
         this.customEventCreator = customEventCreator;
         this.waypointActionKey = new NamespacedKey(plugin, "behaviour-waypoint-action");
         this.waypointTokenKey = new NamespacedKey(plugin, "behaviour-waypoint-token");
+        this.reorderIconKey = new NamespacedKey(plugin, "reorder-definition");
     }
 
     public void setBehaviourService(NpcBehaviourService behaviourService) {
@@ -341,7 +343,8 @@ public final class GuiService implements Listener {
         inventory.setItem(49, item(Material.NETHER_STAR, "Blockfolk Overview", List.of(
                 ChatColor.GRAY + "Presets: " + ChatColor.WHITE + definitions.size(),
                 ChatColor.GRAY + "Spawned instances: " + ChatColor.WHITE + instanceRegistry.findAll().size(),
-                ChatColor.GRAY + "Page " + (page + 1) + " of " + pages
+                ChatColor.GRAY + "Page " + (page + 1) + " of " + pages,
+                ChatColor.YELLOW + "Click to reorder NPC presets"
         )));
         inventory.setItem(51, item(Material.EMERALD, "Create NPC", List.of(
                 ChatColor.GRAY + "Creates a new preset",
@@ -351,6 +354,61 @@ public final class GuiService implements Listener {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of(ChatColor.GRAY + "Page " + (page + 2) + " of " + pages)));
         }
         openInventory(player, inventory);
+    }
+
+    public void openReorder(Player player, int returnPage) {
+        List<String> keys = definitionRepository.findAll().stream().map(NpcDefinition::getKey).toList();
+        openReorder(player, new ReorderHolder(new ArrayList<>(keys), returnPage), 0);
+    }
+
+    private void openReorder(Player player, ReorderHolder holder, int requestedPage) {
+        int pages = Math.max(1, (holder.keys.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        holder.page = Math.max(0, Math.min(requestedPage, pages - 1));
+        Inventory inventory = Bukkit.createInventory(holder, 54, Component.text("Reorder NPC Presets"));
+        renderReorder(inventory, holder);
+        openInventory(player, inventory);
+        restoreReorderCursor(player, holder);
+    }
+
+    private void renderReorder(Inventory inventory, ReorderHolder holder) {
+        inventory.clear();
+        int pages = Math.max(1, (holder.keys.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int from = holder.page * PAGE_SIZE;
+        int to = Math.min(from + PAGE_SIZE, holder.keys.size());
+        for (int index = from; index < to; index++) {
+            String key = holder.keys.get(index);
+            if (key.equals(holder.selectedKey)) {
+                continue;
+            }
+            NpcDefinition definition = definitionRepository.find(key).orElse(null);
+            if (definition != null) {
+                inventory.setItem(index - from, reorderIcon(definition, index));
+            }
+        }
+        if (holder.page > 0) {
+            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+        }
+        inventory.setItem(48, item(Material.LIME_CONCRETE, "Save Order", List.of(
+                ChatColor.GRAY + "Apply this order to the preset overview"
+        )));
+        inventory.setItem(50, item(Material.RED_CONCRETE, "Cancel", List.of(
+                ChatColor.GRAY + "Discard all ordering changes"
+        )));
+        if (holder.page + 1 < pages) {
+            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        }
+        GuiLayout.fillMainBar(inventory);
+    }
+
+    private ItemStack reorderIcon(NpcDefinition definition, int index) {
+        ItemStack icon = definitionIcon(definition, List.of(
+                ChatColor.GRAY + "Position: " + ChatColor.WHITE + (index + 1),
+                ChatColor.YELLOW + "Pick up and drop to move"
+        ));
+        ItemMeta meta = icon.getItemMeta();
+        meta.getPersistentDataContainer().set(reorderIconKey, PersistentDataType.STRING, definition.getKey());
+        icon.setItemMeta(meta);
+        return icon;
     }
 
     public void openEditor(Player player, NpcDefinition definition) {
@@ -846,6 +904,8 @@ public final class GuiService implements Listener {
         InventoryHolder holder = event.getView().getTopInventory().getHolder();
         if (holder instanceof MainHolder mainHolder) {
             handleMainClick(event, player, mainHolder.page());
+        } else if (holder instanceof ReorderHolder reorderHolder) {
+            handleReorderClick(event, player, reorderHolder);
         } else if (holder instanceof EditorHolder editorHolder) {
             handleEditorClick(event, player, editorHolder.key());
         } else if (holder instanceof FightingHolder fightingHolder) {
@@ -927,6 +987,10 @@ public final class GuiService implements Listener {
 
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
+        if (event.getInventory().getHolder() instanceof ReorderHolder) {
+            clearReorderCursor(event.getPlayer());
+            return;
+        }
         if (event.getInventory().getHolder() instanceof NpcInventoryHolder holder) {
             instanceRegistry.findById(holder.instanceId())
                     .ifPresent(instance -> {
@@ -968,6 +1032,10 @@ public final class GuiService implements Listener {
             openMain(player, page - 1);
             return;
         }
+        if (event.getRawSlot() == 49) {
+            openReorder(player, page);
+            return;
+        }
         if (event.getRawSlot() == 51) {
             beginCreate(player, page);
             return;
@@ -986,6 +1054,93 @@ public final class GuiService implements Listener {
                 openEditor(player, definition);
             }
         }
+    }
+
+    private void handleReorderClick(InventoryClickEvent event, Player player, ReorderHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
+        int slot = event.getRawSlot();
+        if (slot == 45 && holder.page > 0) {
+            openReorder(player, holder, holder.page - 1);
+            return;
+        }
+        if (slot == 53 && (holder.page + 1) * PAGE_SIZE < holder.keys.size()) {
+            openReorder(player, holder, holder.page + 1);
+            return;
+        }
+        if (slot == 48) {
+            clearReorderSelection(player, holder);
+            try {
+                definitionRepository.reorder(holder.keys);
+                player.sendMessage(Component.text("NPC preset order saved."));
+                openMain(player, holder.returnPage);
+            } catch (IllegalArgumentException exception) {
+                player.sendMessage(Component.text(
+                        "The preset list changed while you were editing. Please reorder it again."));
+                openReorder(player, holder.returnPage);
+            }
+            return;
+        }
+        if (slot == 50) {
+            clearReorderSelection(player, holder);
+            openMain(player, holder.returnPage);
+            return;
+        }
+        if (slot < 0 || slot >= PAGE_SIZE) {
+            return;
+        }
+
+        int targetIndex = Math.min(holder.page * PAGE_SIZE + slot, holder.keys.size() - 1);
+        if (targetIndex < 0) {
+            return;
+        }
+        if (holder.selectedKey == null) {
+            int sourceIndex = holder.page * PAGE_SIZE + slot;
+            if (sourceIndex >= holder.keys.size() || !isEmpty(player.getItemOnCursor())) {
+                return;
+            }
+            holder.selectedKey = holder.keys.get(sourceIndex);
+            event.getView().getTopInventory().setItem(slot, null);
+            restoreReorderCursor(player, holder);
+            return;
+        }
+
+        int sourceIndex = holder.keys.indexOf(holder.selectedKey);
+        if (sourceIndex >= 0 && sourceIndex != targetIndex) {
+            String moved = holder.keys.remove(sourceIndex);
+            holder.keys.add(targetIndex, moved);
+        }
+        clearReorderSelection(player, holder);
+        renderReorder(event.getView().getTopInventory(), holder);
+    }
+
+    private void restoreReorderCursor(Player player, ReorderHolder holder) {
+        if (holder.selectedKey == null) {
+            return;
+        }
+        definitionRepository.find(holder.selectedKey).ifPresent(definition -> {
+            int index = holder.keys.indexOf(holder.selectedKey);
+            player.setItemOnCursor(reorderIcon(definition, index));
+        });
+    }
+
+    private void clearReorderSelection(Player player, ReorderHolder holder) {
+        holder.selectedKey = null;
+        clearReorderCursor(player);
+    }
+
+    private void clearReorderCursor(org.bukkit.entity.HumanEntity player) {
+        ItemStack cursor = player.getItemOnCursor();
+        if (!isEmpty(cursor) && cursor.hasItemMeta()
+                && cursor.getItemMeta().getPersistentDataContainer().has(reorderIconKey, PersistentDataType.STRING)) {
+            player.setItemOnCursor(null);
+        }
+    }
+
+    private boolean isEmpty(ItemStack item) {
+        return item == null || item.getType().isAir();
     }
 
     private void beginCreate(Player player, int returnPage) {
@@ -2544,6 +2699,7 @@ public final class GuiService implements Listener {
 
     private boolean isManagedHolder(InventoryHolder holder) {
         return holder instanceof MainHolder
+                || holder instanceof ReorderHolder
                 || holder instanceof EditorHolder
                 || holder instanceof FightingHolder
                 || holder instanceof InstancesHolder
@@ -2852,6 +3008,24 @@ public final class GuiService implements Listener {
     }
 
     private record MainHolder(int page) implements InventoryHolder {
+
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
+    private static final class ReorderHolder implements InventoryHolder {
+
+        private final List<String> keys;
+        private final int returnPage;
+        private int page;
+        private String selectedKey;
+
+        private ReorderHolder(List<String> keys, int returnPage) {
+            this.keys = keys;
+            this.returnPage = returnPage;
+        }
 
         @Override
         public Inventory getInventory() {

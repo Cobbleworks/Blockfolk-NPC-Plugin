@@ -83,7 +83,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 this::openMainGui
         );
         customEventGuiService = new CustomEventGuiService(
-                customEventRepository, definitionRepository, chatInputService, this::openMainGui);
+                this, customEventRepository, definitionRepository, chatInputService, this::openMainGui);
         guiService = new GuiService(
                 this,
                 definitionRepository,

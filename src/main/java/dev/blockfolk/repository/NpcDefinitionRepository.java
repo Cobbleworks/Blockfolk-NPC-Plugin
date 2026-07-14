@@ -21,26 +21,32 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.logging.Level;
 
 public final class NpcDefinitionRepository {
 
     private final JavaPlugin plugin;
     private final File definitionsFolder;
+    private final File orderFile;
     private final Map<String, NpcDefinition> definitions = new LinkedHashMap<>();
+    private final List<String> definitionOrder = new ArrayList<>();
 
     public NpcDefinitionRepository(JavaPlugin plugin) {
         this.plugin = plugin;
         this.definitionsFolder = new File(plugin.getDataFolder(), "definitions");
+        this.orderFile = new File(plugin.getDataFolder(), "definition-order.yml");
     }
 
     public void loadAll() {
         definitions.clear();
+        definitionOrder.clear();
         if (!definitionsFolder.exists() && !definitionsFolder.mkdirs()) {
             plugin.getLogger().warning("Could not create definitions folder.");
             return;
@@ -57,6 +63,7 @@ public final class NpcDefinitionRepository {
                 plugin.getLogger().log(Level.WARNING, "Failed to load NPC definition " + file.getName(), exception);
             }
         }
+        loadOrder();
     }
 
     public Optional<NpcDefinition> find(String keyOrName) {
@@ -64,13 +71,18 @@ public final class NpcDefinitionRepository {
     }
 
     public Collection<NpcDefinition> findAll() {
-        return definitions.values().stream()
-                .sorted(Comparator.comparing(NpcDefinition::getKey))
+        return definitionOrder.stream()
+                .map(definitions::get)
+                .filter(java.util.Objects::nonNull)
                 .toList();
     }
 
     public NpcDefinition save(NpcDefinition definition) {
-        definitions.put(definition.getKey(), definition);
+        boolean added = definitions.put(definition.getKey(), definition) == null;
+        if (added) {
+            definitionOrder.add(definition.getKey());
+            saveOrder();
+        }
         File file = new File(definitionsFolder, definition.getKey() + ".yml");
         YamlConfiguration configuration = new YamlConfiguration();
         configuration.set("key", definition.getKey());
@@ -119,16 +131,58 @@ public final class NpcDefinitionRepository {
         return definition;
     }
 
+    public void reorder(List<String> orderedKeys) {
+        List<String> normalized = orderedKeys.stream().map(NpcDefinition::toKey).toList();
+        if (normalized.size() != definitions.size()
+                || new HashSet<>(normalized).size() != normalized.size()
+                || !definitions.keySet().containsAll(normalized)) {
+            throw new IllegalArgumentException("The NPC order must contain every definition exactly once.");
+        }
+        definitionOrder.clear();
+        definitionOrder.addAll(normalized);
+        saveOrder();
+    }
+
     public boolean delete(NpcDefinition definition) {
         if (definitions.remove(definition.getKey()) == null) {
             return false;
         }
+        int orderIndex = definitionOrder.indexOf(definition.getKey());
+        definitionOrder.remove(definition.getKey());
         File file = new File(definitionsFolder, definition.getKey() + ".yml");
         if (file.exists() && !file.delete()) {
             definitions.put(definition.getKey(), definition);
+            definitionOrder.add(Math.max(0, orderIndex), definition.getKey());
             throw new IllegalStateException("Could not delete NPC definition " + definition.getKey());
         }
+        saveOrder();
         return true;
+    }
+
+    private void loadOrder() {
+        definitionOrder.clear();
+        List<String> stored = YamlConfiguration.loadConfiguration(orderFile).getStringList("order");
+        Set<String> seen = new HashSet<>();
+        for (String key : stored) {
+            String normalized = NpcDefinition.toKey(key);
+            if (definitions.containsKey(normalized) && seen.add(normalized)) {
+                definitionOrder.add(normalized);
+            }
+        }
+        definitions.keySet().stream()
+                .filter(seen::add)
+                .sorted(Comparator.naturalOrder())
+                .forEach(definitionOrder::add);
+    }
+
+    private void saveOrder() {
+        YamlConfiguration configuration = new YamlConfiguration();
+        configuration.set("order", definitionOrder);
+        try {
+            configuration.save(orderFile);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not save NPC definition order", exception);
+        }
     }
 
     private NpcDefinition load(File file) {
