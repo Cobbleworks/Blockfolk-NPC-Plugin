@@ -2,6 +2,7 @@ package dev.blockfolk.model;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,6 +26,7 @@ public final class NpcDefinition {
     private CombatProfile combatProfile;
     private MovementProfile movementProfile;
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
+    private final EnumSet<BehaviourEvent> behaviourRows;
     private Map<String, List<BehaviourAction>> customEventBehaviours;
 
     public NpcDefinition(String key) {
@@ -35,6 +37,7 @@ public final class NpcDefinition {
         this.combatProfile = CombatProfile.disabled();
         this.movementProfile = MovementProfile.disabled();
         this.behaviours = new EnumMap<>(BehaviourEvent.class);
+        this.behaviourRows = EnumSet.of(BehaviourEvent.SPAWN);
         this.customEventBehaviours = new java.util.LinkedHashMap<>();
     }
 
@@ -148,15 +151,38 @@ public final class NpcDefinition {
         return new ArrayList<>(behaviours.getOrDefault(event, List.of()));
     }
 
+    public List<BehaviourEvent> getBehaviourRows() {
+        return List.copyOf(behaviourRows);
+    }
+
+    public void setBehaviourRows(Iterable<BehaviourEvent> events) {
+        behaviourRows.clear();
+        behaviourRows.add(BehaviourEvent.SPAWN);
+        if (events != null) events.forEach(behaviourRows::add);
+        behaviourRows.addAll(behaviours.keySet());
+    }
+
+    public void addBehaviourRow(BehaviourEvent event) {
+        if (event != null) behaviourRows.add(event);
+    }
+
+    public void removeBehaviourRow(BehaviourEvent event) {
+        if (event == null || event == BehaviourEvent.SPAWN) return;
+        behaviourRows.remove(event);
+        behaviours.remove(event);
+    }
+
     public void setBehaviourActions(BehaviourEvent event, List<BehaviourAction> actions) {
         if (actions == null || actions.isEmpty()) {
             behaviours.remove(event); 
         }else {
             behaviours.put(event, new ArrayList<>(actions));
+            behaviourRows.add(event);
         }
     }
 
     public void addBehaviourAction(BehaviourEvent event, BehaviourAction action) {
+        behaviourRows.add(event);
         behaviours.computeIfAbsent(event, ignored -> new ArrayList<>()).add(action);
     }
 

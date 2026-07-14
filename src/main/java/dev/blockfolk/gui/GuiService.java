@@ -534,20 +534,22 @@ public final class GuiService implements Listener {
     }
 
     public void openBehaviours(Player player, NpcDefinition definition, int requestedPage) {
-        BehaviourEvent[] events = BehaviourEvent.values();
-        int pages = Math.max(1, (events.length + 4) / 5);
+        List<BehaviourEvent> events = definition.getBehaviourRows();
+        int pages = Math.max(1, (events.size() + 4) / 5);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new BehaviourHolder(definition.getKey(), page), 54,
                 Component.text("Behaviour: " + definition.getDisplayName()));
         for (int row = 0; row < 5; row++) {
             int eventIndex = page * 5 + row;
-            if (eventIndex >= events.length) {
+            if (eventIndex >= events.size()) {
                 break;
             }
-            BehaviourEvent behaviourEvent = events[eventIndex];
+            BehaviourEvent behaviourEvent = events.get(eventIndex);
             List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
             inventory.setItem(row * 9, item(eventMaterial(behaviourEvent), behaviourEvent.displayName(),
-                    actionSummaryLore(List.of(ChatColor.GRAY + "Actions run from left to right"), actions)));
+                    actionSummaryLore(List.of(ChatColor.GRAY + "Actions run from left to right",
+                            behaviourEvent == BehaviourEvent.SPAWN ? ChatColor.DARK_GRAY + "Default row"
+                                    : ChatColor.RED + "Right-click to remove row"), actions)));
             inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
                     ChatColor.YELLOW + "Click to append"
             )));
@@ -567,8 +569,35 @@ public final class GuiService implements Listener {
             inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         }
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(50, item(Material.COMPASS, "Add Behaviour Row", List.of(
+                ChatColor.YELLOW + "Click to select a trigger")));
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        }
+        openInventory(player, inventory);
+    }
+
+    private void openBehaviourRowSelector(Player player, NpcDefinition definition, int page) {
+        Inventory inventory = Bukkit.createInventory(new BehaviourRowSelectorHolder(definition.getKey(), page), 54,
+                Component.text("Select Behaviour Row"));
+        inventory.setItem(4, item(Material.SUNFLOWER, "North: Time", List.of(ChatColor.GRAY + "Time-based triggers")));
+        inventory.setItem(22, item(eventMaterial(BehaviourEvent.SPAWN), BehaviourEvent.SPAWN.displayName(), List.of(
+                ChatColor.GRAY + "Spawn is always present")));
+        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(40, item(Material.IRON_SWORD, "South: Combat", List.of(ChatColor.GRAY + "Health and combat triggers")));
+        inventory.setItem(18, item(Material.PLAYER_HEAD, "West: Player", List.of(ChatColor.GRAY + "Player interaction triggers")));
+        inventory.setItem(26, item(Material.CHEST, "East: Items", List.of(ChatColor.GRAY + "Item interaction triggers")));
+        BehaviourEvent[] choices = { BehaviourEvent.DAWN, BehaviourEvent.MORNING, BehaviourEvent.MIDDAY,
+                BehaviourEvent.PLAYER_APPROACH, BehaviourEvent.PLAYER_LEAVES, BehaviourEvent.LEFT_CLICK,
+                BehaviourEvent.RIGHT_CLICK, BehaviourEvent.IDLE, BehaviourEvent.DROP_ITEM, BehaviourEvent.RECEIVE_ITEM,
+                BehaviourEvent.DAMAGE_TAKEN, BehaviourEvent.LOW_HEALTH, BehaviourEvent.HEAL,
+                BehaviourEvent.COMBAT_ENTERED, BehaviourEvent.COMBAT_EXITED, BehaviourEvent.DEATH };
+        int[] slots = { 3, 5, 13, 9, 10, 19, 28, 25, 16, 34, 39, 41, 48, 50, 42, 31 };
+        for (int i = 0; i < choices.length; i++) {
+            BehaviourEvent choice = choices[i];
+            boolean selected = definition.getBehaviourRows().contains(choice);
+            inventory.setItem(slots[i], item(selected ? Material.GRAY_DYE : eventMaterial(choice), choice.displayName(),
+                    List.of(selected ? ChatColor.DARK_GRAY + "Already added" : ChatColor.YELLOW + "Click to add row")));
         }
         openInventory(player, inventory);
     }
@@ -854,6 +883,8 @@ public final class GuiService implements Listener {
             handleRouteAssignmentClick(event, player, routeHolder);
         } else if (holder instanceof BehaviourHolder behaviourHolder) {
             handleBehaviourClick(event, player, behaviourHolder);
+        } else if (holder instanceof BehaviourRowSelectorHolder selectorHolder) {
+            handleBehaviourRowSelectorClick(event, player, selectorHolder);
         } else if (holder instanceof CustomBehaviourHolder customBehaviourHolder) {
             handleCustomBehaviourClick(event, player, customBehaviourHolder);
         } else if (holder instanceof ActionPickerHolder pickerHolder) {
@@ -1288,6 +1319,10 @@ public final class GuiService implements Listener {
             openEditor(player, definition);
             return;
         }
+        if (slot == 50) {
+            openBehaviourRowSelector(player, definition, holder.page());
+            return;
+        }
         if (slot == 53) {
             openBehaviours(player, definition, holder.page() + 1);
             return;
@@ -1295,12 +1330,17 @@ public final class GuiService implements Listener {
         int row = slot / 9;
         int column = slot % 9 - 2;
         int eventIndex = holder.page() * 5 + row;
-        if (row >= 5 || eventIndex >= BehaviourEvent.values().length) {
+        List<BehaviourEvent> rows = definition.getBehaviourRows();
+        if (row >= 5 || eventIndex >= rows.size()) {
             return;
         }
-        BehaviourEvent behaviourEvent = BehaviourEvent.values()[eventIndex];
+        BehaviourEvent behaviourEvent = rows.get(eventIndex);
         List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
-        if (slot % 9 == 1) {
+        if (slot % 9 == 0 && event.isRightClick() && behaviourEvent != BehaviourEvent.SPAWN) {
+            definition.removeBehaviourRow(behaviourEvent);
+            definitionRepository.save(definition);
+            openBehaviours(player, definition, holder.page());
+        } else if (slot % 9 == 1) {
             // "Add Action" button in column 1 — always appends at the end
             openActionPicker(player, definition, behaviourEvent, actions.size(), holder.page());
         } else if (column < 0 || column >= 7) {
@@ -1315,6 +1355,30 @@ public final class GuiService implements Listener {
                     null, column, holder.page()));
         } else if (column <= actions.size()) {
             openActionPicker(player, definition, behaviourEvent, column, holder.page());
+        }
+    }
+
+    private void handleBehaviourRowSelectorClick(InventoryClickEvent event, Player player,
+            BehaviourRowSelectorHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
+        if (definition == null) { player.closeInventory(); return; }
+        if (event.getRawSlot() == 49) {
+            openBehaviours(player, definition, holder.behaviourPage());
+            return;
+        }
+        ItemStack clicked = event.getCurrentItem();
+        if (clicked == null || !clicked.hasItemMeta() || !clicked.getItemMeta().hasDisplayName()) return;
+        String name = ChatColor.stripColor(clicked.getItemMeta().getDisplayName());
+        for (BehaviourEvent candidate : BehaviourEvent.values()) {
+            if (!candidate.displayName().equals(name) || candidate == BehaviourEvent.SPAWN
+                    || definition.getBehaviourRows().contains(candidate)) continue;
+            definition.addBehaviourRow(candidate);
+            definitionRepository.save(definition);
+            int newPage = (definition.getBehaviourRows().size() - 1) / 5;
+            openBehaviours(player, definition, newPage);
+            return;
         }
     }
 
@@ -2509,6 +2573,7 @@ public final class GuiService implements Listener {
                 || holder instanceof InstancesHolder
                 || holder instanceof RouteAssignmentHolder
                 || holder instanceof BehaviourHolder
+                || holder instanceof BehaviourRowSelectorHolder
                 || holder instanceof CustomBehaviourHolder
                 || holder instanceof ActionPickerHolder
                 || holder instanceof AnimationPickerHolder
@@ -2873,6 +2938,11 @@ public final class GuiService implements Listener {
         public Inventory getInventory() {
             return null;
         }
+    }
+
+    private record BehaviourRowSelectorHolder(String key, int behaviourPage) implements InventoryHolder {
+        @Override
+        public Inventory getInventory() { return null; }
     }
 
     private record CustomBehaviourHolder(String key, int page) implements InventoryHolder {

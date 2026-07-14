@@ -102,6 +102,8 @@ public final class NpcDefinitionRepository {
         configuration.set("movement.enabled", null);
         configuration.set("movement.route", null);
         configuration.set("movement.speed", definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
+        configuration.set("behaviour-rows", definition.getBehaviourRows().stream()
+                .map(event -> event.name().toLowerCase(Locale.ROOT)).toList());
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<Map<String, Object>> actions = BehaviourActionCodec.encodeList(definition.getBehaviourActions(event));
             configuration.set("behaviours." + event.name().toLowerCase(Locale.ROOT), actions.isEmpty() ? null : actions);
@@ -193,6 +195,20 @@ public final class NpcDefinitionRepository {
                 }
             }
             definition.setBehaviourActions(event, actions);
+        }
+        if (configuration.contains("behaviour-rows")) {
+            List<BehaviourEvent> rows = new ArrayList<>();
+            for (String stored : configuration.getStringList("behaviour-rows")) {
+                try {
+                    rows.add(BehaviourEvent.fromStored(stored));
+                } catch (IllegalArgumentException ignored) {
+                    plugin.getLogger().warning("Ignoring unknown behaviour row '" + stored + "' in " + file.getName());
+                }
+            }
+            definition.setBehaviourRows(rows);
+        } else {
+            definition.setBehaviourRows(Arrays.stream(BehaviourEvent.values())
+                    .filter(event -> !definition.getBehaviourActions(event).isEmpty()).toList());
         }
         ConfigurationSection custom = configuration.getConfigurationSection("custom-event-behaviours");
         if (custom != null) {
