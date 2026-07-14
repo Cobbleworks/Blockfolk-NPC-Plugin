@@ -140,6 +140,7 @@ public final class GuiService implements Listener {
     private final Map<String, String> pendingSkinUrls = new HashMap<>();
     private final Map<UUID, WaypointSession> waypointSessions = new HashMap<>();
     private final Map<UUID, RouteActionWaypointSession> routeWaypointSessions = new HashMap<>();
+    private final Map<UUID, List<BehaviourAction>> behaviourClipboards = new HashMap<>();
 
     public GuiService(
             Plugin plugin,
@@ -547,7 +548,10 @@ public final class GuiService implements Listener {
             BehaviourEvent behaviourEvent = events[eventIndex];
             List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
             inventory.setItem(row * 9, item(eventMaterial(behaviourEvent), behaviourEvent.displayName(),
-                    actionSummaryLore(List.of(ChatColor.GRAY + "Actions run from left to right"), actions)));
+                    actionSummaryLore(List.of(
+                            ChatColor.GRAY + "Actions run from left to right",
+                            ChatColor.YELLOW + "Shift-left-click to copy row",
+                            ChatColor.YELLOW + "Shift-right-click to paste row"), actions)));
             inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
                     ChatColor.YELLOW + "Click to append"
             )));
@@ -586,7 +590,9 @@ public final class GuiService implements Listener {
             List<BehaviourAction> actions = definition.getCustomEventActions(customEvent.getName());
             inventory.setItem(row * 9, item(customEventIcon(customEvent), customEvent.getName(), actionSummaryLore(List.of(
                     ChatColor.GRAY + (customEvent.getDescription().isBlank() ? "No description" : customEvent.getDescription()),
-                    ChatColor.GRAY + "Actions run from left to right"), actions)));
+                    ChatColor.GRAY + "Actions run from left to right",
+                    ChatColor.YELLOW + "Shift-left-click to copy row",
+                    ChatColor.YELLOW + "Shift-right-click to paste row"), actions)));
             inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
                     ChatColor.YELLOW + "Click to append")));
             for (int column = 0; column < Math.min(7, actions.size()); column++) {
@@ -1300,7 +1306,13 @@ public final class GuiService implements Listener {
         }
         BehaviourEvent behaviourEvent = BehaviourEvent.values()[eventIndex];
         List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
-        if (slot % 9 == 1) {
+        if (slot % 9 == 0 && handleBehaviourClipboardClick(event, player, actions, pasted -> {
+            definition.setBehaviourActions(behaviourEvent, pasted);
+            definitionRepository.save(definition);
+            openBehaviours(player, definition, holder.page());
+        })) {
+            return;
+        } else if (slot % 9 == 1) {
             // "Add Action" button in column 1 — always appends at the end
             openActionPicker(player, definition, behaviourEvent, actions.size(), holder.page());
         } else if (column < 0 || column >= 7) {
@@ -1334,7 +1346,13 @@ public final class GuiService implements Listener {
         String eventName = customEvents.get(eventIndex).getName();
         List<BehaviourAction> actions = definition.getCustomEventActions(eventName);
         int column = slot % 9 - 2;
-        if (slot % 9 == 1) {
+        if (slot % 9 == 0 && handleBehaviourClipboardClick(event, player, actions, pasted -> {
+            definition.setCustomEventActions(eventName, pasted);
+            definitionRepository.save(definition);
+            openCustomBehaviours(player, definition, holder.page());
+        })) {
+            return;
+        } else if (slot % 9 == 1) {
             openActionPicker(player, definition, null, eventName, actions.size(), holder.page());
         } else if (column < 0 || column >= 7) {
             return;
@@ -1823,6 +1841,28 @@ public final class GuiService implements Listener {
     public void onWaypointPlayerQuit(PlayerQuitEvent event) {
         finishWaypointSelection(event.getPlayer());
         finishRouteWaypointSelection(event.getPlayer());
+        behaviourClipboards.remove(event.getPlayer().getUniqueId());
+    }
+
+    private boolean handleBehaviourClipboardClick(InventoryClickEvent event, Player player,
+            List<BehaviourAction> rowActions, Consumer<List<BehaviourAction>> pasteAction) {
+        UUID playerId = player.getUniqueId();
+        if (event.getClick() == ClickType.SHIFT_LEFT) {
+            behaviourClipboards.put(playerId, List.copyOf(rowActions));
+            player.sendMessage(Component.text("Copied behaviour row with " + rowActions.size() + " action(s)."));
+            return true;
+        }
+        if (event.getClick() != ClickType.SHIFT_RIGHT) {
+            return false;
+        }
+        List<BehaviourAction> clipboard = behaviourClipboards.get(playerId);
+        if (clipboard == null) {
+            player.sendMessage(Component.text("Copy a behaviour row first with shift-left-click."));
+            return true;
+        }
+        pasteAction.accept(new ArrayList<>(clipboard));
+        player.sendMessage(Component.text("Pasted behaviour row with " + clipboard.size() + " action(s)."));
+        return true;
     }
 
     private WaypointSession validWaypointSession(Player player, ItemStack item) {
