@@ -56,7 +56,9 @@ import dev.blockfolk.model.CustomEvent;
 import dev.blockfolk.model.LootTier;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
+import dev.blockfolk.model.NpcQuestion;
 import dev.blockfolk.model.NpcRoute;
+import dev.blockfolk.model.QuestionOption;
 import dev.blockfolk.model.RoutePoint;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
@@ -86,6 +88,7 @@ public final class GuiService implements Listener {
             // Dialogue and scripting
             Map.entry(1, BehaviourActionType.SEND_DIALOG),
             Map.entry(2, BehaviourActionType.SHOW_HOLO_DIALOG),
+            Map.entry(3, BehaviourActionType.ASK_QUESTION),
             Map.entry(4, BehaviourActionType.EMIT_EVENT),
             Map.entry(5, BehaviourActionType.RUN_CONSOLE_COMMAND),
             Map.entry(7, BehaviourActionType.WAIT),
@@ -862,6 +865,12 @@ public final class GuiService implements Listener {
             handleRoutePointAnimationPickerClick(event, player, routePointAnimation);
         } else if (holder instanceof RoutePointValuePickerHolder routePointValuePicker) {
             handleRoutePointValuePickerClick(event, player, routePointValuePicker);
+        } else if (holder instanceof QuestionEditorHolder questionEditor) {
+            handleQuestionEditorClick(event, player, questionEditor);
+        } else if (holder instanceof QuestionBranchHolder questionBranch) {
+            handleQuestionBranchClick(event, player, questionBranch);
+        } else if (holder instanceof QuestionBranchPickerHolder branchPicker) {
+            handleQuestionBranchPickerClick(event, player, branchPicker);
         } else if (holder instanceof ConfirmationHolder confirmationHolder) {
             handleConfirmationClick(event, player, confirmationHolder);
         } else if (holder instanceof NpcInventoryHolder) {
@@ -1295,6 +1304,10 @@ public final class GuiService implements Listener {
             definition.removeBehaviourAction(behaviourEvent, column);
             definitionRepository.save(definition);
             openBehaviours(player, definition, holder.page());
+        } else if (column < actions.size() && actions.get(column).type() == BehaviourActionType.ASK_QUESTION
+                && !event.isShiftClick()) {
+            openQuestionEditor(player, QuestionTarget.definition(definition.getKey(), behaviourEvent,
+                    null, column, holder.page()));
         } else if (column <= actions.size()) {
             openActionPicker(player, definition, behaviourEvent, column, holder.page());
         }
@@ -1324,6 +1337,10 @@ public final class GuiService implements Listener {
             definition.removeCustomEventAction(eventName, column);
             definitionRepository.save(definition);
             openCustomBehaviours(player, definition, holder.page());
+        } else if (column < actions.size() && actions.get(column).type() == BehaviourActionType.ASK_QUESTION
+                && !event.isShiftClick()) {
+            openQuestionEditor(player, QuestionTarget.definition(definition.getKey(), null,
+                    eventName, column, holder.page()));
         } else if (column <= actions.size()) {
             openActionPicker(player, definition, null, eventName, column, holder.page());
         }
@@ -1355,6 +1372,10 @@ public final class GuiService implements Listener {
             if (updated != null) {
                 openWaypointActions(player, holder.routeKey(), updated);
             }
+        } else if (index < current.actions().size()
+                && current.actions().get(index).type() == BehaviourActionType.ASK_QUESTION
+                && !event.isShiftClick()) {
+            openQuestionEditor(player, QuestionTarget.route(holder.routeKey(), current, index));
         } else if (index <= current.actions().size()) {
             openRoutePointActionPicker(player,
                     new RoutePointActionPickerHolder(holder.routeKey(), current, index));
@@ -1387,7 +1408,9 @@ public final class GuiService implements Listener {
         }
         RoutePointActionPickerHolder action = new RoutePointActionPickerHolder(
                 holder.routeKey(), current, holder.actionIndex());
-        if (type == BehaviourActionType.SET_ROUTE) {
+        if (type == BehaviourActionType.ASK_QUESTION) {
+            requestRouteQuestion(player, action);
+        } else if (type == BehaviourActionType.SET_ROUTE) {
             openRoutePointValuePicker(player, action, BehaviourValuePickerType.ROUTE, 0);
         } else if (type == BehaviourActionType.SET_WALK_SPEED) {
             openRoutePointValuePicker(player, action, BehaviourValuePickerType.WALK_SPEED, 0);
@@ -1539,12 +1562,15 @@ public final class GuiService implements Listener {
 
     private RoutePoint setRoutePointAction(RoutePointActionPickerHolder holder,
             BehaviourActionType type, String value) {
+        return setRoutePointAction(holder, new BehaviourAction(type, value));
+    }
+
+    private RoutePoint setRoutePointAction(RoutePointActionPickerHolder holder, BehaviourAction action) {
         RoutePoint current = currentRoutePoint(holder.routeKey(), holder.point());
         if (current == null) {
             return null;
         }
         List<BehaviourAction> actions = new ArrayList<>(current.actions());
-        BehaviourAction action = new BehaviourAction(type, value);
         if (holder.actionIndex() < actions.size()) {
             actions.set(holder.actionIndex(), action);
         } else if (actions.size() < 7) {
@@ -1593,7 +1619,9 @@ public final class GuiService implements Listener {
         if (type == null) {
             return;
         }
-        if (type == BehaviourActionType.SET_ROUTE) {
+        if (type == BehaviourActionType.ASK_QUESTION) {
+            requestQuestion(player, definition, holder);
+        } else if (type == BehaviourActionType.SET_ROUTE) {
             openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.ROUTE, 0);
         } else if (type == BehaviourActionType.SET_WALK_SPEED) {
             openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.WALK_SPEED, 0);
@@ -1642,6 +1670,23 @@ public final class GuiService implements Listener {
             }
             setAction(definition, holder, BehaviourActionType.WAIT, normalized);
             openBehaviourHome(player, definition, holder);
+        });
+    }
+
+    private void requestQuestion(Player player, NpcDefinition definition, ActionPickerHolder holder) {
+        chatInputService.request(player, "Enter the question shown to the player:", prompt -> {
+            BehaviourAction action = BehaviourAction.ask(NpcQuestion.create(prompt));
+            setAction(definition, holder, action);
+            openQuestionEditor(player, QuestionTarget.definition(definition.getKey(), holder.event(),
+                    holder.customEvent(), holder.actionIndex(), holder.page()));
+        });
+    }
+
+    private void requestRouteQuestion(Player player, RoutePointActionPickerHolder holder) {
+        chatInputService.request(player, "Enter the question shown to the player:", prompt -> {
+            RoutePoint updated = setRoutePointAction(holder, BehaviourAction.ask(NpcQuestion.create(prompt)));
+            if (updated != null) openQuestionEditor(player,
+                    QuestionTarget.route(holder.routeKey(), updated, holder.actionIndex()));
         });
     }
 
@@ -1965,10 +2010,13 @@ public final class GuiService implements Listener {
     }
 
     private void setAction(NpcDefinition definition, ActionPickerHolder holder, BehaviourActionType type, String value) {
+        setAction(definition, holder, new BehaviourAction(type, value));
+    }
+
+    private void setAction(NpcDefinition definition, ActionPickerHolder holder, BehaviourAction action) {
         List<BehaviourAction> actions = holder.customEvent() == null
                 ? definition.getBehaviourActions(holder.event())
                 : definition.getCustomEventActions(holder.customEvent());
-        BehaviourAction action = new BehaviourAction(type, value);
         boolean actionSet = false;
         if (holder.actionIndex() < actions.size()) {
             actions.set(holder.actionIndex(), action);
@@ -1980,8 +2028,8 @@ public final class GuiService implements Listener {
         if (holder.customEvent() == null) definition.setBehaviourActions(holder.event(), actions);
         else definition.setCustomEventActions(holder.customEvent(), actions);
         definitionRepository.save(definition);
-        if (actionSet && type == BehaviourActionType.EMIT_EVENT) {
-            setDefaultEventIconFromNpc(definition, value);
+        if (actionSet && action.type() == BehaviourActionType.EMIT_EVENT) {
+            setDefaultEventIconFromNpc(definition, action.value());
         }
     }
 
@@ -1997,6 +2045,335 @@ public final class GuiService implements Listener {
     private void openBehaviourHome(Player player, NpcDefinition definition, ActionPickerHolder holder) {
         if (holder.customEvent() == null) openBehaviours(player, definition, holder.page());
         else openCustomBehaviours(player, definition, holder.page());
+    }
+
+    private void openQuestionEditor(Player player, QuestionTarget target) {
+        BehaviourAction action = questionAction(target);
+        if (action == null) { openQuestionParent(player, target); return; }
+        NpcQuestion question = action.question();
+        Inventory inventory = Bukkit.createInventory(new QuestionEditorHolder(target), 54,
+                Component.text("Question Editor"));
+        inventory.setItem(4, item(Material.WRITABLE_BOOK, "Prompt", List.of(
+                ChatColor.WHITE + question.prompt(), ChatColor.YELLOW + "Click to edit")));
+        for (int index = 0; index < NpcQuestion.MAX_OPTIONS; index++) {
+            int slot = 10 + index;
+            if (index < question.options().size()) {
+                QuestionOption option = question.options().get(index);
+                inventory.setItem(slot, item(Material.LIME_DYE, (index + 1) + ". " + option.label(), List.of(
+                        ChatColor.GRAY + "Branch actions: " + ChatColor.WHITE + option.actions().size(),
+                        ChatColor.YELLOW + "Click to edit this answer")));
+            } else if (index == question.options().size()) {
+                inventory.setItem(slot, item(Material.LIME_STAINED_GLASS_PANE, "Add Answer", List.of(
+                        ChatColor.YELLOW + "Click, then enter its label")));
+            }
+        }
+        inventory.setItem(31, item(Material.BARRIER, "Cancel / Timeout", List.of(
+                ChatColor.GRAY + "Branch actions: " + ChatColor.WHITE + question.cancelActions().size(),
+                ChatColor.YELLOW + "Click to edit the cancellation branch")));
+        inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
+        inventory.setItem(49, item(question.options().isEmpty() ? Material.REDSTONE_TORCH : Material.OAK_SIGN,
+                "Question Summary", List.of(
+                        ChatColor.GRAY + "Answers: " + ChatColor.WHITE + question.options().size(),
+                        question.options().isEmpty() ? ChatColor.RED + "No answers: cancellation branch will run"
+                                : ChatColor.GREEN + "Ready")));
+        openInventory(player, inventory);
+    }
+
+    private void handleQuestionEditorClick(InventoryClickEvent event, Player player, QuestionEditorHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        BehaviourAction action = questionAction(holder.target());
+        if (action == null) { openQuestionParent(player, holder.target()); return; }
+        NpcQuestion question = action.question();
+        int slot = event.getRawSlot();
+        if (slot == 45) { openQuestionParent(player, holder.target()); return; }
+        if (slot == 4) {
+            chatInputService.request(player, "Enter the question shown to the player:", value -> {
+                updateQuestion(holder.target(), question.withPrompt(value));
+                openQuestionEditor(player, holder.target());
+            });
+            return;
+        }
+        if (slot == 31) {
+            openQuestionBranch(player, holder.target(), -1);
+            return;
+        }
+        int optionIndex = slot - 10;
+        if (optionIndex < 0 || optionIndex >= NpcQuestion.MAX_OPTIONS) return;
+        if (optionIndex < question.options().size()) {
+            openQuestionBranch(player, holder.target(), optionIndex);
+        } else if (optionIndex == question.options().size()) {
+            chatInputService.request(player, "Enter the answer label:", label -> {
+                try {
+                    List<QuestionOption> options = new ArrayList<>(question.options());
+                    options.add(new QuestionOption(label, List.of()));
+                    updateQuestion(holder.target(), question.withOptions(options));
+                    openQuestionEditor(player, holder.target());
+                } catch (IllegalArgumentException exception) {
+                    player.sendMessage(Component.text(exception.getMessage()));
+                    openQuestionEditor(player, holder.target());
+                }
+            });
+        }
+    }
+
+    private void openQuestionBranch(Player player, QuestionTarget target, int optionIndex) {
+        BehaviourAction action = questionAction(target);
+        if (action == null) { openQuestionParent(player, target); return; }
+        NpcQuestion question = action.question();
+        if (optionIndex >= question.options().size()) { openQuestionEditor(player, target); return; }
+        List<BehaviourAction> actions = optionIndex < 0 ? question.cancelActions()
+                : question.options().get(optionIndex).actions();
+        String title = optionIndex < 0 ? "Cancel / Timeout Branch"
+                : "Answer: " + question.options().get(optionIndex).label();
+        Inventory inventory = Bukkit.createInventory(new QuestionBranchHolder(target, optionIndex), 54,
+                Component.text(title));
+        for (int index = 0; index < NpcQuestion.MAX_BRANCH_ACTIONS; index++) {
+            int slot = 10 + index;
+            if (index < actions.size()) {
+                BehaviourAction branchAction = actions.get(index);
+                inventory.setItem(slot, item(actionMaterial(branchAction.type()),
+                        (index + 1) + ". " + branchAction.type().displayName(), List.of(
+                                ChatColor.GRAY + actionValueDisplay(branchAction),
+                                ChatColor.YELLOW + "Left-click to replace",
+                                ChatColor.RED + "Right-click to remove")));
+            } else if (index == actions.size()) {
+                inventory.setItem(slot, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
+                        ChatColor.YELLOW + "Click to append")));
+            }
+        }
+        if (optionIndex >= 0) {
+            inventory.setItem(28, item(Material.ARROW, "Move Earlier", List.of()));
+            inventory.setItem(30, item(Material.NAME_TAG, "Rename Answer", List.of()));
+            inventory.setItem(32, item(Material.RED_CONCRETE, "Delete Answer", List.of(
+                    ChatColor.RED + "Shift-click to confirm")));
+            inventory.setItem(34, item(Material.ARROW, "Move Later", List.of()));
+        }
+        inventory.setItem(45, item(Material.ARROW, "Back to Question", List.of()));
+        openInventory(player, inventory);
+    }
+
+    private void handleQuestionBranchClick(InventoryClickEvent event, Player player, QuestionBranchHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        BehaviourAction action = questionAction(holder.target());
+        if (action == null) { openQuestionParent(player, holder.target()); return; }
+        NpcQuestion question = action.question();
+        int optionIndex = holder.optionIndex();
+        int slot = event.getRawSlot();
+        if (slot == 45) { openQuestionEditor(player, holder.target()); return; }
+        if (optionIndex >= 0 && slot == 30) {
+            chatInputService.request(player, "Enter the new answer label:", label -> {
+                try {
+                    List<QuestionOption> options = new ArrayList<>(question.options());
+                    options.set(optionIndex, options.get(optionIndex).withLabel(label));
+                    updateQuestion(holder.target(), question.withOptions(options));
+                    openQuestionBranch(player, holder.target(), optionIndex);
+                } catch (IllegalArgumentException exception) {
+                    player.sendMessage(Component.text(exception.getMessage()));
+                    openQuestionBranch(player, holder.target(), optionIndex);
+                }
+            });
+            return;
+        }
+        if (optionIndex >= 0 && slot == 32 && event.isShiftClick()) {
+            List<QuestionOption> options = new ArrayList<>(question.options());
+            options.remove(optionIndex);
+            updateQuestion(holder.target(), question.withOptions(options));
+            openQuestionEditor(player, holder.target());
+            return;
+        }
+        if (optionIndex >= 0 && (slot == 28 || slot == 34)) {
+            int destination = optionIndex + (slot == 28 ? -1 : 1);
+            if (destination >= 0 && destination < question.options().size()) {
+                List<QuestionOption> options = new ArrayList<>(question.options());
+                java.util.Collections.swap(options, optionIndex, destination);
+                updateQuestion(holder.target(), question.withOptions(options));
+                openQuestionBranch(player, holder.target(), destination);
+            }
+            return;
+        }
+        int actionIndex = slot - 10;
+        List<BehaviourAction> actions = questionBranch(question, optionIndex);
+        if (actionIndex < 0 || actionIndex >= NpcQuestion.MAX_BRANCH_ACTIONS) return;
+        if (actionIndex < actions.size() && event.isRightClick()) {
+            List<BehaviourAction> changed = new ArrayList<>(actions);
+            changed.remove(actionIndex);
+            updateQuestionBranch(holder.target(), optionIndex, changed);
+            openQuestionBranch(player, holder.target(), optionIndex);
+        } else if (actionIndex <= actions.size()) {
+            openQuestionBranchPicker(player, holder.target(), optionIndex, actionIndex);
+        }
+    }
+
+    private void openQuestionBranchPicker(Player player, QuestionTarget target, int optionIndex, int actionIndex) {
+        Inventory inventory = Bukkit.createInventory(new QuestionBranchPickerHolder(target, optionIndex, actionIndex),
+                54, Component.text("Choose Branch Action"));
+        for (Map.Entry<Integer, BehaviourActionType> entry : ACTION_PICKER_ACTIONS.entrySet()) {
+            if (entry.getValue() == BehaviourActionType.ASK_QUESTION) continue;
+            inventory.setItem(entry.getKey(), item(actionMaterial(entry.getValue()), entry.getValue().displayName(),
+                    List.of(ChatColor.YELLOW + "Click to configure")));
+        }
+        int[] animationSlots = {37, 38, 39, 40, 41, 42, 43};
+        for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
+            BehaviourActionType type = ANIMATION_ACTIONS.get(index);
+            inventory.setItem(animationSlots[index], item(actionMaterial(type), type.displayName(),
+                    List.of(ChatColor.YELLOW + "Click to select")));
+        }
+        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        openInventory(player, inventory);
+    }
+
+    private void handleQuestionBranchPickerClick(InventoryClickEvent event, Player player,
+            QuestionBranchPickerHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        if (event.getRawSlot() == 49) {
+            openQuestionBranch(player, holder.target(), holder.optionIndex());
+            return;
+        }
+        BehaviourActionType type = ACTION_PICKER_ACTIONS.get(event.getRawSlot());
+        if (type == BehaviourActionType.ASK_QUESTION) return;
+        if (type == null && event.getRawSlot() >= 37 && event.getRawSlot() <= 43) {
+            type = ANIMATION_ACTIONS.get(event.getRawSlot() - 37);
+        }
+        if (type == null) return;
+        if (!type.requiresValue()) {
+            setQuestionBranchAction(holder, new BehaviourAction(type, null));
+            openQuestionBranch(player, holder.target(), holder.optionIndex());
+            return;
+        }
+        BehaviourActionType selected = type;
+        String prompt = switch (selected) {
+            case SEND_DIALOG -> "Enter the dialog line:";
+            case SHOW_HOLO_DIALOG -> "Enter the hologram dialog line:";
+            case RUN_CONSOLE_COMMAND -> "Enter the command without a leading slash:";
+            case WAIT -> "Enter the positive number of seconds to wait:";
+            case SET_ROUTE -> "Enter an existing route key:";
+            case SET_WALK_SPEED -> "Enter walk speed (slouch, slow, normal, fast, very_fast):";
+            case EMIT_EVENT -> "Enter an existing custom event name:";
+            case CHANGE_FIGHT_OPTIONS -> "Enter targets (mobs, animals, players, npcs), or 'none':";
+            case MOVE_TO, TELEPORT_TO -> "Type 'here' to use your current location:";
+            default -> "Enter the action value:";
+        };
+        chatInputService.request(player, prompt, value -> {
+            String normalized = branchActionValue(player, selected, value);
+            if (normalized == null) {
+                openQuestionBranchPicker(player, holder.target(), holder.optionIndex(), holder.actionIndex());
+                return;
+            }
+            setQuestionBranchAction(holder, new BehaviourAction(selected, normalized));
+            openQuestionBranch(player, holder.target(), holder.optionIndex());
+        });
+    }
+
+    private String branchActionValue(Player player, BehaviourActionType type, String value) {
+        try {
+            if (type == BehaviourActionType.WAIT) {
+                double seconds = Double.parseDouble(value.trim());
+                if (!Double.isFinite(seconds) || seconds <= 0.0) throw new IllegalArgumentException();
+                return Double.toString(seconds);
+            }
+            if (type == BehaviourActionType.SET_ROUTE) {
+                NpcRoute route = routeRepository.find(value).orElseThrow();
+                return route.getKey();
+            }
+            if (type == BehaviourActionType.SET_WALK_SPEED) {
+                return WalkingSpeed.fromStored(value).name().toLowerCase(java.util.Locale.ROOT);
+            }
+            if (type == BehaviourActionType.EMIT_EVENT) {
+                return customEventRepository.find(value).orElseThrow().getName();
+            }
+            if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
+                return FightOptions.fromStored(value.equalsIgnoreCase("none") ? "" : value).storedValue();
+            }
+            if (type == BehaviourActionType.MOVE_TO || type == BehaviourActionType.TELEPORT_TO) {
+                if (!value.equalsIgnoreCase("here")) throw new IllegalArgumentException();
+                Location location = player.getLocation();
+                return new ActionLocation(location.getWorld().getName(), location.getX(), location.getY(),
+                        location.getZ()).serialize();
+            }
+            return value;
+        } catch (RuntimeException exception) {
+            player.sendMessage(Component.text("That value is not valid for " + type.displayName() + "."));
+            return null;
+        }
+    }
+
+    private void setQuestionBranchAction(QuestionBranchPickerHolder holder, BehaviourAction action) {
+        BehaviourAction parent = questionAction(holder.target());
+        if (parent == null) return;
+        List<BehaviourAction> actions = new ArrayList<>(questionBranch(parent.question(), holder.optionIndex()));
+        if (holder.actionIndex() < actions.size()) actions.set(holder.actionIndex(), action);
+        else if (actions.size() < NpcQuestion.MAX_BRANCH_ACTIONS) actions.add(action);
+        updateQuestionBranch(holder.target(), holder.optionIndex(), actions);
+    }
+
+    private List<BehaviourAction> questionBranch(NpcQuestion question, int optionIndex) {
+        return optionIndex < 0 ? question.cancelActions() : question.options().get(optionIndex).actions();
+    }
+
+    private void updateQuestionBranch(QuestionTarget target, int optionIndex, List<BehaviourAction> actions) {
+        BehaviourAction parent = questionAction(target);
+        if (parent == null) return;
+        NpcQuestion question = parent.question();
+        if (optionIndex < 0) {
+            updateQuestion(target, question.withCancelActions(actions));
+        } else {
+            List<QuestionOption> options = new ArrayList<>(question.options());
+            options.set(optionIndex, options.get(optionIndex).withActions(actions));
+            updateQuestion(target, question.withOptions(options));
+        }
+    }
+
+    private BehaviourAction questionAction(QuestionTarget target) {
+        List<BehaviourAction> actions = target.routeKey() == null
+                ? definitionActions(target) : routeActions(target);
+        if (target.actionIndex() < 0 || target.actionIndex() >= actions.size()) return null;
+        BehaviourAction action = actions.get(target.actionIndex());
+        return action.type() == BehaviourActionType.ASK_QUESTION ? action : null;
+    }
+
+    private void updateQuestion(QuestionTarget target, NpcQuestion question) {
+        List<BehaviourAction> actions = new ArrayList<>(target.routeKey() == null
+                ? definitionActions(target) : routeActions(target));
+        if (target.actionIndex() < 0 || target.actionIndex() >= actions.size()) return;
+        actions.set(target.actionIndex(), BehaviourAction.ask(question));
+        if (target.routeKey() != null) {
+            RoutePoint current = currentRoutePoint(target.routeKey(), target.point());
+            if (current != null) saveRoutePointActions(target.routeKey(), current, actions);
+            return;
+        }
+        NpcDefinition definition = definitionRepository.find(target.definitionKey()).orElse(null);
+        if (definition == null) return;
+        if (target.customEvent() == null) definition.setBehaviourActions(target.event(), actions);
+        else definition.setCustomEventActions(target.customEvent(), actions);
+        definitionRepository.save(definition);
+    }
+
+    private List<BehaviourAction> definitionActions(QuestionTarget target) {
+        NpcDefinition definition = definitionRepository.find(target.definitionKey()).orElse(null);
+        if (definition == null) return List.of();
+        return target.customEvent() == null ? definition.getBehaviourActions(target.event())
+                : definition.getCustomEventActions(target.customEvent());
+    }
+
+    private List<BehaviourAction> routeActions(QuestionTarget target) {
+        RoutePoint current = currentRoutePoint(target.routeKey(), target.point());
+        return current == null ? List.of() : current.actions();
+    }
+
+    private void openQuestionParent(Player player, QuestionTarget target) {
+        if (target.routeKey() != null) {
+            RoutePoint current = currentRoutePoint(target.routeKey(), target.point());
+            if (current != null) openWaypointActions(player, target.routeKey(), current);
+            else player.closeInventory();
+            return;
+        }
+        NpcDefinition definition = definitionRepository.find(target.definitionKey()).orElse(null);
+        if (definition == null) { player.closeInventory(); return; }
+        if (target.customEvent() == null) openBehaviours(player, definition, target.page());
+        else openCustomBehaviours(player, definition, target.page());
     }
 
     private void handleConfirmationClick(InventoryClickEvent event, Player player, ConfirmationHolder holder) {
@@ -2160,6 +2537,9 @@ public final class GuiService implements Listener {
                 || holder instanceof RoutePointActionPickerHolder
                 || holder instanceof RoutePointAnimationPickerHolder
                 || holder instanceof RoutePointValuePickerHolder
+                || holder instanceof QuestionEditorHolder
+                || holder instanceof QuestionBranchHolder
+                || holder instanceof QuestionBranchPickerHolder
                 || holder instanceof ConfirmationHolder;
     }
 
@@ -2333,6 +2713,8 @@ public final class GuiService implements Listener {
                 Material.WRITABLE_BOOK;
             case SHOW_HOLO_DIALOG ->
                 Material.NAME_TAG;
+            case ASK_QUESTION ->
+                Material.OAK_SIGN;
             case SET_ROUTE ->
                 Material.RAIL;
             case RUN_CONSOLE_COMMAND ->
@@ -2389,6 +2771,9 @@ public final class GuiService implements Listener {
     }
 
     private String actionValueDisplay(BehaviourAction action) {
+        if (action.type() == BehaviourActionType.ASK_QUESTION) {
+            return action.question().prompt() + " (" + action.question().options().size() + " answers)";
+        }
         if (!action.type().requiresValue() || action.value() == null) {
             return "No setting required";
         }
@@ -2416,7 +2801,9 @@ public final class GuiService implements Listener {
             BehaviourAction action = actions.get(index);
             String summary = ChatColor.GRAY + Integer.toString(index + 1) + ". "
                     + ChatColor.WHITE + action.type().displayName();
-            if (action.type().requiresValue()) {
+            if (action.type() == BehaviourActionType.ASK_QUESTION) {
+                summary += ChatColor.GRAY + ": " + ChatColor.WHITE + actionValueDisplay(action);
+            } else if (action.type().requiresValue()) {
                 summary += ChatColor.GRAY + ": " + ChatColor.WHITE + actionValueDisplay(action);
             }
             lore.add(summary);
@@ -2603,6 +2990,31 @@ public final class GuiService implements Listener {
         public Inventory getInventory() {
             return null;
         }
+    }
+
+    private record QuestionTarget(String definitionKey, BehaviourEvent event, String customEvent,
+            String routeKey, RoutePoint point, int actionIndex, int page) {
+        static QuestionTarget definition(String key, BehaviourEvent event, String customEvent,
+                int actionIndex, int page) {
+            return new QuestionTarget(key, event, customEvent, null, null, actionIndex, page);
+        }
+
+        static QuestionTarget route(String routeKey, RoutePoint point, int actionIndex) {
+            return new QuestionTarget(null, null, null, routeKey, point, actionIndex, 0);
+        }
+    }
+
+    private record QuestionEditorHolder(QuestionTarget target) implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record QuestionBranchHolder(QuestionTarget target, int optionIndex) implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record QuestionBranchPickerHolder(QuestionTarget target, int optionIndex, int actionIndex)
+            implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
     }
 
     private record BehaviourPickerOption(

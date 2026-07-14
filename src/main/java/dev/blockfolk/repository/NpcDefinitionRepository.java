@@ -103,23 +103,12 @@ public final class NpcDefinitionRepository {
         configuration.set("movement.route", null);
         configuration.set("movement.speed", definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
         for (BehaviourEvent event : BehaviourEvent.values()) {
-            List<Map<String, Object>> actions = definition.getBehaviourActions(event).stream().map(action -> {
-                Map<String, Object> stored = new LinkedHashMap<String, Object>();
-                stored.put("type", action.type().name().toLowerCase(Locale.ROOT));
-                if (action.value() != null) {
-                    stored.put("value", action.value());
-                }
-                return stored;
-            }).toList();
+            List<Map<String, Object>> actions = BehaviourActionCodec.encodeList(definition.getBehaviourActions(event));
             configuration.set("behaviours." + event.name().toLowerCase(Locale.ROOT), actions.isEmpty() ? null : actions);
         }
         for (String eventName : definition.getCustomEventNames()) {
-            List<Map<String, Object>> actions = definition.getCustomEventActions(eventName).stream().map(action -> {
-                Map<String, Object> stored = new LinkedHashMap<String, Object>();
-                stored.put("type", action.type().name().toLowerCase(Locale.ROOT));
-                if (action.value() != null) stored.put("value", action.value());
-                return stored;
-            }).toList();
+            List<Map<String, Object>> actions = BehaviourActionCodec.encodeList(
+                    definition.getCustomEventActions(eventName));
             configuration.set("custom-event-behaviours." + encodeEventName(eventName), actions);
         }
         try {
@@ -198,8 +187,7 @@ public final class NpcDefinitionRepository {
                     continue;
                 }
                 try {
-                    actions.add(new BehaviourAction(BehaviourActionType.fromStored(type.toString()),
-                            entry.get("value") == null ? null : entry.get("value").toString()));
+                    actions.add(BehaviourActionCodec.decode(entry));
                 } catch (IllegalArgumentException ignored) {
                     plugin.getLogger().warning("Ignoring unknown behaviour action '" + type + "' in " + file.getName());
                 }
@@ -221,9 +209,7 @@ public final class NpcDefinitionRepository {
                     Object type = entry.get("type");
                     if (type == null) continue;
                     try {
-                        Object value = entry.get("value");
-                        actions.add(new BehaviourAction(BehaviourActionType.fromStored(type.toString()),
-                                value == null ? null : value.toString()));
+                        actions.add(BehaviourActionCodec.decode(entry));
                     } catch (IllegalArgumentException ignored) {
                         plugin.getLogger().warning("Ignoring unknown custom-event action '" + type + "' in " + file.getName());
                     }

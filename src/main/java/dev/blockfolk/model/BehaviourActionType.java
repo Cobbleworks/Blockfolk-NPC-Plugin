@@ -5,6 +5,7 @@ import java.util.Locale;
 public enum BehaviourActionType {
     SEND_DIALOG("Send Dialog", true),
     SHOW_HOLO_DIALOG("Show Holo Dialog", true),
+    ASK_QUESTION("Ask Question", false),
     SET_ROUTE("Set Route", true),
     RUN_CONSOLE_COMMAND("Run Console Command", true),
     START_COMBAT("Start Combat", false),

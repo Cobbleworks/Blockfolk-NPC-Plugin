@@ -71,6 +71,7 @@ public final class NpcBehaviourService implements Listener {
     private final NpcDefinitionRepository definitions;
     private final NpcInstanceRegistry instances;
     private final DialogService dialogService;
+    private final NpcQuestionService questionService;
     private final Set<UUID> lowHealthTriggered = new HashSet<>();
     private final Map<UUID, String> routeOverrides = new HashMap<>();
     private final Map<UUID, WalkingSpeed> speedOverrides = new HashMap<>();
@@ -95,12 +96,14 @@ public final class NpcBehaviourService implements Listener {
             NpcDefinitionRepository definitions,
             NpcInstanceRegistry instances,
             DialogService dialogService,
+            NpcQuestionService questionService,
             int proximityCooldownSeconds
     ) {
         this.plugin = plugin;
         this.definitions = definitions;
         this.instances = instances;
         this.dialogService = dialogService;
+        this.questionService = questionService;
         this.proximityCooldownTicks = Math.max(0L, proximityCooldownSeconds) * 20L;
     }
 
@@ -194,6 +197,7 @@ public final class NpcBehaviourService implements Listener {
     }
 
     public void forget(NpcInstance instance) {
+        questionService.forget(instance);
         lowHealthTriggered.remove(instance.getId());
         routeOverrides.remove(instance.getId());
         speedOverrides.remove(instance.getId());
@@ -233,6 +237,7 @@ public final class NpcBehaviourService implements Listener {
             Runnable completion
     ) {
         if (instances.findAll().stream().noneMatch(candidate -> candidate.getId().equals(instance.getId()))) {
+            completion.run();
             return;
         }
         if (index >= actions.size()) {
@@ -240,6 +245,10 @@ public final class NpcBehaviourService implements Listener {
             return;
         }
         BehaviourAction action = actions.get(index);
+        if (action.type() == BehaviourActionType.ASK_QUESTION) {
+            askQuestion(event, actions, index, action, instance, definition, actor, completion);
+            return;
+        }
         execute(event, action, instance, definition, actor);
         long delayTicks = delayAfter(action);
         if (delayTicks <= 0L) {
@@ -248,6 +257,32 @@ public final class NpcBehaviourService implements Listener {
             Bukkit.getScheduler().runTaskLater(plugin,
                     () -> executeSequence(event, actions, index + 1, instance, definition, actor, completion), delayTicks);
         }
+    }
+
+    private void askQuestion(BehaviourEvent event, List<BehaviourAction> parent, int index,
+            BehaviourAction action, NpcInstance instance, NpcDefinition definition, Entity actor,
+            Runnable completion) {
+        Player player = questionPlayer(instance, actor);
+        if (player == null) {
+            executeSequence(event, action.question().cancelActions(), 0, instance, definition, actor,
+                    () -> executeSequence(event, parent, index + 1, instance, definition, actor, completion));
+            return;
+        }
+        questionService.enqueue(player, instance, definition.getDisplayName(), action.question(),
+                (branch, done) -> executeSequence(event, branch, 0, instance, definition, player,
+                        () -> executeSequence(event, parent, index + 1, instance, definition, player, done)));
+        // A duplicate intentionally stops only this repeated trigger. Its parent
+        // continuation is not run, preventing idle loops from producing side effects.
+    }
+
+    private Player questionPlayer(NpcInstance instance, Entity actor) {
+        Location location = instance.getLocation();
+        if (location.getWorld() == null) return null;
+        if (actor instanceof Player direct && direct.isOnline() && direct.getWorld() == location.getWorld()
+                && direct.getLocation().distanceSquared(location) <= FOLLOW_ACQUIRE_RANGE_SQUARED) {
+            return direct;
+        }
+        return nearestPlayer(instance).orElse(null);
     }
 
     private void startIdle(NpcInstance instance) {
@@ -358,6 +393,7 @@ public final class NpcBehaviourService implements Listener {
                 sendDialog(event, instance, definition, action.value(), actor);
             case SHOW_HOLO_DIALOG ->
                 dialogService.showHologram(instance, definition, action.value());
+            case ASK_QUESTION -> { /* Asynchronous and handled by executeSequence. */ }
             case SET_ROUTE -> {
                 if (action.value() != null) {
                     routeOverrides.put(instance.getId(), action.value());
