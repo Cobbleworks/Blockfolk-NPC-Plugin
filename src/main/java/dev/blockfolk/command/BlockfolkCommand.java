@@ -100,6 +100,15 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             guiService.openEditor(player, definition);
             return true;
         }
+        if (args.length == 2 && args[0].equalsIgnoreCase("edit")) {
+            NpcDefinition definition = definitionRepository.find(args[1]).orElse(null);
+            if (definition == null) {
+                player.sendMessage(Component.text("Unknown NPC: " + args[1]));
+                return true;
+            }
+            guiService.openEditor(player, definition);
+            return true;
+        }
         if (args.length == 2 && args[0].equalsIgnoreCase("npc")) {
             NpcDefinition definition = definitionRepository.find(args[1]).orElse(null);
             if (definition == null) {
@@ -135,7 +144,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(Component.text("Duplicated " + source.getDisplayName() + " as " + copy.getDisplayName() + "."));
             return true;
         }
-        player.sendMessage(Component.text("Usage: /bf [create [name]|routes|events [trigger <event>]|npc <name> [duplicate]]"));
+        player.sendMessage(Component.text("Usage: /bf [create [name]|edit <name>|routes|events [trigger <event>]|npc <name> [duplicate]]"));
         return true;
     }
 
@@ -149,10 +158,11 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             suggestions.add("create");
             suggestions.add("routes");
             suggestions.add("events");
+            suggestions.add("edit");
             suggestions.add("npc");
             return filter(suggestions, args[0]);
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("npc")) {
+        if (args.length == 2 && (args[0].equalsIgnoreCase("npc") || args[0].equalsIgnoreCase("edit"))) {
             return filter(definitionRepository.findAll().stream()
                     .map(NpcDefinition::getKey)
                     .toList(), args[1]);

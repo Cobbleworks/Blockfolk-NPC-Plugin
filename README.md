@@ -13,6 +13,7 @@ All commands require the `blockfolk.admin` permission (granted to operators by d
 - `/bf` or `/blockfolk` — open the Blockfolk preset UI.
 - `/bf create` — start creating an NPC and enter its name in chat.
 - `/bf create <name>` — create an NPC preset with the supplied name.
+- `/bf edit <name>` — open the editor for an NPC preset. NPC names are tab-completed.
 - `/bf routes` — open the route manager.
 - `/bf npc <name>` — spawn a persistent copy of the selected NPC preset. NPC names are tab-completed.
 - `/bf npc <name> duplicate` — duplicate a preset with ` (copy)` appended to its display name.
