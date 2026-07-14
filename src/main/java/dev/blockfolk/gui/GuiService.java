@@ -573,24 +573,34 @@ public final class GuiService implements Listener {
     }
 
     public void openTargetsAndBehaviour(Player player, NpcDefinition definition) {
-        CombatProfile combat = definition.getCombatProfile();
         Inventory inventory = Bukkit.createInventory(new TargetsHolder(definition.getKey()), 27,
                 UiText.title("Targets & Behaviour", definition.getDisplayName()));
-        inventory.setItem(10, item(reactionMaterial(combat.attackReaction()), "Aggression Level", List.of(
-                ChatColor.GRAY + "Current: " + ChatColor.WHITE + combat.attackReaction().displayName(),
-                reactionDescription(combat.attackReaction()),
+        populateFightOptions(inventory, FightOptions.from(definition.getCombatProfile()), "Back");
+        openInventory(player, inventory);
+    }
+
+    private void openFightOptionsAction(Player player, FightOptionsActionHolder holder) {
+        Inventory inventory = Bukkit.createInventory(holder, 27, UiText.title("Change Fight Options"));
+        populateFightOptions(inventory, holder.options(), "Back");
+        openInventory(player, inventory);
+    }
+
+    private void populateFightOptions(Inventory inventory, FightOptions options, String backLabel) {
+        AttackReaction reaction = options.attackReaction() == null ? AttackReaction.IGNORE : options.attackReaction();
+        inventory.setItem(10, item(reactionMaterial(reaction), "Aggression Level", List.of(
+                ChatColor.GRAY + "Current: " + ChatColor.WHITE + reaction.displayName(),
+                reactionDescription(reaction),
                 ChatColor.YELLOW + "Click to cycle"
         )));
-        inventory.setItem(12, toggleItem(Material.ZOMBIE_HEAD, "Target Mobs", combat.targetMobs(),
+        inventory.setItem(12, toggleItem(Material.ZOMBIE_HEAD, "Target Mobs", options.mobs(),
                 "Allows attacks against non-animal mobs"));
-        inventory.setItem(13, toggleItem(Material.PORKCHOP, "Target Animals", combat.targetAnimals(),
+        inventory.setItem(13, toggleItem(Material.PORKCHOP, "Target Animals", options.animals(),
                 "Allows attacks against animals"));
-        inventory.setItem(14, toggleItem(Material.PLAYER_HEAD, "Target Players", combat.targetPlayers(),
+        inventory.setItem(14, toggleItem(Material.PLAYER_HEAD, "Target Players", options.players(),
                 "Allows attacks against survival and adventure players"));
-        inventory.setItem(15, toggleItem(Material.ARMOR_STAND, "Target Other NPCs", combat.targetNpcs(),
+        inventory.setItem(15, toggleItem(Material.ARMOR_STAND, "Target Other NPCs", options.npcs(),
                 "Allows attacks against vulnerable NPCs"));
-        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
-        openInventory(player, inventory);
+        inventory.setItem(22, item(Material.BARRIER, backLabel, List.of()));
     }
 
     public void openBehaviours(Player player, NpcDefinition definition, int requestedPage) {
@@ -913,6 +923,8 @@ public final class GuiService implements Listener {
             handleFightingClick(event, player, fightingHolder.key());
         } else if (holder instanceof TargetsHolder targetsHolder) {
             handleTargetsClick(event, player, targetsHolder.key());
+        } else if (holder instanceof FightOptionsActionHolder fightOptionsHolder) {
+            handleFightOptionsActionClick(event, player, fightOptionsHolder);
         } else if (holder instanceof EquipmentHolder equipmentHolder) {
             handleEquipmentClick(event, player, equipmentHolder.key());
         } else if (holder instanceof InstancesHolder instancesHolder) {
@@ -1308,6 +1320,62 @@ public final class GuiService implements Listener {
             openTargetsAndBehaviour(player, definition);
         } else if (event.getRawSlot() == 22) {
             openFightingEditor(player, definition);
+        }
+    }
+
+    private void handleFightOptionsActionClick(InventoryClickEvent event, Player player,
+            FightOptionsActionHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        if (event.getRawSlot() == 22) {
+            openFightOptionsActionParent(player, holder);
+            return;
+        }
+        FightOptions current = holder.options();
+        FightOptions updated = switch (event.getRawSlot()) {
+            case 10 -> current.withAttackReaction(current.attackReaction().next());
+            case 12 -> current.withMobs(!current.mobs());
+            case 13 -> current.withAnimals(!current.animals());
+            case 14 -> current.withPlayers(!current.players());
+            case 15 -> current.withNpcs(!current.npcs());
+            default -> null;
+        };
+        if (updated == null) return;
+        FightOptionsActionHolder refreshed = saveFightOptionsAction(holder, updated);
+        if (refreshed != null) openFightOptionsAction(player, refreshed);
+        else player.closeInventory();
+    }
+
+    private FightOptionsActionHolder saveFightOptionsAction(FightOptionsActionHolder holder, FightOptions options) {
+        BehaviourAction action = new BehaviourAction(
+                BehaviourActionType.CHANGE_FIGHT_OPTIONS, options.storedValue());
+        if (holder.definitionAction() != null) {
+            NpcDefinition definition = definitionRepository.find(holder.definitionAction().key()).orElse(null);
+            if (definition == null) return null;
+            setAction(definition, holder.definitionAction(), action);
+            return holder.withOptions(options);
+        }
+        if (holder.routeAction() != null) {
+            RoutePoint updated = setRoutePointAction(holder.routeAction(), action);
+            if (updated == null) return null;
+            return FightOptionsActionHolder.route(new RoutePointActionPickerHolder(
+                    holder.routeAction().routeKey(), updated, holder.routeAction().actionIndex()), options);
+        }
+        setQuestionBranchAction(holder.questionAction(), action);
+        return holder.withOptions(options);
+    }
+
+    private void openFightOptionsActionParent(Player player, FightOptionsActionHolder holder) {
+        if (holder.definitionAction() != null) {
+            NpcDefinition definition = definitionRepository.find(holder.definitionAction().key()).orElse(null);
+            if (definition == null) player.closeInventory();
+            else openBehaviourHome(player, definition, holder.definitionAction());
+        } else if (holder.routeAction() != null) {
+            RoutePoint current = currentRoutePoint(holder.routeAction().routeKey(), holder.routeAction().point());
+            if (current == null) player.closeInventory();
+            else openWaypointActions(player, holder.routeAction().routeKey(), current);
+        } else {
+            openAfterQuestionBranchPicker(player, holder.questionAction());
         }
     }
 
@@ -1870,22 +1938,40 @@ public final class GuiService implements Listener {
     }
 
     private void requestFightOptionsAction(Player player, NpcDefinition definition, ActionPickerHolder holder) {
-        chatInputService.request(player,
-                "Enter enabled targets separated by commas (mobs, animals, players, npcs), or 'none':", value -> {
-            FightOptions options = FightOptions.fromStored(value.equalsIgnoreCase("none") ? "" : value);
-            setAction(definition, holder, BehaviourActionType.CHANGE_FIGHT_OPTIONS, options.storedValue());
-            openBehaviourHome(player, definition, holder);
-        });
+        List<BehaviourAction> actions = holder.customEvent() == null
+                ? definition.getBehaviourActions(holder.event())
+                : definition.getCustomEventActions(holder.customEvent());
+        FightOptions options = fightOptionsForAction(actions, holder.actionIndex(),
+                FightOptions.from(definition.getCombatProfile()));
+        setAction(definition, holder, BehaviourActionType.CHANGE_FIGHT_OPTIONS, options.storedValue());
+        openFightOptionsAction(player, FightOptionsActionHolder.definition(holder, options));
     }
 
     private void requestRouteFightOptionsAction(Player player, RoutePointActionPickerHolder holder) {
-        chatInputService.request(player,
-                "Enter enabled targets separated by commas (mobs, animals, players, npcs), or 'none':", value -> {
-            FightOptions options = FightOptions.fromStored(value.equalsIgnoreCase("none") ? "" : value);
-            RoutePoint updated = setRoutePointAction(holder, BehaviourActionType.CHANGE_FIGHT_OPTIONS,
-                    options.storedValue());
-            if (updated != null) openWaypointActions(player, holder.routeKey(), updated);
-        });
+        RoutePoint current = currentRoutePoint(holder.routeKey(), holder.point());
+        if (current == null) {
+            player.closeInventory();
+            return;
+        }
+        FightOptions defaults = new FightOptions(AttackReaction.IGNORE, false, false, false, false);
+        FightOptions options = fightOptionsForAction(current.actions(), holder.actionIndex(), defaults);
+        RoutePoint updated = setRoutePointAction(holder, BehaviourActionType.CHANGE_FIGHT_OPTIONS,
+                options.storedValue());
+        if (updated != null) {
+            RoutePointActionPickerHolder action = new RoutePointActionPickerHolder(
+                    holder.routeKey(), updated, holder.actionIndex());
+            openFightOptionsAction(player, FightOptionsActionHolder.route(action, options));
+        }
+    }
+
+    private FightOptions fightOptionsForAction(List<BehaviourAction> actions, int index, FightOptions defaults) {
+        if (index < 0 || index >= actions.size()
+                || actions.get(index).type() != BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
+            return defaults;
+        }
+        FightOptions stored = FightOptions.fromStored(actions.get(index).value());
+        return stored.attackReaction() == null
+                ? stored.withAttackReaction(defaults.attackReaction()) : stored;
     }
 
     private void beginWaypointSelection(Player player, ActionPickerHolder holder, BehaviourActionType type) {
@@ -2380,6 +2466,15 @@ public final class GuiService implements Listener {
         BehaviourActionType type = ACTION_PICKER_ACTIONS.get(event.getRawSlot());
         if (type == BehaviourActionType.ASK_QUESTION) return;
         if (type == null) return;
+        if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
+            List<BehaviourAction> branch = questionBranch(
+                    questionAction(holder.target()).question(), holder.optionIndex());
+            FightOptions defaults = defaultFightOptions(holder.target());
+            FightOptions options = fightOptionsForAction(branch, holder.actionIndex(), defaults);
+            setQuestionBranchAction(holder, new BehaviourAction(type, options.storedValue()));
+            openFightOptionsAction(player, FightOptionsActionHolder.question(holder, options));
+            return;
+        }
         if (!type.requiresValue()) {
             setQuestionBranchAction(holder, new BehaviourAction(type, null));
             openAfterQuestionBranchPicker(player, holder);
@@ -2394,7 +2489,6 @@ public final class GuiService implements Listener {
             case SET_ROUTE -> "Enter an existing route key:";
             case SET_WALK_SPEED -> "Enter walk speed (slouch, slow, normal, fast, very_fast):";
             case EMIT_EVENT -> "Enter an existing custom event name:";
-            case CHANGE_FIGHT_OPTIONS -> "Enter targets (mobs, animals, players, npcs), or 'none':";
             case MOVE_TO, TELEPORT_TO -> "Type 'here' to use your current location:";
             default -> "Enter the action value:";
         };
@@ -2407,6 +2501,14 @@ public final class GuiService implements Listener {
             setQuestionBranchAction(holder, new BehaviourAction(selected, normalized));
             openAfterQuestionBranchPicker(player, holder);
         });
+    }
+
+    private FightOptions defaultFightOptions(QuestionTarget target) {
+        if (target.definitionKey() != null) {
+            NpcDefinition definition = definitionRepository.find(target.definitionKey()).orElse(null);
+            if (definition != null) return FightOptions.from(definition.getCombatProfile());
+        }
+        return new FightOptions(AttackReaction.IGNORE, false, false, false, false);
     }
 
     private void openAfterQuestionBranchPicker(Player player, QuestionBranchPickerHolder holder) {
@@ -2703,6 +2805,8 @@ public final class GuiService implements Listener {
                 || holder instanceof ReorderHolder
                 || holder instanceof EditorHolder
                 || holder instanceof FightingHolder
+                || holder instanceof TargetsHolder
+                || holder instanceof FightOptionsActionHolder
                 || holder instanceof InstancesHolder
                 || holder instanceof RouteAssignmentHolder
                 || holder instanceof BehaviourHolder
@@ -3051,6 +3155,35 @@ public final class GuiService implements Listener {
     }
 
     private record TargetsHolder(String key) implements InventoryHolder {
+
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
+    private record FightOptionsActionHolder(
+            ActionPickerHolder definitionAction,
+            RoutePointActionPickerHolder routeAction,
+            QuestionBranchPickerHolder questionAction,
+            FightOptions options
+            ) implements InventoryHolder {
+
+        static FightOptionsActionHolder definition(ActionPickerHolder action, FightOptions options) {
+            return new FightOptionsActionHolder(action, null, null, options);
+        }
+
+        static FightOptionsActionHolder route(RoutePointActionPickerHolder action, FightOptions options) {
+            return new FightOptionsActionHolder(null, action, null, options);
+        }
+
+        static FightOptionsActionHolder question(QuestionBranchPickerHolder action, FightOptions options) {
+            return new FightOptionsActionHolder(null, null, action, options);
+        }
+
+        FightOptionsActionHolder withOptions(FightOptions updated) {
+            return new FightOptionsActionHolder(definitionAction, routeAction, questionAction, updated);
+        }
 
         @Override
         public Inventory getInventory() {

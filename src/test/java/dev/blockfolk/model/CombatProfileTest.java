@@ -54,6 +54,15 @@ class CombatProfileTest {
     }
 
     @Test
+    void fightOptionsStoreAggressionAndStillReadLegacyTargetLists() {
+        FightOptions options = new FightOptions(AttackReaction.HUNTING, true, false, true, false);
+
+        assertEquals("aggression=hunting;targets=mobs,players", options.storedValue());
+        assertEquals(options, FightOptions.fromStored(options.storedValue()));
+        assertNull(FightOptions.fromStored("mobs,players").attackReaction());
+    }
+
+    @Test
     void targetTogglesAreIndependent() {
         CombatProfile profile = CombatProfile.disabled().withTargetAnimals(true).withTargetNpcs(true);
 
