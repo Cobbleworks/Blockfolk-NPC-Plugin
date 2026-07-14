@@ -872,8 +872,6 @@ public final class GuiService implements Listener {
             handleRoutePointValuePickerClick(event, player, routePointValuePicker);
         } else if (holder instanceof QuestionEditorHolder questionEditor) {
             handleQuestionEditorClick(event, player, questionEditor);
-        } else if (holder instanceof QuestionBranchHolder questionBranch) {
-            handleQuestionBranchClick(event, player, questionBranch);
         } else if (holder instanceof QuestionBranchPickerHolder branchPicker) {
             handleQuestionBranchPickerClick(event, player, branchPicker);
         } else if (holder instanceof QuestionBranchAnimationPickerHolder branchAnimationPicker) {
@@ -2063,7 +2061,6 @@ public final class GuiService implements Listener {
         for (int row = 0; row < 5; row++) {
             boolean cancelBranch = row == NpcQuestion.MAX_OPTIONS;
             int optionIndex = row;
-            if (!cancelBranch && optionIndex >= question.options().size()) continue;
             List<BehaviourAction> branchActions = cancelBranch
                     ? question.cancelActions() : question.options().get(optionIndex).actions();
             if (cancelBranch) {
@@ -2072,13 +2069,22 @@ public final class GuiService implements Listener {
                                 ChatColor.GRAY + "Runs when the player cancels or cannot answer"), branchActions)));
             } else {
                 QuestionOption option = question.options().get(optionIndex);
-                inventory.setItem(row * 9, item(Material.LIME_DYE, option.label(),
-                        actionSummaryLore(List.of(
-                                ChatColor.GRAY + "Answer " + (optionIndex + 1),
-                                ChatColor.YELLOW + "Click for rename, move, and delete"), branchActions)));
+                if (option.configured()) {
+                    inventory.setItem(row * 9, item(Material.LIME_DYE, option.label(),
+                            actionSummaryLore(List.of(
+                                    ChatColor.GRAY + "Answer " + (optionIndex + 1),
+                                    ChatColor.YELLOW + "Click to change label",
+                                    ChatColor.RED + "Shift-right-click to clear"), branchActions)));
+                } else {
+                    inventory.setItem(row * 9, item(Material.GRAY_DYE, "Answer " + (optionIndex + 1) + ": Not Set",
+                            List.of(ChatColor.GRAY + "This answer is not shown to players",
+                                    ChatColor.YELLOW + "Click to set its label")));
+                }
             }
-            inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
-                    ChatColor.YELLOW + "Click to append")));
+            if (cancelBranch || question.options().get(optionIndex).configured()) {
+                inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
+                        ChatColor.YELLOW + "Click to append")));
+            }
             for (int actionIndex = 0; actionIndex < branchActions.size(); actionIndex++) {
                 BehaviourAction branchAction = branchActions.get(actionIndex);
                 inventory.setItem(row * 9 + actionIndex + 2,
@@ -2092,12 +2098,6 @@ public final class GuiService implements Listener {
         inventory.setItem(46, item(Material.WRITABLE_BOOK, "Edit Prompt", List.of(
                 ChatColor.WHITE + question.prompt(), ChatColor.YELLOW + "Click to edit")));
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
-        if (question.options().size() < NpcQuestion.MAX_OPTIONS) {
-            inventory.setItem(51, item(Material.EMERALD, "Add Answer", List.of(
-                    ChatColor.GRAY + "Answers: " + ChatColor.WHITE + question.options().size()
-                            + "/" + NpcQuestion.MAX_OPTIONS,
-                    ChatColor.YELLOW + "Click, then enter its label")));
-        }
         openInventory(player, inventory);
     }
 
@@ -2116,32 +2116,37 @@ public final class GuiService implements Listener {
             });
             return;
         }
-        if (slot == 51 && question.options().size() < NpcQuestion.MAX_OPTIONS) {
-            chatInputService.request(player, "Enter the answer label:", label -> {
-                try {
-                    List<QuestionOption> options = new ArrayList<>(question.options());
-                    options.add(new QuestionOption(label, List.of()));
-                    updateQuestion(holder.target(), question.withOptions(options));
-                    openQuestionEditor(player, holder.target());
-                } catch (IllegalArgumentException exception) {
-                    player.sendMessage(Component.text(exception.getMessage()));
-                    openQuestionEditor(player, holder.target());
-                }
-            });
-            return;
-        }
         int row = slot / 9;
         if (row < 0 || row >= 5) return;
         boolean cancelBranch = row == NpcQuestion.MAX_OPTIONS;
         int optionIndex = row;
-        if (!cancelBranch && optionIndex >= question.options().size()) return;
         int branchIndex = cancelBranch ? -1 : optionIndex;
         List<BehaviourAction> branchActions = cancelBranch
                 ? question.cancelActions() : question.options().get(optionIndex).actions();
         int column = slot % 9;
         if (column == 0 && !cancelBranch) {
-            openQuestionBranch(player, holder.target(), branchIndex);
+            if (event.isShiftClick() && event.isRightClick()) {
+                List<QuestionOption> options = new ArrayList<>(question.options());
+                options.set(optionIndex, QuestionOption.empty());
+                updateQuestion(holder.target(), question.withOptions(options));
+                openQuestionEditor(player, holder.target());
+                return;
+            }
+            chatInputService.request(player, "Enter the answer label:", label -> {
+                try {
+                    if (label == null || label.isBlank()) {
+                        throw new IllegalArgumentException("Answer label is required");
+                    }
+                    List<QuestionOption> options = new ArrayList<>(question.options());
+                    options.set(optionIndex, new QuestionOption(label, branchActions));
+                    updateQuestion(holder.target(), question.withOptions(options));
+                } catch (IllegalArgumentException exception) {
+                    player.sendMessage(Component.text(exception.getMessage()));
+                }
+                openQuestionEditor(player, holder.target());
+            });
         } else if (column == 1) {
+            if (!cancelBranch && !question.options().get(optionIndex).configured()) return;
             openQuestionBranchPicker(player, holder.target(), branchIndex, branchActions.size());
         } else {
             int actionIndex = column - 2;
@@ -2154,97 +2159,6 @@ public final class GuiService implements Listener {
             } else {
                 openQuestionBranchPicker(player, holder.target(), branchIndex, actionIndex);
             }
-        }
-    }
-
-    private void openQuestionBranch(Player player, QuestionTarget target, int optionIndex) {
-        BehaviourAction action = questionAction(target);
-        if (action == null) { openQuestionParent(player, target); return; }
-        NpcQuestion question = action.question();
-        if (optionIndex < 0 || optionIndex >= question.options().size()) {
-            openQuestionEditor(player, target);
-            return;
-        }
-        List<BehaviourAction> actions = question.options().get(optionIndex).actions();
-        String title = "Answer: " + question.options().get(optionIndex).label();
-        Inventory inventory = Bukkit.createInventory(new QuestionBranchHolder(target, optionIndex), 54,
-                Component.text(title));
-        for (int index = 0; index < NpcQuestion.MAX_BRANCH_ACTIONS; index++) {
-            int slot = 10 + index;
-            if (index < actions.size()) {
-                BehaviourAction branchAction = actions.get(index);
-                inventory.setItem(slot, item(actionMaterial(branchAction.type()),
-                        (index + 1) + ". " + branchAction.type().displayName(), List.of(
-                                ChatColor.GRAY + actionValueDisplay(branchAction),
-                                ChatColor.YELLOW + "Left-click to replace",
-                                ChatColor.RED + "Right-click to remove")));
-            } else if (index == actions.size()) {
-                inventory.setItem(slot, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
-                        ChatColor.YELLOW + "Click to append")));
-            }
-        }
-        inventory.setItem(28, item(Material.ARROW, "Move Earlier", List.of()));
-        inventory.setItem(30, item(Material.NAME_TAG, "Rename Answer", List.of()));
-        inventory.setItem(32, item(Material.RED_CONCRETE, "Delete Answer", List.of(
-                ChatColor.RED + "Shift-click to confirm")));
-        inventory.setItem(34, item(Material.ARROW, "Move Later", List.of()));
-        inventory.setItem(45, item(Material.ARROW, "Back to Question", List.of()));
-        openInventory(player, inventory);
-    }
-
-    private void handleQuestionBranchClick(InventoryClickEvent event, Player player, QuestionBranchHolder holder) {
-        event.setCancelled(true);
-        if (!isTopInventoryClick(event)) return;
-        BehaviourAction action = questionAction(holder.target());
-        if (action == null) { openQuestionParent(player, holder.target()); return; }
-        NpcQuestion question = action.question();
-        int optionIndex = holder.optionIndex();
-        int slot = event.getRawSlot();
-        if (slot == 45) {
-            openQuestionEditor(player, holder.target());
-            return;
-        }
-        if (optionIndex >= 0 && slot == 30) {
-            chatInputService.request(player, "Enter the new answer label:", label -> {
-                try {
-                    List<QuestionOption> options = new ArrayList<>(question.options());
-                    options.set(optionIndex, options.get(optionIndex).withLabel(label));
-                    updateQuestion(holder.target(), question.withOptions(options));
-                    openQuestionBranch(player, holder.target(), optionIndex);
-                } catch (IllegalArgumentException exception) {
-                    player.sendMessage(Component.text(exception.getMessage()));
-                    openQuestionBranch(player, holder.target(), optionIndex);
-                }
-            });
-            return;
-        }
-        if (optionIndex >= 0 && slot == 32 && event.isShiftClick()) {
-            List<QuestionOption> options = new ArrayList<>(question.options());
-            options.remove(optionIndex);
-            updateQuestion(holder.target(), question.withOptions(options));
-            openQuestionEditor(player, holder.target());
-            return;
-        }
-        if (optionIndex >= 0 && (slot == 28 || slot == 34)) {
-            int destination = optionIndex + (slot == 28 ? -1 : 1);
-            if (destination >= 0 && destination < question.options().size()) {
-                List<QuestionOption> options = new ArrayList<>(question.options());
-                java.util.Collections.swap(options, optionIndex, destination);
-                updateQuestion(holder.target(), question.withOptions(options));
-                openQuestionBranch(player, holder.target(), destination);
-            }
-            return;
-        }
-        int actionIndex = slot - 10;
-        List<BehaviourAction> actions = questionBranch(question, optionIndex);
-        if (actionIndex < 0 || actionIndex >= NpcQuestion.MAX_BRANCH_ACTIONS) return;
-        if (actionIndex < actions.size() && event.isRightClick()) {
-            List<BehaviourAction> changed = new ArrayList<>(actions);
-            changed.remove(actionIndex);
-            updateQuestionBranch(holder.target(), optionIndex, changed);
-            openQuestionBranch(player, holder.target(), optionIndex);
-        } else if (actionIndex <= actions.size()) {
-            openQuestionBranchPicker(player, holder.target(), optionIndex, actionIndex);
         }
     }
 
@@ -2604,7 +2518,6 @@ public final class GuiService implements Listener {
                 || holder instanceof RoutePointAnimationPickerHolder
                 || holder instanceof RoutePointValuePickerHolder
                 || holder instanceof QuestionEditorHolder
-                || holder instanceof QuestionBranchHolder
                 || holder instanceof QuestionBranchPickerHolder
                 || holder instanceof ConfirmationHolder;
     }
@@ -2838,7 +2751,7 @@ public final class GuiService implements Listener {
 
     private String actionValueDisplay(BehaviourAction action) {
         if (action.type() == BehaviourActionType.ASK_QUESTION) {
-            return action.question().prompt() + " (" + action.question().options().size() + " answers)";
+            return action.question().prompt() + " (" + action.question().configuredOptions().size() + " answers)";
         }
         if (!action.type().requiresValue() || action.value() == null) {
             return "No setting required";
@@ -3071,10 +2984,6 @@ public final class GuiService implements Listener {
     }
 
     private record QuestionEditorHolder(QuestionTarget target) implements InventoryHolder {
-        @Override public Inventory getInventory() { return null; }
-    }
-
-    private record QuestionBranchHolder(QuestionTarget target, int optionIndex) implements InventoryHolder {
         @Override public Inventory getInventory() { return null; }
     }
 

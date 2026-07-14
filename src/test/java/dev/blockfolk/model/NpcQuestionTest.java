@@ -33,7 +33,8 @@ class NpcQuestionTest {
 
         branch.clear();
         options.clear();
-        assertEquals(1, question.options().size());
+        assertEquals(4, question.options().size());
+        assertEquals(1, question.configuredOptions().size());
         assertEquals(1, question.options().getFirst().actions().size());
         assertEquals(1, question.cancelActions().size());
         assertThrows(UnsupportedOperationException.class, () -> question.options().clear());

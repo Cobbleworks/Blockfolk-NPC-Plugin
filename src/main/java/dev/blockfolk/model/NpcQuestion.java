@@ -1,5 +1,6 @@
 package dev.blockfolk.model;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -18,14 +19,17 @@ public record NpcQuestion(UUID id, String prompt, List<QuestionOption> options,
         if (prompt.isBlank()) {
             throw new IllegalArgumentException("Question prompt is required");
         }
-        options = options == null ? List.of() : List.copyOf(options);
-        if (options.size() > MAX_OPTIONS) {
+        List<QuestionOption> slots = options == null ? List.of() : options;
+        if (slots.size() > MAX_OPTIONS) {
             throw new IllegalArgumentException("A question may have at most four answers");
         }
+        ArrayList<QuestionOption> normalized = new ArrayList<>(slots);
+        while (normalized.size() < MAX_OPTIONS) normalized.add(QuestionOption.empty());
+        options = List.copyOf(normalized);
         HashSet<String> labels = new HashSet<>();
         for (QuestionOption option : options) {
             Objects.requireNonNull(option, "option");
-            if (!labels.add(option.label().toLowerCase(Locale.ROOT))) {
+            if (option.configured() && !labels.add(option.label().toLowerCase(Locale.ROOT))) {
                 throw new IllegalArgumentException("Answer labels must be unique");
             }
         }
@@ -57,5 +61,9 @@ public record NpcQuestion(UUID id, String prompt, List<QuestionOption> options,
 
     public NpcQuestion withCancelActions(List<BehaviourAction> actions) {
         return new NpcQuestion(id, prompt, options, actions);
+    }
+
+    public List<QuestionOption> configuredOptions() {
+        return options.stream().filter(QuestionOption::configured).toList();
     }
 }

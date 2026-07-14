@@ -6,10 +6,18 @@ public record QuestionOption(String label, List<BehaviourAction> actions) {
 
     public QuestionOption {
         label = label == null ? "" : label.trim();
-        if (label.isBlank()) {
-            throw new IllegalArgumentException("Answer label is required");
-        }
         actions = NpcQuestion.validateBranch(actions);
+        if (label.isBlank() && !actions.isEmpty()) {
+            throw new IllegalArgumentException("An empty answer cannot have actions");
+        }
+    }
+
+    public static QuestionOption empty() {
+        return new QuestionOption("", List.of());
+    }
+
+    public boolean configured() {
+        return !label.isBlank();
     }
 
     public QuestionOption withLabel(String label) {

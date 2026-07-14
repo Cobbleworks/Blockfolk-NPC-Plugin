@@ -23,6 +23,7 @@ import org.bukkit.scheduler.BukkitTask;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.NpcQuestion;
+import dev.blockfolk.model.QuestionOption;
 import dev.blockfolk.input.ChatInputService;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
@@ -129,7 +130,7 @@ public final class NpcQuestionService implements Listener {
             removeIfEmpty(playerId, state);
             return;
         }
-        if (!valid(request, player) || request.question.options().isEmpty()) {
+        if (!valid(request, player) || request.question.configuredOptions().isEmpty()) {
             state.active = request;
             resolve(playerId, state, request.question.cancelActions());
             return;
@@ -143,9 +144,10 @@ public final class NpcQuestionService implements Listener {
     private void show(Player player, Request request) {
         player.sendMessage(Component.text(request.npcName + ": ", NamedTextColor.GOLD)
                 .append(Component.text(request.question.prompt(), NamedTextColor.WHITE)));
-        for (int index = 0; index < request.question.options().size(); index++) {
+        List<QuestionOption> configuredOptions = request.question.configuredOptions();
+        for (int index = 0; index < configuredOptions.size(); index++) {
             int optionIndex = index;
-            String label = request.question.options().get(index).label();
+            String label = configuredOptions.get(index).label();
             ClickCallback<net.kyori.adventure.audience.Audience> callback = audience -> {
                 if (audience instanceof Player clicked && clicked.getUniqueId().equals(player.getUniqueId())) {
                     Bukkit.getScheduler().runTask(plugin,
@@ -172,13 +174,14 @@ public final class NpcQuestionService implements Listener {
         PlayerState state = states.get(playerId);
         Request active = state == null ? null : state.active;
         if (active == null || !active.token.equals(token)) return;
-        if (optionIndex < 0 || optionIndex >= active.question.options().size()) {
+        List<QuestionOption> options = active.question.configuredOptions();
+        if (optionIndex < 0 || optionIndex >= options.size()) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) player.sendMessage(Component.text("Choose a number from 1 to "
-                    + active.question.options().size() + ".", NamedTextColor.RED));
+                    + options.size() + ".", NamedTextColor.RED));
             return;
         }
-        resolve(playerId, state, active.question.options().get(optionIndex).actions());
+        resolve(playerId, state, options.get(optionIndex).actions());
     }
 
     private void cancel(UUID playerId, UUID token) {
