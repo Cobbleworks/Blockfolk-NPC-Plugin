@@ -37,4 +37,18 @@ class BehaviourActionCodecTest {
 
         assertEquals(new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Legacy line"), decoded);
     }
+
+    @Test
+    void limitsLegacyQuestionsToFourAnswers() {
+        List<Map<String, Object>> options = java.util.stream.IntStream.range(0, 5)
+                .mapToObj(index -> Map.of("label", "Option " + index, "actions", List.of()))
+                .toList();
+
+        BehaviourAction decoded = BehaviourActionCodec.decode(Map.of(
+                "type", "ask-question",
+                "question", Map.of("prompt", "Choose", "options", options)));
+
+        assertEquals(4, decoded.question().options().size());
+        assertEquals("Option 3", decoded.question().options().getLast().label());
+    }
 }

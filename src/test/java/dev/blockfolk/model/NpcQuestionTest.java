@@ -41,10 +41,10 @@ class NpcQuestionTest {
 
     @Test
     void enforcesLimitsUniqueLabelsAndOneLevelNesting() {
-        List<QuestionOption> eight = java.util.stream.IntStream.range(0, 8)
+        List<QuestionOption> five = java.util.stream.IntStream.range(0, 5)
                 .mapToObj(index -> new QuestionOption("Option " + index, List.of())).toList();
         assertThrows(IllegalArgumentException.class,
-                () -> new NpcQuestion(UUID.randomUUID(), "Too many?", eight, List.of()));
+                () -> new NpcQuestion(UUID.randomUUID(), "Too many?", five, List.of()));
         assertThrows(IllegalArgumentException.class, () -> new NpcQuestion(UUID.randomUUID(), "Duplicate?",
                 List.of(new QuestionOption("Yes", List.of()), new QuestionOption("YES", List.of())), List.of()));
         BehaviourAction nested = BehaviourAction.ask(NpcQuestion.create("Nested?"));

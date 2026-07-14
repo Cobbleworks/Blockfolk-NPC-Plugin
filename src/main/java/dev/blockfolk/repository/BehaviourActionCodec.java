@@ -75,6 +75,7 @@ final class BehaviourActionCodec {
         Object rawOptions = stored.get("options");
         if (rawOptions instanceof List<?> list) {
             for (Object rawOption : list) {
+                if (options.size() == NpcQuestion.MAX_OPTIONS) break;
                 if (!(rawOption instanceof Map<?, ?> option)) continue;
                 Object label = option.get("label");
                 if (label != null) options.add(new QuestionOption(label.toString(), decodeList(option.get("actions"))));
