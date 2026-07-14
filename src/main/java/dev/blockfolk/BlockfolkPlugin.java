@@ -23,6 +23,7 @@ import dev.blockfolk.runtime.NativeNpcNavigationService;
 import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.runtime.NpcCombatService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
+import dev.blockfolk.runtime.NpcQuestionService;
 import dev.blockfolk.runtime.NpcRenderer;
 import dev.blockfolk.runtime.PaperMannequinNpcRenderer;
 import dev.blockfolk.runtime.RouteMovementService;
@@ -47,6 +48,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private RouteMovementService routeMovementService;
     private NpcCombatService combatService;
     private NpcBehaviourService behaviourService;
+    private NpcQuestionService questionService;
     private SkinResolver skinResolver;
 
     @Override
@@ -97,11 +99,15 @@ public final class BlockfolkPlugin extends JavaPlugin {
         );
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
+        questionService = new NpcQuestionService(this, instanceRegistry, chatInputService,
+                getConfig().getInt("question-timeout-seconds", 30));
+        chatInputService.setBeforeRequest(questionService::cancelForAdminInput);
         behaviourService = new NpcBehaviourService(
                 this,
                 definitionRepository,
                 instanceRegistry,
                 dialogService,
+                questionService,
                 getConfig().getInt("proximity-transition-cooldown-seconds", 3)
         );
         behaviourService.setCombatService(combatService);
@@ -141,6 +147,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(routeGuiService, this);
         getServer().getPluginManager().registerEvents(customEventGuiService, this);
         getServer().getPluginManager().registerEvents(chatInputService, this);
+        getServer().getPluginManager().registerEvents(questionService, this);
         getServer().getPluginManager().registerEvents(combatService, this);
         getServer().getPluginManager().registerEvents(behaviourService, this);
 
@@ -150,6 +157,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         instanceRegistry.spawnAll();
         resolveStoredExternalSkins();
         combatService.start();
+        questionService.start();
         behaviourService.start();
         routeMovementService.start();
         getLogger().info("Blockfolk enabled with " + definitionRepository.findAll().size() + " NPC definitions.");
@@ -165,6 +173,9 @@ public final class BlockfolkPlugin extends JavaPlugin {
         }
         if (behaviourService != null) {
             behaviourService.stop();
+        }
+        if (questionService != null) {
+            questionService.stop();
         }
         if (routeGuiService != null) {
             routeGuiService.stop();

@@ -2,6 +2,8 @@ package dev.blockfolk.input;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -21,6 +23,8 @@ public final class ChatInputService implements Listener {
     private final Plugin plugin;
     private final int timeoutSeconds;
     private final Map<UUID, PendingInput> pendingInputs = new HashMap<>();
+    private final Set<UUID> requestingInputs = new HashSet<>();
+    private Consumer<Player> beforeRequest = ignored -> { };
 
     public ChatInputService(Plugin plugin, int timeoutSeconds) {
         this.plugin = plugin;
@@ -28,16 +32,31 @@ public final class ChatInputService implements Listener {
     }
 
     public void request(Player player, String prompt, Consumer<String> consumer) {
-        cancel(player.getUniqueId(), false);
-        player.closeInventory();
-        player.sendMessage(Component.text(prompt));
-        player.sendMessage(Component.text("Type cancel to stop."));
-        BukkitTask timeout = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (pendingInputs.remove(player.getUniqueId()) != null && player.isOnline()) {
-                player.sendMessage(Component.text("Input timed out."));
-            }
-        }, timeoutSeconds * 20L);
-        pendingInputs.put(player.getUniqueId(), new PendingInput(consumer, timeout));
+        UUID playerId = player.getUniqueId();
+        requestingInputs.add(playerId);
+        try {
+            beforeRequest.accept(player);
+            cancel(playerId, false);
+            player.closeInventory();
+            player.sendMessage(Component.text(prompt));
+            player.sendMessage(Component.text("Type cancel to stop."));
+            BukkitTask timeout = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (pendingInputs.remove(playerId) != null && player.isOnline()) {
+                    player.sendMessage(Component.text("Input timed out."));
+                }
+            }, timeoutSeconds * 20L);
+            pendingInputs.put(playerId, new PendingInput(consumer, timeout));
+        } finally {
+            requestingInputs.remove(playerId);
+        }
+    }
+
+    public boolean isPending(Player player) {
+        return pendingInputs.containsKey(player.getUniqueId()) || requestingInputs.contains(player.getUniqueId());
+    }
+
+    public void setBeforeRequest(Consumer<Player> beforeRequest) {
+        this.beforeRequest = beforeRequest == null ? ignored -> { } : beforeRequest;
     }
 
     public void cancelAll() {
@@ -45,6 +64,7 @@ public final class ChatInputService implements Listener {
             input.timeout.cancel();
         }
         pendingInputs.clear();
+        requestingInputs.clear();
     }
 
     public void cancel(Player player) {
