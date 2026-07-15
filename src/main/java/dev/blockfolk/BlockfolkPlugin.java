@@ -150,6 +150,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(questionService, this);
         getServer().getPluginManager().registerEvents(combatService, this);
         getServer().getPluginManager().registerEvents(behaviourService, this);
+        getServer().getPluginManager().registerEvents((PaperMannequinNpcRenderer) npcRenderer, this);
 
         npcRenderer.start();
         dialogService.start();

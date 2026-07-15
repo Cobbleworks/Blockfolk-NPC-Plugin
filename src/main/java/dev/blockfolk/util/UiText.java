@@ -38,9 +38,17 @@ public final class UiText {
     }
 
     public static Component title(String section, String subject) {
+        return title(section, subject, NamedTextColor.GREEN);
+    }
+
+    public static Component manageTitle(String subject) {
+        return title("Manage", subject, NamedTextColor.GOLD);
+    }
+
+    private static Component title(String section, String subject, NamedTextColor subjectColor) {
         return Component.text(section + ": ", NamedTextColor.DARK_AQUA)
                 .decorate(TextDecoration.BOLD)
-                .append(Component.text(subject, NamedTextColor.GREEN).decorate(TextDecoration.BOLD));
+                .append(Component.text(subject, subjectColor).decorate(TextDecoration.BOLD));
     }
 
     public static Component npcDialog(String npcName, String line) {

@@ -36,10 +36,17 @@ class UiTextTest {
     }
 
     @Test
-    void guiTitleHighlightsItsSubjectInLimeGreen() {
-        Component title = UiText.title("Manage", "Ada");
+    void manageTitleHighlightsItsSubjectInGold() {
+        Component title = UiText.manageTitle("Ada");
 
         assertEquals(NamedTextColor.DARK_AQUA, title.color());
+        assertEquals(NamedTextColor.GOLD, title.children().getFirst().color());
+    }
+
+    @Test
+    void otherSectionTitlesStillHighlightTheirSubjectInGreen() {
+        Component title = UiText.title("Equipment", "Ada");
+
         assertEquals(NamedTextColor.GREEN, title.children().getFirst().color());
     }
 }

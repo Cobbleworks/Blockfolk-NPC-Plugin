@@ -415,7 +415,7 @@ public final class GuiService implements Listener {
     public void openEditor(Player player, NpcDefinition definition) {
         int instances = instanceRegistry.findByDefinition(definition).size();
         Inventory inventory = Bukkit.createInventory(new EditorHolder(definition.getKey()), 36,
-                UiText.title("Manage", definition.getDisplayName()));
+                UiText.manageTitle(definition.getDisplayName()));
         inventory.setItem(4, definitionIcon(definition, List.of(
                 LegacyText.DARK_GRAY + "Key: " + definition.getKey(),
                 LegacyText.GRAY + "Instances: " + LegacyText.WHITE + instances,
