@@ -21,8 +21,9 @@ class NpcRouteTest {
         RoutePoint five = new RoutePoint("world", 5, 64, 0);
         RoutePoint two = new RoutePoint("world", 2, 64, 0);
         route.setPoints(List.of(ten, zero, five, two));
+        World world = world("world");
 
-        List<RoutePoint> ordered = route.logicallyOrdered(new Location(world("world"), 2.6, 65.0, 0.5));
+        List<RoutePoint> ordered = route.logicallyOrdered(new Location(world, 2.6, 65.0, 0.5));
 
         assertEquals(List.of(two, zero, five, ten), ordered);
     }
@@ -60,10 +61,11 @@ class NpcRouteTest {
         RoutePoint middle = new RoutePoint("world", 5, 64, 0);
         RoutePoint far = new RoutePoint("world", 10, 64, 0);
         route.setPoints(List.of(far, nearWaiting, middle));
+        World world = world("world");
 
         assertEquals(
                 List.of(nearWaiting, middle, far),
-                route.logicallyOrdered(new Location(world("world"), 2.5, 65.0, 0.5))
+                route.logicallyOrdered(new Location(world, 2.5, 65.0, 0.5))
         );
     }
 

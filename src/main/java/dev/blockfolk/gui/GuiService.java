@@ -467,6 +467,7 @@ public final class GuiService implements Listener {
         inventory.setItem(15, item(Material.IRON_SWORD, "Fighting", List.of(
                 ChatColor.GRAY + "Health: " + ChatColor.WHITE + healthLabel(combat),
                 ChatColor.GRAY + "Respawn: " + ChatColor.WHITE + respawnLabel(combat),
+                ChatColor.GRAY + "Experience: " + ChatColor.WHITE + experienceLabel(combat),
                 ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.attackReaction().displayName(),
                 ChatColor.GRAY + "Attack targets: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
                 ChatColor.GRAY + "Alliance: " + ChatColor.WHITE + allianceLabel(combat),
@@ -556,9 +557,25 @@ public final class GuiService implements Listener {
                 ChatColor.YELLOW + "Click to decrease respawn time",
                 ChatColor.DARK_GRAY + "Shift-click for x10"
         )));
+        inventory.setItem(5, item(Material.LIME_DYE, "+ " + CombatProfile.EXPERIENCE_STEP + " Experience", List.of(
+                ChatColor.GRAY + "Current: " + ChatColor.WHITE + experienceLabel(combat),
+                ChatColor.YELLOW + "Click to increase dropped experience",
+                ChatColor.DARK_GRAY + "Shift-click for x10"
+        )));
+        inventory.setItem(14, item(Material.EXPERIENCE_BOTTLE,
+                "Dropped Experience: " + experienceLabel(combat), List.of(
+                combat.droppedExperience() == 0
+                        ? ChatColor.GRAY + "This NPC drops no experience"
+                        : ChatColor.GREEN + "Dropped when this NPC dies"
+        )));
+        inventory.setItem(23, item(Material.RED_DYE, "- " + CombatProfile.EXPERIENCE_STEP + " Experience", List.of(
+                ChatColor.GRAY + "Current: " + ChatColor.WHITE + experienceLabel(combat),
+                ChatColor.YELLOW + "Click to decrease dropped experience",
+                ChatColor.DARK_GRAY + "Shift-click for x10"
+        )));
         inventory.setItem(15, toggleItem(Material.WITHER_SKELETON_SKULL, "Show Boss Bar", combat.showBossBar(),
                 "Shows current HP to players within 16 blocks"));
-        inventory.setItem(14, item(Material.TARGET, "Targets & Behaviour", List.of(
+        inventory.setItem(13, item(Material.TARGET, "Targets & Behaviour", List.of(
                 ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.attackReaction().displayName(),
                 ChatColor.GRAY + "Attack targets enabled: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
                 ChatColor.YELLOW + "Click to configure"
@@ -916,6 +933,8 @@ public final class GuiService implements Listener {
             handleQuestionEditorClick(event, player, questionEditor);
         } else if (holder instanceof QuestionBranchPickerHolder branchPicker) {
             handleQuestionBranchPickerClick(event, player, branchPicker);
+        } else if (holder instanceof QuestionBranchRoutePickerHolder branchRoutePicker) {
+            handleQuestionBranchRoutePickerClick(event, player, branchRoutePicker);
         } else if (holder instanceof QuestionBranchAnimationPickerHolder branchAnimationPicker) {
             handleQuestionBranchAnimationPickerClick(event, player, branchAnimationPicker);
         } else if (holder instanceof ConfirmationHolder confirmationHolder) {
@@ -1230,7 +1249,22 @@ public final class GuiService implements Listener {
                 definitionRepository.save(definition);
                 openFightingEditor(player, definition);
             }
-            case 14 -> {
+            case 23 -> {
+                definition.setCombatProfile(combat.withDroppedExperience(
+                        combat.droppedExperience() - CombatProfile.EXPERIENCE_STEP * multiplier));
+                definitionRepository.save(definition);
+                openFightingEditor(player, definition);
+            }
+            case 5 -> {
+                int droppedExperience = (int) Math.min(
+                        Integer.MAX_VALUE,
+                        (long) combat.droppedExperience() + CombatProfile.EXPERIENCE_STEP * multiplier
+                );
+                definition.setCombatProfile(combat.withDroppedExperience(droppedExperience));
+                definitionRepository.save(definition);
+                openFightingEditor(player, definition);
+            }
+            case 13 -> {
                 openTargetsAndBehaviour(player, definition);
             }
             case 15 -> {
@@ -2398,6 +2432,10 @@ public final class GuiService implements Listener {
             openFightOptionsAction(player, FightOptionsActionHolder.question(holder, options));
             return;
         }
+        if (type == BehaviourActionType.SET_ROUTE) {
+            openQuestionBranchRoutePicker(player, holder, "", 0);
+            return;
+        }
         if (!type.requiresValue()) {
             setQuestionBranchAction(holder, new BehaviourAction(type, null));
             openAfterQuestionBranchPicker(player, holder);
@@ -2424,6 +2462,78 @@ public final class GuiService implements Listener {
             setQuestionBranchAction(holder, new BehaviourAction(selected, normalized));
             openAfterQuestionBranchPicker(player, holder);
         });
+    }
+
+    private void openQuestionBranchRoutePicker(Player player, QuestionBranchPickerHolder action,
+            String folder, int requestedPage) {
+        List<BehaviourPickerOption> options = routePickerOptions(folder);
+        int pages = Math.max(1, (options.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int page = Math.max(0, Math.min(requestedPage, pages - 1));
+        Inventory inventory = Bukkit.createInventory(new QuestionBranchRoutePickerHolder(action, folder, page), 54,
+                UiText.title("Select Route"));
+        int from = page * PAGE_SIZE;
+        int to = Math.min(from + PAGE_SIZE, options.size());
+        for (int index = from; index < to; index++) {
+            BehaviourPickerOption option = options.get(index);
+            List<String> lore = new ArrayList<>(option.lore());
+            lore.add(ChatColor.YELLOW + (option.folder() ? "Click to open" : "Click to select"));
+            inventory.setItem(index - from, item(option.icon(), option.label(), lore));
+        }
+        if (options.isEmpty()) {
+            inventory.setItem(22, item(Material.BARRIER, "No Routes Available", List.of(
+                    ChatColor.GRAY + "Create a route with the button below")));
+        }
+        if (!folder.isEmpty()) inventory.setItem(45, item(Material.ARROW, "Up One Group", List.of()));
+        if (page > 0) inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
+        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
+                ChatColor.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
+                ChatColor.YELLOW + "Click, then enter its name")));
+        if (page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        openInventory(player, inventory);
+    }
+
+    private void handleQuestionBranchRoutePickerClick(InventoryClickEvent event, Player player,
+            QuestionBranchRoutePickerHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        int slot = event.getRawSlot();
+        if (slot == 45 && !holder.folder().isEmpty()) {
+            openQuestionBranchRoutePicker(player, holder.action(), parentFolder(holder.folder()), 0);
+            return;
+        }
+        if (slot == 47) {
+            openQuestionBranchRoutePicker(player, holder.action(), holder.folder(), holder.page() - 1);
+            return;
+        }
+        if (slot == 49) {
+            openQuestionBranchPicker(player, holder.action().target(), holder.action().optionIndex(),
+                    holder.action().actionIndex());
+            return;
+        }
+        if (slot == 51) {
+            routeCreator.create(player, holder.folder(), route -> {
+                setQuestionBranchAction(holder.action(), new BehaviourAction(BehaviourActionType.SET_ROUTE,
+                        route.getKey()));
+                player.sendMessage(UiText.success("Created and selected '" + route.getDisplayName() + "'."));
+            });
+            return;
+        }
+        if (slot == 53) {
+            openQuestionBranchRoutePicker(player, holder.action(), holder.folder(), holder.page() + 1);
+            return;
+        }
+        List<BehaviourPickerOption> options = routePickerOptions(holder.folder());
+        int index = holder.page() * PAGE_SIZE + slot;
+        if (slot >= PAGE_SIZE || index < 0 || index >= options.size()) return;
+        BehaviourPickerOption option = options.get(index);
+        if (option.folder()) {
+            openQuestionBranchRoutePicker(player, holder.action(), option.value(), 0);
+            return;
+        }
+        setQuestionBranchAction(holder.action(), new BehaviourAction(BehaviourActionType.SET_ROUTE, option.value()));
+        player.sendMessage(UiText.success("Selected '" + option.label() + "'."));
+        openAfterQuestionBranchPicker(player, holder.action());
     }
 
     private FightOptions defaultFightOptions(QuestionTarget target) {
@@ -2742,6 +2852,7 @@ public final class GuiService implements Listener {
                 || holder instanceof RoutePointValuePickerHolder
                 || holder instanceof QuestionEditorHolder
                 || holder instanceof QuestionBranchPickerHolder
+                || holder instanceof QuestionBranchRoutePickerHolder
                 || holder instanceof ConfirmationHolder;
     }
 
@@ -2838,6 +2949,10 @@ public final class GuiService implements Listener {
 
     private String respawnLabel(CombatProfile combat) {
         return combat.respawnSeconds() == 0 ? "Disabled (0 seconds)" : combat.respawnSeconds() + " seconds";
+    }
+
+    private String experienceLabel(CombatProfile combat) {
+        return combat.droppedExperience() == 0 ? "None (0 XP)" : combat.droppedExperience() + " XP";
     }
 
     private String allianceLabel(CombatProfile combat) {
@@ -3251,6 +3366,11 @@ public final class GuiService implements Listener {
 
     private record QuestionBranchPickerHolder(QuestionTarget target, int optionIndex, int actionIndex)
             implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record QuestionBranchRoutePickerHolder(
+            QuestionBranchPickerHolder action, String folder, int page) implements InventoryHolder {
         @Override public Inventory getInventory() { return null; }
     }
 

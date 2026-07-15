@@ -105,6 +105,7 @@ public final class NpcDefinitionRepository {
         configuration.set("combat.targets.npcs", definition.getCombatProfile().targetNpcs());
         configuration.set("combat.alliance", definition.getCombatProfile().alliance());
         configuration.set("combat.show-boss-bar", definition.getCombatProfile().showBossBar());
+        configuration.set("combat.dropped-experience", definition.getCombatProfile().droppedExperience());
         configuration.set("movement.speed", definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<Map<String, Object>> actions = BehaviourActionCodec.encodeList(definition.getBehaviourActions(event));
@@ -201,7 +202,8 @@ public final class NpcDefinitionRepository {
                 configuration.getBoolean("combat.targets.players", false),
                 configuration.getBoolean("combat.targets.npcs", false),
                 configuration.getString("combat.alliance"),
-                configuration.getBoolean("combat.show-boss-bar", false)
+                configuration.getBoolean("combat.show-boss-bar", false),
+                configuration.getInt("combat.dropped-experience", 0)
         ));
         definition.setMovementProfile(MovementProfile.disabled().withWalkingSpeed(
                 WalkingSpeed.fromStored(configuration.getString("movement.speed"))));

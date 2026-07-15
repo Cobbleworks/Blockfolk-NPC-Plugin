@@ -198,7 +198,7 @@ public final class NpcCombatService implements Listener {
                 event.getDrops().add(item);
             }
         }
-        event.setDroppedExp(0);
+        event.setDroppedExp(definition == null ? 0 : definition.getCombatProfile().droppedExperience());
         clearState(instance);
         Location respawnLocation = instance.getSpawnLocation();
         Bukkit.getScheduler().runTask(plugin, () -> {

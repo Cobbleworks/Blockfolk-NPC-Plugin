@@ -34,4 +34,12 @@ class UiTextTest {
                 feedback.children().getFirst().decoration(TextDecoration.BOLD));
         assertEquals(NamedTextColor.GREEN, feedback.children().getFirst().color());
     }
+
+    @Test
+    void guiTitleHighlightsItsSubjectInLimeGreen() {
+        Component title = UiText.title("Manage", "Ada");
+
+        assertEquals(NamedTextColor.DARK_AQUA, title.color());
+        assertEquals(NamedTextColor.GREEN, title.children().getFirst().color());
+    }
 }

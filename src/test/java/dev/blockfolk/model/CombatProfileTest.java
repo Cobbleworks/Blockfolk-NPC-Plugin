@@ -20,11 +20,12 @@ class CombatProfileTest {
     @Test
     void clampsHealthAndNormalizesAlliance() {
         CombatProfile profile = new CombatProfile(
-                -5, -10, null, false, false, false, false, "  guards  ", false
+                -5, -10, null, false, false, false, false, "  guards  ", false, -15
         );
 
         assertEquals(0, profile.maxHealth());
         assertEquals(0, profile.respawnSeconds());
+        assertEquals(0, profile.droppedExperience());
         assertEquals(AttackReaction.IGNORE, profile.attackReaction());
         assertEquals("guards", profile.alliance());
         assertEquals(CombatProfile.MAX_HEALTH, profile.withMaxHealth(Integer.MAX_VALUE).maxHealth());
@@ -75,6 +76,16 @@ class CombatProfileTest {
         assertTrue(profile.showBossBar());
         assertTrue(profile.withAlliance("guards").showBossBar());
         assertFalse(CombatProfile.disabled().showBossBar());
+    }
+
+    @Test
+    void experienceDropDefaultsToNoneAndIsPreservedByOtherChanges() {
+        CombatProfile profile = CombatProfile.disabled().withDroppedExperience(25);
+
+        assertEquals(0, CombatProfile.disabled().droppedExperience());
+        assertEquals(25, profile.droppedExperience());
+        assertEquals(25, profile.withMaxHealth(20).droppedExperience());
+        assertEquals(0, profile.withDroppedExperience(-5).droppedExperience());
     }
 
     @Test

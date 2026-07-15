@@ -40,7 +40,7 @@ public final class UiText {
     public static Component title(String section, String subject) {
         return Component.text(section + ": ", NamedTextColor.DARK_AQUA)
                 .decorate(TextDecoration.BOLD)
-                .append(Component.text(subject, NamedTextColor.GOLD).decorate(TextDecoration.BOLD));
+                .append(Component.text(subject, NamedTextColor.GREEN).decorate(TextDecoration.BOLD));
     }
 
     public static Component npcDialog(String npcName, String line) {
