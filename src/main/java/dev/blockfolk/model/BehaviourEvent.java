@@ -1,7 +1,5 @@
 package dev.blockfolk.model;
 
-import java.util.Locale;
-
 public enum BehaviourEvent {
     SPAWN("On Spawn"),
     IDLE("On Idle"),
@@ -25,8 +23,4 @@ public enum BehaviourEvent {
 
     BehaviourEvent(String displayName) { this.displayName = displayName; }
     public String displayName() { return displayName; }
-
-    public static BehaviourEvent fromStored(String value) {
-        return valueOf(value.trim().toUpperCase(Locale.ROOT).replace('-', '_'));
-    }
 }

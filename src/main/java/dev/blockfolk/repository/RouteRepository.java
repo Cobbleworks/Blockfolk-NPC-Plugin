@@ -16,7 +16,6 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import dev.blockfolk.model.BehaviourAction;
-import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcRoute;
 import dev.blockfolk.model.RoutePoint;
@@ -70,7 +69,7 @@ public final class RouteRepository {
                                 actions
                         ));
                     } catch (IllegalArgumentException ignored) {
-                        // Ignore malformed cross-world or duplicate legacy points.
+                        // Ignore malformed cross-world or duplicate points.
                     }
                 });
             }
@@ -169,13 +168,6 @@ public final class RouteRepository {
         for (Map<?, ?> stored : point.getMapList("actions")) {
             try { actions.add(BehaviourActionCodec.decode(stored)); }
             catch (IllegalArgumentException ignored) { /* Ignore malformed waypoint actions. */ }
-        }
-        // Migrate the former dedicated waiting-point setting to the general
-        // action sequence. It is deliberately not written back on the next save.
-        long legacyWaitMillis = point.getLong("wait-millis", 0L);
-        if (actions.isEmpty() && legacyWaitMillis > 0L) {
-            actions.add(new BehaviourAction(BehaviourActionType.WAIT,
-                    Double.toString(legacyWaitMillis / 1_000.0)));
         }
         return actions;
     }

@@ -2,6 +2,7 @@ package dev.blockfolk.model;
 
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -9,8 +10,8 @@ import java.util.stream.Collectors;
 public record FightOptions(AttackReaction attackReaction,
         boolean mobs, boolean animals, boolean players, boolean npcs) {
 
-    public FightOptions(boolean mobs, boolean animals, boolean players, boolean npcs) {
-        this(null, mobs, animals, players, npcs);
+    public FightOptions {
+        attackReaction = Objects.requireNonNullElse(attackReaction, AttackReaction.IGNORE);
     }
 
     public static FightOptions from(CombatProfile profile) {
@@ -20,26 +21,23 @@ public record FightOptions(AttackReaction attackReaction,
 
     public static FightOptions fromStored(String value) {
         String stored = value == null ? "" : value.trim();
-        AttackReaction reaction = null;
-        String targetValue = stored;
-        if (stored.startsWith("aggression=")) {
-            String[] sections = stored.split(";", 2);
-            reaction = AttackReaction.fromStored(sections[0].substring("aggression=".length()));
-            targetValue = sections.length == 2 && sections[1].startsWith("targets=")
-                    ? sections[1].substring("targets=".length()) : "";
-        }
+        String[] sections = stored.split(";", 2);
+        AttackReaction reaction = sections.length > 0 && sections[0].startsWith("aggression=")
+                ? AttackReaction.fromStored(sections[0].substring("aggression=".length()))
+                : AttackReaction.IGNORE;
+        String targetValue = sections.length == 2 && sections[1].startsWith("targets=")
+                ? sections[1].substring("targets=".length()) : "";
         Set<String> targets = Arrays.stream(targetValue.split(","))
                 .map(target -> target.trim().toLowerCase(Locale.ROOT))
                 .filter(target -> !target.isEmpty())
                 .collect(Collectors.toSet());
-        return new FightOptions(reaction, targets.contains("mobs") || targets.contains("monsters"),
+        return new FightOptions(reaction, targets.contains("mobs"),
                 targets.contains("animals"), targets.contains("players"),
-                targets.contains("npcs") || targets.contains("npc"));
+                targets.contains("npcs"));
     }
 
     public String storedValue() {
         String targets = targetValue();
-        if (attackReaction == null) return targets;
         return "aggression=" + attackReaction.name().toLowerCase(Locale.ROOT) + ";targets=" + targets;
     }
 
@@ -54,7 +52,7 @@ public record FightOptions(AttackReaction attackReaction,
 
     public String displayName() {
         String targets = targetValue().isEmpty() ? "No targets" : targetValue();
-        return attackReaction == null ? targets : attackReaction.displayName() + "; " + targets;
+        return attackReaction.displayName() + "; " + targets;
     }
 
     public FightOptions withAttackReaction(AttackReaction reaction) {

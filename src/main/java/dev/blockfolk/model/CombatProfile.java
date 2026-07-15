@@ -11,7 +11,6 @@ public record CombatProfile(
         boolean targetPlayers,
         boolean targetNpcs,
         String alliance,
-        String shoutout,
         boolean showBossBar
 ) {
 
@@ -24,11 +23,10 @@ public record CombatProfile(
         respawnSeconds = Math.max(0, respawnSeconds);
         attackReaction = Objects.requireNonNullElse(attackReaction, AttackReaction.IGNORE);
         alliance = normalizeOptionalText(alliance);
-        shoutout = shoutout == null || shoutout.isBlank() ? null : shoutout.trim();
     }
 
     public static CombatProfile disabled() {
-        return new CombatProfile(0, 0, AttackReaction.IGNORE, false, false, false, false, null, null, false);
+        return new CombatProfile(0, 0, AttackReaction.IGNORE, false, false, false, false, null, false);
     }
 
     public boolean invulnerable() {
@@ -37,52 +35,47 @@ public record CombatProfile(
 
     public CombatProfile withMaxHealth(int maxHealth) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, showBossBar);
     }
 
     public CombatProfile withRespawnSeconds(int respawnSeconds) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, showBossBar);
     }
 
     public CombatProfile withAttackReaction(AttackReaction attackReaction) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, showBossBar);
     }
 
     public CombatProfile withTargetMobs(boolean targetMobs) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, showBossBar);
     }
 
     public CombatProfile withTargetAnimals(boolean targetAnimals) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, showBossBar);
     }
 
     public CombatProfile withTargetPlayers(boolean targetPlayers) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, showBossBar);
     }
 
     public CombatProfile withTargetNpcs(boolean targetNpcs) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, showBossBar);
     }
 
     public CombatProfile withAlliance(String alliance) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
-    }
-
-    public CombatProfile withShoutout(String shoutout) {
-        return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, showBossBar);
     }
 
     public CombatProfile withShowBossBar(boolean showBossBar) {
         return new CombatProfile(maxHealth, respawnSeconds, attackReaction,
-                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, shoutout, showBossBar);
+                targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, showBossBar);
     }
 
     public boolean hasSightTargets() {

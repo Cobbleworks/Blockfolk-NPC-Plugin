@@ -586,7 +586,7 @@ public final class GuiService implements Listener {
     }
 
     private void populateFightOptions(Inventory inventory, FightOptions options, String backLabel) {
-        AttackReaction reaction = options.attackReaction() == null ? AttackReaction.IGNORE : options.attackReaction();
+        AttackReaction reaction = options.attackReaction();
         inventory.setItem(10, item(reactionMaterial(reaction), "Aggression Level", List.of(
                 ChatColor.GRAY + "Current: " + ChatColor.WHITE + reaction.displayName(),
                 reactionDescription(reaction),
@@ -824,41 +824,6 @@ public final class GuiService implements Listener {
         return slash < 0 ? "" : folder.substring(0, slash);
     }
 
-    public void openRouteAssignment(Player player, NpcDefinition definition, int requestedPage) {
-        List<NpcRoute> routes = new ArrayList<>(routeRepository.findAll());
-        int pages = Math.max(1, (routes.size() + PAGE_SIZE - 1) / PAGE_SIZE);
-        int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(new RouteAssignmentHolder(definition.getKey(), page), 54,
-                UiText.title("Route", definition.getDisplayName()));
-        int from = page * PAGE_SIZE;
-        int to = Math.min(from + PAGE_SIZE, routes.size());
-        for (int index = from; index < to; index++) {
-            NpcRoute route = routes.get(index);
-            boolean selected = route.getKey().equals(definition.getMovementProfile().routeKey());
-            inventory.setItem(index - from, item(routeIcon(route), route.getDisplayName(), List.of(
-                    ChatColor.DARK_GRAY + "Key: " + route.getKey(),
-                    ChatColor.GRAY + "Key points: " + ChatColor.WHITE + route.getPoints().size(),
-                    selected ? ChatColor.GREEN + "Currently assigned" : ChatColor.YELLOW + "Click to assign"
-            )));
-        }
-        if (routes.isEmpty()) {
-            inventory.setItem(22, item(Material.GRAY_DYE, "No Routes", List.of(
-                    ChatColor.GRAY + "Create one with /bf routes"
-            )));
-        }
-        if (page > 0) {
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
-        }
-        inventory.setItem(48, item(Material.BARRIER, "Back to Preset", List.of()));
-        inventory.setItem(49, item(Material.BARRIER, "Clear Route", List.of(
-                ChatColor.GRAY + "Stops this NPC preset from walking"
-        )));
-        if (page + 1 < pages) {
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
-        }
-        openInventory(player, inventory);
-    }
-
     public void openInstances(Player player, NpcDefinition definition, int requestedPage) {
         List<NpcInstance> instances = new ArrayList<>(instanceRegistry.findByDefinition(definition));
         int pages = Math.max(1, (instances.size() + PAGE_SIZE - 1) / PAGE_SIZE);
@@ -929,8 +894,6 @@ public final class GuiService implements Listener {
             handleEquipmentClick(event, player, equipmentHolder.key());
         } else if (holder instanceof InstancesHolder instancesHolder) {
             handleInstancesClick(event, player, instancesHolder);
-        } else if (holder instanceof RouteAssignmentHolder routeHolder) {
-            handleRouteAssignmentClick(event, player, routeHolder);
         } else if (holder instanceof BehaviourHolder behaviourHolder) {
             handleBehaviourClick(event, player, behaviourHolder);
         } else if (holder instanceof CustomBehaviourHolder customBehaviourHolder) {
@@ -1461,44 +1424,6 @@ public final class GuiService implements Listener {
         }
     }
 
-    private void handleRouteAssignmentClick(InventoryClickEvent event, Player player, RouteAssignmentHolder holder) {
-        event.setCancelled(true);
-        if (!isTopInventoryClick(event)) {
-            return;
-        }
-        NpcDefinition definition = definitionRepository.find(holder.definitionKey()).orElse(null);
-        if (definition == null) {
-            player.closeInventory();
-            return;
-        }
-        switch (event.getRawSlot()) {
-            case 45 ->
-                openRouteAssignment(player, definition, holder.page() - 1);
-            case 48 ->
-                openEditor(player, definition);
-            case 49 -> {
-                definition.setMovementProfile(definition.getMovementProfile().withoutRoute());
-                saveRefresh(definition);
-                player.sendMessage(UiText.success("Walking route cleared."));
-                openEditor(player, definition);
-            }
-            case 53 ->
-                openRouteAssignment(player, definition, holder.page() + 1);
-            default -> {
-                List<NpcRoute> routes = new ArrayList<>(routeRepository.findAll());
-                int index = holder.page() * PAGE_SIZE + event.getRawSlot();
-                if (event.getRawSlot() >= PAGE_SIZE || index < 0 || index >= routes.size()) {
-                    return;
-                }
-                NpcRoute route = routes.get(index);
-                definition.setMovementProfile(definition.getMovementProfile().withRoute(route.getKey()));
-                saveRefresh(definition);
-                player.sendMessage(UiText.success("Assigned route '" + route.getDisplayName() + "'."));
-                openEditor(player, definition);
-            }
-        }
-    }
-
     private void handleBehaviourClick(InventoryClickEvent event, Player player, BehaviourHolder holder) {
         event.setCancelled(true);
         if (!isTopInventoryClick(event)) {
@@ -1969,9 +1894,7 @@ public final class GuiService implements Listener {
                 || actions.get(index).type() != BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             return defaults;
         }
-        FightOptions stored = FightOptions.fromStored(actions.get(index).value());
-        return stored.attackReaction() == null
-                ? stored.withAttackReaction(defaults.attackReaction()) : stored;
+        return FightOptions.fromStored(actions.get(index).value());
     }
 
     private void beginWaypointSelection(Player player, ActionPickerHolder holder, BehaviourActionType type) {
@@ -2808,7 +2731,6 @@ public final class GuiService implements Listener {
                 || holder instanceof TargetsHolder
                 || holder instanceof FightOptionsActionHolder
                 || holder instanceof InstancesHolder
-                || holder instanceof RouteAssignmentHolder
                 || holder instanceof BehaviourHolder
                 || holder instanceof CustomBehaviourHolder
                 || holder instanceof ActionPickerHolder
@@ -2842,7 +2764,7 @@ public final class GuiService implements Listener {
             meta.setPlayerProfile(profile);
             head.setItemMeta(meta);
         } catch (RuntimeException ignored) {
-            // A broken legacy skin value must never prevent the management GUI opening.
+            // A broken skin value must never prevent the management GUI opening.
         }
         return head;
     }
@@ -3200,14 +3122,6 @@ public final class GuiService implements Listener {
     }
 
     private record InstancesHolder(String key, int page) implements InventoryHolder {
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
-
-    private record RouteAssignmentHolder(String definitionKey, int page) implements InventoryHolder {
 
         @Override
         public Inventory getInventory() {

@@ -3,8 +3,6 @@ package dev.blockfolk.model;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WalkingSpeedTest {
     @Test
@@ -26,17 +24,4 @@ class WalkingSpeedTest {
         assertEquals(WalkingSpeed.NORMAL, WalkingSpeed.fromStored("unknown"));
     }
 
-    @Test
-    void preservesChosenSpeedWhenAssigningOrClearingRoutes() {
-        MovementProfile profile = MovementProfile.disabled().withWalkingSpeed(WalkingSpeed.VERY_FAST);
-
-        profile = profile.withRoute("Village Patrol");
-        assertTrue(profile.enabled());
-        assertEquals("village-patrol", profile.routeKey());
-        assertEquals(WalkingSpeed.VERY_FAST, profile.walkingSpeed());
-
-        profile = profile.withoutRoute();
-        assertFalse(profile.enabled());
-        assertEquals(WalkingSpeed.VERY_FAST, profile.walkingSpeed());
-    }
 }

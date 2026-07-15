@@ -144,13 +144,9 @@ public final class RouteGuiService implements Listener {
                 continue;
             }
             NpcRoute route = entry.route();
-            long assignments = definitionRepository.findAll().stream()
-                    .filter(definition -> route.getKey().equals(definition.getMovementProfile().routeKey()))
-                    .count();
             inventory.setItem(index - from, routeItem(route, List.of(
                     ChatColor.DARK_GRAY + "Key: " + route.getKey(),
                     ChatColor.GRAY + "Key points: " + ChatColor.WHITE + route.getPoints().size(),
-                    ChatColor.GRAY + "Assigned presets: " + ChatColor.WHITE + assignments,
                     ChatColor.AQUA + "Middle-click: set icon from main hand",
                     ChatColor.YELLOW + "Left-click: edit points",
                     ChatColor.RED + "Shift-right-click: remove route"
@@ -504,18 +500,8 @@ public final class RouteGuiService implements Listener {
             openRoutes(player, holder.folder(), holder.page());
             return;
         }
-        int unassigned = 0;
-        for (NpcDefinition definition : definitionRepository.findAll()) {
-            if (!route.getKey().equals(definition.getMovementProfile().routeKey())) {
-                continue;
-            }
-            definition.setMovementProfile(definition.getMovementProfile().withoutRoute());
-            definitionRepository.save(definition);
-            instanceRegistry.refreshDefinition(definition);
-            unassigned++;
-        }
         routeRepository.delete(route);
-        player.sendMessage(UiText.success("Deleted route and unassigned " + unassigned + " NPC preset(s)."));
+        player.sendMessage(UiText.success("Deleted route '" + route.getDisplayName() + "'."));
         openRoutes(player, holder.folder(), holder.page());
     }
 

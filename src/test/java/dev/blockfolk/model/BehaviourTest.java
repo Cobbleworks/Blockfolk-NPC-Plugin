@@ -10,7 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class BehaviourTest {
     @Test
     void idleIsStoredAndDisplayedAsABuiltInEvent() {
-        assertEquals(BehaviourEvent.IDLE, BehaviourEvent.fromStored("idle"));
         assertEquals("On Idle", BehaviourEvent.IDLE.displayName());
         assertEquals(BehaviourEvent.IDLE, BehaviourEvent.values()[1]);
     }
@@ -19,26 +18,21 @@ class BehaviourTest {
     @Test
     void parsesNewBehaviourTypesFromStoredNames() {
         assertEquals(BehaviourActionType.SHOW_HOLO_DIALOG,
-            BehaviourActionType.fromStored("show-holo-dialog"));
-        assertEquals(BehaviourActionType.ASK_QUESTION, BehaviourActionType.fromStored("ask-question"));
-        assertEquals(BehaviourActionType.STAND, BehaviourActionType.fromStored("sit"));
-        assertEquals(BehaviourActionType.FALL_FLY, BehaviourActionType.fromStored("fall-fly"));
+            BehaviourActionType.fromStored("show_holo_dialog"));
+        assertEquals(BehaviourActionType.ASK_QUESTION, BehaviourActionType.fromStored("ask_question"));
+        assertEquals(BehaviourActionType.FALL_FLY, BehaviourActionType.fromStored("fall_fly"));
         assertEquals(BehaviourActionType.UNFOLLOW, BehaviourActionType.fromStored("unfollow"));
-        assertEquals(BehaviourActionType.MOVE_TO, BehaviourActionType.fromStored("move-to"));
-        assertEquals(BehaviourActionType.TELEPORT_TO, BehaviourActionType.fromStored("teleport-to"));
+        assertEquals(BehaviourActionType.MOVE_TO, BehaviourActionType.fromStored("move_to"));
+        assertEquals(BehaviourActionType.TELEPORT_TO, BehaviourActionType.fromStored("teleport_to"));
         assertEquals(BehaviourActionType.WAIT, BehaviourActionType.fromStored("wait"));
         assertEquals(BehaviourActionType.INTERACT, BehaviourActionType.fromStored("interact"));
-        assertEquals(BehaviourActionType.MINE_BLOCKS, BehaviourActionType.fromStored("mine-blocks"));
-        assertEquals(BehaviourActionType.TAKE_ITEM, BehaviourActionType.fromStored("take-item"));
-        assertEquals(BehaviourActionType.SHOW_INVENTORY, BehaviourActionType.fromStored("show-inventory"));
-        assertEquals(BehaviourActionType.DROP_INVENTORY, BehaviourActionType.fromStored("drop-inventory"));
+        assertEquals(BehaviourActionType.MINE_BLOCKS, BehaviourActionType.fromStored("mine_blocks"));
+        assertEquals(BehaviourActionType.TAKE_ITEM, BehaviourActionType.fromStored("take_item"));
+        assertEquals(BehaviourActionType.SHOW_INVENTORY, BehaviourActionType.fromStored("show_inventory"));
+        assertEquals(BehaviourActionType.DROP_INVENTORY, BehaviourActionType.fromStored("drop_inventory"));
         assertEquals(BehaviourActionType.HARVEST, BehaviourActionType.fromStored("harvest"));
         assertEquals(BehaviourActionType.CHANGE_FIGHT_OPTIONS,
-                BehaviourActionType.fromStored("change-fight-options"));
-        assertEquals(BehaviourEvent.HEAL, BehaviourEvent.fromStored("heal"));
-        assertEquals(BehaviourEvent.DROP_ITEM, BehaviourEvent.fromStored("drop-item"));
-        assertEquals(BehaviourEvent.RECEIVE_ITEM, BehaviourEvent.fromStored("receive-item"));
-        assertEquals(BehaviourEvent.MIDDAY, BehaviourEvent.fromStored("midday"));
+                BehaviourActionType.fromStored("change_fight_options"));
         assertEquals("At Midday / Lunch", BehaviourEvent.MIDDAY.displayName());
     }
 

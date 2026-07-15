@@ -27,10 +27,7 @@ public enum AttackReaction {
         if (value == null || value.isBlank()) {
             return IGNORE;
         }
-        String normalized = value.trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
-        if (normalized.equals("FIGHTS_BACK")) {
-            normalized = "FIGHT_BACK";
-        }
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
         try {
             return valueOf(normalized);
         } catch (IllegalArgumentException ignored) {

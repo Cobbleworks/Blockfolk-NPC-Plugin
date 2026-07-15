@@ -217,7 +217,7 @@ public final class NpcBehaviourService implements Listener {
             return MovementProfile.disabled().withWalkingSpeed(speed);
         }
         return route == null ? definition.getMovementProfile().withWalkingSpeed(speed)
-                : new MovementProfile(true, route, speed);
+                : MovementProfile.routing(route, speed);
     }
 
     public boolean isFollowing(NpcInstance instance) {

@@ -1,13 +1,11 @@
 package dev.blockfolk.repository;
 
 import dev.blockfolk.model.CombatProfile;
-import dev.blockfolk.model.AggressionLevel;
 import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.MovementProfile;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.model.BehaviourAction;
-import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.util.LocationCodec;
 import org.bukkit.configuration.ConfigurationSection;
@@ -97,11 +95,8 @@ public final class NpcDefinitionRepository {
         configuration.set("inventory.armor", Arrays.asList(definition.getArmorContents()));
         configuration.set("inventory.main-hand", definition.getMainHand());
         configuration.set("inventory.off-hand", definition.getOffHand());
-        configuration.set("combat.enabled", !definition.getCombatProfile().invulnerable());
         configuration.set("combat.max-health", definition.getCombatProfile().maxHealth());
         configuration.set("combat.respawn-seconds", definition.getCombatProfile().respawnSeconds());
-        configuration.set("combat.aggression", null);
-        configuration.set("combat.reaction-to-attacks", null);
         configuration.set("combat.aggression-level",
                 definition.getCombatProfile().attackReaction().name().toLowerCase(Locale.ROOT));
         configuration.set("combat.targets.mobs", definition.getCombatProfile().targetMobs());
@@ -110,9 +105,6 @@ public final class NpcDefinitionRepository {
         configuration.set("combat.targets.npcs", definition.getCombatProfile().targetNpcs());
         configuration.set("combat.alliance", definition.getCombatProfile().alliance());
         configuration.set("combat.show-boss-bar", definition.getCombatProfile().showBossBar());
-        configuration.set("combat.shoutout", null);
-        configuration.set("movement.enabled", null);
-        configuration.set("movement.route", null);
         configuration.set("movement.speed", definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<Map<String, Object>> actions = BehaviourActionCodec.encodeList(definition.getBehaviourActions(event));
@@ -200,39 +192,19 @@ public final class NpcDefinitionRepository {
         definition.setArmorContents(readItemArray(configuration, "inventory.armor", 4));
         definition.setMainHand(configuration.getItemStack("inventory.main-hand"));
         definition.setOffHand(configuration.getItemStack("inventory.off-hand"));
-        int legacyHealth = configuration.getBoolean("combat.enabled", false) ? 20 : 0;
-        AggressionLevel legacyAggression = AggressionLevel.fromStored(configuration.getString("combat.aggression"));
-        boolean hasNewAggressionSettings = configuration.contains("combat.aggression-level")
-                || configuration.contains("combat.reaction-to-attacks")
-                || configuration.contains("combat.targets");
-        AttackReaction attackReaction = hasNewAggressionSettings
-                ? AttackReaction.fromStored(configuration.getString("combat.aggression-level",
-                        configuration.getString("combat.reaction-to-attacks")))
-                : switch (legacyAggression) {
-                    case FLEE -> AttackReaction.FLEE;
-                    case FIGHT_BACK -> AttackReaction.FIGHT_BACK;
-                    case FIGHTS_ON_SIGHT -> AttackReaction.HUNTING;
-                    case NONE -> AttackReaction.IGNORE;
-                };
-        boolean legacySightTargeting = !hasNewAggressionSettings
-                && legacyAggression == AggressionLevel.FIGHTS_ON_SIGHT;
         definition.setCombatProfile(new CombatProfile(
-                configuration.getInt("combat.max-health", legacyHealth),
+                configuration.getInt("combat.max-health", 0),
                 configuration.getInt("combat.respawn-seconds", 0),
-                attackReaction,
-                configuration.getBoolean("combat.targets.mobs", legacySightTargeting),
-                configuration.getBoolean("combat.targets.animals", legacySightTargeting),
-                configuration.getBoolean("combat.targets.players", legacySightTargeting),
-                configuration.getBoolean("combat.targets.npcs", legacySightTargeting),
+                AttackReaction.fromStored(configuration.getString("combat.aggression-level")),
+                configuration.getBoolean("combat.targets.mobs", false),
+                configuration.getBoolean("combat.targets.animals", false),
+                configuration.getBoolean("combat.targets.players", false),
+                configuration.getBoolean("combat.targets.npcs", false),
                 configuration.getString("combat.alliance"),
-                configuration.getString("combat.shoutout"),
                 configuration.getBoolean("combat.show-boss-bar", false)
         ));
-        definition.setMovementProfile(new MovementProfile(
-                configuration.getBoolean("movement.enabled", false),
-                configuration.getString("movement.route"),
-                WalkingSpeed.fromStored(configuration.getString("movement.speed"))
-        ));
+        definition.setMovementProfile(MovementProfile.disabled().withWalkingSpeed(
+                WalkingSpeed.fromStored(configuration.getString("movement.speed"))));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
             for (Map<?, ?> entry : configuration.getMapList("behaviours." + event.name().toLowerCase(Locale.ROOT))) {
@@ -270,17 +242,6 @@ public final class NpcDefinitionRepository {
                 }
                 definition.setCustomEventActions(eventName, actions);
             }
-        }
-        // One-time compatibility migration. New saves contain only behaviours for these features.
-        String legacyShoutout = configuration.getString("combat.shoutout");
-        if (legacyShoutout != null && definition.getBehaviourActions(BehaviourEvent.COMBAT_ENTERED).isEmpty()) {
-            definition.addBehaviourAction(BehaviourEvent.COMBAT_ENTERED,
-                    new BehaviourAction(BehaviourActionType.SEND_DIALOG, legacyShoutout));
-        }
-        String legacyRoute = configuration.getString("movement.route");
-        if (legacyRoute != null && definition.getBehaviourActions(BehaviourEvent.SPAWN).isEmpty()) {
-            definition.addBehaviourAction(BehaviourEvent.SPAWN,
-                    new BehaviourAction(BehaviourActionType.SET_ROUTE, legacyRoute));
         }
         return definition;
     }

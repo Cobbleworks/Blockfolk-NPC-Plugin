@@ -18,17 +18,15 @@ class CombatProfileTest {
     }
 
     @Test
-    void clampsHealthAndNormalizesShoutout() {
+    void clampsHealthAndNormalizesAlliance() {
         CombatProfile profile = new CombatProfile(
-                -5, -10, null, false, false, false, false, "  guards  ", "  Stand down!  ", false
+                -5, -10, null, false, false, false, false, "  guards  ", false
         );
 
         assertEquals(0, profile.maxHealth());
         assertEquals(0, profile.respawnSeconds());
         assertEquals(AttackReaction.IGNORE, profile.attackReaction());
         assertEquals("guards", profile.alliance());
-        assertEquals("Stand down!", profile.shoutout());
-        assertNull(profile.withShoutout("   ").shoutout());
         assertEquals(CombatProfile.MAX_HEALTH, profile.withMaxHealth(Integer.MAX_VALUE).maxHealth());
         assertEquals(20, profile.withRespawnSeconds(20).respawnSeconds());
     }
@@ -36,30 +34,29 @@ class CombatProfileTest {
     @Test
     void attackReactionCyclesAndReadsStoredNames() {
         assertEquals(AttackReaction.FIGHT_BACK, AttackReaction.IGNORE.next());
-        assertEquals(AttackReaction.FIGHT_BACK, AttackReaction.fromStored("fights-back"));
+        assertEquals(AttackReaction.FIGHT_BACK, AttackReaction.fromStored("fight_back"));
         assertEquals(AttackReaction.FLEE, AttackReaction.FIGHT_BACK.next());
         assertEquals(AttackReaction.HUNTING, AttackReaction.FLEE.next());
         assertEquals(AttackReaction.IGNORE, AttackReaction.HUNTING.next());
     }
 
     @Test
-    void fightOptionsRoundTripAndAcceptMonsterAlias() {
-        FightOptions options = FightOptions.fromStored("monsters, NPCs");
+    void fightOptionsRoundTrip() {
+        FightOptions options = new FightOptions(AttackReaction.FIGHT_BACK, true, false, false, true);
 
         assertTrue(options.mobs());
         assertTrue(options.npcs());
         assertFalse(options.animals());
-        assertEquals("mobs,npcs", options.storedValue());
+        assertEquals("aggression=fight_back;targets=mobs,npcs", options.storedValue());
         assertEquals(options, FightOptions.fromStored(options.storedValue()));
     }
 
     @Test
-    void fightOptionsStoreAggressionAndStillReadLegacyTargetLists() {
+    void fightOptionsStoreAggression() {
         FightOptions options = new FightOptions(AttackReaction.HUNTING, true, false, true, false);
 
         assertEquals("aggression=hunting;targets=mobs,players", options.storedValue());
         assertEquals(options, FightOptions.fromStored(options.storedValue()));
-        assertNull(FightOptions.fromStored("mobs,players").attackReaction());
     }
 
     @Test

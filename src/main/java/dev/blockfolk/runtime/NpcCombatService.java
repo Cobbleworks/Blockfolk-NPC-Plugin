@@ -162,7 +162,7 @@ public final class NpcCombatService implements Listener {
             return;
         }
         FightOptions options = fightOptions(instance, definition.getCombatProfile());
-        AttackReaction reaction = attackReaction(options, definition.getCombatProfile());
+        AttackReaction reaction = options.attackReaction();
         boolean selectedTarget = isSelectedTarget(attacker, options);
         if (reaction == AttackReaction.FLEE && !selectedTarget) {
             engage(instance, definition, CombatMode.FLEE, attacker);
@@ -239,7 +239,7 @@ public final class NpcCombatService implements Listener {
             }
 
             CombatState state = states.get(instance.getId());
-            if (state == null && attackReaction(fightOptions, profile) == AttackReaction.HUNTING
+            if (state == null && fightOptions.attackReaction() == AttackReaction.HUNTING
                     && currentTick % 10 == Math.floorMod(instance.getId().hashCode(), 10)) {
                 LivingEntity target = findNearestTarget(instance, npc, fightOptions);
                 if (target != null) {
@@ -434,10 +434,6 @@ public final class NpcCombatService implements Listener {
 
     private FightOptions fightOptions(NpcInstance instance, CombatProfile profile) {
         return fightOptionsOverrides.getOrDefault(instance.getId(), FightOptions.from(profile));
-    }
-
-    private AttackReaction attackReaction(FightOptions options, CombatProfile profile) {
-        return options.attackReaction() == null ? profile.attackReaction() : options.attackReaction();
     }
 
     private boolean isAttackable(NpcInstance attacker, LivingEntity target) {

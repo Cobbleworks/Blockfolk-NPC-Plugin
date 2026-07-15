@@ -50,9 +50,7 @@ public enum BehaviourActionType {
     }
 
     public static BehaviourActionType fromStored(String value) {
-        String normalized = value.trim().toUpperCase(Locale.ROOT).replace('-', '_');
-        // Sitting was briefly exposed before mannequin pose validation was
-        // added. Treat stored actions as Standing instead of dropping them.
-        return valueOf(normalized.equals("SIT") ? "STAND" : normalized);
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        return valueOf(normalized);
     }
 }
