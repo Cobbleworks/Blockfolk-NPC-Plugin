@@ -53,6 +53,7 @@ import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.CustomEvent;
 import dev.blockfolk.model.LootTier;
+import dev.blockfolk.model.NamedLocation;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.NpcQuestion;
@@ -62,6 +63,7 @@ import dev.blockfolk.model.RoutePoint;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.CustomEventRepository;
+import dev.blockfolk.repository.LocationRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
@@ -72,6 +74,10 @@ import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
 import dev.blockfolk.util.UiText;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 
 public final class GuiService implements Listener {
 
@@ -134,6 +140,7 @@ public final class GuiService implements Listener {
     private final CustomEventRepository customEventRepository;
     private final Consumer<Player> customEventGuiOpener;
     private final CustomEventCreator customEventCreator;
+    private final LocationRepository locationRepository;
     private final NamespacedKey waypointActionKey;
     private final NamespacedKey waypointTokenKey;
     private final NamespacedKey reorderIconKey;
@@ -155,7 +162,8 @@ public final class GuiService implements Listener {
             RouteCreator routeCreator,
             CustomEventRepository customEventRepository,
             Consumer<Player> customEventGuiOpener,
-            CustomEventCreator customEventCreator
+            CustomEventCreator customEventCreator,
+            LocationRepository locationRepository
     ) {
         this.plugin = plugin;
         this.definitionRepository = definitionRepository;
@@ -168,6 +176,7 @@ public final class GuiService implements Listener {
         this.customEventRepository = customEventRepository;
         this.customEventGuiOpener = customEventGuiOpener;
         this.customEventCreator = customEventCreator;
+        this.locationRepository = locationRepository;
         this.waypointActionKey = new NamespacedKey(plugin, "behaviour-waypoint-action");
         this.waypointTokenKey = new NamespacedKey(plugin, "behaviour-waypoint-token");
         this.reorderIconKey = new NamespacedKey(plugin, "reorder-definition");
@@ -929,6 +938,8 @@ public final class GuiService implements Listener {
             handleRoutePointAnimationPickerClick(event, player, routePointAnimation);
         } else if (holder instanceof RoutePointValuePickerHolder routePointValuePicker) {
             handleRoutePointValuePickerClick(event, player, routePointValuePicker);
+        } else if (holder instanceof SavedLocationPickerHolder locationPicker) {
+            handleSavedLocationPickerClick(event, player, locationPicker);
         } else if (holder instanceof QuestionEditorHolder questionEditor) {
             handleQuestionEditorClick(event, player, questionEditor);
         } else if (holder instanceof QuestionBranchPickerHolder branchPicker) {
@@ -1945,8 +1956,24 @@ public final class GuiService implements Listener {
                     -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
         }
         player.closeInventory();
-        player.sendMessage(UiText.prompt("Right-click the block the NPC should "
-                + (type == BehaviourActionType.MOVE_TO ? "walk to" : "teleport onto") + ". Drop the compass to cancel."));
+        sendWaypointPrompt(player, type, token);
+    }
+
+    private void sendWaypointPrompt(Player player, BehaviourActionType type, UUID token) {
+        Component message = UiText.prompt("Right-click the block the NPC should "
+                + (type == BehaviourActionType.MOVE_TO ? "walk to" : "teleport onto") + ". ");
+        if (type == BehaviourActionType.MOVE_TO) {
+            Component selector = Component.text("[Select saved location]", NamedTextColor.GREEN)
+                    .decorate(TextDecoration.UNDERLINED)
+                    .hoverEvent(HoverEvent.showText(Component.text("Open global Locations", NamedTextColor.YELLOW)))
+                    .clickEvent(ClickEvent.callback(audience -> {
+                        if (!(audience instanceof Player clicked)
+                                || !clicked.getUniqueId().equals(player.getUniqueId())) return;
+                        Bukkit.getScheduler().runTask(plugin, () -> openSavedLocationPicker(clicked, token, 0));
+                    }));
+            message = message.append(selector).append(Component.space());
+        }
+        player.sendMessage(message.append(Component.text("Drop the compass to cancel.", NamedTextColor.YELLOW)));
     }
 
     private ItemStack createWaypointTool(WaypointSession session) {
@@ -2120,9 +2147,7 @@ public final class GuiService implements Listener {
                     -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
         }
         player.closeInventory();
-        player.sendMessage(UiText.prompt("Right-click the block the NPC should "
-                + (type == BehaviourActionType.MOVE_TO ? "walk to" : "teleport onto")
-                + ". Drop the compass to cancel."));
+        sendWaypointPrompt(player, type, token);
     }
 
     private ItemStack createRouteWaypointTool(RouteActionWaypointSession session) {
@@ -2171,6 +2196,100 @@ public final class GuiService implements Listener {
                 player.getInventory().setItem(slot, null);
             }
         }
+    }
+
+    private void openSavedLocationPicker(Player player, UUID token, int requestedPage) {
+        BehaviourActionType type = waypointType(player, token);
+        if (type != BehaviourActionType.MOVE_TO) {
+            player.sendMessage(UiText.warning("That Move To selection is no longer active."));
+            return;
+        }
+        List<NamedLocation> locations = new ArrayList<>(locationRepository.findAll());
+        int pages = Math.max(1, (locations.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int page = Math.max(0, Math.min(requestedPage, pages - 1));
+        Inventory inventory = Bukkit.createInventory(new SavedLocationPickerHolder(token, page), 54,
+                UiText.title("Select Global Location"));
+        int from = page * PAGE_SIZE;
+        int to = Math.min(from + PAGE_SIZE, locations.size());
+        for (int index = from; index < to; index++) {
+            NamedLocation named = locations.get(index);
+            inventory.setItem(index - from, item(Material.LODESTONE, named.displayName(), List.of(
+                    LegacyText.GRAY + named.location().display(),
+                    LegacyText.YELLOW + "Click to set Move To position"
+            )));
+        }
+        if (locations.isEmpty()) {
+            inventory.setItem(22, item(Material.BARRIER, "No Saved Locations", List.of(
+                    LegacyText.GRAY + "Create locations from the Routes menu")));
+        }
+        if (page > 0) inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
+        inventory.setItem(49, item(Material.RECOVERY_COMPASS, "Back to Block Selection", List.of(
+                LegacyText.GRAY + "Keep using the compass in the world")));
+        if (page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        openInventory(player, inventory);
+    }
+
+    private BehaviourActionType waypointType(Player player, UUID token) {
+        WaypointSession direct = waypointSessions.get(player.getUniqueId());
+        if (direct != null && direct.token().equals(token)) return direct.type();
+        RouteActionWaypointSession route = routeWaypointSessions.get(player.getUniqueId());
+        return route != null && route.token().equals(token) ? route.type() : null;
+    }
+
+    private void handleSavedLocationPickerClick(
+            InventoryClickEvent event, Player player, SavedLocationPickerHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        if (waypointType(player, holder.token()) != BehaviourActionType.MOVE_TO) {
+            player.closeInventory();
+            player.sendMessage(UiText.warning("That Move To selection is no longer active."));
+            return;
+        }
+        int slot = event.getRawSlot();
+        if (slot == 47) {
+            openSavedLocationPicker(player, holder.token(), holder.page() - 1);
+            return;
+        }
+        if (slot == 49) {
+            player.closeInventory();
+            sendWaypointPrompt(player, BehaviourActionType.MOVE_TO, holder.token());
+            return;
+        }
+        if (slot == 53) {
+            openSavedLocationPicker(player, holder.token(), holder.page() + 1);
+            return;
+        }
+        List<NamedLocation> locations = new ArrayList<>(locationRepository.findAll());
+        int index = holder.page() * PAGE_SIZE + slot;
+        if (slot < 0 || slot >= PAGE_SIZE || index < 0 || index >= locations.size()) return;
+        applySavedLocation(player, holder.token(), locations.get(index));
+    }
+
+    private void applySavedLocation(Player player, UUID token, NamedLocation named) {
+        WaypointSession direct = waypointSessions.get(player.getUniqueId());
+        if (direct != null && direct.token().equals(token)) {
+            NpcDefinition definition = definitionRepository.find(direct.action().key()).orElse(null);
+            finishWaypointSelection(player);
+            if (definition == null) {
+                player.sendMessage(UiText.error("That NPC preset no longer exists."));
+                return;
+            }
+            setAction(definition, direct.action(), direct.type(), named.location().serialize());
+            player.sendMessage(UiText.success("Move To set to global location '" + named.displayName() + "'."));
+            openBehaviourHome(player, definition, direct.action());
+            return;
+        }
+        RouteActionWaypointSession route = routeWaypointSessions.get(player.getUniqueId());
+        if (route == null || !route.token().equals(token)) return;
+        finishRouteWaypointSelection(player);
+        RoutePoint updated = setRoutePointAction(
+                route.action(), route.type(), named.location().serialize());
+        if (updated == null) {
+            player.sendMessage(UiText.error("That route point no longer exists."));
+            return;
+        }
+        player.sendMessage(UiText.success("Move To set to global location '" + named.displayName() + "'."));
+        openWaypointActions(player, route.action().routeKey(), updated);
     }
 
     private void handleAnimationPickerClick(
@@ -2861,6 +2980,7 @@ public final class GuiService implements Listener {
                 || holder instanceof RoutePointActionPickerHolder
                 || holder instanceof RoutePointAnimationPickerHolder
                 || holder instanceof RoutePointValuePickerHolder
+                || holder instanceof SavedLocationPickerHolder
                 || holder instanceof QuestionEditorHolder
                 || holder instanceof QuestionBranchPickerHolder
                 || holder instanceof QuestionBranchRoutePickerHolder
@@ -3329,6 +3449,10 @@ public final class GuiService implements Listener {
             UUID token
             ) {
 
+    }
+
+    private record SavedLocationPickerHolder(UUID token, int page) implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
     }
 
     private record AnimationPickerHolder(String key, BehaviourEvent event, String customEvent, int actionIndex, int page)

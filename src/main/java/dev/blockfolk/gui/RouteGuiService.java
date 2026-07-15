@@ -38,10 +38,13 @@ import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
 import dev.blockfolk.input.ChatInputService;
+import dev.blockfolk.model.ActionLocation;
+import dev.blockfolk.model.NamedLocation;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcRoute;
 import dev.blockfolk.model.RoutePoint;
 import dev.blockfolk.repository.NpcDefinitionRepository;
+import dev.blockfolk.repository.LocationRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
 import dev.blockfolk.util.LegacyText;
@@ -56,6 +59,7 @@ public final class RouteGuiService implements Listener {
     private static final Color PATH_DIRECTION_COLOR = Color.fromRGB(75, 255, 145);
     private final JavaPlugin plugin;
     private final RouteRepository routeRepository;
+    private final LocationRepository locationRepository;
     private final NpcDefinitionRepository definitionRepository;
     private final NpcInstanceRegistry instanceRegistry;
     private final ChatInputService chatInputService;
@@ -63,13 +67,16 @@ public final class RouteGuiService implements Listener {
     private final NamespacedKey wandRouteKey;
     private final NamespacedKey wandTokenKey;
     private final NamespacedKey reorderRouteKey;
+    private final NamespacedKey locationWandTokenKey;
     private final Map<UUID, EditSession> editSessions = new HashMap<>();
+    private final Map<UUID, LocationEditSession> locationEditSessions = new HashMap<>();
     private WaypointActionOpener waypointActionOpener;
     private BukkitTask markerTask;
 
     public RouteGuiService(
             JavaPlugin plugin,
             RouteRepository routeRepository,
+            LocationRepository locationRepository,
             NpcDefinitionRepository definitionRepository,
             NpcInstanceRegistry instanceRegistry,
             ChatInputService chatInputService,
@@ -77,6 +84,7 @@ public final class RouteGuiService implements Listener {
     ) {
         this.plugin = plugin;
         this.routeRepository = routeRepository;
+        this.locationRepository = locationRepository;
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.chatInputService = chatInputService;
@@ -84,6 +92,7 @@ public final class RouteGuiService implements Listener {
         this.wandRouteKey = new NamespacedKey(plugin, "route-editor-route");
         this.wandTokenKey = new NamespacedKey(plugin, "route-editor-token");
         this.reorderRouteKey = new NamespacedKey(plugin, "reorder-route");
+        this.locationWandTokenKey = new NamespacedKey(plugin, "location-editor-token");
     }
 
     public void setWaypointActionOpener(WaypointActionOpener waypointActionOpener) {
@@ -154,6 +163,11 @@ public final class RouteGuiService implements Listener {
         }
         inventory.setItem(45, item(folder.isEmpty() ? Material.PLAYER_HEAD : Material.ARROW,
                 folder.isEmpty() ? "Manage NPCs" : "Up One Group", List.of()));
+        inventory.setItem(46, item(Material.LODESTONE, "Locations", List.of(
+                LegacyText.GRAY + "Define global positions for NPC actions",
+                LegacyText.GREEN + "Uses green waypoint markers",
+                LegacyText.YELLOW + "Click to manage locations"
+        )));
         if (page > 0) {
             inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
         }
@@ -171,6 +185,43 @@ public final class RouteGuiService implements Listener {
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
+        GuiLayout.fillMainBar(inventory);
+        player.openInventory(inventory);
+    }
+
+    public void openLocations(Player player) {
+        openLocations(player, 0, "", 0);
+    }
+
+    private void openLocations(Player player, int requestedPage, String returnFolder, int returnPage) {
+        finishEditing(player, false);
+        finishLocationEditing(player);
+        List<NamedLocation> locations = new ArrayList<>(locationRepository.findAll());
+        int pages = Math.max(1, (locations.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int page = Math.max(0, Math.min(requestedPage, pages - 1));
+        Inventory inventory = Bukkit.createInventory(
+                new LocationsHolder(page, returnFolder, returnPage), 54, UiText.title("Global Locations"));
+        int from = page * PAGE_SIZE;
+        int to = Math.min(from + PAGE_SIZE, locations.size());
+        for (int index = from; index < to; index++) {
+            NamedLocation named = locations.get(index);
+            inventory.setItem(index - from, item(Material.LODESTONE, named.displayName(), List.of(
+                    LegacyText.DARK_GRAY + "Key: " + named.key(),
+                    LegacyText.GRAY + named.location().display(),
+                    LegacyText.RED + "Shift-right-click: delete"
+            )));
+        }
+        inventory.setItem(45, item(Material.ARROW, "Back to Routes", List.of()));
+        if (page > 0) inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
+        inventory.setItem(49, item(Material.COMPASS, "Location Overview", List.of(
+                LegacyText.GRAY + "Locations: " + LegacyText.WHITE + locations.size(),
+                LegacyText.GRAY + "Saved locations can be selected by movement actions"
+        )));
+        inventory.setItem(51, item(Material.AMETHYST_SHARD, "Create Location", List.of(
+                LegacyText.GRAY + "Select a block, then enter a name",
+                LegacyText.YELLOW + "Click to begin placement"
+        )));
+        if (page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
@@ -232,6 +283,11 @@ public final class RouteGuiService implements Listener {
             }
         }
         editSessions.clear();
+        for (UUID playerId : List.copyOf(locationEditSessions.keySet())) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) finishLocationEditing(player);
+        }
+        locationEditSessions.clear();
     }
 
     @EventHandler
@@ -254,6 +310,11 @@ public final class RouteGuiService implements Listener {
             if (isTopInventoryClick(event)) {
                 handleDeleteClick(event, player, deleteHolder);
             }
+        } else if (holder instanceof LocationsHolder locationsHolder) {
+            event.setCancelled(true);
+            if (isTopInventoryClick(event)) {
+                handleLocationsClick(event, player, locationsHolder);
+            }
         }
     }
 
@@ -261,7 +322,7 @@ public final class RouteGuiService implements Listener {
     public void onInventoryDrag(InventoryDragEvent event) {
         InventoryHolder holder = event.getView().getTopInventory().getHolder();
         if (holder instanceof RoutesHolder || holder instanceof ReorderRoutesHolder
-                || holder instanceof DeleteRouteHolder) {
+                || holder instanceof DeleteRouteHolder || holder instanceof LocationsHolder) {
             event.setCancelled(true);
         }
     }
@@ -336,8 +397,66 @@ public final class RouteGuiService implements Listener {
     }
 
     @EventHandler
+    public void onLocationPointClick(PlayerInteractEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND || event.getClickedBlock() == null
+                || (event.getAction() != Action.LEFT_CLICK_BLOCK
+                && event.getAction() != Action.RIGHT_CLICK_BLOCK)) {
+            return;
+        }
+        Player player = event.getPlayer();
+        LocationEditSession session = validLocationSession(player, event.getItem());
+        if (session == null) return;
+        event.setCancelled(true);
+        ActionLocation position = ActionLocation.above(event.getClickedBlock());
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+            NamedLocation existing = locationRepository.findAll().stream()
+                    .filter(named -> named.location().equals(position))
+                    .findFirst().orElse(null);
+            if (existing == null) {
+                player.sendMessage(UiText.info("That block is not a global location."));
+                return;
+            }
+            locationRepository.delete(existing);
+            player.sendMessage(UiText.success("Deleted global location '" + existing.displayName() + "'."));
+            player.spawnParticle(Particle.DUST, position.toLocation(), 10, 0.22, 0.08, 0.22, 0.0,
+                    new Particle.DustOptions(Color.fromRGB(70, 255, 120), 1.5f));
+            player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_PLACE, 0.7f, 0.7f);
+            return;
+        }
+        removeLocationEditor(player, session);
+        player.spawnParticle(Particle.DUST, position.toLocation(), 10, 0.22, 0.08, 0.22, 0.0,
+                new Particle.DustOptions(Color.fromRGB(70, 255, 120), 1.5f));
+        player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_PLACE, 0.7f, 1.2f);
+        chatInputService.request(player, "Enter a name for this global location:", value -> {
+            try {
+                NamedLocation named = NamedLocation.create(value, position);
+                if (locationRepository.find(named.key()).isPresent()) {
+                    player.sendMessage(UiText.error("A location with that key already exists."));
+                    openLocations(player, 0, session.returnFolder(), session.returnPage());
+                    return;
+                }
+                locationRepository.save(named);
+                player.sendMessage(UiText.success("Saved global location '" + named.displayName() + "'."));
+                openLocations(player, 0, session.returnFolder(), session.returnPage());
+            } catch (IllegalArgumentException exception) {
+                player.sendMessage(UiText.error(exception.getMessage()));
+                openLocations(player, 0, session.returnFolder(), session.returnPage());
+            }
+        });
+    }
+
+    @EventHandler
     public void onWandDrop(PlayerDropItemEvent event) {
         Player player = event.getPlayer();
+        LocationEditSession locationSession = validLocationSession(player, event.getItemDrop().getItemStack());
+        if (locationSession != null) {
+            event.getItemDrop().remove();
+            locationEditSessions.remove(player.getUniqueId());
+            player.sendMessage(UiText.success("Finished editing global locations."));
+            Bukkit.getScheduler().runTask(plugin, () -> openLocations(
+                    player, 0, locationSession.returnFolder(), locationSession.returnPage()));
+            return;
+        }
         if (validSession(player, event.getItemDrop().getItemStack()) == null) {
             return;
         }
@@ -350,6 +469,7 @@ public final class RouteGuiService implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         finishEditing(event.getPlayer(), false);
+        finishLocationEditing(event.getPlayer());
     }
 
     private void handleRoutesClick(InventoryClickEvent event, Player player, RoutesHolder holder) {
@@ -358,6 +478,10 @@ public final class RouteGuiService implements Listener {
         if (event.getRawSlot() == 45) {
             if (folder.isEmpty()) mainGuiOpener.accept(player);
             else openRoutes(player, parent(folder), 0);
+            return;
+        }
+        if (event.getRawSlot() == 46) {
+            openLocations(player, 0, folder, page);
             return;
         }
         if (event.getRawSlot() == 47) {
@@ -410,6 +534,106 @@ public final class RouteGuiService implements Listener {
             openDeleteConfirmation(player, route, folder, page);
         } else {
             beginEditing(player, route);
+        }
+    }
+
+    private void handleLocationsClick(InventoryClickEvent event, Player player, LocationsHolder holder) {
+        int slot = event.getRawSlot();
+        if (slot == 45) {
+            openRoutes(player, holder.returnFolder(), holder.returnPage());
+            return;
+        }
+        if (slot == 47) {
+            openLocations(player, holder.page() - 1, holder.returnFolder(), holder.returnPage());
+            return;
+        }
+        if (slot == 51) {
+            beginLocationEditing(player, holder.returnFolder(), holder.returnPage());
+            return;
+        }
+        if (slot == 53) {
+            openLocations(player, holder.page() + 1, holder.returnFolder(), holder.returnPage());
+            return;
+        }
+        int index = holder.page() * PAGE_SIZE + slot;
+        List<NamedLocation> locations = new ArrayList<>(locationRepository.findAll());
+        if (slot < 0 || slot >= PAGE_SIZE || index < 0 || index >= locations.size()) return;
+        if (event.isRightClick() && event.isShiftClick()) {
+            NamedLocation named = locations.get(index);
+            locationRepository.delete(named);
+            player.sendMessage(UiText.success("Deleted global location '" + named.displayName() + "'."));
+            openLocations(player, holder.page(), holder.returnFolder(), holder.returnPage());
+        }
+    }
+
+    private void beginLocationEditing(Player player, String returnFolder, int returnPage) {
+        finishEditing(player, false);
+        finishLocationEditing(player);
+        UUID token = UUID.randomUUID();
+        LocationEditSession session = new LocationEditSession(token, returnFolder, returnPage);
+        locationEditSessions.put(player.getUniqueId(), session);
+        ItemStack held = player.getInventory().getItemInMainHand();
+        player.getInventory().setItemInMainHand(createLocationWand(session));
+        if (!held.getType().isAir()) {
+            player.getInventory().addItem(held).values().forEach(leftover
+                    -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
+        }
+        player.closeInventory();
+        player.sendMessage(UiText.info("Placing a new global location."));
+        player.sendMessage(UiText.prompt(
+                "Left-click a block to add a named location, right-click to delete one, and drop the shard to finish."));
+        showLocations(player);
+    }
+
+    private ItemStack createLocationWand(LocationEditSession session) {
+        ItemStack wand = new ItemStack(Material.AMETHYST_SHARD);
+        ItemMeta meta = wand.getItemMeta();
+        meta.displayName(LegacyText.component(LegacyText.GREEN + "Global Location Editor"));
+        meta.lore(LegacyText.components(List.of(
+                LegacyText.GRAY + "Unique editor: " + session.token().toString().substring(0, 8),
+                LegacyText.YELLOW + "Left-click a block: set position",
+                LegacyText.RED + "Right-click a location: delete it",
+                LegacyText.GREEN + "Global locations are highlighted in green",
+                LegacyText.GRAY + "Drop: finish editing"
+        )));
+        meta.setEnchantmentGlintOverride(true);
+        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        meta.getPersistentDataContainer().set(locationWandTokenKey,
+                PersistentDataType.STRING, session.token().toString());
+        wand.setItemMeta(meta);
+        return wand;
+    }
+
+    private LocationEditSession validLocationSession(Player player, ItemStack item) {
+        LocationEditSession session = locationEditSessions.get(player.getUniqueId());
+        if (session == null || item == null || item.getType() != Material.AMETHYST_SHARD || !item.hasItemMeta()) {
+            return null;
+        }
+        String token = item.getItemMeta().getPersistentDataContainer()
+                .get(locationWandTokenKey, PersistentDataType.STRING);
+        return session.token().toString().equals(token) ? session : null;
+    }
+
+    private void finishLocationEditing(Player player) {
+        LocationEditSession session = locationEditSessions.remove(player.getUniqueId());
+        if (session != null) removeLocationWand(player, session);
+    }
+
+    private void removeLocationEditor(Player player, LocationEditSession session) {
+        locationEditSessions.remove(player.getUniqueId());
+        removeLocationWand(player, session);
+    }
+
+    private void removeLocationWand(Player player, LocationEditSession session) {
+        ItemStack[] contents = player.getInventory().getContents();
+        for (int slot = 0; slot < contents.length; slot++) {
+            ItemStack item = contents[slot];
+            ItemMeta meta = item == null ? null : item.getItemMeta();
+            if (item != null && item.getType() == Material.AMETHYST_SHARD && meta != null
+                    && session.token().toString().equals(meta.getPersistentDataContainer()
+                            .get(locationWandTokenKey, PersistentDataType.STRING))) {
+                player.getInventory().setItem(slot, null);
+            }
         }
     }
 
@@ -638,6 +862,20 @@ public final class RouteGuiService implements Listener {
                 showRoutePoints(player, route);
             }
         }
+        for (UUID playerId : locationEditSessions.keySet()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null && player.isOnline()) showLocations(player);
+        }
+    }
+
+    private void showLocations(Player player) {
+        Particle.DustOptions dust = new Particle.DustOptions(Color.fromRGB(70, 255, 120), 1.5f);
+        for (NamedLocation named : locationRepository.findAll()) {
+            Location location = named.location().toLocation();
+            if (location == null || location.getWorld() != player.getWorld()) continue;
+            player.spawnParticle(Particle.DUST, location.clone().add(0.0, 0.1, 0.0),
+                    6, 0.22, 0.08, 0.22, 0.0, dust);
+        }
     }
 
     private void showRoutePoints(Player player, NpcRoute route) {
@@ -736,6 +974,8 @@ public final class RouteGuiService implements Listener {
 
     }
 
+    private record LocationEditSession(UUID token, String returnFolder, int returnPage) { }
+
     @FunctionalInterface
     public interface WaypointActionOpener {
 
@@ -750,6 +990,10 @@ public final class RouteGuiService implements Listener {
         public Inventory getInventory() {
             return null;
         }
+    }
+
+    private record LocationsHolder(int page, String returnFolder, int returnPage) implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
     }
 
     private static final class ReorderRoutesHolder implements InventoryHolder {

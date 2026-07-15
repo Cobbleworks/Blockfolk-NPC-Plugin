@@ -16,6 +16,7 @@ import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.repository.CustomEventRepository;
+import dev.blockfolk.repository.LocationRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.NpcInstanceRepository;
 import dev.blockfolk.repository.RouteRepository;
@@ -36,6 +37,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private NpcDefinitionRepository definitionRepository;
     private NpcInstanceRepository instanceRepository;
     private RouteRepository routeRepository;
+    private LocationRepository locationRepository;
     private CustomEventRepository customEventRepository;
     private NpcInstanceRegistry instanceRegistry;
     private NpcRenderer npcRenderer;
@@ -58,6 +60,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         definitionRepository = new NpcDefinitionRepository(this);
         instanceRepository = new NpcInstanceRepository(this);
         routeRepository = new RouteRepository(this);
+        locationRepository = new LocationRepository(this);
         customEventRepository = new CustomEventRepository(this);
         npcRenderer = new PaperMannequinNpcRenderer(this);
         navigationService = new NativeNpcNavigationService(this);
@@ -78,6 +81,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         routeGuiService = new RouteGuiService(
                 this,
                 routeRepository,
+                locationRepository,
                 definitionRepository,
                 instanceRegistry,
                 chatInputService,
@@ -96,7 +100,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 routeGuiService::createRoute,
                 customEventRepository,
                 customEventGuiService::open,
-                customEventGuiService::createEvent
+                customEventGuiService::createEvent,
+                locationRepository
         );
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
@@ -128,6 +133,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         );
 
         routeRepository.loadAll();
+        locationRepository.loadAll();
         customEventRepository.loadAll();
         definitionRepository.loadAll();
         instanceRegistry.loadPersistedInstances();
