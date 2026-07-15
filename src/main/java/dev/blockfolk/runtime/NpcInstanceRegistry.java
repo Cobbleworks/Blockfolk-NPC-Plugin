@@ -8,9 +8,18 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Pose;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityRemoveEvent;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.Plugin;
 
 import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.model.NpcDefinition;
@@ -19,8 +28,10 @@ import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.NpcInstanceRepository;
 
-public final class NpcInstanceRegistry {
+public final class NpcInstanceRegistry implements Listener {
 
+    private final Plugin plugin;
+    private final NamespacedKey instanceKey;
     private final NpcDefinitionRepository definitionRepository;
     private final NpcInstanceRepository instanceRepository;
     private final NpcRenderer renderer;
@@ -36,17 +47,46 @@ public final class NpcInstanceRegistry {
     }
 
     public NpcInstanceRegistry(
+            Plugin plugin,
             NpcDefinitionRepository definitionRepository,
             NpcInstanceRepository instanceRepository,
             NpcRenderer renderer,
             NativeNpcNavigationService navigationService,
             DialogService dialogService
     ) {
+        this.plugin = plugin;
+        this.instanceKey = new NamespacedKey(plugin, "instance-id");
         this.definitionRepository = definitionRepository;
         this.instanceRepository = instanceRepository;
         this.renderer = renderer;
         this.navigationService = navigationService;
         this.dialogService = dialogService;
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onMannequinRemoved(EntityRemoveEvent event) {
+        if (!(event.getEntity() instanceof Mannequin mannequin)
+                || event.getCause() == EntityRemoveEvent.Cause.UNLOAD
+                || event.getCause() == EntityRemoveEvent.Cause.DEATH) {
+            return;
+        }
+        String storedId = mannequin.getPersistentDataContainer().get(instanceKey, PersistentDataType.STRING);
+        if (storedId == null) {
+            return;
+        }
+        UUID instanceId;
+        try {
+            instanceId = UUID.fromString(storedId);
+        } catch (IllegalArgumentException ignored) {
+            return;
+        }
+        int removedEntityId = mannequin.getEntityId();
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            NpcInstance instance = instances.get(instanceId);
+            if (instance != null && instance.getEntityId() == removedEntityId) {
+                deleteInstance(instanceId);
+            }
+        });
     }
 
     public void loadPersistedInstances() {

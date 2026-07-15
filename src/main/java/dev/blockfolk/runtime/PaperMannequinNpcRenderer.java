@@ -14,10 +14,6 @@ import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Pose;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
@@ -38,13 +34,12 @@ import net.kyori.adventure.text.Component;
  * packet-only fake player, the server owns and tracks this entity, so packet
  * layout changes cannot leave the client with a silently missing NPC.
  */
-public final class PaperMannequinNpcRenderer implements NpcRenderer, Listener {
+public final class PaperMannequinNpcRenderer implements NpcRenderer {
 
     private final Plugin plugin;
     private final NamespacedKey instanceKey;
     private final Map<UUID, UUID> entityIdsByInstance = new HashMap<>();
     private final Map<UUID, Integer> jumpTicksByInstance = new HashMap<>();
-    private final Map<UUID, RenderTarget> renderTargets = new HashMap<>();
     private BukkitTask animationTask;
 
     private static final int JUMP_DURATION_TICKS = 12;
@@ -71,12 +66,10 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer, Listener {
         }
         jumpTicksByInstance.clear();
         entityIdsByInstance.clear();
-        renderTargets.clear();
     }
 
     @Override
     public void spawn(NpcInstance instance, NpcDefinition definition) {
-        renderTargets.put(instance.getId(), new RenderTarget(instance, definition));
         Mannequin existing = findEntity(instance);
         if (existing != null) {
             applyDefinition(existing, instance, definition, false);
@@ -115,7 +108,6 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer, Listener {
 
     @Override
     public void destroy(NpcInstance instance) {
-        renderTargets.remove(instance.getId());
         Mannequin mannequin = findEntity(instance);
         if (mannequin != null) {
             mannequin.remove();
@@ -123,36 +115,6 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer, Listener {
         entityIdsByInstance.remove(instance.getId());
         jumpTicksByInstance.remove(instance.getId());
         instance.setEntityId(0);
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onMannequinRemoved(EntityRemoveEvent event) {
-        if (!(event.getEntity() instanceof Mannequin mannequin)
-                || event.getCause() == EntityRemoveEvent.Cause.UNLOAD
-                || event.getCause() == EntityRemoveEvent.Cause.DEATH) {
-            return;
-        }
-        String storedId = mannequin.getPersistentDataContainer().get(instanceKey, PersistentDataType.STRING);
-        if (storedId == null) {
-            return;
-        }
-        UUID instanceId;
-        try {
-            instanceId = UUID.fromString(storedId);
-        } catch (IllegalArgumentException ignored) {
-            return;
-        }
-        RenderTarget target = renderTargets.get(instanceId);
-        if (target == null) {
-            return;
-        }
-        entityIdsByInstance.remove(instanceId, mannequin.getUniqueId());
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            if (renderTargets.get(instanceId) == target && findEntity(target.instance()) == null) {
-                plugin.getLogger().fine(() -> "Restoring externally removed NPC " + instanceId);
-                spawn(target.instance(), target.definition());
-            }
-        });
     }
 
     @Override
@@ -342,9 +304,6 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer, Listener {
         } else if (previousHealth <= 0.0) {
             mannequin.setHealth(maxHealth.getValue());
         }
-    }
-
-    private record RenderTarget(NpcInstance instance, NpcDefinition definition) {
     }
 
     private ResolvableProfile createProfile(NpcInstance instance, NpcDefinition definition) {

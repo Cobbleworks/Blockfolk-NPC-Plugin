@@ -63,6 +63,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         navigationService = new NativeNpcNavigationService(this);
         dialogService = new DialogService(this);
         instanceRegistry = new NpcInstanceRegistry(
+                this,
                 definitionRepository,
                 instanceRepository,
                 npcRenderer,
@@ -150,7 +151,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(questionService, this);
         getServer().getPluginManager().registerEvents(combatService, this);
         getServer().getPluginManager().registerEvents(behaviourService, this);
-        getServer().getPluginManager().registerEvents((PaperMannequinNpcRenderer) npcRenderer, this);
+        getServer().getPluginManager().registerEvents(instanceRegistry, this);
 
         npcRenderer.start();
         dialogService.start();
