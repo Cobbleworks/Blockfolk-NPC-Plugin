@@ -37,14 +37,12 @@ final class ArrowNpcAttack implements NpcAttack {
         ItemStack weapon = attacker.getEquipment().getItemInMainHand();
         double speed = crossbow ? 3.15 : 3.0;
         Arrow arrow = attacker.launchProjectile(Arrow.class, aimedVelocity(attacker, target, speed, 0.045));
+        arrow.setWeapon(weapon.clone());
         int power = weapon.getEnchantmentLevel(Enchantment.POWER);
         arrow.setDamage(2.0 + (power == 0 ? 0.0 : 0.5 * power + 0.5));
-        arrow.setKnockbackStrength(weapon.getEnchantmentLevel(Enchantment.PUNCH));
         arrow.setFireTicks(weapon.containsEnchantment(Enchantment.FLAME) ? 100 : 0);
         arrow.setPierceLevel(crossbow ? weapon.getEnchantmentLevel(Enchantment.PIERCING) : 0);
-        arrow.setShotFromCrossbow(crossbow);
         arrow.setPickupStatus(AbstractArrow.PickupStatus.DISALLOWED);
-        arrow.setWeapon(weapon.clone());
         attacker.swingMainHand();
     }
 

@@ -9,14 +9,14 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import dev.blockfolk.command.BlockfolkCommand;
 import dev.blockfolk.dialog.DialogService;
-import dev.blockfolk.gui.GuiService;
 import dev.blockfolk.gui.CustomEventGuiService;
+import dev.blockfolk.gui.GuiService;
 import dev.blockfolk.gui.RouteGuiService;
 import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.NpcDefinition;
-import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.CustomEventRepository;
+import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.NpcInstanceRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.runtime.NativeNpcNavigationService;
@@ -160,7 +160,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         questionService.start();
         behaviourService.start();
         routeMovementService.start();
-        getLogger().info("Blockfolk enabled with " + definitionRepository.findAll().size() + " NPC definitions.");
+        getLogger().info(() -> "Blockfolk enabled with " + definitionRepository.findAll().size() + " NPC definitions.");
     }
 
     @Override
@@ -244,7 +244,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
             definition.setResolvedSkin(requestedUrl, resolved.textureValue(), resolved.textureSignature());
             definitionRepository.save(definition);
             instanceRegistry.refreshDefinition(definition);
-            getLogger().info("Processed the external skin for NPC " + definitionKey + ".");
+            getLogger().info(() -> "Processed the external skin for NPC " + definitionKey + ".");
         });
     }
 }

@@ -12,7 +12,6 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -68,6 +67,7 @@ import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
 import dev.blockfolk.runtime.NpcBehaviourService.NpcInventoryHolder;
 import dev.blockfolk.util.ResolvedSkin;
+import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
 import dev.blockfolk.util.UiText;
@@ -210,18 +210,18 @@ public final class GuiService implements Listener {
             if (index < actions.size()) {
                 BehaviourAction action = actions.get(index);
                 inventory.setItem(slot, item(actionMaterial(action.type()), (index + 1) + ". " + action.type().displayName(), List.of(
-                        ChatColor.GRAY + actionValueDisplay(action),
-                        ChatColor.YELLOW + "Left-click to replace",
-                        ChatColor.RED + "Right-click to remove"
+                        LegacyText.GRAY + actionValueDisplay(action),
+                        LegacyText.YELLOW + "Left-click to replace",
+                        LegacyText.RED + "Right-click to remove"
                 )));
             } else if (index == actions.size()) {
                 inventory.setItem(slot, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
-                        ChatColor.YELLOW + "Click to append"
+                        LegacyText.YELLOW + "Click to append"
                 )));
             }
         }
         inventory.setItem(22, item(Material.BARRIER, "Back to Route Editing", List.of(
-                ChatColor.GRAY + "Close this menu and keep editing points"
+                LegacyText.GRAY + "Close this menu and keep editing points"
         )));
         openInventory(player, inventory);
     }
@@ -231,12 +231,12 @@ public final class GuiService implements Listener {
         for (Map.Entry<Integer, BehaviourActionType> entry : ACTION_PICKER_ACTIONS.entrySet()) {
             BehaviourActionType type = entry.getValue();
             inventory.setItem(entry.getKey(), item(actionMaterial(type), type.displayName(), List.of(
-                    ChatColor.YELLOW + "Click to configure"
+                    LegacyText.YELLOW + "Click to configure"
             )));
         }
         inventory.setItem(ACTION_PICKER_ANIMATIONS_SLOT, item(Material.ARMOR_STAND, "Animations", List.of(
-                ChatColor.GRAY + "Poses, waving, and jumping",
-                ChatColor.YELLOW + "Click to choose an animation"
+                LegacyText.GRAY + "Poses, waving, and jumping",
+                LegacyText.YELLOW + "Click to choose an animation"
         )));
         inventory.setItem(ACTION_PICKER_BACK_SLOT, item(Material.BARRIER, "Back", List.of()));
         openInventory(player, inventory);
@@ -249,7 +249,7 @@ public final class GuiService implements Listener {
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
             BehaviourActionType type = ANIMATION_ACTIONS.get(index);
             inventory.setItem(slots[index], item(actionMaterial(type), type.displayName(), List.of(
-                    ChatColor.YELLOW + "Click to select"
+                    LegacyText.YELLOW + "Click to select"
             )));
         }
         inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
@@ -274,12 +274,12 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             BehaviourPickerOption option = options.get(index);
             List<String> lore = new ArrayList<>(option.lore());
-            lore.add(ChatColor.YELLOW + (option.folder() ? "Click to open" : "Click to select"));
+            lore.add(LegacyText.YELLOW + (option.folder() ? "Click to open" : "Click to select"));
             inventory.setItem(index - from, item(option.icon(), option.label(), lore));
         }
         if (options.isEmpty()) {
             inventory.setItem(22, item(Material.BARRIER, "No Values Available", List.of(
-                    ChatColor.GRAY + pickerType.emptyMessage()
+                    LegacyText.GRAY + pickerType.emptyMessage()
             )));
         }
         if (page > 0) {
@@ -291,12 +291,12 @@ public final class GuiService implements Listener {
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         if (pickerType == BehaviourValuePickerType.ROUTE) {
             inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
-                    ChatColor.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
-                    ChatColor.YELLOW + "Click, then enter its name")));
+                    LegacyText.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
+                    LegacyText.YELLOW + "Click, then enter its name")));
         } else if (pickerType == BehaviourValuePickerType.CUSTOM_EVENT) {
             inventory.setItem(51, item(Material.EMERALD, "Create New Event", List.of(
-                    ChatColor.GRAY + "Creates and selects a custom event",
-                    ChatColor.YELLOW + "Click, then enter its name")));
+                    LegacyText.GRAY + "Creates and selects a custom event",
+                    LegacyText.YELLOW + "Click, then enter its name")));
         }
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
@@ -323,36 +323,36 @@ public final class GuiService implements Listener {
             NpcDefinition definition = definitions.get(index);
             int instances = instanceRegistry.findByDefinition(definition).size();
             inventory.setItem(index - from, definitionIcon(definition, List.of(
-                    ChatColor.DARK_GRAY + "Key: " + definition.getKey(),
-                    ChatColor.GRAY + "Instances: " + ChatColor.WHITE + instances,
+                    LegacyText.DARK_GRAY + "Key: " + definition.getKey(),
+                    LegacyText.GRAY + "Instances: " + LegacyText.WHITE + instances,
                     statusLine(definition),
-                    ChatColor.YELLOW + "Click to manage",
-                    ChatColor.RED + "Shift + right-click to delete"
+                    LegacyText.YELLOW + "Click to manage",
+                    LegacyText.RED + "Shift + right-click to delete"
             )));
         }
         inventory.setItem(45, item(Material.MAP, "Manage Routes", List.of(
-                ChatColor.GRAY + "Create and edit NPC walking routes",
-                ChatColor.YELLOW + "Click to open route setup"
+                LegacyText.GRAY + "Create and edit NPC walking routes",
+                LegacyText.YELLOW + "Click to open route setup"
         )));
         inventory.setItem(46, item(Material.BELL, "Custom Events", List.of(
-                ChatColor.GRAY + "Define events NPCs can emit and react to",
-                ChatColor.YELLOW + "Click to manage custom events"
+                LegacyText.GRAY + "Define events NPCs can emit and react to",
+                LegacyText.YELLOW + "Click to manage custom events"
         )));
         if (page > 0) {
-            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of(ChatColor.GRAY + "Page " + page + " of " + pages)));
+            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of(LegacyText.GRAY + "Page " + page + " of " + pages)));
         }
         inventory.setItem(49, item(Material.NETHER_STAR, "Blockfolk Overview", List.of(
-                ChatColor.GRAY + "Presets: " + ChatColor.WHITE + definitions.size(),
-                ChatColor.GRAY + "Spawned instances: " + ChatColor.WHITE + instanceRegistry.findAll().size(),
-                ChatColor.GRAY + "Page " + (page + 1) + " of " + pages,
-                ChatColor.YELLOW + "Click to reorder NPC presets"
+                LegacyText.GRAY + "Presets: " + LegacyText.WHITE + definitions.size(),
+                LegacyText.GRAY + "Spawned instances: " + LegacyText.WHITE + instanceRegistry.findAll().size(),
+                LegacyText.GRAY + "Page " + (page + 1) + " of " + pages,
+                LegacyText.YELLOW + "Click to reorder NPC presets"
         )));
         inventory.setItem(51, item(Material.EMERALD, "Create NPC", List.of(
-                ChatColor.GRAY + "Creates a new preset",
-                ChatColor.YELLOW + "Click, then enter its name in chat"
+                LegacyText.GRAY + "Creates a new preset",
+                LegacyText.YELLOW + "Click, then enter its name in chat"
         )));
         if (page + 1 < pages) {
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of(ChatColor.GRAY + "Page " + (page + 2) + " of " + pages)));
+            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of(LegacyText.GRAY + "Page " + (page + 2) + " of " + pages)));
         }
         openInventory(player, inventory);
     }
@@ -390,10 +390,10 @@ public final class GuiService implements Listener {
             inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         }
         inventory.setItem(48, item(Material.LIME_CONCRETE, "Save Order", List.of(
-                ChatColor.GRAY + "Apply this order to the preset overview"
+                LegacyText.GRAY + "Apply this order to the preset overview"
         )));
         inventory.setItem(50, item(Material.RED_CONCRETE, "Cancel", List.of(
-                ChatColor.GRAY + "Discard all ordering changes"
+                LegacyText.GRAY + "Discard all ordering changes"
         )));
         if (holder.page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
@@ -403,8 +403,8 @@ public final class GuiService implements Listener {
 
     private ItemStack reorderIcon(NpcDefinition definition, int index) {
         ItemStack icon = definitionIcon(definition, List.of(
-                ChatColor.GRAY + "Position: " + ChatColor.WHITE + (index + 1),
-                ChatColor.YELLOW + "Pick up and drop to move"
+                LegacyText.GRAY + "Position: " + LegacyText.WHITE + (index + 1),
+                LegacyText.YELLOW + "Pick up and drop to move"
         ));
         ItemMeta meta = icon.getItemMeta();
         meta.getPersistentDataContainer().set(reorderIconKey, PersistentDataType.STRING, definition.getKey());
@@ -417,62 +417,62 @@ public final class GuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(new EditorHolder(definition.getKey()), 36,
                 UiText.title("Manage", definition.getDisplayName()));
         inventory.setItem(4, definitionIcon(definition, List.of(
-                ChatColor.DARK_GRAY + "Key: " + definition.getKey(),
-                ChatColor.GRAY + "Instances: " + ChatColor.WHITE + instances,
-                ChatColor.GRAY + "Skin: " + ChatColor.WHITE + (definition.getSkinUrl() == null ? "Default" : "Custom"),
-                ChatColor.GRAY + "Spawn: " + ChatColor.WHITE + formatLocation(definition.getSpawnpoint())
+                LegacyText.DARK_GRAY + "Key: " + definition.getKey(),
+                LegacyText.GRAY + "Instances: " + LegacyText.WHITE + instances,
+                LegacyText.GRAY + "Skin: " + LegacyText.WHITE + (definition.getSkinUrl() == null ? "Default" : "Custom"),
+                LegacyText.GRAY + "Spawn: " + LegacyText.WHITE + formatLocation(definition.getSpawnpoint())
         )));
         inventory.setItem(10, item(Material.NAME_TAG, "Display Name", List.of(
-                ChatColor.GRAY + definition.getDisplayName(),
-                ChatColor.YELLOW + "Click to rename"
+                LegacyText.GRAY + definition.getDisplayName(),
+                LegacyText.YELLOW + "Click to rename"
         )));
         inventory.setItem(11, item(Material.PLAYER_HEAD, "Skin", List.of(
-                ChatColor.GRAY + abbreviatedSkin(definition.getSkinUrl()),
-                ChatColor.YELLOW + "Click to set a URL or texture hash",
-                ChatColor.DARK_GRAY + "Enter 'default' to clear it"
+                LegacyText.GRAY + abbreviatedSkin(definition.getSkinUrl()),
+                LegacyText.YELLOW + "Click to set a URL or texture hash",
+                LegacyText.DARK_GRAY + "Enter 'default' to clear it"
         )));
         inventory.setItem(12, item(Material.RED_BED, "Preset Spawnpoint", List.of(
-                ChatColor.GRAY + formatLocation(definition.getSpawnpoint()),
-                ChatColor.YELLOW + "Click to use your current location"
+                LegacyText.GRAY + formatLocation(definition.getSpawnpoint()),
+                LegacyText.YELLOW + "Click to use your current location"
         )));
         inventory.setItem(14, item(Material.CHEST, "Equipment", List.of(
-                ChatColor.GRAY + "Armor, hands, and stored inventory",
-                ChatColor.YELLOW + "Click to edit"
+                LegacyText.GRAY + "Armor, hands, and stored inventory",
+                LegacyText.YELLOW + "Click to edit"
         )));
         if (instances == 0) {
             inventory.setItem(16, item(Material.ARMOR_STAND, "Spawn NPC", List.of(
-                    ChatColor.GRAY + "Creates the first visible NPC",
-                    ChatColor.GRAY + "at the preset spawnpoint",
-                    ChatColor.YELLOW + "Click to spawn"
+                    LegacyText.GRAY + "Creates the first visible NPC",
+                    LegacyText.GRAY + "at the preset spawnpoint",
+                    LegacyText.YELLOW + "Click to spawn"
             )));
         } else {
             inventory.setItem(16, item(Material.ENDER_EYE, "Manage Instances", List.of(
-                    ChatColor.GRAY + "" + instances + " spawned instance(s)",
-                    ChatColor.YELLOW + "Teleport, move, remove, or spawn copies"
+                    LegacyText.GRAY + "" + instances + " spawned instance(s)",
+                    LegacyText.YELLOW + "Teleport, move, remove, or spawn copies"
             )));
         }
         int behaviourCount = java.util.Arrays.stream(BehaviourEvent.values())
                 .mapToInt(event -> definition.getBehaviourActions(event).size()).sum();
         inventory.setItem(13, item(Material.COMMAND_BLOCK, "Event Behaviour", List.of(
-                ChatColor.GRAY + "" + behaviourCount + " configured action(s)",
-                ChatColor.GRAY + "Build event-to-action sequences",
-                ChatColor.YELLOW + "Click to configure"
+                LegacyText.GRAY + "" + behaviourCount + " configured action(s)",
+                LegacyText.GRAY + "Build event-to-action sequences",
+                LegacyText.YELLOW + "Click to configure"
         )));
         inventory.setItem(22, item(Material.BELL, "Custom Event Behaviour", List.of(
-                ChatColor.GRAY + "" + definition.customEventActionCount() + " configured action(s)",
-                ChatColor.GRAY + "React to globally emitted custom events",
-                ChatColor.YELLOW + "Click to configure"
+                LegacyText.GRAY + "" + definition.customEventActionCount() + " configured action(s)",
+                LegacyText.GRAY + "React to globally emitted custom events",
+                LegacyText.YELLOW + "Click to configure"
         )));
         CombatProfile combat = definition.getCombatProfile();
         inventory.setItem(15, item(Material.IRON_SWORD, "Fighting", List.of(
-                ChatColor.GRAY + "Health: " + ChatColor.WHITE + healthLabel(combat),
-                ChatColor.GRAY + "Respawn: " + ChatColor.WHITE + respawnLabel(combat),
-                ChatColor.GRAY + "Experience: " + ChatColor.WHITE + experienceLabel(combat),
-                ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.attackReaction().displayName(),
-                ChatColor.GRAY + "Attack targets: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
-                ChatColor.GRAY + "Alliance: " + ChatColor.WHITE + allianceLabel(combat),
-                ChatColor.GRAY + "Boss bar: " + ChatColor.WHITE + (combat.showBossBar() ? "Shown nearby" : "Hidden"),
-                ChatColor.YELLOW + "Click to configure combat"
+                LegacyText.GRAY + "Health: " + LegacyText.WHITE + healthLabel(combat),
+                LegacyText.GRAY + "Respawn: " + LegacyText.WHITE + respawnLabel(combat),
+                LegacyText.GRAY + "Experience: " + LegacyText.WHITE + experienceLabel(combat),
+                LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName(),
+                LegacyText.GRAY + "Attack targets: " + LegacyText.WHITE + enabledTargetCount(combat) + "/4",
+                LegacyText.GRAY + "Alliance: " + LegacyText.WHITE + allianceLabel(combat),
+                LegacyText.GRAY + "Boss bar: " + LegacyText.WHITE + (combat.showBossBar() ? "Shown nearby" : "Hidden"),
+                LegacyText.YELLOW + "Click to configure combat"
         )));
         inventory.setItem(31, item(Material.BARRIER, "Back to Presets", List.of()));
         openInventory(player, inventory);
@@ -489,7 +489,7 @@ public final class GuiService implements Listener {
         }
         for (LootTier tier : LootTier.values()) {
             inventory.setItem(tier.rowStarterSlot(), item(tier.icon(), tier.displayName(), List.of(
-                    ChatColor.GRAY + "" + tier.dropChancePercent() + "% chance per item slot"
+                    LegacyText.GRAY + "" + tier.dropChancePercent() + "% chance per item slot"
             )));
         }
         inventory.setItem(36, label("Helmet", Material.CHAINMAIL_HELMET));
@@ -499,8 +499,8 @@ public final class GuiService implements Listener {
         inventory.setItem(41, label("Main Hand", Material.IRON_SWORD));
         inventory.setItem(42, label("Off Hand", Material.SHIELD));
         inventory.setItem(44, item(Material.CHEST, "NPC loot above", List.of(
-                ChatColor.GRAY + "Each filled slot rolls independently",
-                ChatColor.GRAY + "Equipment is stored below"
+                LegacyText.GRAY + "Each filled slot rolls independently",
+                LegacyText.GRAY + "Equipment is stored below"
         )));
         ItemStack[] armor = definition.getArmorContents();
         inventory.setItem(45, armor[3]);
@@ -510,7 +510,7 @@ public final class GuiService implements Listener {
         inventory.setItem(50, definition.getMainHand());
         inventory.setItem(51, definition.getOffHand());
         inventory.setItem(53, item(Material.LIME_DYE, "Save Equipment", List.of(
-                ChatColor.GRAY + "Saves and refreshes every instance"
+                LegacyText.GRAY + "Saves and refreshes every instance"
         )));
         openInventory(player, inventory);
     }
@@ -520,70 +520,70 @@ public final class GuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(new FightingHolder(definition.getKey()), 36,
                 UiText.title("Fighting", definition.getDisplayName()));
         inventory.setItem(1, item(Material.LIME_DYE, "+ " + CombatProfile.HEALTH_STEP + " Health", List.of(
-                ChatColor.GRAY + "Current: " + ChatColor.WHITE + healthLabel(combat),
-                ChatColor.YELLOW + "Click to increase max health",
-                ChatColor.DARK_GRAY + "Shift-click for x10"
+                LegacyText.GRAY + "Current: " + LegacyText.WHITE + healthLabel(combat),
+                LegacyText.YELLOW + "Click to increase max health",
+                LegacyText.DARK_GRAY + "Shift-click for x10"
         )));
         inventory.setItem(10, combat.invulnerable()
                 ? item(Material.TOTEM_OF_UNDYING, "Max Health: " + healthLabel(combat), List.of(
-                        ChatColor.GREEN + "This NPC cannot be damaged",
-                        ChatColor.DARK_GRAY + "Set health to 0 for invulnerability"
+                        LegacyText.GREEN + "This NPC cannot be damaged",
+                        LegacyText.DARK_GRAY + "Set health to 0 for invulnerability"
                 ))
                 : potionItem(PotionType.HEALING, "Max Health: " + healthLabel(combat), List.of(
-                        ChatColor.GRAY + "The NPC is removed when killed",
-                        ChatColor.DARK_GRAY + "Set health to 0 for invulnerability"
+                        LegacyText.GRAY + "The NPC is removed when killed",
+                        LegacyText.DARK_GRAY + "Set health to 0 for invulnerability"
                 )));
         inventory.setItem(19, item(Material.RED_DYE, "- " + CombatProfile.HEALTH_STEP + " Health", List.of(
-                ChatColor.GRAY + "Current: " + ChatColor.WHITE + healthLabel(combat),
-                ChatColor.YELLOW + "Click to decrease max health",
-                ChatColor.DARK_GRAY + "Shift-click for x10"
+                LegacyText.GRAY + "Current: " + LegacyText.WHITE + healthLabel(combat),
+                LegacyText.YELLOW + "Click to decrease max health",
+                LegacyText.DARK_GRAY + "Shift-click for x10"
         )));
         inventory.setItem(3, item(Material.LIME_DYE, "+ " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds", List.of(
-                ChatColor.GRAY + "Current: " + ChatColor.WHITE + respawnLabel(combat),
-                ChatColor.YELLOW + "Click to increase respawn time",
-                ChatColor.DARK_GRAY + "Shift-click for x10"
+                LegacyText.GRAY + "Current: " + LegacyText.WHITE + respawnLabel(combat),
+                LegacyText.YELLOW + "Click to increase respawn time",
+                LegacyText.DARK_GRAY + "Shift-click for x10"
         )));
         inventory.setItem(12, item(combat.respawnSeconds() == 0 ? Material.BARRIER : Material.CLOCK,
                 "Respawn Time: " + respawnLabel(combat), List.of(
                 combat.respawnSeconds() == 0
-                ? ChatColor.GRAY + "Killed NPCs will not respawn"
-                : ChatColor.GREEN + "Respawns at the preset spawn point",
+                ? LegacyText.GRAY + "Killed NPCs will not respawn"
+                : LegacyText.GREEN + "Respawns at the preset spawn point",
                 definition.getSpawnpoint() == null
-                ? ChatColor.RED + "A preset spawn point is required"
-                : ChatColor.DARK_GRAY + "Preset spawn point is configured"
+                ? LegacyText.RED + "A preset spawn point is required"
+                : LegacyText.DARK_GRAY + "Preset spawn point is configured"
         )));
         inventory.setItem(21, item(Material.RED_DYE, "- " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds", List.of(
-                ChatColor.GRAY + "Current: " + ChatColor.WHITE + respawnLabel(combat),
-                ChatColor.YELLOW + "Click to decrease respawn time",
-                ChatColor.DARK_GRAY + "Shift-click for x10"
+                LegacyText.GRAY + "Current: " + LegacyText.WHITE + respawnLabel(combat),
+                LegacyText.YELLOW + "Click to decrease respawn time",
+                LegacyText.DARK_GRAY + "Shift-click for x10"
         )));
         inventory.setItem(5, item(Material.LIME_DYE, "+ " + CombatProfile.EXPERIENCE_STEP + " Experience", List.of(
-                ChatColor.GRAY + "Current: " + ChatColor.WHITE + experienceLabel(combat),
-                ChatColor.YELLOW + "Click to increase dropped experience",
-                ChatColor.DARK_GRAY + "Shift-click for x10"
+                LegacyText.GRAY + "Current: " + LegacyText.WHITE + experienceLabel(combat),
+                LegacyText.YELLOW + "Click to increase dropped experience",
+                LegacyText.DARK_GRAY + "Shift-click for x10"
         )));
         inventory.setItem(14, item(Material.EXPERIENCE_BOTTLE,
                 "Dropped Experience: " + experienceLabel(combat), List.of(
                 combat.droppedExperience() == 0
-                        ? ChatColor.GRAY + "This NPC drops no experience"
-                        : ChatColor.GREEN + "Dropped when this NPC dies"
+                        ? LegacyText.GRAY + "This NPC drops no experience"
+                        : LegacyText.GREEN + "Dropped when this NPC dies"
         )));
         inventory.setItem(23, item(Material.RED_DYE, "- " + CombatProfile.EXPERIENCE_STEP + " Experience", List.of(
-                ChatColor.GRAY + "Current: " + ChatColor.WHITE + experienceLabel(combat),
-                ChatColor.YELLOW + "Click to decrease dropped experience",
-                ChatColor.DARK_GRAY + "Shift-click for x10"
+                LegacyText.GRAY + "Current: " + LegacyText.WHITE + experienceLabel(combat),
+                LegacyText.YELLOW + "Click to decrease dropped experience",
+                LegacyText.DARK_GRAY + "Shift-click for x10"
         )));
         inventory.setItem(15, toggleItem(Material.WITHER_SKELETON_SKULL, "Show Boss Bar", combat.showBossBar(),
                 "Shows current HP to players within 16 blocks"));
         inventory.setItem(13, item(Material.TARGET, "Targets & Behaviour", List.of(
-                ChatColor.GRAY + "Aggression: " + ChatColor.WHITE + combat.attackReaction().displayName(),
-                ChatColor.GRAY + "Attack targets enabled: " + ChatColor.WHITE + enabledTargetCount(combat) + "/4",
-                ChatColor.YELLOW + "Click to configure"
+                LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName(),
+                LegacyText.GRAY + "Attack targets enabled: " + LegacyText.WHITE + enabledTargetCount(combat) + "/4",
+                LegacyText.YELLOW + "Click to configure"
         )));
         inventory.setItem(16, item(Material.NAME_TAG, "Alliance", List.of(
-                ChatColor.GRAY + "Current: " + ChatColor.WHITE + allianceLabel(combat),
-                ChatColor.GRAY + "NPCs with the same alliance will not fight",
-                ChatColor.YELLOW + "Click to enter text"
+                LegacyText.GRAY + "Current: " + LegacyText.WHITE + allianceLabel(combat),
+                LegacyText.GRAY + "NPCs with the same alliance will not fight",
+                LegacyText.YELLOW + "Click to enter text"
         )));
         inventory.setItem(31, item(Material.BARRIER, "Back", List.of()));
         openInventory(player, inventory);
@@ -605,9 +605,9 @@ public final class GuiService implements Listener {
     private void populateFightOptions(Inventory inventory, FightOptions options, String backLabel) {
         AttackReaction reaction = options.attackReaction();
         inventory.setItem(10, item(reactionMaterial(reaction), "Aggression Level", List.of(
-                ChatColor.GRAY + "Current: " + ChatColor.WHITE + reaction.displayName(),
+                LegacyText.GRAY + "Current: " + LegacyText.WHITE + reaction.displayName(),
                 reactionDescription(reaction),
-                ChatColor.YELLOW + "Click to cycle"
+                LegacyText.YELLOW + "Click to cycle"
         )));
         inventory.setItem(12, toggleItem(Material.ZOMBIE_HEAD, "Target Mobs", options.mobs(),
                 "Allows attacks against non-animal mobs"));
@@ -635,20 +635,20 @@ public final class GuiService implements Listener {
             List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
             inventory.setItem(row * 9, item(eventMaterial(behaviourEvent), behaviourEvent.displayName(),
                     actionSummaryLore(List.of(
-                            ChatColor.GRAY + "Actions run from left to right",
-                            ChatColor.YELLOW + "Shift-left-click to copy row",
-                            ChatColor.YELLOW + "Shift-right-click to paste row"), actions)));
+                            LegacyText.GRAY + "Actions run from left to right",
+                            LegacyText.YELLOW + "Shift-left-click to copy row",
+                            LegacyText.YELLOW + "Shift-right-click to paste row"), actions)));
             inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
-                    ChatColor.YELLOW + "Click to append"
+                    LegacyText.YELLOW + "Click to append"
             )));
             for (int column = 0; column < 7; column++) {
                 int slot = row * 9 + column + 2;
                 if (column < actions.size()) {
                     BehaviourAction action = actions.get(column);
                     inventory.setItem(slot, item(actionMaterial(action.type()), (column + 1) + ". " + action.type().displayName(), List.of(
-                            ChatColor.GRAY + actionValueDisplay(action),
-                            ChatColor.YELLOW + "Left-click to replace",
-                            ChatColor.RED + "Right-click to remove"
+                            LegacyText.GRAY + actionValueDisplay(action),
+                            LegacyText.YELLOW + "Left-click to replace",
+                            LegacyText.RED + "Right-click to remove"
                     )));
                 }
             }
@@ -675,23 +675,23 @@ public final class GuiService implements Listener {
             CustomEvent customEvent = events.get(eventIndex);
             List<BehaviourAction> actions = definition.getCustomEventActions(customEvent.getName());
             inventory.setItem(row * 9, item(customEventIcon(customEvent), customEvent.getName(), actionSummaryLore(List.of(
-                    ChatColor.GRAY + (customEvent.getDescription().isBlank() ? "No description" : customEvent.getDescription()),
-                    ChatColor.GRAY + "Actions run from left to right",
-                    ChatColor.YELLOW + "Shift-left-click to copy row",
-                    ChatColor.YELLOW + "Shift-right-click to paste row"), actions)));
+                    LegacyText.GRAY + (customEvent.getDescription().isBlank() ? "No description" : customEvent.getDescription()),
+                    LegacyText.GRAY + "Actions run from left to right",
+                    LegacyText.YELLOW + "Shift-left-click to copy row",
+                    LegacyText.YELLOW + "Shift-right-click to paste row"), actions)));
             inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
-                    ChatColor.YELLOW + "Click to append")));
+                    LegacyText.YELLOW + "Click to append")));
             for (int column = 0; column < Math.min(7, actions.size()); column++) {
                 BehaviourAction action = actions.get(column);
                 inventory.setItem(row * 9 + column + 2,
                         item(actionMaterial(action.type()), (column + 1) + ". " + action.type().displayName(), List.of(
-                                ChatColor.GRAY + actionValueDisplay(action),
-                                ChatColor.YELLOW + "Left-click to replace",
-                                ChatColor.RED + "Right-click to remove")));
+                                LegacyText.GRAY + actionValueDisplay(action),
+                                LegacyText.YELLOW + "Left-click to replace",
+                                LegacyText.RED + "Right-click to remove")));
             }
         }
         if (events.isEmpty()) inventory.setItem(22, item(Material.GRAY_DYE, "No Custom Events", List.of(
-                ChatColor.GRAY + "Create one from the Custom Events main menu")));
+                LegacyText.GRAY + "Create one from the Custom Events main menu")));
         if (page > 0) inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         if (page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
@@ -714,11 +714,11 @@ public final class GuiService implements Listener {
         for (Map.Entry<Integer, BehaviourActionType> entry : ACTION_PICKER_ACTIONS.entrySet()) {
             BehaviourActionType type = entry.getValue();
             if (!includeQuestion && type == BehaviourActionType.ASK_QUESTION) continue;
-            inventory.setItem(entry.getKey(), item(actionMaterial(type), type.displayName(), List.of(ChatColor.YELLOW + "Click to configure")));
+            inventory.setItem(entry.getKey(), item(actionMaterial(type), type.displayName(), List.of(LegacyText.YELLOW + "Click to configure")));
         }
         inventory.setItem(ACTION_PICKER_ANIMATIONS_SLOT, item(Material.ARMOR_STAND, "Animations", List.of(
-                ChatColor.GRAY + "Poses, waving, and jumping",
-                ChatColor.YELLOW + "Click to choose an animation"
+                LegacyText.GRAY + "Poses, waving, and jumping",
+                LegacyText.YELLOW + "Click to choose an animation"
         )));
         inventory.setItem(ACTION_PICKER_BACK_SLOT, item(Material.BARRIER, "Back", List.of()));
     }
@@ -731,7 +731,7 @@ public final class GuiService implements Listener {
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
             BehaviourActionType type = ANIMATION_ACTIONS.get(index);
             inventory.setItem(slots[index], item(actionMaterial(type), type.displayName(), List.of(
-                    ChatColor.YELLOW + "Click to select"
+                    LegacyText.YELLOW + "Click to select"
             )));
         }
         inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
@@ -761,12 +761,12 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             BehaviourPickerOption option = options.get(index);
             List<String> lore = new ArrayList<>(option.lore());
-            lore.add(ChatColor.YELLOW + (option.folder() ? "Click to open" : "Click to select"));
+            lore.add(LegacyText.YELLOW + (option.folder() ? "Click to open" : "Click to select"));
             inventory.setItem(index - from, item(option.icon(), option.label(), lore));
         }
         if (options.isEmpty()) {
             inventory.setItem(22, item(Material.BARRIER, "No Values Available", List.of(
-                    ChatColor.GRAY + pickerType.emptyMessage()
+                    LegacyText.GRAY + pickerType.emptyMessage()
             )));
         }
         if (valuePage > 0) {
@@ -778,12 +778,12 @@ public final class GuiService implements Listener {
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         if (pickerType == BehaviourValuePickerType.ROUTE) {
             inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
-                    ChatColor.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
-                    ChatColor.YELLOW + "Click, then enter its name")));
+                    LegacyText.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
+                    LegacyText.YELLOW + "Click, then enter its name")));
         } else if (pickerType == BehaviourValuePickerType.CUSTOM_EVENT) {
             inventory.setItem(51, item(Material.EMERALD, "Create New Event", List.of(
-                    ChatColor.GRAY + "Creates and selects a custom event",
-                    ChatColor.YELLOW + "Click, then enter its name")));
+                    LegacyText.GRAY + "Creates and selects a custom event",
+                    LegacyText.YELLOW + "Click, then enter its name")));
         }
         if (valuePage + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
@@ -802,13 +802,13 @@ public final class GuiService implements Listener {
                 java.util.Arrays.stream(WalkingSpeed.values())
                 .map(speed -> new BehaviourPickerOption(speed.name().toLowerCase(java.util.Locale.ROOT),
                 speed.displayName(), new ItemStack(Material.FEATHER), List.of(
-                ChatColor.GRAY + "" + speed.blocksPerSecond() + " blocks/second"
+                LegacyText.GRAY + "" + speed.blocksPerSecond() + " blocks/second"
                 ), false))
                 .toList();
             case CUSTOM_EVENT ->
                 customEventRepository.findAll().stream()
                 .map(event -> new BehaviourPickerOption(event.getName(), event.getName(), customEventIcon(event), List.of(
-                        ChatColor.GRAY + (event.getDescription().isBlank() ? "No description" : event.getDescription())), false))
+                        LegacyText.GRAY + (event.getDescription().isBlank() ? "No description" : event.getDescription())), false))
                 .toList();
         };
     }
@@ -826,11 +826,11 @@ public final class GuiService implements Listener {
                 BehaviourPickerOption old = options.get(path);
                 int count = old == null ? 1 : Integer.parseInt(old.lore().getFirst().split(" ")[0]) + 1;
                 options.put(path, new BehaviourPickerOption(path, label, new ItemStack(Material.CHEST),
-                        List.of(count + " route(s)", ChatColor.DARK_GRAY + path), true));
+                        List.of(count + " route(s)", LegacyText.DARK_GRAY + path), true));
             } else {
                 options.put(route.getKey(), new BehaviourPickerOption(route.getKey(), route.getDisplayName(), routeIcon(route), List.of(
-                        ChatColor.DARK_GRAY + "Key: " + route.getKey(),
-                        ChatColor.GRAY + "" + route.getPoints().size() + " route point(s)"), false));
+                        LegacyText.DARK_GRAY + "Key: " + route.getKey(),
+                        LegacyText.GRAY + "" + route.getPoints().size() + " route point(s)"), false));
             }
         }
         return new ArrayList<>(options.values());
@@ -852,16 +852,16 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             NpcInstance instance = instances.get(index);
             inventory.setItem(index - from, item(Material.ARMOR_STAND, "NPC Instance", List.of(
-                    ChatColor.DARK_GRAY + instance.getId().toString(),
-                    ChatColor.GRAY + formatLocation(instance.getLocation()),
-                    ChatColor.YELLOW + "Left-click: teleport to instance",
-                    ChatColor.AQUA + "Middle-click: move instance to you",
-                    ChatColor.RED + "Right-click: remove instance"
+                    LegacyText.DARK_GRAY + instance.getId().toString(),
+                    LegacyText.GRAY + formatLocation(instance.getLocation()),
+                    LegacyText.YELLOW + "Left-click: teleport to instance",
+                    LegacyText.AQUA + "Middle-click: move instance to you",
+                    LegacyText.RED + "Right-click: remove instance"
             )));
         }
         if (instances.isEmpty()) {
             inventory.setItem(22, item(Material.GRAY_DYE, "No Instances", List.of(
-                    ChatColor.GRAY + "Use Spawn Another Here below to create one."
+                    LegacyText.GRAY + "Use Spawn Another Here below to create one."
             )));
         }
         if (page > 0) {
@@ -869,19 +869,19 @@ public final class GuiService implements Listener {
         }
         if (!instances.isEmpty()) {
             inventory.setItem(47, item(Material.REDSTONE_BLOCK, "Remove All Instances", List.of(
-                    ChatColor.RED + "Removes every spawned copy",
-                    ChatColor.YELLOW + "Click for confirmation"
+                    LegacyText.RED + "Removes every spawned copy",
+                    LegacyText.YELLOW + "Click for confirmation"
             )));
             inventory.setItem(51, item(Material.SUNFLOWER, "Refresh Instances", List.of(
-                    ChatColor.GRAY + "Re-applies name, skin, and equipment",
-                    ChatColor.YELLOW + "Click to refresh all copies"
+                    LegacyText.GRAY + "Re-applies name, skin, and equipment",
+                    LegacyText.YELLOW + "Click to refresh all copies"
             )));
         }
         inventory.setItem(49, item(Material.BARRIER, "Back to Preset", List.of()));
         inventory.setItem(50, item(Material.ARMOR_STAND, "Spawn Another Here", List.of(
-                ChatColor.GRAY + "Creates another visible persistent NPC",
-                ChatColor.GRAY + "at your current location",
-                ChatColor.YELLOW + "Click to spawn"
+                LegacyText.GRAY + "Creates another visible persistent NPC",
+                LegacyText.GRAY + "at your current location",
+                LegacyText.YELLOW + "Click to spawn"
         )));
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
@@ -1128,8 +1128,9 @@ public final class GuiService implements Listener {
 
     private void clearReorderCursor(org.bukkit.entity.HumanEntity player) {
         ItemStack cursor = player.getItemOnCursor();
-        if (!isEmpty(cursor) && cursor.hasItemMeta()
-                && cursor.getItemMeta().getPersistentDataContainer().has(reorderIconKey, PersistentDataType.STRING)) {
+        ItemMeta meta = isEmpty(cursor) ? null : cursor.getItemMeta();
+        if (meta != null
+                && meta.getPersistentDataContainer().has(reorderIconKey, PersistentDataType.STRING)) {
             player.setItemOnCursor(null);
         }
     }
@@ -1951,12 +1952,12 @@ public final class GuiService implements Listener {
     private ItemStack createWaypointTool(WaypointSession session) {
         ItemStack tool = new ItemStack(Material.RECOVERY_COMPASS);
         ItemMeta meta = tool.getItemMeta();
-        meta.setDisplayName(ChatColor.AQUA + session.type().displayName() + " Waypoint Selector");
-        meta.setLore(List.of(
-                ChatColor.YELLOW + "Right-click a block to select it",
-                ChatColor.GRAY + "The NPC will stand on top of that block",
-                ChatColor.RED + "Drop this compass to cancel"
-        ));
+        meta.displayName(LegacyText.component(LegacyText.AQUA + session.type().displayName() + " Waypoint Selector"));
+        meta.lore(LegacyText.components(List.of(
+                LegacyText.YELLOW + "Right-click a block to select it",
+                LegacyText.GRAY + "The NPC will stand on top of that block",
+                LegacyText.RED + "Drop this compass to cancel"
+        )));
         meta.setEnchantmentGlintOverride(true);
         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         meta.getPersistentDataContainer().set(waypointActionKey, PersistentDataType.STRING, session.type().name());
@@ -2070,6 +2071,9 @@ public final class GuiService implements Listener {
             return null;
         }
         ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return null;
+        }
         String type = meta.getPersistentDataContainer().get(waypointActionKey, PersistentDataType.STRING);
         String token = meta.getPersistentDataContainer().get(waypointTokenKey, PersistentDataType.STRING);
         return session.type().name().equals(type) && session.token().toString().equals(token) ? session : null;
@@ -2093,6 +2097,9 @@ public final class GuiService implements Listener {
             return false;
         }
         ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return false;
+        }
         return session.type().name().equals(meta.getPersistentDataContainer()
                 .get(waypointActionKey, PersistentDataType.STRING))
                 && session.token().toString().equals(meta.getPersistentDataContainer()
@@ -2121,12 +2128,12 @@ public final class GuiService implements Listener {
     private ItemStack createRouteWaypointTool(RouteActionWaypointSession session) {
         ItemStack tool = new ItemStack(Material.RECOVERY_COMPASS);
         ItemMeta meta = tool.getItemMeta();
-        meta.setDisplayName(ChatColor.AQUA + session.type().displayName() + " Waypoint Selector");
-        meta.setLore(List.of(
-                ChatColor.YELLOW + "Right-click a block to select it",
-                ChatColor.GRAY + "The NPC will stand on top of that block",
-                ChatColor.RED + "Drop this compass to cancel"
-        ));
+        meta.displayName(LegacyText.component(LegacyText.AQUA + session.type().displayName() + " Waypoint Selector"));
+        meta.lore(LegacyText.components(List.of(
+                LegacyText.YELLOW + "Right-click a block to select it",
+                LegacyText.GRAY + "The NPC will stand on top of that block",
+                LegacyText.RED + "Drop this compass to cancel"
+        )));
         meta.setEnchantmentGlintOverride(true);
         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         meta.getPersistentDataContainer().set(waypointActionKey, PersistentDataType.STRING, session.type().name());
@@ -2141,6 +2148,9 @@ public final class GuiService implements Listener {
             return null;
         }
         ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return null;
+        }
         String type = meta.getPersistentDataContainer().get(waypointActionKey, PersistentDataType.STRING);
         String token = meta.getPersistentDataContainer().get(waypointTokenKey, PersistentDataType.STRING);
         return session.type().name().equals(type) && session.token().toString().equals(token) ? session : null;
@@ -2154,8 +2164,9 @@ public final class GuiService implements Listener {
         ItemStack[] contents = player.getInventory().getContents();
         for (int slot = 0; slot < contents.length; slot++) {
             ItemStack item = contents[slot];
-            if (item != null && item.getType() == Material.RECOVERY_COMPASS && item.hasItemMeta()
-                    && session.token().toString().equals(item.getItemMeta().getPersistentDataContainer()
+            ItemMeta meta = item == null ? null : item.getItemMeta();
+            if (item != null && item.getType() == Material.RECOVERY_COMPASS && meta != null
+                    && session.token().toString().equals(meta.getPersistentDataContainer()
                             .get(waypointTokenKey, PersistentDataType.STRING))) {
                 player.getInventory().setItem(slot, null);
             }
@@ -2305,37 +2316,37 @@ public final class GuiService implements Listener {
             if (cancelBranch) {
                 inventory.setItem(row * 9, item(Material.RED_DYE, "Cancel / Timeout",
                         actionSummaryLore(List.of(
-                                ChatColor.GRAY + "Runs when the player cancels or cannot answer"), branchActions)));
+                                LegacyText.GRAY + "Runs when the player cancels or cannot answer"), branchActions)));
             } else {
                 QuestionOption option = question.options().get(optionIndex);
                 if (option.configured()) {
                     inventory.setItem(row * 9, item(Material.LIME_DYE, option.label(),
                             actionSummaryLore(List.of(
-                                    ChatColor.GRAY + "Answer " + (optionIndex + 1),
-                                    ChatColor.YELLOW + "Click to change label",
-                                    ChatColor.RED + "Shift-right-click to clear"), branchActions)));
+                                    LegacyText.GRAY + "Answer " + (optionIndex + 1),
+                                    LegacyText.YELLOW + "Click to change label",
+                                    LegacyText.RED + "Shift-right-click to clear"), branchActions)));
                 } else {
                     inventory.setItem(row * 9, item(Material.GRAY_DYE, "Answer " + (optionIndex + 1) + ": Not Set",
-                            List.of(ChatColor.GRAY + "This answer is not shown to players",
-                                    ChatColor.YELLOW + "Click to set its label")));
+                            List.of(LegacyText.GRAY + "This answer is not shown to players",
+                                    LegacyText.YELLOW + "Click to set its label")));
                 }
             }
             if (cancelBranch || question.options().get(optionIndex).configured()) {
                 inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action", List.of(
-                        ChatColor.YELLOW + "Click to append")));
+                        LegacyText.YELLOW + "Click to append")));
             }
             for (int actionIndex = 0; actionIndex < branchActions.size(); actionIndex++) {
                 BehaviourAction branchAction = branchActions.get(actionIndex);
                 inventory.setItem(row * 9 + actionIndex + 2,
                         item(actionMaterial(branchAction.type()),
                                 (actionIndex + 1) + ". " + branchAction.type().displayName(), List.of(
-                                        ChatColor.GRAY + actionValueDisplay(branchAction),
-                                        ChatColor.YELLOW + "Left-click to replace",
-                                        ChatColor.RED + "Right-click to remove")));
+                                        LegacyText.GRAY + actionValueDisplay(branchAction),
+                                        LegacyText.YELLOW + "Left-click to replace",
+                                        LegacyText.RED + "Right-click to remove")));
             }
         }
         inventory.setItem(46, item(Material.WRITABLE_BOOK, "Edit Prompt", List.of(
-                ChatColor.WHITE + question.prompt(), ChatColor.YELLOW + "Click to edit")));
+                LegacyText.WHITE + question.prompt(), LegacyText.YELLOW + "Click to edit")));
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         openInventory(player, inventory);
     }
@@ -2476,19 +2487,19 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             BehaviourPickerOption option = options.get(index);
             List<String> lore = new ArrayList<>(option.lore());
-            lore.add(ChatColor.YELLOW + (option.folder() ? "Click to open" : "Click to select"));
+            lore.add(LegacyText.YELLOW + (option.folder() ? "Click to open" : "Click to select"));
             inventory.setItem(index - from, item(option.icon(), option.label(), lore));
         }
         if (options.isEmpty()) {
             inventory.setItem(22, item(Material.BARRIER, "No Routes Available", List.of(
-                    ChatColor.GRAY + "Create a route with the button below")));
+                    LegacyText.GRAY + "Create a route with the button below")));
         }
         if (!folder.isEmpty()) inventory.setItem(45, item(Material.ARROW, "Up One Group", List.of()));
         if (page > 0) inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
-                ChatColor.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
-                ChatColor.YELLOW + "Click, then enter its name")));
+                LegacyText.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
+                LegacyText.YELLOW + "Click, then enter its name")));
         if (page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         openInventory(player, inventory);
     }
@@ -2556,7 +2567,7 @@ public final class GuiService implements Listener {
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
             BehaviourActionType type = ANIMATION_ACTIONS.get(index);
             inventory.setItem(slots[index], item(actionMaterial(type), type.displayName(), List.of(
-                    ChatColor.YELLOW + "Click to select")));
+                    LegacyText.YELLOW + "Click to select")));
         }
         inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
         openInventory(player, inventory);
@@ -2724,9 +2735,9 @@ public final class GuiService implements Listener {
                 UiText.title("Confirm Deletion"));
         String target = action == ConfirmationAction.DELETE_DEFINITION ? "preset and all instances" : "all instances";
         inventory.setItem(11, item(Material.LIME_CONCRETE, "Confirm", List.of(
-                ChatColor.RED + "Permanently delete " + target
+                LegacyText.RED + "Permanently delete " + target
         )));
-        inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel", List.of(ChatColor.GRAY + "Nothing will be changed")));
+        inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel", List.of(LegacyText.GRAY + "Nothing will be changed")));
         openInventory(player, inventory);
     }
 
@@ -2898,21 +2909,21 @@ public final class GuiService implements Listener {
         ItemStack result = template.clone();
         result.setAmount(1);
         ItemMeta meta = result.getItemMeta();
-        meta.setDisplayName(ChatColor.GOLD + name);
-        meta.setLore(lore);
+        meta.displayName(LegacyText.component(LegacyText.GOLD + name));
+        meta.lore(LegacyText.components(lore));
         result.setItemMeta(meta);
         return result;
     }
 
     private ItemStack label(String name, Material material) {
-        return item(material, name, List.of(ChatColor.DARK_GRAY + "Place the item in the slot below"));
+        return item(material, name, List.of(LegacyText.DARK_GRAY + "Place the item in the slot below"));
     }
 
     private ItemStack item(Material material, String name, List<String> lore) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.GOLD + name);
-        meta.setLore(lore);
+        meta.displayName(LegacyText.component(LegacyText.GOLD + name));
+        meta.lore(LegacyText.components(lore));
         item.setItemMeta(meta);
         return item;
     }
@@ -2921,17 +2932,17 @@ public final class GuiService implements Listener {
         ItemStack item = new ItemStack(Material.POTION);
         PotionMeta meta = (PotionMeta) item.getItemMeta();
         meta.setBasePotionType(potionType);
-        meta.setDisplayName(ChatColor.GOLD + name);
-        meta.setLore(lore);
+        meta.displayName(LegacyText.component(LegacyText.GOLD + name));
+        meta.lore(LegacyText.components(lore));
         item.setItemMeta(meta);
         return item;
     }
 
     private String statusLine(NpcDefinition definition) {
         if (definition.getSpawnpoint() == null) {
-            return ChatColor.RED + "Spawnpoint not set";
+            return LegacyText.RED + "Spawnpoint not set";
         }
-        return ChatColor.GRAY + "Spawn: " + ChatColor.WHITE + formatLocation(definition.getSpawnpoint());
+        return LegacyText.GRAY + "Spawn: " + LegacyText.WHITE + formatLocation(definition.getSpawnpoint());
     }
 
     private String abbreviatedSkin(String value) {
@@ -2974,9 +2985,9 @@ public final class GuiService implements Listener {
 
     private ItemStack toggleItem(Material material, String name, boolean enabled, String description) {
         return item(enabled ? material : Material.GRAY_DYE, name, List.of(
-                (enabled ? ChatColor.GREEN + "On" : ChatColor.RED + "Off"),
-                ChatColor.GRAY + description,
-                ChatColor.YELLOW + "Click to toggle"
+                (enabled ? LegacyText.GREEN + "On" : LegacyText.RED + "Off"),
+                LegacyText.GRAY + description,
+                LegacyText.YELLOW + "Click to toggle"
         ));
     }
 
@@ -3111,18 +3122,16 @@ public final class GuiService implements Listener {
         List<String> lore = new ArrayList<>(introduction);
         lore.add("");
         if (actions.isEmpty()) {
-            lore.add(ChatColor.DARK_GRAY + "No actions configured");
+            lore.add(LegacyText.DARK_GRAY + "No actions configured");
             return lore;
         }
         for (int index = 0; index < actions.size(); index++) {
             BehaviourAction action = actions.get(index);
-            String summary = ChatColor.GRAY + Integer.toString(index + 1) + ". "
-                    + ChatColor.WHITE + action.type().displayName();
-            if (action.type() == BehaviourActionType.ASK_QUESTION) {
-                summary += ChatColor.GRAY + ": " + ChatColor.WHITE + actionValueDisplay(action);
-            } else if (action.type().requiresValue()) {
-                summary += ChatColor.GRAY + ": " + ChatColor.WHITE + actionValueDisplay(action);
-            }
+            boolean showValue = action.type() == BehaviourActionType.ASK_QUESTION
+                    || action.type().requiresValue();
+            String summary = LegacyText.GRAY + Integer.toString(index + 1) + ". "
+                    + LegacyText.WHITE + action.type().displayName()
+                    + (showValue ? LegacyText.GRAY + ": " + LegacyText.WHITE + actionValueDisplay(action) : "");
             lore.add(summary);
         }
         return lore;
@@ -3131,13 +3140,13 @@ public final class GuiService implements Listener {
     private String reactionDescription(AttackReaction reaction) {
         return switch (reaction) {
             case IGNORE ->
-                ChatColor.GRAY + "Does not react when attacked";
+                LegacyText.GRAY + "Does not react when attacked";
             case FLEE ->
-                ChatColor.GRAY + "Runs away after taking entity damage";
+                LegacyText.GRAY + "Runs away after taking entity damage";
             case FIGHT_BACK ->
-                ChatColor.GRAY + "Attacks an entity that damages it";
+                LegacyText.GRAY + "Attacks an entity that damages it";
             case HUNTING ->
-                ChatColor.GRAY + "Actively hunts enabled attack targets";
+                LegacyText.GRAY + "Actively hunts enabled attack targets";
         };
     }
 

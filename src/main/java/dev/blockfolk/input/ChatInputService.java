@@ -7,11 +7,12 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
+import io.papermc.paper.event.player.AsyncChatEvent;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
@@ -19,6 +20,8 @@ import org.bukkit.scheduler.BukkitTask;
 import dev.blockfolk.util.UiText;
 
 public final class ChatInputService implements Listener {
+
+    private static final PlainTextComponentSerializer PLAIN_TEXT = PlainTextComponentSerializer.plainText();
 
     private final Plugin plugin;
     private final int timeoutSeconds;
@@ -72,14 +75,14 @@ public final class ChatInputService implements Listener {
     }
 
     @EventHandler
-    public void onChat(AsyncPlayerChatEvent event) {
+    public void onChat(AsyncChatEvent event) {
         PendingInput input = pendingInputs.remove(event.getPlayer().getUniqueId());
         if (input == null) {
             return;
         }
         event.setCancelled(true);
         input.timeout.cancel();
-        String message = event.getMessage();
+        String message = PLAIN_TEXT.serialize(event.message());
         if (message.equalsIgnoreCase("cancel")) {
             Bukkit.getScheduler().runTask(plugin, () -> event.getPlayer().sendMessage(UiText.warning("Input cancelled.")));
             return;

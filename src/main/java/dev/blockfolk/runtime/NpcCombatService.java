@@ -27,7 +27,6 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.ChatColor;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
@@ -46,6 +45,8 @@ import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
+import dev.blockfolk.util.LegacyText;
+import net.kyori.adventure.text.Component;
 
 public final class NpcCombatService implements Listener {
 
@@ -473,9 +474,10 @@ public final class NpcCombatService implements Listener {
                 continue;
             }
             ItemMeta meta = item.getItemMeta();
-            if (meta.hasDisplayName()) {
-                String name = ChatColor.stripColor(meta.getDisplayName());
-                if (name != null && alliance.equalsIgnoreCase(name.trim())) {
+            Component displayName = meta == null ? null : meta.displayName();
+            if (displayName != null) {
+                String name = LegacyText.plainText(displayName);
+                if (alliance.equalsIgnoreCase(name.trim())) {
                     return true;
                 }
             }

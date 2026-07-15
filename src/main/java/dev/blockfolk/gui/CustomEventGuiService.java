@@ -7,7 +7,6 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
@@ -29,6 +28,7 @@ import dev.blockfolk.model.CustomEvent;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.repository.CustomEventRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
+import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.UiText;
 import net.kyori.adventure.text.Component;
 
@@ -83,21 +83,21 @@ public final class CustomEventGuiService implements Listener {
             Entry entry = entries.get(index);
             inventory.setItem(index - from, entry.folder()
                     ? item(Material.CHEST, entry.label(), List.of(
-                            ChatColor.GRAY + "" + entry.childCount() + " item(s)",
-                            ChatColor.DARK_GRAY + entry.path(),
-                            ChatColor.YELLOW + "Click to open"))
+                            LegacyText.GRAY + "" + entry.childCount() + " item(s)",
+                            LegacyText.DARK_GRAY + entry.path(),
+                            LegacyText.YELLOW + "Click to open"))
                     : eventItem(entry.event()));
         }
         inventory.setItem(45, item(folder.isEmpty() ? Material.PLAYER_HEAD : Material.ARROW,
                 folder.isEmpty() ? "Manage NPCs" : "Up One Group", List.of()));
         if (page > 0) inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
         inventory.setItem(49, item(Material.BELL, "Event Overview", List.of(
-                ChatColor.GRAY + "Defined events: " + ChatColor.WHITE + events.findAll().size(),
-                ChatColor.GRAY + "Group: " + ChatColor.WHITE + (folder.isEmpty() ? "Root" : folder),
-                ChatColor.YELLOW + "Click to reorder custom events")));
+                LegacyText.GRAY + "Defined events: " + LegacyText.WHITE + events.findAll().size(),
+                LegacyText.GRAY + "Group: " + LegacyText.WHITE + (folder.isEmpty() ? "Root" : folder),
+                LegacyText.YELLOW + "Click to reorder custom events")));
         inventory.setItem(51, item(Material.EMERALD, "Create Event", List.of(
-                ChatColor.GRAY + "Use / in the name to create groups",
-                ChatColor.YELLOW + "Click, then enter the full event name")));
+                LegacyText.GRAY + "Use / in the name to create groups",
+                LegacyText.YELLOW + "Click, then enter the full event name")));
         if (page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
@@ -130,9 +130,9 @@ public final class CustomEventGuiService implements Listener {
         }
         if (holder.page > 0) inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         inventory.setItem(48, item(Material.LIME_CONCRETE, "Save Order", List.of(
-                ChatColor.GRAY + "Apply this order to the custom event browser")));
+                LegacyText.GRAY + "Apply this order to the custom event browser")));
         inventory.setItem(50, item(Material.RED_CONCRETE, "Cancel", List.of(
-                ChatColor.GRAY + "Discard all ordering changes")));
+                LegacyText.GRAY + "Discard all ordering changes")));
         if (holder.page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         GuiLayout.fillMainBar(inventory);
     }
@@ -141,9 +141,9 @@ public final class CustomEventGuiService implements Listener {
         ItemStack template = event.getIcon();
         if (template == null) template = new ItemStack(Material.BELL);
         ItemStack icon = item(template, event.getName().substring(event.getName().lastIndexOf('/') + 1), List.of(
-                ChatColor.DARK_GRAY + event.getName(),
-                ChatColor.GRAY + "Position: " + ChatColor.WHITE + (index + 1),
-                ChatColor.YELLOW + "Pick up and drop to move"));
+                LegacyText.DARK_GRAY + event.getName(),
+                LegacyText.GRAY + "Position: " + LegacyText.WHITE + (index + 1),
+                LegacyText.YELLOW + "Pick up and drop to move"));
         ItemMeta meta = icon.getItemMeta();
         meta.getPersistentDataContainer().set(reorderEventKey, PersistentDataType.STRING, event.getName());
         icon.setItemMeta(meta);
@@ -276,8 +276,9 @@ public final class CustomEventGuiService implements Listener {
 
     private void clearReorderCursor(org.bukkit.entity.HumanEntity player) {
         ItemStack cursor = player.getItemOnCursor();
-        if (!isEmpty(cursor) && cursor.hasItemMeta()
-                && cursor.getItemMeta().getPersistentDataContainer()
+        ItemMeta meta = isEmpty(cursor) ? null : cursor.getItemMeta();
+        if (meta != null
+                && meta.getPersistentDataContainer()
                         .has(reorderEventKey, PersistentDataType.STRING)) {
             player.setItemOnCursor(null);
         }
@@ -294,8 +295,8 @@ public final class CustomEventGuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(new DeleteHolder(event.getName(), back.folder(), back.page()), 27,
                 UiText.title("Delete Event", event.getName()));
         inventory.setItem(11, item(Material.LIME_CONCRETE, "Confirm", List.of(
-                ChatColor.RED + "Permanently delete this event",
-                ChatColor.GRAY + "NPC reactions to it will also be removed")));
+                LegacyText.RED + "Permanently delete this event",
+                LegacyText.GRAY + "NPC reactions to it will also be removed")));
         inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel", List.of()));
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
@@ -339,11 +340,11 @@ public final class CustomEventGuiService implements Listener {
         ItemStack template = event.getIcon();
         if (template == null) template = new ItemStack(Material.BELL);
         return item(template, event.getName().substring(event.getName().lastIndexOf('/') + 1), List.of(
-                ChatColor.DARK_GRAY + event.getName(),
-                ChatColor.GRAY + (event.getDescription().isBlank() ? "No description" : event.getDescription()),
-                ChatColor.AQUA + "Middle-click: set icon from main hand",
-                ChatColor.YELLOW + "Right-click: edit description",
-                ChatColor.RED + "Shift-right-click: delete"));
+                LegacyText.DARK_GRAY + event.getName(),
+                LegacyText.GRAY + (event.getDescription().isBlank() ? "No description" : event.getDescription()),
+                LegacyText.AQUA + "Middle-click: set icon from main hand",
+                LegacyText.YELLOW + "Right-click: edit description",
+                LegacyText.RED + "Shift-right-click: delete"));
     }
 
     private static String parent(String path) {
@@ -356,7 +357,10 @@ public final class CustomEventGuiService implements Listener {
     private ItemStack item(Material material, String name, List<String> lore) { return item(new ItemStack(material), name, lore); }
     private ItemStack item(ItemStack template, String name, List<String> lore) {
         ItemStack item = template.clone(); item.setAmount(1);
-        ItemMeta meta = item.getItemMeta(); meta.setDisplayName(ChatColor.GOLD + name); meta.setLore(lore); item.setItemMeta(meta);
+        ItemMeta meta = item.getItemMeta();
+        meta.displayName(LegacyText.component(LegacyText.GOLD + name));
+        meta.lore(LegacyText.components(lore));
+        item.setItemMeta(meta);
         return item;
     }
     private record Entry(boolean folder, String path, String label, int childCount, CustomEvent event) { }

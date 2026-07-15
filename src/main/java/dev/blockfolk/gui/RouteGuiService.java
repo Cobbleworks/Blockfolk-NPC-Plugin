@@ -9,7 +9,6 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -45,6 +44,7 @@ import dev.blockfolk.model.RoutePoint;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
+import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.UiText;
 import net.kyori.adventure.text.Component;
 
@@ -138,18 +138,18 @@ public final class RouteGuiService implements Listener {
             RouteEntry entry = entries.get(index);
             if (entry.folder()) {
                 inventory.setItem(index - from, item(Material.CHEST, entry.label(), List.of(
-                        ChatColor.GRAY + "" + entry.childCount() + " route(s)",
-                        ChatColor.DARK_GRAY + entry.path(),
-                        ChatColor.YELLOW + "Click to open")));
+                        LegacyText.GRAY + "" + entry.childCount() + " route(s)",
+                        LegacyText.DARK_GRAY + entry.path(),
+                        LegacyText.YELLOW + "Click to open")));
                 continue;
             }
             NpcRoute route = entry.route();
             inventory.setItem(index - from, routeItem(route, List.of(
-                    ChatColor.DARK_GRAY + "Key: " + route.getKey(),
-                    ChatColor.GRAY + "Key points: " + ChatColor.WHITE + route.getPoints().size(),
-                    ChatColor.AQUA + "Middle-click: set icon from main hand",
-                    ChatColor.YELLOW + "Left-click: edit points",
-                    ChatColor.RED + "Shift-right-click: remove route"
+                    LegacyText.DARK_GRAY + "Key: " + route.getKey(),
+                    LegacyText.GRAY + "Key points: " + LegacyText.WHITE + route.getPoints().size(),
+                    LegacyText.AQUA + "Middle-click: set icon from main hand",
+                    LegacyText.YELLOW + "Left-click: edit points",
+                    LegacyText.RED + "Shift-right-click: remove route"
             )));
         }
         inventory.setItem(45, item(folder.isEmpty() ? Material.PLAYER_HEAD : Material.ARROW,
@@ -158,15 +158,15 @@ public final class RouteGuiService implements Listener {
             inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
         }
         inventory.setItem(49, item(Material.COMPASS, "Route Overview", List.of(
-                ChatColor.GRAY + "Routes: " + ChatColor.WHITE + routeRepository.findAll().size(),
-                ChatColor.GRAY + "Group: " + ChatColor.WHITE + (folder.isEmpty() ? "Root" : folder),
-                ChatColor.GRAY + "NPCs start at their nearest point",
-                ChatColor.GRAY + "then follow nearest unvisited points in a loop",
-                ChatColor.YELLOW + "Click to reorder routes"
+                LegacyText.GRAY + "Routes: " + LegacyText.WHITE + routeRepository.findAll().size(),
+                LegacyText.GRAY + "Group: " + LegacyText.WHITE + (folder.isEmpty() ? "Root" : folder),
+                LegacyText.GRAY + "NPCs start at their nearest point",
+                LegacyText.GRAY + "then follow nearest unvisited points in a loop",
+                LegacyText.YELLOW + "Click to reorder routes"
         )));
         inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
-                ChatColor.GRAY + "Use / in the name to create groups",
-                ChatColor.YELLOW + "Click, then enter the full route name"
+                LegacyText.GRAY + "Use / in the name to create groups",
+                LegacyText.YELLOW + "Click, then enter the full route name"
         )));
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
@@ -202,18 +202,18 @@ public final class RouteGuiService implements Listener {
         }
         if (holder.page > 0) inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         inventory.setItem(48, item(Material.LIME_CONCRETE, "Save Order", List.of(
-                ChatColor.GRAY + "Apply this order to the routes browser")));
+                LegacyText.GRAY + "Apply this order to the routes browser")));
         inventory.setItem(50, item(Material.RED_CONCRETE, "Cancel", List.of(
-                ChatColor.GRAY + "Discard all ordering changes")));
+                LegacyText.GRAY + "Discard all ordering changes")));
         if (holder.page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         GuiLayout.fillMainBar(inventory);
     }
 
     private ItemStack reorderItem(NpcRoute route, int index) {
         ItemStack icon = routeItem(route, List.of(
-                ChatColor.DARK_GRAY + route.getKey(),
-                ChatColor.GRAY + "Position: " + ChatColor.WHITE + (index + 1),
-                ChatColor.YELLOW + "Pick up and drop to move"));
+                LegacyText.DARK_GRAY + route.getKey(),
+                LegacyText.GRAY + "Position: " + LegacyText.WHITE + (index + 1),
+                LegacyText.YELLOW + "Pick up and drop to move"));
         ItemMeta meta = icon.getItemMeta();
         meta.getPersistentDataContainer().set(reorderRouteKey, PersistentDataType.STRING, route.getKey());
         icon.setItemMeta(meta);
@@ -476,8 +476,9 @@ public final class RouteGuiService implements Listener {
 
     private void clearReorderCursor(org.bukkit.entity.HumanEntity player) {
         ItemStack cursor = player.getItemOnCursor();
-        if (!isEmpty(cursor) && cursor.hasItemMeta()
-                && cursor.getItemMeta().getPersistentDataContainer()
+        ItemMeta meta = isEmpty(cursor) ? null : cursor.getItemMeta();
+        if (meta != null
+                && meta.getPersistentDataContainer()
                         .has(reorderRouteKey, PersistentDataType.STRING)) {
             player.setItemOnCursor(null);
         }
@@ -509,10 +510,10 @@ public final class RouteGuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(new DeleteRouteHolder(route.getKey(), folder, page), 27,
                 UiText.title("Delete Route", route.getDisplayName()));
         inventory.setItem(11, item(Material.LIME_CONCRETE, "Confirm", List.of(
-                ChatColor.RED + "Permanently delete this route",
-                ChatColor.GRAY + "NPC presets using it will be unassigned"
+                LegacyText.RED + "Permanently delete this route",
+                LegacyText.GRAY + "NPC presets using it will be unassigned"
         )));
-        inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel", List.of(ChatColor.GRAY + "Nothing will be changed")));
+        inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel", List.of(LegacyText.GRAY + "Nothing will be changed")));
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
@@ -562,15 +563,15 @@ public final class RouteGuiService implements Listener {
     private ItemStack createWand(NpcRoute route, UUID token) {
         ItemStack wand = new ItemStack(Material.AMETHYST_SHARD);
         ItemMeta meta = wand.getItemMeta();
-        meta.setDisplayName(ChatColor.LIGHT_PURPLE + "Route Editor: " + route.getDisplayName());
-        meta.setLore(List.of(
-                ChatColor.GRAY + "Unique editor: " + token.toString().substring(0, 8),
-                ChatColor.YELLOW + "Left-click a block: add point",
-                ChatColor.YELLOW + "Right-click: remove point",
-                ChatColor.GOLD + "Shift-right-click: edit point actions",
-                ChatColor.LIGHT_PURPLE + "Points and walking order stay highlighted",
-                ChatColor.GREEN + "Drop: save and finish"
-        ));
+        meta.displayName(LegacyText.component(LegacyText.LIGHT_PURPLE + "Route Editor: " + route.getDisplayName()));
+        meta.lore(LegacyText.components(List.of(
+                LegacyText.GRAY + "Unique editor: " + token.toString().substring(0, 8),
+                LegacyText.YELLOW + "Left-click a block: add point",
+                LegacyText.YELLOW + "Right-click: remove point",
+                LegacyText.GOLD + "Shift-right-click: edit point actions",
+                LegacyText.LIGHT_PURPLE + "Points and walking order stay highlighted",
+                LegacyText.GREEN + "Drop: save and finish"
+        )));
         meta.setEnchantmentGlintOverride(true);
         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         meta.getPersistentDataContainer().set(wandRouteKey, PersistentDataType.STRING, route.getKey());
@@ -585,6 +586,9 @@ public final class RouteGuiService implements Listener {
             return null;
         }
         ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return null;
+        }
         String routeKey = meta.getPersistentDataContainer().get(wandRouteKey, PersistentDataType.STRING);
         String token = meta.getPersistentDataContainer().get(wandTokenKey, PersistentDataType.STRING);
         return session.routeKey().equals(routeKey) && session.token().toString().equals(token) ? session : null;
@@ -612,8 +616,12 @@ public final class RouteGuiService implements Listener {
         if (item == null || item.getType() != Material.AMETHYST_SHARD || !item.hasItemMeta()) {
             return false;
         }
-        String routeKey = item.getItemMeta().getPersistentDataContainer().get(wandRouteKey, PersistentDataType.STRING);
-        String token = item.getItemMeta().getPersistentDataContainer().get(wandTokenKey, PersistentDataType.STRING);
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return false;
+        }
+        String routeKey = meta.getPersistentDataContainer().get(wandRouteKey, PersistentDataType.STRING);
+        String token = meta.getPersistentDataContainer().get(wandTokenKey, PersistentDataType.STRING);
         return session.routeKey().equals(routeKey) && session.token().toString().equals(token);
     }
 
@@ -707,8 +715,8 @@ public final class RouteGuiService implements Listener {
     private ItemStack item(Material material, String name, List<String> lore) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.GOLD + name);
-        meta.setLore(lore);
+        meta.displayName(LegacyText.component(LegacyText.GOLD + name));
+        meta.lore(LegacyText.components(lore));
         item.setItemMeta(meta);
         return item;
     }
@@ -718,8 +726,8 @@ public final class RouteGuiService implements Listener {
         ItemStack result = icon == null ? new ItemStack(Material.RAIL) : icon;
         result.setAmount(1);
         ItemMeta meta = result.getItemMeta();
-        meta.setDisplayName(ChatColor.GOLD + route.getDisplayName());
-        meta.setLore(lore);
+        meta.displayName(LegacyText.component(LegacyText.GOLD + route.getDisplayName()));
+        meta.lore(LegacyText.components(lore));
         result.setItemMeta(meta);
         return result;
     }

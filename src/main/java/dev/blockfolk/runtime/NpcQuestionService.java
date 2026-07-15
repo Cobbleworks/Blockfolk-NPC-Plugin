@@ -14,7 +14,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
+import io.papermc.paper.event.player.AsyncChatEvent;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
@@ -33,6 +34,8 @@ import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 
 public final class NpcQuestionService implements Listener {
+
+    private static final PlainTextComponentSerializer PLAIN_TEXT = PlainTextComponentSerializer.plainText();
 
     private static final double RANGE_SQUARED = 16.0 * 16.0;
     private final Plugin plugin;
@@ -91,12 +94,12 @@ public final class NpcQuestionService implements Listener {
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
-    public void onChat(AsyncPlayerChatEvent event) {
+    public void onChat(AsyncChatEvent event) {
         PlayerState state = states.get(event.getPlayer().getUniqueId());
         Request active = state == null ? null : state.active;
         if (active == null) return;
         event.setCancelled(true);
-        String input = event.getMessage().trim();
+        String input = PLAIN_TEXT.serialize(event.message()).trim();
         UUID token = active.token;
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (input.equalsIgnoreCase("cancel")) {

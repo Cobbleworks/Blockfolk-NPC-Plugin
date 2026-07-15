@@ -1,18 +1,5 @@
 package dev.blockfolk.repository;
 
-import dev.blockfolk.model.CombatProfile;
-import dev.blockfolk.model.AttackReaction;
-import dev.blockfolk.model.MovementProfile;
-import dev.blockfolk.model.NpcDefinition;
-import dev.blockfolk.model.WalkingSpeed;
-import dev.blockfolk.model.BehaviourAction;
-import dev.blockfolk.model.BehaviourEvent;
-import dev.blockfolk.util.LocationCodec;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.plugin.java.JavaPlugin;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -27,6 +14,20 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.logging.Level;
+
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import dev.blockfolk.model.AttackReaction;
+import dev.blockfolk.model.BehaviourAction;
+import dev.blockfolk.model.BehaviourEvent;
+import dev.blockfolk.model.CombatProfile;
+import dev.blockfolk.model.MovementProfile;
+import dev.blockfolk.model.NpcDefinition;
+import dev.blockfolk.model.WalkingSpeed;
+import dev.blockfolk.util.LocationCodec;
 
 public final class NpcDefinitionRepository {
 
@@ -213,10 +214,14 @@ public final class NpcDefinitionRepository {
             if (!configuration.contains(path)) {
                 path = switch (event) {
                     // Pre-Sunrise/Noon/Sunset definitions used these event keys.
-                    case SUNRISE -> "behaviours.dawn";
-                    case NOON -> "behaviours.midday";
-                    case SUNSET -> "behaviours.morning";
-                    default -> path;
+                    case SUNRISE ->
+                        "behaviours.dawn";
+                    case NOON ->
+                        "behaviours.midday";
+                    case SUNSET ->
+                        "behaviours.morning";
+                    default ->
+                        path;
                 };
             }
             for (Map<?, ?> entry : configuration.getMapList(path)) {
@@ -227,7 +232,7 @@ public final class NpcDefinitionRepository {
                 try {
                     actions.add(BehaviourActionCodec.decode(entry));
                 } catch (IllegalArgumentException ignored) {
-                    plugin.getLogger().warning("Ignoring unknown behaviour action '" + type + "' in " + file.getName());
+                    plugin.getLogger().warning(() -> "Ignoring unknown behaviour action '" + type + "' in " + file.getName());
                 }
             }
             definition.setBehaviourActions(event, actions);
@@ -239,17 +244,19 @@ public final class NpcDefinitionRepository {
                 try {
                     eventName = decodeEventName(encodedName);
                 } catch (IllegalArgumentException exception) {
-                    plugin.getLogger().warning("Ignoring malformed custom event name in " + file.getName());
+                    plugin.getLogger().warning(() -> "Ignoring malformed custom event name in " + file.getName());
                     continue;
                 }
                 List<BehaviourAction> actions = new ArrayList<>();
                 for (Map<?, ?> entry : custom.getMapList(encodedName)) {
                     Object type = entry.get("type");
-                    if (type == null) continue;
+                    if (type == null) {
+                        continue;
+                    }
                     try {
                         actions.add(BehaviourActionCodec.decode(entry));
                     } catch (IllegalArgumentException ignored) {
-                        plugin.getLogger().warning("Ignoring unknown custom-event action '" + type + "' in " + file.getName());
+                        plugin.getLogger().warning(() -> "Ignoring unknown custom-event action '" + type + "' in " + file.getName());
                     }
                 }
                 definition.setCustomEventActions(eventName, actions);
