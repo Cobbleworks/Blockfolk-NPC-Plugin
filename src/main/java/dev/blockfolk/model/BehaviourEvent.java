@@ -13,9 +13,9 @@ public enum BehaviourEvent {
     HEAL("On Heal — 2+ Hearts"),
     DROP_ITEM("On Drop Item"),
     RECEIVE_ITEM("On Receive Item"),
-    DAWN("At Dawn"),
-    MORNING("In the Morning"),
-    MIDDAY("At Midday / Lunch"),
+    SUNRISE("At Sunrise"),
+    NOON("At Noon"),
+    SUNSET("At Sunset"),
     COMBAT_ENTERED("On Combat Entered"),
     COMBAT_EXITED("On Combat Exited");
 

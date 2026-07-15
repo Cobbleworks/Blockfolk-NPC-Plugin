@@ -32,4 +32,6 @@ public interface NpcRenderer {
     void wave(NpcInstance instance);
 
     void jump(NpcInstance instance);
+
+    void lookAt(NpcInstance instance, Location target);
 }

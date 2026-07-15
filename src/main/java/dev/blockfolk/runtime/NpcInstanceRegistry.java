@@ -193,6 +193,10 @@ public final class NpcInstanceRegistry {
         renderer.jump(instance);
     }
 
+    public void lookAt(NpcInstance instance, Location target) {
+        renderer.lookAt(instance, target);
+    }
+
     public Collection<NpcInstance> findByDefinition(NpcDefinition definition) {
         return instances.values().stream()
                 .filter(instance -> instance.getDefinitionKey().equals(definition.getKey()))

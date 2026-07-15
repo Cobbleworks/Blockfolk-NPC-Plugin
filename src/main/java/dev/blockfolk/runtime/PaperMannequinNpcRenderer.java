@@ -180,6 +180,18 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         }
     }
 
+    @Override
+    public void lookAt(NpcInstance instance, Location target) {
+        Mannequin mannequin = findEntity(instance);
+        if (mannequin == null || target == null || target.getWorld() != mannequin.getWorld()) {
+            return;
+        }
+        Location facing = mannequin.getLocation();
+        facing.setDirection(target.toVector().subtract(mannequin.getEyeLocation().toVector()));
+        mannequin.setRotation(facing.getYaw(), facing.getPitch());
+        mannequin.setBodyYaw(facing.getYaw());
+    }
+
     private void tickJumps() {
         jumpTicksByInstance.replaceAll((instanceId, elapsed) -> elapsed + 1);
         jumpTicksByInstance.entrySet().removeIf(entry -> {

@@ -33,7 +33,9 @@ class BehaviourTest {
         assertEquals(BehaviourActionType.HARVEST, BehaviourActionType.fromStored("harvest"));
         assertEquals(BehaviourActionType.CHANGE_FIGHT_OPTIONS,
                 BehaviourActionType.fromStored("change_fight_options"));
-        assertEquals("At Midday / Lunch", BehaviourEvent.MIDDAY.displayName());
+        assertEquals("At Sunrise", BehaviourEvent.SUNRISE.displayName());
+        assertEquals("At Noon", BehaviourEvent.NOON.displayName());
+        assertEquals("At Sunset", BehaviourEvent.SUNSET.displayName());
     }
 
     @Test

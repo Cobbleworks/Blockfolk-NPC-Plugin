@@ -2900,12 +2900,12 @@ public final class GuiService implements Listener {
                 Material.HOPPER;
             case LOW_HEALTH ->
                 Material.GLISTERING_MELON_SLICE;
-            case DAWN ->
+            case SUNRISE ->
                 Material.ORANGE_DYE;
-            case MORNING ->
-                Material.SUNFLOWER;
-            case MIDDAY ->
+            case NOON ->
                 Material.COOKED_BEEF;
+            case SUNSET ->
+                Material.SUNFLOWER;
         };
     }
 

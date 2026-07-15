@@ -18,8 +18,10 @@ import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.BlockState;
 import org.bukkit.block.TileState;
 import org.bukkit.block.Container;
+import org.bukkit.block.Lidded;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Ageable;
 import org.bukkit.block.data.Powerable;
@@ -67,6 +69,8 @@ public final class NpcBehaviourService implements Listener {
     private static final double FOLLOW_RESUME_RANGE_SQUARED = 5.0 * 5.0;
     private static final double FOLLOW_CATCH_UP_RANGE_SQUARED = 12.0 * 12.0;
     private static final int FOLLOW_REPATH_TICKS = 10;
+    private static final int PLAYER_LOOK_INTERVAL_TICKS = 5;
+    private static final long CONTAINER_CLOSE_DELAY_TICKS = 20L;
     private static final long IDLE_REPEAT_TICKS = 1L * 20L;
     private final Plugin plugin;
     private final NpcDefinitionRepository definitions;
@@ -88,6 +92,7 @@ public final class NpcBehaviourService implements Listener {
     private BukkitTask behaviourTask;
     private long currentTick;
     private int proximityTick;
+    private int playerLookTick;
     private long customEmissionTick = -1L;
     private int customEmissionsThisTick;
     private boolean redstonePhysicsWarningLogged;
@@ -475,6 +480,10 @@ public final class NpcBehaviourService implements Listener {
             proximityTick = 0;
             tickProximity();
         }
+        if (++playerLookTick >= PLAYER_LOOK_INTERVAL_TICKS) {
+            playerLookTick = 0;
+            tickPlayerLook();
+        }
         Set<UUID> active = new HashSet<>();
         for (NpcInstance instance : instances.findAll()) {
             active.add(instance.getId());
@@ -502,14 +511,14 @@ public final class NpcBehaviourService implements Listener {
             if (elapsed == 0L || elapsed > 12000L) {
                 continue;
             }
-            if (crossedTime(previous, elapsed, 23000L)) {
-                triggerTimeEvent(world, BehaviourEvent.DAWN);
-            }
             if (crossedTime(previous, elapsed, 0L)) {
-                triggerTimeEvent(world, BehaviourEvent.MORNING);
+                triggerTimeEvent(world, BehaviourEvent.SUNRISE);
             }
             if (crossedTime(previous, elapsed, 6000L)) {
-                triggerTimeEvent(world, BehaviourEvent.MIDDAY);
+                triggerTimeEvent(world, BehaviourEvent.NOON);
+            }
+            if (crossedTime(previous, elapsed, 12000L)) {
+                triggerTimeEvent(world, BehaviourEvent.SUNSET);
             }
         }
         lastWorldTimes.keySet().retainAll(activeWorlds);
@@ -704,30 +713,32 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void takeNearbyItem(NpcInstance instance, Entity actor) {
-        Inventory source = nearbySourceInventory(instance, actor);
+        InventorySource source = nearbySourceInventory(instance, actor);
         if (source == null) return;
 
         Inventory carried = Bukkit.createInventory(null, 27);
         carried.setContents(instance.getTemporaryInventoryContents());
-        for (int slot = 0; slot < source.getSize(); slot++) {
-            ItemStack item = source.getItem(slot);
+        animateContainerInteraction(source.containerLocation());
+        for (int slot = 0; slot < source.inventory().getSize(); slot++) {
+            ItemStack item = source.inventory().getItem(slot);
             if (item == null || item.getType().isAir()) continue;
             ItemStack offered = item.clone();
             Map<Integer, ItemStack> leftovers = carried.addItem(offered);
             int remaining = leftovers.values().stream().mapToInt(ItemStack::getAmount).sum();
             int moved = item.getAmount() - remaining;
             if (moved <= 0) return;
-            if (moved == item.getAmount()) source.setItem(slot, null);
+            if (moved == item.getAmount()) source.inventory().setItem(slot, null);
             else item.setAmount(item.getAmount() - moved);
             updateTemporaryInventory(instance, carried.getContents(), actor);
             return;
         }
     }
 
-    private Inventory nearbySourceInventory(NpcInstance instance, Entity actor) {
+    private InventorySource nearbySourceInventory(NpcInstance instance, Entity actor) {
         Location center = instance.getLocation();
         if (center.getWorld() == null) return null;
         Inventory nearest = null;
+        Location nearestContainer = null;
         double nearestDistance = Double.MAX_VALUE;
         if (actor instanceof Player player && player.getWorld() == center.getWorld()
                 && player.getLocation().distanceSquared(center) <= 16.0) {
@@ -742,6 +753,7 @@ public final class NpcBehaviourService implements Listener {
                     double distance = block.getLocation().add(.5, .5, .5).distanceSquared(center);
                     if (distance < nearestDistance) {
                         nearest = container.getInventory();
+                        nearestContainer = block.getLocation();
                         nearestDistance = distance;
                     }
                 }
@@ -751,10 +763,11 @@ public final class NpcBehaviourService implements Listener {
             double distance = player.getLocation().distanceSquared(center);
             if (distance <= 16.0 && distance < nearestDistance) {
                 nearest = player.getInventory();
+                nearestContainer = null;
                 nearestDistance = distance;
             }
         }
-        return nearest;
+        return nearest == null ? null : new InventorySource(nearest, nearestContainer);
     }
 
     private void showInventory(NpcInstance instance, Entity actor) {
@@ -787,12 +800,15 @@ public final class NpcBehaviourService implements Listener {
         for (Container container : containers) {
             Inventory destination = container.getInventory();
             if (!visited.add(destination)) continue;
+            boolean inspected = false;
             for (int slot = 0; slot < carried.getSize(); slot++) {
                 ItemStack item = carried.getItem(slot);
                 if (item == null || item.getType().isAir()) continue;
+                inspected = true;
                 Map<Integer, ItemStack> leftovers = destination.addItem(item.clone());
                 carried.setItem(slot, leftovers.isEmpty() ? null : leftovers.values().iterator().next());
             }
+            if (inspected) animateContainerInteraction(container.getLocation());
         }
         for (ItemStack item : carried.getContents()) {
             if (item != null && !item.getType().isAir()) center.getWorld().dropItemNaturally(center, item);
@@ -892,6 +908,22 @@ public final class NpcBehaviourService implements Listener {
 
     private record Planting(Material item, Material crop) { }
 
+    private record InventorySource(Inventory inventory, Location containerLocation) { }
+
+    private void animateContainerInteraction(Location location) {
+        if (location == null || location.getWorld() == null) return;
+        BlockState state = location.getBlock().getState();
+        if (!(state instanceof Lidded lidded) || lidded.isOpen()) return;
+        lidded.open();
+        Location blockLocation = location.clone();
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            BlockState current = blockLocation.getBlock().getState();
+            if (current instanceof Lidded currentLid && currentLid.isOpen()) {
+                currentLid.close();
+            }
+        }, CONTAINER_CLOSE_DELAY_TICKS);
+    }
+
     public record NpcInventoryHolder(UUID instanceId) implements InventoryHolder {
         @Override public Inventory getInventory() { return null; }
     }
@@ -910,6 +942,13 @@ public final class NpcBehaviourService implements Listener {
                 .filter(player -> player.getWorld() == location.getWorld())
                 .filter(player -> player.getLocation().distanceSquared(location) <= FOLLOW_ACQUIRE_RANGE_SQUARED)
                 .min(Comparator.comparingDouble(player -> player.getLocation().distanceSquared(location)));
+    }
+
+    private void tickPlayerLook() {
+        for (NpcInstance instance : instances.findAll()) {
+            if (combatService != null && combatService.isEngaged(instance)) continue;
+            nearestPlayer(instance).ifPresent(player -> instances.lookAt(instance, player.getEyeLocation()));
+        }
     }
 
     private boolean isFollowTarget(NpcInstance instance, Player player) {

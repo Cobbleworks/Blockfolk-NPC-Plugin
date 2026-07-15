@@ -207,7 +207,17 @@ public final class NpcDefinitionRepository {
                 WalkingSpeed.fromStored(configuration.getString("movement.speed"))));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
-            for (Map<?, ?> entry : configuration.getMapList("behaviours." + event.name().toLowerCase(Locale.ROOT))) {
+            String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);
+            if (!configuration.contains(path)) {
+                path = switch (event) {
+                    // Pre-Sunrise/Noon/Sunset definitions used these event keys.
+                    case SUNRISE -> "behaviours.dawn";
+                    case NOON -> "behaviours.midday";
+                    case SUNSET -> "behaviours.morning";
+                    default -> path;
+                };
+            }
+            for (Map<?, ?> entry : configuration.getMapList(path)) {
                 Object type = entry.get("type");
                 if (type == null) {
                     continue;
