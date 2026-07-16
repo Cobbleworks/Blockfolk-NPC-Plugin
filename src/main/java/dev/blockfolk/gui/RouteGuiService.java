@@ -2,7 +2,6 @@ package dev.blockfolk.gui;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -136,20 +135,26 @@ public final class RouteGuiService implements Listener {
 
     private void openRoutes(Player player, String folder, int requestedPage) {
         finishEditing(player, false);
-        List<RouteEntry> entries = routeEntries(folder);
+        List<RouteBrowserModel.Entry> entries = routeEntries(folder);
         int pages = Math.max(1, (entries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        String title = folder.isEmpty() ? "Blockfolk Routes" : "Routes: " + folder;
+        String title = routeBrowserTitle(folder);
         Inventory inventory = Bukkit.createInventory(new RoutesHolder(folder, page), 54, UiText.title(title));
         int from = page * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, entries.size());
         for (int index = from; index < to; index++) {
-            RouteEntry entry = entries.get(index);
+            RouteBrowserModel.Entry entry = entries.get(index);
             if (entry.folder()) {
-                inventory.setItem(index - from, item(Material.CHEST, entry.label(), List.of(
+                ItemStack folderIcon = item(entry.npcFolder() ? Material.PLAYER_HEAD : Material.CHEST,
+                        entry.label(), List.of(
                         LegacyText.GRAY + "" + entry.childCount() + " route(s)",
-                        LegacyText.DARK_GRAY + entry.path(),
-                        LegacyText.YELLOW + "Click to open")));
+                        LegacyText.DARK_GRAY + (entry.npcFolder() ? "NPC route group" : entry.path()),
+                        LegacyText.YELLOW + "Click to open"));
+                if (entry.npcFolder()) {
+                    definitionRepository.find(RouteBrowserModel.npcKey(entry.path()))
+                            .ifPresent(definition -> NpcHeadUtil.applySkin(folderIcon, definition));
+                }
+                inventory.setItem(index - from, folderIcon);
                 continue;
             }
             NpcRoute route = entry.route();
@@ -173,15 +178,17 @@ public final class RouteGuiService implements Listener {
         }
         inventory.setItem(49, item(Material.COMPASS, "Route Overview", List.of(
                 LegacyText.GRAY + "Routes: " + LegacyText.WHITE + routeRepository.findAll().size(),
-                LegacyText.GRAY + "Group: " + LegacyText.WHITE + (folder.isEmpty() ? "Root" : folder),
+                LegacyText.GRAY + "Group: " + LegacyText.WHITE + routeBrowserLabel(folder),
                 LegacyText.GRAY + "NPCs start at their nearest point",
                 LegacyText.GRAY + "then follow nearest unvisited points in a loop",
                 LegacyText.YELLOW + "Click to reorder routes"
         )));
-        inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
-                LegacyText.GRAY + "Use / in the name to create groups",
-                LegacyText.YELLOW + "Click, then enter the full route name"
-        )));
+        if (!RouteBrowserModel.isNpcFolder(folder)) {
+            inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
+                    LegacyText.GRAY + "Use / in the name to create groups",
+                    LegacyText.YELLOW + "Click, then enter the full route name"
+            )));
+        }
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
@@ -486,7 +493,7 @@ public final class RouteGuiService implements Listener {
         int page = holder.page();
         if (event.getRawSlot() == 45) {
             if (folder.isEmpty()) mainGuiOpener.accept(player);
-            else openRoutes(player, parent(folder), 0);
+            else openRoutes(player, RouteBrowserModel.parent(folder), 0);
             return;
         }
         if (event.getRawSlot() == 46) {
@@ -502,6 +509,9 @@ public final class RouteGuiService implements Listener {
             return;
         }
         if (event.getRawSlot() == 51) {
+            if (RouteBrowserModel.isNpcFolder(folder)) {
+                return;
+            }
             chatInputService.request(player, "Enter the full route name (use / for groups):", value -> {
                 try {
                     NpcRoute route = NpcRoute.create(value);
@@ -523,12 +533,12 @@ public final class RouteGuiService implements Listener {
             openRoutes(player, folder, page + 1);
             return;
         }
-        List<RouteEntry> entries = routeEntries(folder);
+        List<RouteBrowserModel.Entry> entries = routeEntries(folder);
         int index = page * PAGE_SIZE + event.getRawSlot();
         if (event.getRawSlot() >= PAGE_SIZE || index < 0 || index >= entries.size()) {
             return;
         }
-        RouteEntry entry = entries.get(index);
+        RouteBrowserModel.Entry entry = entries.get(index);
         if (entry.folder()) {
             openRoutes(player, entry.path(), 0);
             return;
@@ -762,29 +772,24 @@ public final class RouteGuiService implements Listener {
         player.openInventory(inventory);
     }
 
-    private List<RouteEntry> routeEntries(String folder) {
-        String prefix = folder.isEmpty() ? "" : folder + "/";
-        Map<String, RouteEntry> result = new LinkedHashMap<>();
-        for (NpcRoute route : routeRepository.findAll()) {
-            if (!route.getKey().startsWith(prefix)) continue;
-            String rest = route.getKey().substring(prefix.length());
-            int slash = rest.indexOf('/');
-            if (slash >= 0) {
-                String label = rest.substring(0, slash);
-                String path = prefix + label;
-                RouteEntry old = result.get(path);
-                result.put(path, new RouteEntry(true, path, label,
-                        old == null ? 1 : old.childCount() + 1, null));
-            } else {
-                result.put(route.getKey(), new RouteEntry(false, route.getKey(), rest, 0, route));
-            }
-        }
-        return new ArrayList<>(result.values());
+    private List<RouteBrowserModel.Entry> routeEntries(String folder) {
+        return RouteBrowserModel.entries(routeRepository.findAll(), definitionRepository.findAll(), folder);
     }
 
-    private static String parent(String path) {
-        int slash = path.lastIndexOf('/');
-        return slash < 0 ? "" : path.substring(0, slash);
+    private String routeBrowserTitle(String folder) {
+        return folder.isEmpty() ? "Blockfolk Routes" : "Routes: " + routeBrowserLabel(folder);
+    }
+
+    private String routeBrowserLabel(String folder) {
+        if (!RouteBrowserModel.isNpcFolder(folder)) {
+            return folder.isEmpty() ? "Root" : folder;
+        }
+        String npcKey = RouteBrowserModel.npcKey(folder);
+        String npcName = definitionRepository.find(npcKey)
+                .map(NpcDefinition::getDisplayName)
+                .orElse(npcKey);
+        String routeFolder = RouteBrowserModel.routeFolder(folder);
+        return routeFolder.isEmpty() ? npcName : npcName + "/" + routeFolder;
     }
 
     private void beginEditing(Player player, NpcRoute route) {
@@ -1012,8 +1017,6 @@ public final class RouteGuiService implements Listener {
 
         void open(Player player, String routeKey, RoutePoint point);
     }
-
-    private record RouteEntry(boolean folder, String path, String label, int childCount, NpcRoute route) { }
 
     private record RoutesHolder(String folder, int page) implements InventoryHolder {
 

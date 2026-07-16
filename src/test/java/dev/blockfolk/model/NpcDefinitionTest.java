@@ -3,6 +3,7 @@ package dev.blockfolk.model;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -49,5 +50,24 @@ class NpcDefinitionTest {
         assertEquals(List.of(action), definition.getCustomEventActions("jungle/idolWasStolen"));
         assertEquals(1, definition.customEventActionCount());
         assertEquals(List.of(), definition.getBehaviourActions(BehaviourEvent.SPAWN));
+    }
+
+    @Test
+    void findsRoutesReferencedByMovementEventsCustomEventsAndQuestions() {
+        NpcDefinition definition = NpcDefinition.create("Guard");
+        definition.setMovementProfile(MovementProfile.routing("Day Patrol", WalkingSpeed.NORMAL));
+        definition.setBehaviourActions(BehaviourEvent.SPAWN, List.of(
+                new BehaviourAction(BehaviourActionType.SET_ROUTE, "Village/Night Patrol")));
+        definition.setCustomEventActions("alarm", List.of(
+                new BehaviourAction(BehaviourActionType.SET_ROUTE, "Emergency")));
+        definition.setBehaviourActions(BehaviourEvent.RIGHT_CLICK, List.of(BehaviourAction.ask(
+                new NpcQuestion(UUID.randomUUID(), "Choose", List.of(
+                        new QuestionOption("Market", List.of(
+                                new BehaviourAction(BehaviourActionType.SET_ROUTE, "Market Loop")))),
+                        List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "Return Home"))))));
+
+        assertEquals(java.util.Set.of(
+                "day-patrol", "village/night-patrol", "emergency", "market-loop", "return-home"),
+                definition.getReferencedRouteKeys());
     }
 }

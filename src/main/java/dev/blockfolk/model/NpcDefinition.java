@@ -3,9 +3,11 @@ package dev.blockfolk.model;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.bukkit.Location;
 import org.bukkit.inventory.ItemStack;
@@ -219,6 +221,39 @@ public final class NpcDefinition {
     public void removeCustomEvent(String eventName) { customEventBehaviours.remove(eventName); }
     public int customEventActionCount() { return customEventBehaviours.values().stream().mapToInt(List::size).sum(); }
     public List<String> getCustomEventNames() { return new ArrayList<>(customEventBehaviours.keySet()); }
+
+    public Set<String> getReferencedRouteKeys() {
+        Set<String> routeKeys = new LinkedHashSet<>();
+        if (movementProfile.routeKey() != null) {
+            routeKeys.add(movementProfile.routeKey());
+        }
+        for (BehaviourEvent event : BehaviourEvent.values()) {
+            collectRouteKeys(getBehaviourActions(event), routeKeys);
+        }
+        for (String eventName : getCustomEventNames()) {
+            collectRouteKeys(getCustomEventActions(eventName), routeKeys);
+        }
+        return Set.copyOf(routeKeys);
+    }
+
+    private static void collectRouteKeys(List<BehaviourAction> actions, Set<String> routeKeys) {
+        for (BehaviourAction action : actions) {
+            if (action.type() == BehaviourActionType.SET_ROUTE && action.value() != null) {
+                try {
+                    routeKeys.add(NpcRoute.normalizeKey(action.value()));
+                } catch (IllegalArgumentException ignored) {
+                    // A malformed stored action cannot refer to a route in the repository.
+                }
+            }
+            if (action.type() != BehaviourActionType.ASK_QUESTION || action.question() == null) {
+                continue;
+            }
+            for (QuestionOption option : action.question().options()) {
+                collectRouteKeys(option.actions(), routeKeys);
+            }
+            collectRouteKeys(action.question().cancelActions(), routeKeys);
+        }
+    }
 
     private static ItemStack[] cloneArray(ItemStack[] source, int length) {
         ItemStack[] copy = new ItemStack[length];

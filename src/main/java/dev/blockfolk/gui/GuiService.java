@@ -1,6 +1,5 @@
 package dev.blockfolk.gui;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,13 +34,9 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
-import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.potion.PotionType;
-
-import com.destroystokyo.paper.profile.PlayerProfile;
-import com.destroystokyo.paper.profile.ProfileProperty;
 
 import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.model.ActionLocation;
@@ -3040,26 +3035,7 @@ public final class GuiService implements Listener {
 
     private ItemStack definitionIcon(NpcDefinition definition, List<String> lore) {
         ItemStack head = item(Material.PLAYER_HEAD, definition.getDisplayName(), lore);
-        if (definition.getSkinUrl() == null || !(head.getItemMeta() instanceof SkullMeta meta)) {
-            return head;
-        }
-        try {
-            UUID uuid = UUID.nameUUIDFromBytes(definition.getKey().getBytes(StandardCharsets.UTF_8));
-            PlayerProfile profile = Bukkit.createProfileExact(uuid, "Blockfolk");
-            String texture = definition.getSkinTextureValue();
-            if (texture == null) {
-                texture = SkinTextureUtil.toTextureProperty(definition.getSkinUrl());
-            }
-            String signature = definition.getSkinTextureSignature();
-            profile.setProperty(signature == null
-                    ? new ProfileProperty("textures", texture)
-                    : new ProfileProperty("textures", texture, signature));
-            meta.setPlayerProfile(profile);
-            head.setItemMeta(meta);
-        } catch (RuntimeException ignored) {
-            // A broken skin value must never prevent the management GUI opening.
-        }
-        return head;
+        return NpcHeadUtil.applySkin(head, definition);
     }
 
     private ItemStack routeIcon(NpcRoute route) {
