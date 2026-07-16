@@ -205,9 +205,10 @@ public final class RouteGuiService implements Listener {
         int to = Math.min(from + PAGE_SIZE, locations.size());
         for (int index = from; index < to; index++) {
             NamedLocation named = locations.get(index);
-            inventory.setItem(index - from, item(Material.LODESTONE, named.displayName(), List.of(
+            inventory.setItem(index - from, locationItem(named, List.of(
                     LegacyText.DARK_GRAY + "Key: " + named.key(),
                     LegacyText.GRAY + named.location().display(),
+                    LegacyText.AQUA + "Middle-click: set icon from main hand",
                     LegacyText.YELLOW + "Left-click: teleport",
                     LegacyText.RED + "Shift-right-click: delete"
             )));
@@ -566,13 +567,18 @@ public final class RouteGuiService implements Listener {
         int index = holder.page() * PAGE_SIZE + slot;
         List<NamedLocation> locations = new ArrayList<>(locationRepository.findAll());
         if (slot < 0 || slot >= PAGE_SIZE || index < 0 || index >= locations.size()) return;
-        if (event.isRightClick() && event.isShiftClick()) {
-            NamedLocation named = locations.get(index);
+        NamedLocation named = locations.get(index);
+        if (event.getClick() == ClickType.MIDDLE) {
+            named = named.withIcon(player.getInventory().getItemInMainHand());
+            locationRepository.save(named);
+            player.sendMessage(UiText.info(named.icon() == null
+                    ? "Location icon cleared." : "Location icon updated."));
+            openLocations(player, holder.page(), holder.returnFolder(), holder.returnPage());
+        } else if (event.isRightClick() && event.isShiftClick()) {
             locationRepository.delete(named);
             player.sendMessage(UiText.success("Deleted global location '" + named.displayName() + "'."));
             openLocations(player, holder.page(), holder.returnFolder(), holder.returnPage());
         } else if (event.isLeftClick()) {
-            NamedLocation named = locations.get(index);
             Location destination = named.location().toLocation();
             if (destination == null) {
                 player.sendMessage(UiText.error(
@@ -979,6 +985,17 @@ public final class RouteGuiService implements Listener {
         result.setAmount(1);
         ItemMeta meta = result.getItemMeta();
         meta.displayName(LegacyText.component(LegacyText.GOLD + route.getDisplayName()));
+        meta.lore(LegacyText.components(lore));
+        result.setItemMeta(meta);
+        return result;
+    }
+
+    private ItemStack locationItem(NamedLocation location, List<String> lore) {
+        ItemStack icon = location.icon();
+        ItemStack result = icon == null ? new ItemStack(Material.LODESTONE) : icon;
+        result.setAmount(1);
+        ItemMeta meta = result.getItemMeta();
+        meta.displayName(LegacyText.component(LegacyText.GOLD + location.displayName()));
         meta.lore(LegacyText.components(lore));
         result.setItemMeta(meta);
         return result;

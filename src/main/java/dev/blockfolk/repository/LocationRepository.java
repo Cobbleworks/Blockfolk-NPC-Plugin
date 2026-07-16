@@ -39,7 +39,8 @@ public final class LocationRepository {
                         section.getDouble("y"),
                         section.getDouble("z"));
                 NamedLocation named = new NamedLocation(storedKey,
-                        section.getString("display-name", storedKey), location);
+                        section.getString("display-name", storedKey), location,
+                        section.getItemStack("icon"));
                 locations.put(named.key(), named);
             } catch (IllegalArgumentException ignored) {
                 // Ignore malformed saved locations without preventing plugin startup.
@@ -81,6 +82,7 @@ public final class LocationRepository {
             section.set("x", named.location().x());
             section.set("y", named.location().y());
             section.set("z", named.location().z());
+            section.set("icon", named.icon());
         }
         try {
             configuration.save(file);
