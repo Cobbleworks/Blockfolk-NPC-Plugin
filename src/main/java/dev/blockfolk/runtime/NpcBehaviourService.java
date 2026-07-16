@@ -89,6 +89,7 @@ public final class NpcBehaviourService implements Listener {
     private final Set<UUID> routePaused = new HashSet<>();
     private final Map<UUID, Location> moveTargets = new HashMap<>();
     private final Map<UUID, FollowState> following = new HashMap<>();
+    private final Map<UUID, Object> waypointActionSequences = new HashMap<>();
     private final Map<UUID, Object> idleCycles = new HashMap<>();
     private final Set<ProximityKey> nearbyPlayers = new HashSet<>();
     private final Map<ProximityKey, Long> proximityCooldownUntilTick = new HashMap<>();
@@ -137,6 +138,7 @@ public final class NpcBehaviourService implements Listener {
         routePaused.clear();
         moveTargets.clear();
         following.clear();
+        waypointActionSequences.clear();
         idleCycles.clear();
         nearbyPlayers.clear();
         proximityCooldownUntilTick.clear();
@@ -188,7 +190,10 @@ public final class NpcBehaviourService implements Listener {
         if (definition == null || actions == null || actions.isEmpty()) {
             return;
         }
-        executeSequence(null, List.copyOf(actions), 0, instance, definition, null, () -> { });
+        Object token = new Object();
+        waypointActionSequences.put(instance.getId(), token);
+        executeSequence(null, List.copyOf(actions), 0, instance, definition, null,
+                () -> waypointActionSequences.remove(instance.getId(), token));
     }
 
     public void emitCustomEvent(String eventName, Entity actor) {
@@ -217,6 +222,7 @@ public final class NpcBehaviourService implements Listener {
         routePaused.remove(instance.getId());
         moveTargets.remove(instance.getId());
         following.remove(instance.getId());
+        waypointActionSequences.remove(instance.getId());
         idleCycles.remove(instance.getId());
         nearbyPlayers.removeIf(key -> key.instanceId().equals(instance.getId()));
         proximityCooldownUntilTick.keySet().removeIf(key -> key.instanceId().equals(instance.getId()));
@@ -238,6 +244,22 @@ public final class NpcBehaviourService implements Listener {
 
     public boolean isMovingTo(NpcInstance instance) {
         return moveTargets.containsKey(instance.getId());
+    }
+
+    /**
+     * Returns whether route movement has been explicitly paused by a behaviour
+     * action. A pause must not discard the route worker's next waypoint.
+     */
+    public boolean isNavigationPaused(NpcInstance instance) {
+        return routePaused.contains(instance.getId());
+    }
+
+    /**
+     * Waypoint actions own route movement until their sequence (including any
+     * waits, dialog delays, or questions) has completed.
+     */
+    public boolean isRunningWaypointActions(NpcInstance instance) {
+        return waypointActionSequences.containsKey(instance.getId());
     }
 
     private void executeSequence(
@@ -504,6 +526,7 @@ public final class NpcBehaviourService implements Listener {
         routePaused.retainAll(active);
         moveTargets.keySet().retainAll(active);
         following.keySet().retainAll(active);
+        waypointActionSequences.keySet().retainAll(active);
         idleCycles.keySet().retainAll(active);
     }
 

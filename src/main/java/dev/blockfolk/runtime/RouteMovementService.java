@@ -76,10 +76,17 @@ public final class RouteMovementService {
 
     private void move(NpcInstance instance) {
         if (combatService.isEngaged(instance) || behaviourService.isFollowing(instance)
-                || behaviourService.isMovingTo(instance)) {
-            // Combat temporarily owns navigation. Keep the route target so the
-            // NPC resumes toward the same waypoint instead of rebuilding the
-            // route from its post-combat position.
+                || behaviourService.isMovingTo(instance)
+                || behaviourService.isRunningWaypointActions(instance)) {
+            // Another runtime activity temporarily owns navigation. Keep the
+            // route target so the NPC resumes toward the same next waypoint.
+            return;
+        }
+        if (behaviourService.isNavigationPaused(instance)) {
+            // STOP_NAVIGATION is temporary state, not a disabled route. In
+            // particular, a waypoint's stop/wait/start sequence has already
+            // advanced targetIndex, and removing progress here would select
+            // the waypoint just reached again when navigation resumes.
             return;
         }
         NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
