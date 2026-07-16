@@ -419,7 +419,8 @@ public final class GuiService implements Listener {
                 LegacyText.DARK_GRAY + "Key: " + definition.getKey(),
                 LegacyText.GRAY + "Instances: " + LegacyText.WHITE + instances,
                 LegacyText.GRAY + "Skin: " + LegacyText.WHITE + (definition.getSkinUrl() == null ? "Default" : "Custom"),
-                LegacyText.GRAY + "Spawn: " + LegacyText.WHITE + formatLocation(definition.getSpawnpoint())
+                LegacyText.GRAY + "Spawn: " + LegacyText.WHITE + formatLocation(definition.getSpawnpoint()),
+                LegacyText.YELLOW + "Click to configure NPC properties"
         )));
         inventory.setItem(10, item(Material.NAME_TAG, "Display Name", List.of(
                 LegacyText.GRAY + definition.getDisplayName(),
@@ -460,12 +461,6 @@ public final class GuiService implements Listener {
         inventory.setItem(22, item(Material.BELL, "Custom Event Behaviour", List.of(
                 LegacyText.GRAY + "" + definition.customEventActionCount() + " configured action(s)",
                 LegacyText.GRAY + "React to globally emitted custom events",
-                LegacyText.YELLOW + "Click to configure"
-        )));
-        inventory.setItem(21, item(Material.COMPARATOR, "NPC Properties", List.of(
-                propertyStatus("Show Name", definition.isShowName()),
-                propertyStatus("Look at Player", definition.isLookAtPlayer()),
-                propertyStatus("Item Pickup", definition.isItemPickup()),
                 LegacyText.YELLOW + "Click to configure"
         )));
         CombatProfile combat = definition.getCombatProfile();
@@ -1169,6 +1164,8 @@ public final class GuiService implements Listener {
             return;
         }
         switch (event.getRawSlot()) {
+            case 4 ->
+                openProperties(player, definition);
             case 10 ->
                 chatInputService.request(player, "Enter NPC display name:", value -> {
                     definition.setDisplayName(value.trim());
@@ -1204,8 +1201,6 @@ public final class GuiService implements Listener {
                 openBehaviours(player, definition, 0);
             case 22 ->
                 openCustomBehaviours(player, definition, 0);
-            case 21 ->
-                openProperties(player, definition);
             case 15 ->
                 openFightingEditor(player, definition);
             case 31 ->
@@ -3096,11 +3091,6 @@ public final class GuiService implements Listener {
         lore.addAll(description);
         lore.add(LegacyText.YELLOW + "Click to toggle");
         return item(enabled ? material : Material.GRAY_DYE, name, lore);
-    }
-
-    private String propertyStatus(String name, boolean enabled) {
-        return LegacyText.GRAY + name + ": "
-                + (enabled ? LegacyText.GREEN + "On" : LegacyText.RED + "Off");
     }
 
     private int enabledTargetCount(CombatProfile combat) {
