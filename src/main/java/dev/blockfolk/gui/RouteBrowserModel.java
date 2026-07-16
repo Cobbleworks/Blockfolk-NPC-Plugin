@@ -47,7 +47,7 @@ final class RouteBrowserModel {
                             definition.getDisplayName(), keys.size()));
                 }
             }
-            result.addAll(routeEntries(orderedRoutes, usedRouteKeys, "", "", true));
+            result.addAll(routeEntries(orderedRoutes, usedRouteKeys, true));
             return result;
         }
 
@@ -57,24 +57,10 @@ final class RouteBrowserModel {
             if (keys == null) {
                 return List.of();
             }
-            String routeFolder = routeFolder(folder);
-            return routeEntries(orderedRoutes, keys, routeFolder, npcFolder(npcKey), false);
+            return routeEntries(orderedRoutes, keys, false);
         }
 
-        return routeEntries(orderedRoutes, usedRouteKeys, folder, "", true);
-    }
-
-    static String parent(String folder) {
-        if (isNpcFolder(folder)) {
-            String npcRoot = npcFolder(npcKey(folder));
-            if (folder.equals(npcRoot)) {
-                return "";
-            }
-            int slash = folder.lastIndexOf('/');
-            return slash < npcRoot.length() ? npcRoot : folder.substring(0, slash);
-        }
-        int slash = folder.lastIndexOf('/');
-        return slash < 0 ? "" : folder.substring(0, slash);
+        return List.of();
     }
 
     static boolean isNpcFolder(String folder) {
@@ -82,14 +68,7 @@ final class RouteBrowserModel {
     }
 
     static String npcKey(String folder) {
-        String rest = folder.substring(NPC_PREFIX.length());
-        int slash = rest.indexOf('/');
-        return slash < 0 ? rest : rest.substring(0, slash);
-    }
-
-    static String routeFolder(String folder) {
-        String npcRoot = npcFolder(npcKey(folder));
-        return folder.length() == npcRoot.length() ? "" : folder.substring(npcRoot.length() + 1);
+        return folder.substring(NPC_PREFIX.length());
     }
 
     private static String npcFolder(String npcKey) {
@@ -99,41 +78,22 @@ final class RouteBrowserModel {
     private static List<Entry> routeEntries(
             List<NpcRoute> routes,
             Set<String> selectedRouteKeys,
-            String routeFolder,
-            String virtualPrefix,
             boolean invertSelection
     ) {
-        String prefix = routeFolder.isEmpty() ? "" : routeFolder + "/";
-        Map<String, Entry> result = new LinkedHashMap<>();
+        List<Entry> result = new ArrayList<>();
         for (NpcRoute route : routes) {
             boolean selected = selectedRouteKeys.contains(route.getKey());
-            if (selected == invertSelection || !route.getKey().startsWith(prefix)) {
+            if (selected == invertSelection) {
                 continue;
             }
-            String rest = route.getKey().substring(prefix.length());
-            int slash = rest.indexOf('/');
-            if (slash >= 0) {
-                String label = rest.substring(0, slash);
-                String childRoutePath = prefix + label;
-                String path = virtualPrefix.isEmpty()
-                        ? childRoutePath
-                        : virtualPrefix + "/" + childRoutePath;
-                Entry old = result.get(path);
-                result.put(path, Entry.routeFolder(path, label, old == null ? 1 : old.childCount() + 1));
-            } else {
-                result.put(route.getKey(), Entry.route(route));
-            }
+            result.add(Entry.route(route));
         }
-        return new ArrayList<>(result.values());
+        return result;
     }
 
     record Entry(boolean folder, boolean npcFolder, String path, String label, int childCount, NpcRoute route) {
         static Entry npcFolder(String path, String label, int childCount) {
             return new Entry(true, true, path, label, childCount, null);
-        }
-
-        static Entry routeFolder(String path, String label, int childCount) {
-            return new Entry(true, false, path, label, childCount, null);
         }
 
         static Entry route(NpcRoute route) {

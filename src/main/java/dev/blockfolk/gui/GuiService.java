@@ -5,7 +5,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.LinkedHashMap;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -289,13 +288,9 @@ public final class GuiService implements Listener {
         if (page > 0) {
             inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
         }
-        if (pickerType == BehaviourValuePickerType.ROUTE && !folder.isEmpty()) {
-            inventory.setItem(45, item(Material.ARROW, "Up One Group", List.of()));
-        }
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         if (pickerType == BehaviourValuePickerType.ROUTE) {
             inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
-                    LegacyText.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
                     LegacyText.YELLOW + "Click, then enter its name")));
         } else if (pickerType == BehaviourValuePickerType.CUSTOM_EVENT) {
             inventory.setItem(51, item(Material.EMERALD, "Create New Event", List.of(
@@ -800,13 +795,9 @@ public final class GuiService implements Listener {
         if (valuePage > 0) {
             inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
         }
-        if (pickerType == BehaviourValuePickerType.ROUTE && !folder.isEmpty()) {
-            inventory.setItem(45, item(Material.ARROW, "Up One Group", List.of()));
-        }
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         if (pickerType == BehaviourValuePickerType.ROUTE) {
             inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
-                    LegacyText.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
                     LegacyText.YELLOW + "Click, then enter its name")));
         } else if (pickerType == BehaviourValuePickerType.CUSTOM_EVENT) {
             inventory.setItem(51, item(Material.EMERALD, "Create New Event", List.of(
@@ -842,31 +833,12 @@ public final class GuiService implements Listener {
     }
 
     private List<BehaviourPickerOption> routePickerOptions(String folder) {
-        String prefix = folder.isEmpty() ? "" : folder + "/";
-        Map<String, BehaviourPickerOption> options = new LinkedHashMap<>();
-        for (NpcRoute route : routeRepository.findAll()) {
-            if (!route.getKey().startsWith(prefix)) continue;
-            String rest = route.getKey().substring(prefix.length());
-            int slash = rest.indexOf('/');
-            if (slash >= 0) {
-                String label = rest.substring(0, slash);
-                String path = prefix + label;
-                BehaviourPickerOption old = options.get(path);
-                int count = old == null ? 1 : Integer.parseInt(old.lore().getFirst().split(" ")[0]) + 1;
-                options.put(path, new BehaviourPickerOption(path, label, new ItemStack(Material.CHEST),
-                        List.of(count + " route(s)", LegacyText.DARK_GRAY + path), true));
-            } else {
-                options.put(route.getKey(), new BehaviourPickerOption(route.getKey(), route.getDisplayName(), routeIcon(route), List.of(
+        return routeRepository.findAll().stream()
+                .map(route -> new BehaviourPickerOption(
+                        route.getKey(), route.getDisplayName(), routeIcon(route), List.of(
                         LegacyText.DARK_GRAY + "Key: " + route.getKey(),
-                        LegacyText.GRAY + "" + route.getPoints().size() + " route point(s)"), false));
-            }
-        }
-        return new ArrayList<>(options.values());
-    }
-
-    private static String parentFolder(String folder) {
-        int slash = folder.lastIndexOf('/');
-        return slash < 0 ? "" : folder.substring(0, slash);
+                        LegacyText.GRAY + "" + route.getPoints().size() + " route point(s)"), false))
+                .toList();
     }
 
     public void openInstances(Player player, NpcDefinition definition, int requestedPage) {
@@ -1751,11 +1723,6 @@ public final class GuiService implements Listener {
         RoutePointActionPickerHolder action = new RoutePointActionPickerHolder(
                 holder.routeKey(), current, holder.actionIndex());
         int slot = event.getRawSlot();
-        if (slot == 45) {
-            if (holder.pickerType() == BehaviourValuePickerType.ROUTE && !holder.folder().isEmpty())
-                openRoutePointValuePicker(player, action, holder.pickerType(), parentFolder(holder.folder()), 0);
-            return;
-        }
         if (slot == 47) {
             openRoutePointValuePicker(player, action, holder.pickerType(), holder.folder(), holder.page() - 1);
             return;
@@ -1769,7 +1736,7 @@ public final class GuiService implements Listener {
             return;
         }
         if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.ROUTE) {
-            routeCreator.create(player, holder.folder(), route -> {
+            routeCreator.create(player, "", route -> {
                 RoutePoint updated = setRoutePointAction(action, BehaviourActionType.SET_ROUTE, route.getKey());
                 if (updated != null) player.sendMessage(UiText.success("Created and selected '" + route.getDisplayName() + "'."));
             });
@@ -2381,11 +2348,6 @@ public final class GuiService implements Listener {
         }
         ActionPickerHolder action = new ActionPickerHolder(holder.key(), holder.event(), holder.customEvent(), holder.actionIndex(), holder.behaviourPage());
         int slot = event.getRawSlot();
-        if (slot == 45) {
-            if (holder.pickerType() == BehaviourValuePickerType.ROUTE && !holder.folder().isEmpty())
-                openBehaviourValuePicker(player, definition, action, holder.pickerType(), parentFolder(holder.folder()), 0);
-            return;
-        }
         if (slot == 47) {
             openBehaviourValuePicker(player, definition, action, holder.pickerType(), holder.folder(), holder.valuePage() - 1);
             return;
@@ -2399,7 +2361,7 @@ public final class GuiService implements Listener {
             return;
         }
         if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.ROUTE) {
-            routeCreator.create(player, holder.folder(), route -> {
+            routeCreator.create(player, "", route -> {
                 setAction(definition, action, BehaviourActionType.SET_ROUTE, route.getKey());
                 player.sendMessage(UiText.success("Created and selected '" + route.getDisplayName() + "'."));
             });
@@ -2658,11 +2620,9 @@ public final class GuiService implements Listener {
             inventory.setItem(22, item(Material.BARRIER, "No Routes Available", List.of(
                     LegacyText.GRAY + "Create a route with the button below")));
         }
-        if (!folder.isEmpty()) inventory.setItem(45, item(Material.ARROW, "Up One Group", List.of()));
         if (page > 0) inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
-                LegacyText.GRAY + "New route in " + (folder.isEmpty() ? "the root group" : folder),
                 LegacyText.YELLOW + "Click, then enter its name")));
         if (page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         openInventory(player, inventory);
@@ -2673,10 +2633,6 @@ public final class GuiService implements Listener {
         event.setCancelled(true);
         if (!isTopInventoryClick(event)) return;
         int slot = event.getRawSlot();
-        if (slot == 45 && !holder.folder().isEmpty()) {
-            openQuestionBranchRoutePicker(player, holder.action(), parentFolder(holder.folder()), 0);
-            return;
-        }
         if (slot == 47) {
             openQuestionBranchRoutePicker(player, holder.action(), holder.folder(), holder.page() - 1);
             return;
@@ -2687,7 +2643,7 @@ public final class GuiService implements Listener {
             return;
         }
         if (slot == 51) {
-            routeCreator.create(player, holder.folder(), route -> {
+            routeCreator.create(player, "", route -> {
                 setQuestionBranchAction(holder.action(), new BehaviourAction(BehaviourActionType.SET_ROUTE,
                         route.getKey()));
                 player.sendMessage(UiText.success("Created and selected '" + route.getDisplayName() + "'."));

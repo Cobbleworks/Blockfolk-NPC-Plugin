@@ -114,12 +114,9 @@ public final class RouteGuiService implements Listener {
     }
 
     public void createRoute(Player player, String folder, Consumer<NpcRoute> onCreated) {
-        String normalizedFolder = folder == null ? "" : folder;
-        chatInputService.request(player, "Enter the full route name (use / for groups):", value -> {
+        chatInputService.request(player, "Enter the route name:", value -> {
             try {
-                String name = normalizedFolder.isEmpty() || value.contains("/")
-                        ? value : normalizedFolder + "/" + value;
-                NpcRoute route = NpcRoute.create(name);
+                NpcRoute route = NpcRoute.create(value);
                 if (routeRepository.find(route.getKey()).isPresent()) {
                     player.sendMessage(UiText.error("A route with that key already exists."));
                     return;
@@ -148,7 +145,7 @@ public final class RouteGuiService implements Listener {
                 ItemStack folderIcon = item(entry.npcFolder() ? Material.PLAYER_HEAD : Material.CHEST,
                         entry.label(), List.of(
                         LegacyText.GRAY + "" + entry.childCount() + " route(s)",
-                        LegacyText.DARK_GRAY + (entry.npcFolder() ? "NPC route group" : entry.path()),
+                        LegacyText.DARK_GRAY + "Routes used by this NPC",
                         LegacyText.YELLOW + "Click to open"));
                 if (entry.npcFolder()) {
                     definitionRepository.find(RouteBrowserModel.npcKey(entry.path()))
@@ -167,7 +164,7 @@ public final class RouteGuiService implements Listener {
             )));
         }
         inventory.setItem(45, item(folder.isEmpty() ? Material.PLAYER_HEAD : Material.ARROW,
-                folder.isEmpty() ? "Manage NPCs" : "Up One Group", List.of()));
+                folder.isEmpty() ? "Manage NPCs" : "Back to Routes", List.of()));
         inventory.setItem(46, item(Material.LODESTONE, "Locations", List.of(
                 LegacyText.GRAY + "Define global positions for NPC actions",
                 LegacyText.GREEN + "Uses green waypoint markers",
@@ -178,15 +175,14 @@ public final class RouteGuiService implements Listener {
         }
         inventory.setItem(49, item(Material.COMPASS, "Route Overview", List.of(
                 LegacyText.GRAY + "Routes: " + LegacyText.WHITE + routeRepository.findAll().size(),
-                LegacyText.GRAY + "Group: " + LegacyText.WHITE + routeBrowserLabel(folder),
+                LegacyText.GRAY + "View: " + LegacyText.WHITE + routeBrowserLabel(folder),
                 LegacyText.GRAY + "NPCs start at their nearest point",
                 LegacyText.GRAY + "then follow nearest unvisited points in a loop",
                 LegacyText.YELLOW + "Click to reorder routes"
         )));
         if (!RouteBrowserModel.isNpcFolder(folder)) {
             inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
-                    LegacyText.GRAY + "Use / in the name to create groups",
-                    LegacyText.YELLOW + "Click, then enter the full route name"
+                    LegacyText.YELLOW + "Click, then enter the route name"
             )));
         }
         if (page + 1 < pages) {
@@ -493,7 +489,7 @@ public final class RouteGuiService implements Listener {
         int page = holder.page();
         if (event.getRawSlot() == 45) {
             if (folder.isEmpty()) mainGuiOpener.accept(player);
-            else openRoutes(player, RouteBrowserModel.parent(folder), 0);
+            else openRoutes(player, "", 0);
             return;
         }
         if (event.getRawSlot() == 46) {
@@ -512,7 +508,7 @@ public final class RouteGuiService implements Listener {
             if (RouteBrowserModel.isNpcFolder(folder)) {
                 return;
             }
-            chatInputService.request(player, "Enter the full route name (use / for groups):", value -> {
+            chatInputService.request(player, "Enter the route name:", value -> {
                 try {
                     NpcRoute route = NpcRoute.create(value);
                     if (routeRepository.find(route.getKey()).isPresent()) {
@@ -788,8 +784,7 @@ public final class RouteGuiService implements Listener {
         String npcName = definitionRepository.find(npcKey)
                 .map(NpcDefinition::getDisplayName)
                 .orElse(npcKey);
-        String routeFolder = RouteBrowserModel.routeFolder(folder);
-        return routeFolder.isEmpty() ? npcName : npcName + "/" + routeFolder;
+        return npcName;
     }
 
     private void beginEditing(Player player, NpcRoute route) {

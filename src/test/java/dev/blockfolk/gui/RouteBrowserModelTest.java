@@ -31,7 +31,7 @@ class RouteBrowserModelTest {
                 List.of(patrol, shared, unused, groupedUnused),
                 List.of(guard, merchant, stationary), "");
 
-        assertEquals(List.of("Guard", "Merchant", "unused", "wilderness"),
+        assertEquals(List.of("Guard", "Merchant", "unused", "wilderness/loop"),
                 root.stream().map(RouteBrowserModel.Entry::label).toList());
         assertTrue(root.get(0).npcFolder());
         assertTrue(root.get(1).npcFolder());
@@ -41,7 +41,7 @@ class RouteBrowserModelTest {
     }
 
     @Test
-    void showsSharedRoutesInEveryNpcFolderAndPreservesManualSubgroups() {
+    void showsSharedRoutesDirectlyInEveryNpcFolder() {
         NpcRoute patrol = NpcRoute.create("Patrol");
         NpcRoute shared = NpcRoute.create("Village/Shared");
         NpcDefinition guard = npcUsing("Guard", "patrol", "village/shared");
@@ -51,16 +51,10 @@ class RouteBrowserModelTest {
                 List.of(patrol, shared), List.of(guard, merchant), "npc:guard");
         List<RouteBrowserModel.Entry> merchantRoutes = RouteBrowserModel.entries(
                 List.of(patrol, shared), List.of(guard, merchant), "npc:merchant");
-        List<RouteBrowserModel.Entry> villageRoutes = RouteBrowserModel.entries(
-                List.of(patrol, shared), List.of(guard, merchant), "npc:guard/village");
-
-        assertEquals(List.of("patrol", "village"),
+        assertEquals(List.of("patrol", "village/shared"),
                 guardRoutes.stream().map(RouteBrowserModel.Entry::label).toList());
-        assertEquals(List.of("village"), merchantRoutes.stream().map(RouteBrowserModel.Entry::label).toList());
         assertEquals(List.of("village/shared"),
-                villageRoutes.stream().map(entry -> entry.route().getKey()).toList());
-        assertEquals("npc:guard", RouteBrowserModel.parent("npc:guard/village"));
-        assertEquals("", RouteBrowserModel.parent("npc:guard"));
+                merchantRoutes.stream().map(RouteBrowserModel.Entry::label).toList());
     }
 
     private static NpcDefinition npcUsing(String name, String... routeKeys) {
