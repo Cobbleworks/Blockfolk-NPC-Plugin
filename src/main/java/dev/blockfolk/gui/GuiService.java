@@ -472,6 +472,12 @@ public final class GuiService implements Listener {
                 LegacyText.GRAY + "React to globally emitted custom events",
                 LegacyText.YELLOW + "Click to configure"
         )));
+        inventory.setItem(21, item(Material.COMPARATOR, "NPC Properties", List.of(
+                propertyStatus("Show Name", definition.isShowName()),
+                propertyStatus("Look at Player", definition.isLookAtPlayer()),
+                propertyStatus("Item Pickup", definition.isItemPickup()),
+                LegacyText.YELLOW + "Click to configure"
+        )));
         CombatProfile combat = definition.getCombatProfile();
         inventory.setItem(15, item(Material.IRON_SWORD, "Fighting", List.of(
                 LegacyText.GRAY + "Health: " + LegacyText.WHITE + healthLabel(combat),
@@ -484,6 +490,24 @@ public final class GuiService implements Listener {
                 LegacyText.YELLOW + "Click to configure combat"
         )));
         inventory.setItem(31, item(Material.BARRIER, "Back to Presets", List.of()));
+        openInventory(player, inventory);
+    }
+
+    public void openProperties(Player player, NpcDefinition definition) {
+        Inventory inventory = Bukkit.createInventory(new PropertiesHolder(definition.getKey()), 27,
+                UiText.title("NPC Properties", definition.getDisplayName()));
+        inventory.setItem(11, toggleItem(Material.NAME_TAG, "Show Name", definition.isShowName(), List.of(
+                LegacyText.GRAY + "Show the name hologram above the NPC"
+        )));
+        inventory.setItem(13, toggleItem(Material.SPYGLASS, "Look at Player", definition.isLookAtPlayer(), List.of(
+                LegacyText.GRAY + "Turn the head toward the nearest player",
+                LegacyText.GRAY + "with a subtle, natural body turn"
+        )));
+        inventory.setItem(15, toggleItem(Material.HOPPER, "Item Pickup", definition.isItemPickup(), List.of(
+                LegacyText.GRAY + "Pick up nearby dropped item entities",
+                LegacyText.GRAY + "into this instance's temporary inventory"
+        )));
+        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
         openInventory(player, inventory);
     }
 
@@ -910,6 +934,8 @@ public final class GuiService implements Listener {
             handleReorderClick(event, player, reorderHolder);
         } else if (holder instanceof EditorHolder editorHolder) {
             handleEditorClick(event, player, editorHolder.key());
+        } else if (holder instanceof PropertiesHolder propertiesHolder) {
+            handlePropertiesClick(event, player, propertiesHolder.key());
         } else if (holder instanceof FightingHolder fightingHolder) {
             handleFightingClick(event, player, fightingHolder.key());
         } else if (holder instanceof TargetsHolder targetsHolder) {
@@ -1211,6 +1237,8 @@ public final class GuiService implements Listener {
                 openBehaviours(player, definition, 0);
             case 22 ->
                 openCustomBehaviours(player, definition, 0);
+            case 21 ->
+                openProperties(player, definition);
             case 15 ->
                 openFightingEditor(player, definition);
             case 31 ->
@@ -1218,6 +1246,28 @@ public final class GuiService implements Listener {
             default -> {
             }
         }
+    }
+
+    private void handlePropertiesClick(InventoryClickEvent event, Player player, String key) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        NpcDefinition definition = definitionRepository.find(key).orElse(null);
+        if (definition == null) {
+            player.closeInventory();
+            return;
+        }
+        switch (event.getRawSlot()) {
+            case 11 -> definition.setShowName(!definition.isShowName());
+            case 13 -> definition.setLookAtPlayer(!definition.isLookAtPlayer());
+            case 15 -> definition.setItemPickup(!definition.isItemPickup());
+            case 22 -> {
+                openEditor(player, definition);
+                return;
+            }
+            default -> { return; }
+        }
+        saveRefresh(definition);
+        openProperties(player, definition);
     }
 
     private void handleFightingClick(InventoryClickEvent event, Player player, String key) {
@@ -2967,6 +3017,7 @@ public final class GuiService implements Listener {
         return holder instanceof MainHolder
                 || holder instanceof ReorderHolder
                 || holder instanceof EditorHolder
+                || holder instanceof PropertiesHolder
                 || holder instanceof FightingHolder
                 || holder instanceof TargetsHolder
                 || holder instanceof FightOptionsActionHolder
@@ -3104,11 +3155,20 @@ public final class GuiService implements Listener {
     }
 
     private ItemStack toggleItem(Material material, String name, boolean enabled, String description) {
-        return item(enabled ? material : Material.GRAY_DYE, name, List.of(
-                (enabled ? LegacyText.GREEN + "On" : LegacyText.RED + "Off"),
-                LegacyText.GRAY + description,
-                LegacyText.YELLOW + "Click to toggle"
-        ));
+        return toggleItem(material, name, enabled, List.of(LegacyText.GRAY + description));
+    }
+
+    private ItemStack toggleItem(Material material, String name, boolean enabled, List<String> description) {
+        List<String> lore = new ArrayList<>();
+        lore.add(enabled ? LegacyText.GREEN + "On" : LegacyText.RED + "Off");
+        lore.addAll(description);
+        lore.add(LegacyText.YELLOW + "Click to toggle");
+        return item(enabled ? material : Material.GRAY_DYE, name, lore);
+    }
+
+    private String propertyStatus(String name, boolean enabled) {
+        return LegacyText.GRAY + name + ": "
+                + (enabled ? LegacyText.GREEN + "On" : LegacyText.RED + "Off");
     }
 
     private int enabledTargetCount(CombatProfile combat) {
@@ -3310,6 +3370,10 @@ public final class GuiService implements Listener {
         public Inventory getInventory() {
             return null;
         }
+    }
+
+    private record PropertiesHolder(String key) implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
     }
 
     private record FightingHolder(String key) implements InventoryHolder {

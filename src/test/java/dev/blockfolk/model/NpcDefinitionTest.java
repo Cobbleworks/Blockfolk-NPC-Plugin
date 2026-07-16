@@ -6,8 +6,19 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcDefinitionTest {
+    @Test
+    void usesSafePropertyDefaults() {
+        NpcDefinition definition = NpcDefinition.create("Guard");
+
+        assertTrue(definition.isShowName());
+        assertTrue(definition.isLookAtPlayer());
+        assertFalse(definition.isItemPickup());
+    }
+
     @Test
     void createsStableStorageKeyFromDisplayName() {
         assertEquals("royal-guard-01", NpcDefinition.toKey("Royal Guard 01!"));

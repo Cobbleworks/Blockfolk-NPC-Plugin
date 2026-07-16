@@ -108,6 +108,9 @@ public final class NpcDefinitionRepository {
         configuration.set("combat.show-boss-bar", definition.getCombatProfile().showBossBar());
         configuration.set("combat.dropped-experience", definition.getCombatProfile().droppedExperience());
         configuration.set("movement.speed", definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
+        configuration.set("properties.show-name", definition.isShowName());
+        configuration.set("properties.look-at-player", definition.isLookAtPlayer());
+        configuration.set("properties.item-pickup", definition.isItemPickup());
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<Map<String, Object>> actions = BehaviourActionCodec.encodeList(definition.getBehaviourActions(event));
             configuration.set("behaviours." + event.name().toLowerCase(Locale.ROOT), actions.isEmpty() ? null : actions);
@@ -208,6 +211,9 @@ public final class NpcDefinitionRepository {
         ));
         definition.setMovementProfile(MovementProfile.disabled().withWalkingSpeed(
                 WalkingSpeed.fromStored(configuration.getString("movement.speed"))));
+        definition.setShowName(configuration.getBoolean("properties.show-name", true));
+        definition.setLookAtPlayer(configuration.getBoolean("properties.look-at-player", true));
+        definition.setItemPickup(configuration.getBoolean("properties.item-pickup", false));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
             String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);

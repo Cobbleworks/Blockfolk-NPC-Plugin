@@ -24,6 +24,9 @@ public final class NpcDefinition {
     private ItemStack offHand;
     private CombatProfile combatProfile;
     private MovementProfile movementProfile;
+    private boolean showName;
+    private boolean lookAtPlayer;
+    private boolean itemPickup;
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
     private Map<String, List<BehaviourAction>> customEventBehaviours;
 
@@ -34,6 +37,8 @@ public final class NpcDefinition {
         this.armorContents = new ItemStack[4];
         this.combatProfile = CombatProfile.disabled();
         this.movementProfile = MovementProfile.disabled();
+        this.showName = true;
+        this.lookAtPlayer = true;
         this.behaviours = new EnumMap<>(BehaviourEvent.class);
         this.customEventBehaviours = new java.util.LinkedHashMap<>();
     }
@@ -142,6 +147,30 @@ public final class NpcDefinition {
 
     public void setMovementProfile(MovementProfile movementProfile) {
         this.movementProfile = movementProfile == null ? MovementProfile.disabled() : movementProfile;
+    }
+
+    public boolean isShowName() {
+        return showName;
+    }
+
+    public void setShowName(boolean showName) {
+        this.showName = showName;
+    }
+
+    public boolean isLookAtPlayer() {
+        return lookAtPlayer;
+    }
+
+    public void setLookAtPlayer(boolean lookAtPlayer) {
+        this.lookAtPlayer = lookAtPlayer;
+    }
+
+    public boolean isItemPickup() {
+        return itemPickup;
+    }
+
+    public void setItemPickup(boolean itemPickup) {
+        this.itemPickup = itemPickup;
     }
 
     public List<BehaviourAction> getBehaviourActions(BehaviourEvent event) {

@@ -14,6 +14,7 @@ import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -29,6 +30,7 @@ import org.bukkit.block.data.type.Switch;
 import org.bukkit.entity.Pose;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
@@ -40,6 +42,7 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.block.BlockRedstoneEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
@@ -70,6 +73,9 @@ public final class NpcBehaviourService implements Listener {
     private static final double FOLLOW_CATCH_UP_RANGE_SQUARED = 6.0 * 6.0;
     private static final int FOLLOW_REPATH_TICKS = 10;
     private static final int PLAYER_LOOK_INTERVAL_TICKS = 5;
+    private static final int ITEM_PICKUP_INTERVAL_TICKS = 5;
+    private static final double ITEM_PICKUP_HORIZONTAL_RANGE = 1.5;
+    private static final double ITEM_PICKUP_VERTICAL_RANGE = 1.0;
     private static final long CONTAINER_CLOSE_DELAY_TICKS = 20L;
     private static final long IDLE_REPEAT_TICKS = 1L * 20L;
     private final Plugin plugin;
@@ -93,6 +99,7 @@ public final class NpcBehaviourService implements Listener {
     private long currentTick;
     private int proximityTick;
     private int playerLookTick;
+    private int itemPickupTick;
     private long customEmissionTick = -1L;
     private int customEmissionsThisTick;
     private boolean redstonePhysicsWarningLogged;
@@ -483,6 +490,10 @@ public final class NpcBehaviourService implements Listener {
         if (++playerLookTick >= PLAYER_LOOK_INTERVAL_TICKS) {
             playerLookTick = 0;
             tickPlayerLook();
+        }
+        if (++itemPickupTick >= ITEM_PICKUP_INTERVAL_TICKS) {
+            itemPickupTick = 0;
+            tickItemPickup();
         }
         Set<UUID> active = new HashSet<>();
         for (NpcInstance instance : instances.findAll()) {
@@ -947,8 +958,55 @@ public final class NpcBehaviourService implements Listener {
     private void tickPlayerLook() {
         for (NpcInstance instance : instances.findAll()) {
             if (combatService != null && combatService.isEngaged(instance)) continue;
+            NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+            if (definition == null || !definition.isLookAtPlayer()) continue;
             nearestPlayer(instance).ifPresent(player -> instances.lookAt(instance, player.getEyeLocation()));
         }
+    }
+
+    private void tickItemPickup() {
+        for (NpcInstance instance : instances.findAll()) {
+            NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+            if (definition == null || !definition.isItemPickup()) continue;
+            LivingEntity npc = instances.findEntity(instance).orElse(null);
+            Location location = instance.getLocation();
+            if (npc == null || location.getWorld() == null) continue;
+            location.getWorld().getNearbyEntities(location, ITEM_PICKUP_HORIZONTAL_RANGE,
+                            ITEM_PICKUP_VERTICAL_RANGE, ITEM_PICKUP_HORIZONTAL_RANGE,
+                            entity -> entity instanceof Item)
+                    .stream()
+                    .map(entity -> (Item) entity)
+                    .sorted(Comparator.comparingDouble(item -> item.getLocation().distanceSquared(location)))
+                    .forEach(item -> pickUpItem(instance, npc, item));
+        }
+    }
+
+    private void pickUpItem(NpcInstance instance, LivingEntity npc, Item item) {
+        if (!item.isValid() || item.getPickupDelay() > 0) return;
+        UUID owner = item.getOwner();
+        if (owner != null && !owner.equals(npc.getUniqueId())) return;
+
+        Inventory carried = Bukkit.createInventory(null, 27);
+        carried.setContents(instance.getTemporaryInventoryContents());
+        ItemStack offered = item.getItemStack().clone();
+        Map<Integer, ItemStack> leftovers = carried.addItem(offered);
+        int remaining = leftovers.values().stream().mapToInt(ItemStack::getAmount).sum();
+        int pickedUp = item.getItemStack().getAmount() - remaining;
+        if (pickedUp <= 0) return;
+
+        EntityPickupItemEvent event = new EntityPickupItemEvent(npc, item, remaining);
+        Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) return;
+
+        updateTemporaryInventory(instance, carried.getContents(), item);
+        if (remaining == 0) {
+            item.remove();
+        } else {
+            ItemStack leftover = item.getItemStack().clone();
+            leftover.setAmount(remaining);
+            item.setItemStack(leftover);
+        }
+        npc.getWorld().playSound(npc.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.2f, 1.0f);
     }
 
     private boolean isFollowTarget(NpcInstance instance, Player player) {

@@ -188,8 +188,13 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         }
         Location facing = mannequin.getLocation();
         facing.setDirection(target.toVector().subtract(mannequin.getEyeLocation().toVector()));
-        mannequin.setRotation(facing.getYaw(), facing.getPitch());
-        mannequin.setBodyYaw(facing.getYaw());
+        float targetYaw = facing.getYaw();
+        float targetPitch = Math.max(-60.0f, Math.min(60.0f, facing.getPitch()));
+        float currentBodyYaw = mannequin.getBodyYaw();
+        float bodyDelta = wrapDegrees(targetYaw - currentBodyYaw);
+        float bodyStep = Math.max(-12.0f, Math.min(12.0f, bodyDelta * 0.35f));
+        mannequin.setRotation(targetYaw, targetPitch);
+        mannequin.setBodyYaw(currentBodyYaw + bodyStep);
     }
 
     private void tickJumps() {
@@ -273,7 +278,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         mannequin.setPersistent(true);
         mannequin.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
         mannequin.customName(Component.text(definition.getDisplayName()));
-        mannequin.setCustomNameVisible(true);
+        mannequin.setCustomNameVisible(definition.isShowName());
         mannequin.setDescription(null);
         mannequin.setInvisible(false);
         mannequin.setImmovable(false);
@@ -323,6 +328,13 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
 
     private String profileName(NpcInstance instance) {
         return "NPC" + instance.getId().toString().replace("-", "").substring(0, 13);
+    }
+
+    private float wrapDegrees(float angle) {
+        float wrapped = angle % 360.0f;
+        if (wrapped >= 180.0f) wrapped -= 360.0f;
+        if (wrapped < -180.0f) wrapped += 360.0f;
+        return wrapped;
     }
 
     private void applyEquipment(EntityEquipment equipment, NpcDefinition definition) {
