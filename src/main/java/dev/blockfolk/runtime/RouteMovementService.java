@@ -65,6 +65,11 @@ public final class RouteMovementService {
         progressByInstance.clear();
     }
 
+    public void resetProgress(NpcInstance instance) {
+        progressByInstance.remove(instance.getId());
+        instanceRegistry.stopNavigating(instance);
+    }
+
     private void tick() {
         Set<UUID> activeInstances = new HashSet<>();
         for (NpcInstance instance : instanceRegistry.findAll()) {

@@ -131,6 +131,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 combatService,
                 behaviourService
         );
+        instanceRegistry.setRelocationListener(routeMovementService::resetProgress);
 
         routeRepository.loadAll();
         locationRepository.loadAll();

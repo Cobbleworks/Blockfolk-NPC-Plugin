@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -40,10 +41,17 @@ public final class NpcInstanceRegistry implements Listener {
     private final Map<UUID, NpcInstance> instances = new LinkedHashMap<>();
     private BiConsumer<NpcInstance, NpcDefinition> spawnListener = (instance, definition) -> {
     };
+    private Consumer<NpcInstance> relocationListener = instance -> {
+    };
 
     public void setSpawnListener(BiConsumer<NpcInstance, NpcDefinition> spawnListener) {
         this.spawnListener = spawnListener == null ? (instance, definition) -> {
         } : spawnListener;
+    }
+
+    public void setRelocationListener(Consumer<NpcInstance> relocationListener) {
+        this.relocationListener = relocationListener == null ? instance -> {
+        } : relocationListener;
     }
 
     public NpcInstanceRegistry(
@@ -175,6 +183,7 @@ public final class NpcInstanceRegistry implements Listener {
         }
         if (updateSpawnLocation) {
             instance.setSpawnLocation(location);
+            relocationListener.accept(instance);
         }
         dialogService.move(instance);
         instanceRepository.saveAll(instances.values());

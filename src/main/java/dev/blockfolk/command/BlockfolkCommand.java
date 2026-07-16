@@ -16,6 +16,7 @@ import dev.blockfolk.gui.CustomEventGuiService;
 import dev.blockfolk.gui.RouteGuiService;
 import dev.blockfolk.model.CustomEvent;
 import dev.blockfolk.model.NpcDefinition;
+import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.repository.CustomEventRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.runtime.NpcBehaviourService;
@@ -144,7 +145,32 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(UiText.success("Duplicated " + source.getDisplayName() + " as " + copy.getDisplayName() + "."));
             return true;
         }
-        player.sendMessage(UiText.info("Usage: /bf [create [name]|routes|events [trigger <event>]|npc <name> [spawn|duplicate]]"));
+        if (args.length == 3 && args[0].equalsIgnoreCase("npc")
+                && (args[2].equalsIgnoreCase("tphere") || args[2].equalsIgnoreCase("warpto"))) {
+            NpcDefinition definition = definitionRepository.find(args[1]).orElse(null);
+            if (definition == null) {
+                player.sendMessage(UiText.error("Unknown NPC: " + args[1]));
+                return true;
+            }
+            NpcInstance firstInstance = instanceRegistry.findByDefinition(definition).stream().findFirst().orElse(null);
+            if (firstInstance == null) {
+                player.sendMessage(UiText.warning("This NPC has no spawned instances."));
+                return true;
+            }
+            if (args[2].equalsIgnoreCase("tphere")) {
+                if (instanceRegistry.relocate(firstInstance, player.getLocation())) {
+                    player.sendMessage(UiText.success("Teleported the first NPC instance to you."));
+                } else {
+                    player.sendMessage(UiText.error("Could not teleport the NPC instance."));
+                }
+            } else if (player.teleport(firstInstance.getLocation())) {
+                player.sendMessage(UiText.success("Teleported to the first NPC instance."));
+            } else {
+                player.sendMessage(UiText.error("Could not teleport to the NPC instance."));
+            }
+            return true;
+        }
+        player.sendMessage(UiText.info("Usage: /bf [create [name]|routes|events [trigger <event>]|npc <name> [spawn|duplicate|tphere|warpto]]"));
         return true;
     }
 
@@ -176,7 +202,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
                     .toList(), args[2]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("npc")) {
-            return filter(List.of("spawn", "duplicate"), args[2]);
+            return filter(List.of("spawn", "duplicate", "tphere", "warpto"), args[2]);
         }
         return List.of();
     }
