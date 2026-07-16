@@ -208,6 +208,7 @@ public final class RouteGuiService implements Listener {
             inventory.setItem(index - from, item(Material.LODESTONE, named.displayName(), List.of(
                     LegacyText.DARK_GRAY + "Key: " + named.key(),
                     LegacyText.GRAY + named.location().display(),
+                    LegacyText.YELLOW + "Left-click: teleport",
                     LegacyText.RED + "Shift-right-click: delete"
             )));
         }
@@ -217,8 +218,8 @@ public final class RouteGuiService implements Listener {
                 LegacyText.GRAY + "Locations: " + LegacyText.WHITE + locations.size(),
                 LegacyText.GRAY + "Saved locations can be selected by movement actions"
         )));
-        inventory.setItem(51, item(Material.AMETHYST_SHARD, "Create Location", List.of(
-                LegacyText.GRAY + "Select a block, then enter a name",
+        inventory.setItem(51, item(Material.AMETHYST_SHARD, "Edit Locations", List.of(
+                LegacyText.GRAY + "Left-click a block, then enter a name",
                 LegacyText.YELLOW + "Click to begin placement"
         )));
         if (page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
@@ -408,10 +409,10 @@ public final class RouteGuiService implements Listener {
         if (session == null) return;
         event.setCancelled(true);
         ActionLocation position = ActionLocation.above(event.getClickedBlock());
+        NamedLocation existing = locationRepository.findAll().stream()
+                .filter(named -> named.location().equals(position))
+                .findFirst().orElse(null);
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
-            NamedLocation existing = locationRepository.findAll().stream()
-                    .filter(named -> named.location().equals(position))
-                    .findFirst().orElse(null);
             if (existing == null) {
                 player.sendMessage(UiText.info("That block is not a global location."));
                 return;
@@ -423,24 +424,30 @@ public final class RouteGuiService implements Listener {
             player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_PLACE, 0.7f, 0.7f);
             return;
         }
-        removeLocationEditor(player, session);
+        if (existing != null) {
+            player.sendMessage(UiText.info("Global location: '" + existing.displayName() + "'."));
+            return;
+        }
         player.spawnParticle(Particle.DUST, position.toLocation(), 10, 0.22, 0.08, 0.22, 0.0,
                 new Particle.DustOptions(Color.fromRGB(70, 255, 120), 1.5f));
         player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_PLACE, 0.7f, 1.2f);
         chatInputService.request(player, "Enter a name for this global location:", value -> {
+            if (!session.equals(locationEditSessions.get(player.getUniqueId()))) {
+                return;
+            }
             try {
                 NamedLocation named = NamedLocation.create(value, position);
                 if (locationRepository.find(named.key()).isPresent()) {
                     player.sendMessage(UiText.error("A location with that key already exists."));
-                    openLocations(player, 0, session.returnFolder(), session.returnPage());
                     return;
                 }
                 locationRepository.save(named);
                 player.sendMessage(UiText.success("Saved global location '" + named.displayName() + "'."));
-                openLocations(player, 0, session.returnFolder(), session.returnPage());
+                player.sendMessage(UiText.prompt(
+                        "Left-click another block to add a location, or drop the shard to finish."));
+                showLocations(player);
             } catch (IllegalArgumentException exception) {
                 player.sendMessage(UiText.error(exception.getMessage()));
-                openLocations(player, 0, session.returnFolder(), session.returnPage());
             }
         });
     }
@@ -452,6 +459,7 @@ public final class RouteGuiService implements Listener {
         if (locationSession != null) {
             event.getItemDrop().remove();
             locationEditSessions.remove(player.getUniqueId());
+            chatInputService.cancel(player);
             player.sendMessage(UiText.success("Finished editing global locations."));
             Bukkit.getScheduler().runTask(plugin, () -> openLocations(
                     player, 0, locationSession.returnFolder(), locationSession.returnPage()));
@@ -563,6 +571,17 @@ public final class RouteGuiService implements Listener {
             locationRepository.delete(named);
             player.sendMessage(UiText.success("Deleted global location '" + named.displayName() + "'."));
             openLocations(player, holder.page(), holder.returnFolder(), holder.returnPage());
+        } else if (event.isLeftClick()) {
+            NamedLocation named = locations.get(index);
+            Location destination = named.location().toLocation();
+            if (destination == null) {
+                player.sendMessage(UiText.error(
+                        "The world for location '" + named.displayName() + "' is not available."));
+                return;
+            }
+            player.closeInventory();
+            player.teleport(destination);
+            player.sendMessage(UiText.success("Teleported to '" + named.displayName() + "'."));
         }
     }
 
@@ -617,11 +636,6 @@ public final class RouteGuiService implements Listener {
     private void finishLocationEditing(Player player) {
         LocationEditSession session = locationEditSessions.remove(player.getUniqueId());
         if (session != null) removeLocationWand(player, session);
-    }
-
-    private void removeLocationEditor(Player player, LocationEditSession session) {
-        locationEditSessions.remove(player.getUniqueId());
-        removeLocationWand(player, session);
     }
 
     private void removeLocationWand(Player player, LocationEditSession session) {
