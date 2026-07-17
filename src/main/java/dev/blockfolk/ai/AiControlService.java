@@ -36,7 +36,8 @@ public final class AiControlService {
             Return only one JSON object with an actions array containing 0 to 3 actions.
             Never return Minecraft commands, code, or extra prose. Use only the available actions and target aliases.
             SAY uses {\"type\":\"SAY\",\"text\":\"...\"}.
-            Targeted actions use target: triggering_player, triggering_entity, nearest_player, or current_target.
+            Targeted actions use target: triggering_player, triggering_entity, nearest_player, nearest_attackable, or current_target.
+            START_COMBAT may omit target to attack the nearest attackable entity.
             PLAY_ANIMATION uses animation: wave, jump, sneak, or stand.
             If no action is appropriate return {\"actions\":[{\"type\":\"DO_NOTHING\"}]}.
             Keep speech concise and in character. The thought field is optional and never shown to players.

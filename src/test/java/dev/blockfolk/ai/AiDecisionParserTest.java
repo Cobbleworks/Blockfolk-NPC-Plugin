@@ -44,6 +44,18 @@ class AiDecisionParserTest {
     }
 
     @Test
+    void startCombatMaySelectNearestAttackableImplicitly() {
+        AiControlSettings settings = new AiControlSettings("Guard", "", "Defend this place", "",
+                EnumSet.of(AiActionType.START_COMBAT), true, true, true);
+
+        AiDecision decision = AiDecisionParser.parse("""
+                {"actions":[{"type":"START_COMBAT"}]}
+                """, settings);
+
+        assertEquals(AiActionType.START_COMBAT, decision.actions().getFirst().type());
+    }
+
+    @Test
     void enforcesMaximumOfThreeActionsAndAcceptsCodeFences() {
         AiDecision decision = AiDecisionParser.parse("""
                 ```json

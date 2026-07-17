@@ -602,7 +602,9 @@ public final class NpcBehaviourService implements Listener {
                 }
                 case PLAY_ANIMATION -> playAiAnimation(instance, action.animation());
                 case START_COMBAT -> {
-                    if (combatService != null) combatService.startCombat(instance, target);
+                    if (combatService != null && !combatService.startCombat(instance, target)) {
+                        combatService.startCombat(instance, combatService.findNearestAttackableTarget(instance));
+                    }
                 }
                 case STOP_COMBAT -> {
                     if (combatService != null) combatService.exitCombat(instance);
@@ -639,6 +641,9 @@ public final class NpcBehaviourService implements Listener {
         if (alias == null) return null;
         if ((alias.equals("triggering_player") || alias.equals("triggering_entity")) && actor != null) return actor;
         if (alias.equals("nearest_player")) return nearestPlayer(instance).orElse(null);
+        if (alias.equals("nearest_attackable") && combatService != null) {
+            return combatService.findNearestAttackableTarget(instance);
+        }
         if (alias.equals("current_target") && combatService != null) return combatService.currentTarget(instance);
         return null;
     }

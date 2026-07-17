@@ -93,7 +93,9 @@ enforces the same list before anything runs. Current capabilities are:
 
 - Respond to Nearby Chat / speech;
 - play animation;
-- start or stop combat;
+- start or stop combat; Start Combat falls back to the nearest attackable entity within
+  16 blocks when the model does not provide a valid target, regardless of the preset's
+  aggression setting;
 - flee from a target;
 - follow a player;
 - return home;
@@ -101,5 +103,5 @@ enforces the same list before anything runs. Current capabilities are:
 - do nothing, which is always available.
 
 Targeted capabilities may refer only to the triggering player, triggering entity,
-nearest player, or current combat target. The model cannot provide arbitrary entity IDs
-or server commands.
+nearest player, nearest attackable entity, or current combat target. The model cannot
+provide arbitrary entity IDs or server commands.

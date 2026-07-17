@@ -14,7 +14,7 @@ public final class AiDecisionParser {
     private static final int MAX_ACTIONS = 3;
     private static final int MAX_SPEECH_LENGTH = 240;
     private static final Set<String> TARGETS = Set.of(
-            "triggering_player", "triggering_entity", "nearest_player", "current_target");
+            "triggering_player", "triggering_entity", "nearest_player", "nearest_attackable", "current_target");
     private static final Set<String> ANIMATIONS = Set.of("wave", "jump", "sneak", "stand");
 
     private AiDecisionParser() { }
@@ -52,15 +52,15 @@ public final class AiDecisionParser {
         String animation = string(object, "animation", true);
         if (type == AiActionType.SAY && (text == null || text.isBlank())) return java.util.Optional.empty();
         if (text != null && text.length() > MAX_SPEECH_LENGTH) text = text.substring(0, MAX_SPEECH_LENGTH);
-        if (requiresTarget(type) && (target == null || !TARGETS.contains(target))) return java.util.Optional.empty();
+        if (target != null && !TARGETS.contains(target)) return java.util.Optional.empty();
+        if (requiresTarget(type) && target == null) return java.util.Optional.empty();
         if (type == AiActionType.PLAY_ANIMATION
                 && (animation == null || !ANIMATIONS.contains(animation))) return java.util.Optional.empty();
         return java.util.Optional.of(new AiDecision.Action(type, text, target, animation));
     }
 
     private static boolean requiresTarget(AiActionType type) {
-        return type == AiActionType.START_COMBAT || type == AiActionType.FLEE_FROM
-                || type == AiActionType.FOLLOW;
+        return type == AiActionType.FLEE_FROM || type == AiActionType.FOLLOW;
     }
 
     private static String string(JsonObject object, String name, boolean normalize) {
