@@ -28,7 +28,7 @@ public record AiControlSettings(
     }
 
     public static AiControlSettings defaults() {
-        return new AiControlSettings("", "", "", "", AiActionType.safeDefaults(), false, true, true);
+        return new AiControlSettings("", "", "", "", AiActionType.safeDefaults(), false, false, true);
     }
 
     public boolean hasContext() {

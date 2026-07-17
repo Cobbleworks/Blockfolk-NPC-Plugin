@@ -258,7 +258,7 @@ public final class NpcDefinitionRepository {
                 allowedAiActions,
                 configuration.getBoolean("ai-control.enabled", legacyAiEnabled
                         || !identity.isBlank() || !behaviour.isBlank() || !goal.isBlank() || !information.isBlank()),
-                configuration.getBoolean("ai-control.greet-on-approach", true),
+                configuration.getBoolean("ai-control.greet-on-approach", false),
                 configuration.getBoolean("ai-control.respond-to-chat", true)));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();

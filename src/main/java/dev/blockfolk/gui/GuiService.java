@@ -790,13 +790,6 @@ public final class GuiService implements Listener {
         AiControlSettings settings = definition.getAiControlSettings();
         Inventory inventory = Bukkit.createInventory(new AiControlHolder(definition.getKey()), 54,
                 Component.text("AI Behaviour"));
-        boolean providerReady = aiControlService != null && aiControlService.configured();
-        inventory.setItem(4, item(providerReady ? Material.LIME_DYE : Material.RED_DYE,
-                "OpenRouter: " + (providerReady ? "Ready" : "Not Configured"), List.of(
-                        providerReady
-                                ? ChatColor.GREEN + "API key and model were loaded at startup"
-                                : ChatColor.RED + providerConfigurationIssue(),
-                        ChatColor.DARK_GRAY + "Restart the server after changing config.yml")));
         inventory.setItem(10, aiContextItem(Material.NAME_TAG, "Identity", settings.identity(),
                 "Who this NPC is, its name, history, and role"));
         inventory.setItem(11, aiContextItem(Material.WRITABLE_BOOK, "Personality & Behaviour", settings.behaviour(),
