@@ -6,6 +6,12 @@ automatic triggers are an approach greeting, nearby player chat, and an optional
 death reaction. Chat is accepted within eight blocks of the NPC; deaths are observed
 within twelve blocks.
 
+One player chat message creates one group request for all eligible NPCs within range,
+ordered by distance from the player. The closest NPC is the default speaker. The model
+may involve additional nearby NPCs when that is natural, but is explicitly told not to
+make every NPC respond merely because it is present. Non-AI On Player Chat actions still
+run independently for every nearby NPC.
+
 Opening the NPC preset's admin editor clears AI memory and queued interactions for every
 spawned instance of that preset. Conversation history otherwise has no time or distance
 expiry. Removing or respawning an instance also clears that instance's runtime memory.
@@ -19,8 +25,10 @@ Each request contains two messages:
 2. A user message containing the current event, NPC state, perceived surroundings,
    recent memory, and enabled capabilities.
 
-The system message also requires a single JSON response containing zero to three
-validated actions. It describes the accepted action and target formats, requests concise
+For single-NPC events, the system message requires a single JSON response containing zero
+to three validated actions. Group chat responses contain a list keyed by safe aliases
+(`npc_1`, `npc_2`, and so on), with up to three actions per responding NPC. It describes
+the accepted action and target formats, requests concise
 in-character speech, and asks the model to greet on approach, answer nearby chat, or
 respond naturally to a nearby death when the corresponding event triggered the request.
 Commands, executable code, unrecognized actions, and capabilities disabled in the
@@ -91,7 +99,8 @@ Blockfolk keeps two forms of runtime memory per spawned NPC:
   that NPC preset's editor or the instance is removed.
 
 Only the conversation belonging to the player who triggered the current request is
-included. Conversations are not shared between spawned copies of the same preset.
+included. Conversations are not shared between spawned copies of the same preset, but a
+group chat request supplies each participating NPC's own conversation memory to the model.
 
 ## Enabled capabilities
 

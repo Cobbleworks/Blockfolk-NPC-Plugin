@@ -530,21 +530,30 @@ public final class NpcBehaviourService implements Listener {
         Player player = event.getPlayer();
         String message = PlainTextComponentSerializer.plainText().serialize(event.message());
         Bukkit.getScheduler().runTask(plugin, () -> {
-            for (NpcInstance instance : List.copyOf(instances.findAll())) {
-                Location npcLocation = instance.getLocation();
-                if (npcLocation.getWorld() != player.getWorld()
-                        || npcLocation.distanceSquared(player.getLocation()) > 8.0 * 8.0) continue;
+            List<NpcInstance> nearby = instances.findAll().stream()
+                    .filter(instance -> instance.getLocation().getWorld() == player.getWorld()
+                            && instance.getLocation().distanceSquared(player.getLocation()) <= 8.0 * 8.0)
+                    .sorted(java.util.Comparator.comparingDouble(
+                            instance -> instance.getLocation().distanceSquared(player.getLocation())))
+                    .toList();
+            List<NpcInstance> aiGroup = new ArrayList<>();
+            String detail = "Player " + player.getName() + " said: \"" + message + "\"";
+            for (NpcInstance instance : nearby) {
                 NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
                 if (definition == null) continue;
-                String detail = "Player " + player.getName() + " said: \"" + message + "\"";
                 if (aiControlService != null && definition.getAiControlSettings().enabled()
                         && definition.getAiControlSettings().respondToChat()) {
                     aiControlService.rememberPlayerMessage(instance, player, message);
-                    invokeAi(BehaviourEvent.PLAYER_CHAT, detail, instance, definition, player);
+                    aiGroup.add(instance);
                 }
                 if (!definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT).isEmpty()) {
                     trigger(BehaviourEvent.PLAYER_CHAT, instance, player, detail);
                 }
+            }
+            if (aiControlService != null && !aiGroup.isEmpty()) {
+                aiControlService.invokeChatGroup(detail, aiGroup, player, (instance, decision) ->
+                        definitions.find(instance.getDefinitionKey()).ifPresent(definition ->
+                                applyAiDecision(BehaviourEvent.PLAYER_CHAT, decision, instance, definition, player)));
             }
         });
     }
