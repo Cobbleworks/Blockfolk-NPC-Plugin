@@ -63,4 +63,12 @@ class AiControlSettingsTest {
         assertTrue(settings.systemContext().contains("Knowledge and information:\nThe market"));
         assertTrue(settings.configuredSectionCount() == 3);
     }
+
+    @Test
+    void memorySettingIsOptInAndPreservedByOtherChanges() {
+        AiControlSettings settings = AiControlSettings.defaults().withMemoryEnabled(true)
+                .withIdentity("A guard").withRespondToChat(false);
+
+        assertTrue(settings.memoryEnabled());
+    }
 }

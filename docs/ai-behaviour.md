@@ -107,6 +107,12 @@ Only the conversation belonging to the player who triggered the current request 
 included. Conversations are not shared between spawned copies of the same preset, but a
 group chat request supplies each participating NPC's own conversation memory to the model.
 
+An optional third form is long-term preset memory. When enabled, up to 45 durable facts
+are persisted in the NPC definition and included in future requests for every spawned
+copy of that preset. The model may add facts through `REMEMBER_FACT`; the oldest fact is
+discarded when the grid is full. Administrators can add, edit, or remove individual facts
+from the AI Behaviour memory menu, or shift-right-click its Memory entry to clear them all.
+
 ## Enabled capabilities
 
 The request lists only the capabilities enabled for the preset. The response parser

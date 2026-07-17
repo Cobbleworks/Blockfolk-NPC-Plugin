@@ -16,6 +16,7 @@ public enum AiActionType {
     RETURN_HOME("Return Home"),
     START_ROUTE("Start Route"),
     PAUSE_ROUTE("Pause Route"),
+    REMEMBER_FACT("Remember Fact"),
     DO_NOTHING("Do Nothing");
 
     private final String displayName;

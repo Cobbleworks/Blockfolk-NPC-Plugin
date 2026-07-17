@@ -92,4 +92,17 @@ class AiDecisionParserTest {
 
         assertEquals(speech, decision.actions().getFirst().text());
     }
+
+    @Test
+    void rememberFactRequiresMemoryToBeEnabled() {
+        String response = "{\"actions\":[{\"type\":\"REMEMBER_FACT\",\"text\":\"Alex likes apples\"}]}";
+
+        AiDecision disabled = AiDecisionParser.parse(response, AiControlSettings.defaults());
+        AiDecision enabled = AiDecisionParser.parse(response,
+                AiControlSettings.defaults().withMemoryEnabled(true));
+
+        assertEquals(AiActionType.DO_NOTHING, disabled.actions().getFirst().type());
+        assertEquals(AiActionType.REMEMBER_FACT, enabled.actions().getFirst().type());
+        assertEquals("Alex likes apples", enabled.actions().getFirst().text());
+    }
 }

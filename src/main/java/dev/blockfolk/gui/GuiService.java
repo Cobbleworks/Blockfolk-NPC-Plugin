@@ -798,14 +798,23 @@ public final class GuiService implements Listener {
                 "What it should accomplish or prioritize"));
         inventory.setItem(13, aiContextItem(Material.KNOWLEDGE_BOOK, "Knowledge / Information", settings.information(),
                 "Facts, lore, rules, and local knowledge it may use"));
+        inventory.setItem(15, item(settings.memoryEnabled() ? Material.ENDER_CHEST : Material.CHEST,
+                "Memory: " + (settings.memoryEnabled() ? "Enabled" : "Disabled"), List.of(
+                        ChatColor.GRAY + "Long-term facts: " + ChatColor.WHITE + definition.getAiMemories().size()
+                                + ChatColor.GRAY + " / " + NpcDefinition.MAX_AI_MEMORIES,
+                        ChatColor.GRAY + "Enabled memories provide context and let the AI remember facts",
+                        ChatColor.YELLOW + "Left-click to view and edit",
+                        ChatColor.YELLOW + "Right-click to " + (settings.memoryEnabled() ? "disable" : "enable"),
+                        ChatColor.RED + "Shift-right-click to clear all memories")));
         inventory.setItem(20, toggleItem(Material.SPYGLASS, "Greet On Approach",
                 settings.greetOnApproach(), "Lets the NPC speak when a player comes close"));
         inventory.setItem(21, toggleItem(Material.SKELETON_SKULL, "React To Nearby Deaths",
                 settings.reactToNearbyDeaths(), "Lets the NPC comment when someone dies within 12 blocks"));
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
-        AiActionType[] types = AiActionType.values();
-        for (int index = 0; index < types.length; index++) {
-            AiActionType type = types[index];
+        List<AiActionType> types = java.util.Arrays.stream(AiActionType.values())
+                .filter(type -> type != AiActionType.REMEMBER_FACT).toList();
+        for (int index = 0; index < types.size(); index++) {
+            AiActionType type = types.get(index);
             boolean chatToggle = type == AiActionType.SAY;
             boolean intrinsic = type == AiActionType.DO_NOTHING;
             boolean enabled = chatToggle ? settings.respondToChat()
@@ -831,6 +840,24 @@ public final class GuiService implements Listener {
                         hasTrigger ? ChatColor.GRAY + "Automatic triggers are configured"
                                 : ChatColor.RED + "No requests are made and nearby chat is not read",
                         ChatColor.YELLOW + "Click to " + (settings.enabled() ? "pause" : "resume"))));
+        openInventory(player, inventory);
+    }
+
+    private void openAiMemories(Player player, NpcDefinition definition) {
+        Inventory inventory = Bukkit.createInventory(new AiMemoryHolder(definition.getKey()), 54,
+                UiText.title("Memory", definition.getDisplayName()));
+        List<String> memories = definition.getAiMemories();
+        for (int index = 0; index < memories.size(); index++) {
+            inventory.setItem(index, item(Material.PAPER, "Memory " + (index + 1), List.of(
+                    ChatColor.WHITE + abbreviate(memories.get(index), 96),
+                    ChatColor.YELLOW + "Left-click to edit",
+                    ChatColor.RED + "Right-click to delete")));
+        }
+        inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
+        inventory.setItem(49, item(Material.LIME_DYE, "Add Memory", List.of(
+                ChatColor.GRAY + "The oldest memory is discarded when all 45 slots are full",
+                ChatColor.YELLOW + "Click to add a fact")));
+        GuiLayout.fillMainBar(inventory);
         openInventory(player, inventory);
     }
 
@@ -1018,6 +1045,8 @@ public final class GuiService implements Listener {
             handleActionPickerClick(event, player, pickerHolder);
         } else if (holder instanceof AiControlHolder aiControlHolder) {
             handleAiControlClick(event, player, aiControlHolder);
+        } else if (holder instanceof AiMemoryHolder aiMemoryHolder) {
+            handleAiMemoryClick(event, player, aiMemoryHolder);
         } else if (holder instanceof AnimationPickerHolder animationHolder) {
             handleAnimationPickerClick(event, player, animationHolder);
         } else if (holder instanceof BehaviourValuePickerHolder valuePickerHolder) {
@@ -1803,6 +1832,22 @@ public final class GuiService implements Listener {
             requestAiContext(player, definition, slot);
             return;
         }
+        if (slot == 15) {
+            if (event.getClick() == ClickType.SHIFT_RIGHT) {
+                definition.clearAiMemories();
+                definitionRepository.save(definition);
+                player.sendMessage(UiText.info("Cleared all memories for " + definition.getDisplayName() + "."));
+                openAiControl(player, definition);
+            } else if (event.isRightClick()) {
+                AiControlSettings settings = definition.getAiControlSettings();
+                definition.setAiControlSettings(settings.withMemoryEnabled(!settings.memoryEnabled()));
+                definitionRepository.save(definition);
+                openAiControl(player, definition);
+            } else {
+                openAiMemories(player, definition);
+            }
+            return;
+        }
         if (slot == 20) {
             boolean enabling = !definition.getAiControlSettings().greetOnApproach();
             definition.setAiControlSettings(definition.getAiControlSettings().withGreetOnApproach(
@@ -1821,9 +1866,11 @@ public final class GuiService implements Listener {
             return;
         }
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
-        for (int index = 0; index < AiActionType.values().length; index++) {
+        List<AiActionType> types = java.util.Arrays.stream(AiActionType.values())
+                .filter(type -> type != AiActionType.REMEMBER_FACT).toList();
+        for (int index = 0; index < types.size(); index++) {
             if (slot != slots[index]) continue;
-            AiActionType type = AiActionType.values()[index];
+            AiActionType type = types.get(index);
             if (type == AiActionType.SAY) {
                 definition.setAiControlSettings(definition.getAiControlSettings().withRespondToChat(
                         !definition.getAiControlSettings().respondToChat()));
@@ -1852,6 +1899,44 @@ public final class GuiService implements Listener {
             }
             openAiControl(player, definition);
         }
+    }
+
+    private void handleAiMemoryClick(InventoryClickEvent event, Player player, AiMemoryHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
+        if (definition == null) {
+            player.closeInventory();
+            return;
+        }
+        int slot = event.getRawSlot();
+        if (slot == 45) {
+            openAiControl(player, definition);
+            return;
+        }
+        if (slot == 49) {
+            requestAiMemory(player, definition, -1);
+            return;
+        }
+        if (slot < 0 || slot >= definition.getAiMemories().size()) return;
+        if (event.isRightClick()) {
+            definition.removeAiMemory(slot);
+            definitionRepository.save(definition);
+            openAiMemories(player, definition);
+        } else {
+            requestAiMemory(player, definition, slot);
+        }
+    }
+
+    private void requestAiMemory(Player player, NpcDefinition definition, int index) {
+        String prompt = index < 0 ? "Enter a fact for the NPC to remember:"
+                : "Edit this memory, or enter 'clear' to delete it:";
+        chatInputService.request(player, prompt, value -> {
+            if (index < 0) definition.addAiMemory(value);
+            else definition.setAiMemory(index, value.equalsIgnoreCase("clear") ? "" : value);
+            definitionRepository.save(definition);
+            openAiMemories(player, definition);
+        });
     }
 
     private void requestAiContext(Player player, NpcDefinition definition, int slot) {
@@ -3601,6 +3686,10 @@ public final class GuiService implements Listener {
     }
 
     private record AiControlHolder(String key) implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record AiMemoryHolder(String key) implements InventoryHolder {
         @Override public Inventory getInventory() { return null; }
     }
 

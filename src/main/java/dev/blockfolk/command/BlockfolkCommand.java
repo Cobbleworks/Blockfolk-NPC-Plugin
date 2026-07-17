@@ -218,6 +218,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
         copy.setCombatProfile(source.getCombatProfile());
         copy.setMovementProfile(source.getMovementProfile());
         copy.setAiControlSettings(source.getAiControlSettings());
+        copy.setAiMemories(source.getAiMemories());
         for (dev.blockfolk.model.BehaviourEvent event : dev.blockfolk.model.BehaviourEvent.values()) {
             copy.setBehaviourActions(event, source.getBehaviourActions(event));
         }

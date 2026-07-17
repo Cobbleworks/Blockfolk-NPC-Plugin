@@ -37,6 +37,11 @@ that NPC preset's editor, which resets AI state globally for its spawned copies.
 model can only select validated capabilities enabled for that preset; it cannot return
 commands or executable code.
 
+Long-term memory is optional per preset. When enabled, the model can save durable facts
+with a validated `REMEMBER_FACT` action. Up to 45 facts survive restarts and are shared by
+the preset's spawned copies; adding another discards the oldest. The AI Behaviour menu
+provides a 45-slot memory editor for adding, editing, deleting, or clearing these facts.
+
 Set `openrouter.api-key` and `openrouter.model` in `config.yml` to enable requests.
 Requests run asynchronously and do not delay deterministic NPC behaviour. If players
 speak while a request or cooldown is active, the latest interaction is queued rather

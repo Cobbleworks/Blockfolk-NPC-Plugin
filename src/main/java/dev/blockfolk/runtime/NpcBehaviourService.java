@@ -66,6 +66,8 @@ import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 public final class NpcBehaviourService implements Listener {
@@ -702,6 +704,10 @@ public final class NpcBehaviourService implements Listener {
                     routePaused.add(instance.getId());
                     instances.stopNavigating(instance);
                 }
+                case REMEMBER_FACT -> {
+                    aiControlService.rememberFact(definition, action.text());
+                    announceMemory(instance, definition);
+                }
                 case DO_NOTHING -> { }
             }
         }
@@ -732,6 +738,18 @@ public final class NpcBehaviourService implements Listener {
             case "sneak" -> instances.pose(instance, Pose.SNEAKING);
             case "stand" -> instances.stand(instance);
             default -> { }
+        }
+    }
+
+    private void announceMemory(NpcInstance instance, NpcDefinition definition) {
+        Component message = Component.text(definition.getDisplayName() + " remembered this...",
+                NamedTextColor.GRAY).decorate(TextDecoration.ITALIC);
+        Location location = instance.getLocation();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getWorld() == location.getWorld()
+                    && player.getLocation().distanceSquared(location) <= DIALOG_RANGE_SQUARED) {
+                player.sendMessage(message);
+            }
         }
     }
 

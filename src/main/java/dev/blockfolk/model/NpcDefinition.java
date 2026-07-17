@@ -16,6 +16,8 @@ import dev.blockfolk.ai.AiControlSettings;
 
 public final class NpcDefinition {
 
+    public static final int MAX_AI_MEMORIES = 45;
+
     private final String key;
     private String displayName;
     private String skinUrl;
@@ -36,6 +38,7 @@ public final class NpcDefinition {
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
     private Map<String, List<BehaviourAction>> customEventBehaviours;
     private AiControlSettings aiControlSettings;
+    private List<String> aiMemories;
 
     public NpcDefinition(String key) {
         this.key = key;
@@ -51,6 +54,7 @@ public final class NpcDefinition {
         this.behaviours = new EnumMap<>(BehaviourEvent.class);
         this.customEventBehaviours = new java.util.LinkedHashMap<>();
         this.aiControlSettings = AiControlSettings.defaults();
+        this.aiMemories = new ArrayList<>();
     }
 
     public static NpcDefinition create(String displayName) {
@@ -284,6 +288,33 @@ public final class NpcDefinition {
     public void setAiControlSettings(AiControlSettings settings) {
         aiControlSettings = settings == null ? AiControlSettings.defaults() : settings;
     }
+
+    public List<String> getAiMemories() { return List.copyOf(aiMemories); }
+
+    public void setAiMemories(List<String> memories) {
+        aiMemories.clear();
+        if (memories == null) return;
+        memories.stream().filter(java.util.Objects::nonNull).map(String::trim)
+                .filter(memory -> !memory.isBlank()).forEach(this::addAiMemory);
+    }
+
+    public void addAiMemory(String memory) {
+        if (memory == null || memory.isBlank()) return;
+        aiMemories.add(memory.trim());
+        while (aiMemories.size() > MAX_AI_MEMORIES) aiMemories.removeFirst();
+    }
+
+    public void setAiMemory(int index, String memory) {
+        if (index < 0 || index >= aiMemories.size()) return;
+        if (memory == null || memory.isBlank()) aiMemories.remove(index);
+        else aiMemories.set(index, memory.trim());
+    }
+
+    public void removeAiMemory(int index) {
+        if (index >= 0 && index < aiMemories.size()) aiMemories.remove(index);
+    }
+
+    public void clearAiMemories() { aiMemories.clear(); }
 
     private static ItemStack[] cloneArray(ItemStack[] source, int length) {
         ItemStack[] copy = new ItemStack[length];

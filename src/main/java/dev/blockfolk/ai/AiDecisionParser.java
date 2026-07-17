@@ -43,13 +43,20 @@ public final class AiDecisionParser {
         } catch (IllegalArgumentException exception) {
             return java.util.Optional.empty();
         }
-        if (type != AiActionType.DO_NOTHING && !settings.allowedActions().contains(type)) {
+        if (type == AiActionType.REMEMBER_FACT && !settings.memoryEnabled()) {
+            return java.util.Optional.empty();
+        }
+        if (type != AiActionType.DO_NOTHING && type != AiActionType.REMEMBER_FACT
+                && !settings.allowedActions().contains(type)) {
             return java.util.Optional.empty();
         }
         String text = string(object, "text", false);
         String target = string(object, "target", true);
         String animation = string(object, "animation", true);
         if (type == AiActionType.SAY && (text == null || text.isBlank())) return java.util.Optional.empty();
+        if (type == AiActionType.REMEMBER_FACT && (text == null || text.isBlank())) {
+            return java.util.Optional.empty();
+        }
         if (target != null && !TARGETS.contains(target)) return java.util.Optional.empty();
         if (requiresTarget(type) && target == null) return java.util.Optional.empty();
         if (type == AiActionType.PLAY_ANIMATION
