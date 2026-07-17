@@ -40,6 +40,7 @@ public final class AiControlService {
             PLAY_ANIMATION uses animation: wave, jump, sneak, or stand.
             If no action is appropriate return {\"actions\":[{\"type\":\"DO_NOTHING\"}]}.
             Keep speech concise and in character. The thought field is optional and never shown to players.
+            When a player approaches, greet them using SAY. When a nearby player speaks, answer using SAY.
             """;
 
     private final Plugin plugin;
@@ -50,6 +51,8 @@ public final class AiControlService {
     private final AiMemoryStore memory = new AiMemoryStore();
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Long> lastInvocation = new ConcurrentHashMap<>();
+    private final Map<UUID, PendingInvocation> pending = new HashMap<>();
+    private final Set<UUID> pendingScheduled = new HashSet<>();
     private final long cooldownMillis;
     private volatile boolean warnedNotConfigured;
 
@@ -78,7 +81,7 @@ public final class AiControlService {
             Consumer<AiDecision> resultHandler
     ) {
         AiControlSettings settings = definition.getAiControlSettings();
-        if (settings.prompt().isBlank()) return;
+        if (!settings.enabled() || settings.prompt().isBlank()) return;
         if (!client.configured()) {
             if (!warnedNotConfigured) {
                 warnedNotConfigured = true;
@@ -88,7 +91,12 @@ public final class AiControlService {
         }
         long now = System.currentTimeMillis();
         long previous = lastInvocation.getOrDefault(instance.getId(), 0L);
-        if (now - previous < cooldownMillis || !inFlight.add(instance.getId())) return;
+        if (now - previous < cooldownMillis || !inFlight.add(instance.getId())) {
+            pending.put(instance.getId(), new PendingInvocation(
+                    event, eventDetail, instance, definition, actor, resultHandler));
+            schedulePending(instance.getId(), Math.max(1L, cooldownMillis - (now - previous)));
+            return;
+        }
         lastInvocation.put(instance.getId(), now);
         String detail = eventDetail == null || eventDetail.isBlank() ? describeEvent(event, actor) : eventDetail;
         memory.rememberEvent(instance.getId(), detail);
@@ -99,29 +107,57 @@ public final class AiControlService {
                     if (error != null) {
                         plugin.getLogger().log(Level.WARNING, "AI Control request failed for " + definition.getKey()
                                 + "; deterministic behaviour continues.", error);
-                        return;
+                    } else {
+                        AiDecision decision = AiDecisionParser.parse(content, settings);
+                        if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
+                            if (instances.findById(instance.getId()).isPresent()) resultHandler.accept(decision);
+                        });
                     }
-                    AiDecision decision = AiDecisionParser.parse(content, settings);
-                    if (!plugin.isEnabled()) return;
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        if (instances.findById(instance.getId()).isPresent()) resultHandler.accept(decision);
+                    if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (pending.containsKey(instance.getId())) schedulePending(instance.getId(), cooldownMillis);
                     });
                 });
     }
 
-    public void rememberPlayerMessage(NpcDefinition definition, Player player, String text) {
-        memory.rememberMessage(definition.getKey(), player.getUniqueId(), player.getName() + ": " + text);
+    public boolean configured() {
+        return client.configured();
     }
 
-    public void rememberNpcSpeech(NpcDefinition definition, Player player, String text) {
-        if (player != null) memory.rememberMessage(definition.getKey(), player.getUniqueId(),
+    public String configurationIssue() {
+        return client.configurationIssue();
+    }
+
+    public void rememberPlayerMessage(NpcInstance instance, Player player, String text) {
+        memory.rememberMessage(instance.getId(), player.getUniqueId(), player.getName() + ": " + text);
+    }
+
+    public void rememberNpcSpeech(NpcInstance instance, NpcDefinition definition, Player player, String text) {
+        if (player != null) memory.rememberMessage(instance.getId(), player.getUniqueId(),
                 definition.getDisplayName() + ": " + text);
     }
 
     public void forget(NpcInstance instance) {
         inFlight.remove(instance.getId());
         lastInvocation.remove(instance.getId());
+        pending.remove(instance.getId());
+        pendingScheduled.remove(instance.getId());
         memory.forget(instance.getId());
+    }
+
+    private void schedulePending(UUID instanceId, long delayMillis) {
+        if (!pendingScheduled.add(instanceId)) return;
+        long ticks = Math.max(1L, (Math.max(0L, delayMillis) + 49L) / 50L);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            pendingScheduled.remove(instanceId);
+            if (inFlight.contains(instanceId)) {
+                schedulePending(instanceId, cooldownMillis);
+                return;
+            }
+            PendingInvocation invocation = pending.remove(instanceId);
+            if (invocation == null || instances.findById(instanceId).isEmpty()) return;
+            invoke(invocation.event(), invocation.eventDetail(), invocation.instance(), invocation.definition(),
+                    invocation.actor(), invocation.resultHandler());
+        }, ticks);
     }
 
     private String buildContext(
@@ -161,7 +197,7 @@ public final class AiControlService {
             events.forEach(item -> out.append("- ").append(item).append('\n'));
         }
         if (actor instanceof Player player) {
-            List<String> conversation = memory.recentConversation(definition.getKey(), player.getUniqueId());
+            List<String> conversation = memory.recentConversation(instance.getId(), player.getUniqueId());
             if (!conversation.isEmpty()) {
                 out.append("\nRecent conversation with ").append(player.getName()).append(":\n");
                 conversation.forEach(item -> out.append("- ").append(item).append('\n'));
@@ -237,4 +273,13 @@ public final class AiControlService {
         double distance = Double.MAX_VALUE;
         boolean triggering;
     }
+
+    private record PendingInvocation(
+            BehaviourEvent event,
+            String eventDetail,
+            NpcInstance instance,
+            NpcDefinition definition,
+            Entity actor,
+            Consumer<AiDecision> resultHandler
+    ) { }
 }

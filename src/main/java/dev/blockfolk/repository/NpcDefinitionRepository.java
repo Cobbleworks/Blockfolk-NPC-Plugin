@@ -118,8 +118,10 @@ public final class NpcDefinitionRepository {
         configuration.set("properties.pushable", definition.isPushable());
         configuration.set("properties.color", definition.getColor().name().toLowerCase(Locale.ROOT));
         AiControlSettings ai = definition.getAiControlSettings();
+        configuration.set("ai-control.enabled", ai.enabled());
         configuration.set("ai-control.prompt", ai.prompt().isBlank() ? null : ai.prompt());
         configuration.set("ai-control.mode", ai.mode().name().toLowerCase(Locale.ROOT));
+        configuration.set("ai-control.greet-on-approach", ai.greetOnApproach());
         configuration.set("ai-control.allowed-actions", ai.allowedActions().stream()
                 .map(action -> action.name().toLowerCase(Locale.ROOT)).sorted().toList());
         for (BehaviourEvent event : BehaviourEvent.values()) {
@@ -236,10 +238,14 @@ public final class NpcDefinitionRepository {
             }
         }
         if (allowedAiActions.isEmpty()) allowedAiActions.addAll(AiActionType.safeDefaults());
+        String aiPrompt = configuration.getString("ai-control.prompt", "");
+        boolean legacyAiEnabled = hasLegacyAiControl(configuration);
         definition.setAiControlSettings(new AiControlSettings(
-                configuration.getString("ai-control.prompt", ""),
+                aiPrompt,
                 AiMode.fromStored(configuration.getString("ai-control.mode")),
-                allowedAiActions));
+                allowedAiActions,
+                configuration.getBoolean("ai-control.enabled", legacyAiEnabled),
+                configuration.getBoolean("ai-control.greet-on-approach", true)));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
             String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);
@@ -261,6 +267,7 @@ public final class NpcDefinitionRepository {
                 if (type == null) {
                     continue;
                 }
+                if (isLegacyAiControl(type)) continue;
                 try {
                     actions.add(BehaviourActionCodec.decode(entry));
                 } catch (IllegalArgumentException ignored) {
@@ -285,6 +292,9 @@ public final class NpcDefinitionRepository {
                     if (type == null) {
                         continue;
                     }
+                    if (isLegacyAiControl(type)) {
+                        continue;
+                    }
                     try {
                         actions.add(BehaviourActionCodec.decode(entry));
                     } catch (IllegalArgumentException ignored) {
@@ -295,6 +305,27 @@ public final class NpcDefinitionRepository {
             }
         }
         return definition;
+    }
+
+    private static boolean isLegacyAiControl(Object type) {
+        return type.toString().trim().replace('-', '_').equalsIgnoreCase("AI_CONTROL");
+    }
+
+    private static boolean hasLegacyAiControl(ConfigurationSection configuration) {
+        for (BehaviourEvent event : BehaviourEvent.values()) {
+            for (Map<?, ?> entry : configuration.getMapList(
+                    "behaviours." + event.name().toLowerCase(Locale.ROOT))) {
+                if (entry.get("type") != null && isLegacyAiControl(entry.get("type"))) return true;
+            }
+        }
+        ConfigurationSection custom = configuration.getConfigurationSection("custom-event-behaviours");
+        if (custom == null) return false;
+        for (String event : custom.getKeys(false)) {
+            for (Map<?, ?> entry : custom.getMapList(event)) {
+                if (entry.get("type") != null && isLegacyAiControl(entry.get("type"))) return true;
+            }
+        }
+        return false;
     }
 
     private static String encodeEventName(String value) {

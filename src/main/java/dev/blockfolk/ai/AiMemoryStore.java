@@ -24,10 +24,10 @@ public final class AiMemoryStore {
         trim(memory, MAX_EVENTS);
     }
 
-    public void rememberMessage(String preset, UUID player, String message) {
+    public void rememberMessage(UUID instance, UUID player, String message) {
         if (player == null || message == null || message.isBlank()) return;
         Deque<String> memory = conversations.computeIfAbsent(
-                new ConversationKey(preset, player), ignored -> new ArrayDeque<>());
+                new ConversationKey(instance, player), ignored -> new ArrayDeque<>());
         memory.addLast(message.trim());
         trim(memory, MAX_MESSAGES);
     }
@@ -40,17 +40,20 @@ public final class AiMemoryStore {
         return memory.stream().map(Entry::summary).toList();
     }
 
-    public List<String> recentConversation(String preset, UUID player) {
+    public List<String> recentConversation(UUID instance, UUID player) {
         if (player == null) return List.of();
-        return new ArrayList<>(conversations.getOrDefault(new ConversationKey(preset, player), new ArrayDeque<>()));
+        return new ArrayList<>(conversations.getOrDefault(new ConversationKey(instance, player), new ArrayDeque<>()));
     }
 
-    public void forget(UUID instance) { events.remove(instance); }
+    public void forget(UUID instance) {
+        events.remove(instance);
+        conversations.keySet().removeIf(key -> key.instance().equals(instance));
+    }
 
     private static <T> void trim(Deque<T> deque, int size) {
         while (deque.size() > size) deque.removeFirst();
     }
 
     private record Entry(Instant time, String summary) { }
-    private record ConversationKey(String preset, UUID player) { }
+    private record ConversationKey(UUID instance, UUID player) { }
 }

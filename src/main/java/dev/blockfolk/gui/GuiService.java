@@ -69,6 +69,7 @@ import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
 import dev.blockfolk.util.UiText;
 import dev.blockfolk.ai.AiActionType;
+import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.AiControlSettings;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -142,6 +143,7 @@ public final class GuiService implements Listener {
     private final NamespacedKey waypointTokenKey;
     private final NamespacedKey reorderIconKey;
     private NpcBehaviourService behaviourService;
+    private AiControlService aiControlService;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
     private final Map<String, String> pendingSkinUrls = new HashMap<>();
     private final Map<UUID, WaypointSession> waypointSessions = new HashMap<>();
@@ -181,6 +183,10 @@ public final class GuiService implements Listener {
 
     public void setBehaviourService(NpcBehaviourService behaviourService) {
         this.behaviourService = behaviourService;
+    }
+
+    public void setAiControlService(AiControlService aiControlService) {
+        this.aiControlService = aiControlService;
     }
 
     public void stop() {
@@ -467,6 +473,16 @@ public final class GuiService implements Listener {
                 LegacyText.GRAY + "React to globally emitted custom events",
                 LegacyText.YELLOW + "Click to configure"
         )));
+        AiControlSettings ai = definition.getAiControlSettings();
+        inventory.setItem(23, item(Material.ENDER_EYE,
+                "AI Conversations: " + (ai.enabled() ? "Enabled" : "Disabled"), List.of(
+                        ai.prompt().isBlank()
+                                ? ChatColor.GRAY + "No character prompt configured"
+                                : ChatColor.GRAY + abbreviate(ai.prompt(), 46),
+                        providerStatusLore(),
+                         ChatColor.GRAY + "Reads nearby chat; approach greeting is optional",
+                         ChatColor.YELLOW + "Click to configure"
+                 )));
         CombatProfile combat = definition.getCombatProfile();
         inventory.setItem(15, item(Material.IRON_SWORD, "Fighting", List.of(
                 LegacyText.GRAY + "Health: " + LegacyText.WHITE + healthLabel(combat),
@@ -768,34 +784,56 @@ public final class GuiService implements Listener {
         openInventory(player, inventory);
     }
 
-    private void openAiControl(Player player, NpcDefinition definition, ActionPickerHolder action) {
+    private void openAiControl(Player player, NpcDefinition definition) {
         AiControlSettings settings = definition.getAiControlSettings();
-        Inventory inventory = Bukkit.createInventory(new AiControlHolder(action), 54,
-                Component.text("AI Control (Experimental)"));
+        Inventory inventory = Bukkit.createInventory(new AiControlHolder(definition.getKey()), 54,
+                Component.text("AI Conversations"));
+        boolean providerReady = aiControlService != null && aiControlService.configured();
+        inventory.setItem(4, item(providerReady ? Material.LIME_DYE : Material.RED_DYE,
+                "OpenRouter: " + (providerReady ? "Ready" : "Not Configured"), List.of(
+                        providerReady
+                                ? ChatColor.GREEN + "API key and model were loaded at startup"
+                                : ChatColor.RED + providerConfigurationIssue(),
+                        ChatColor.DARK_GRAY + "Restart the server after changing config.yml")));
         inventory.setItem(11, item(Material.WRITABLE_BOOK, "AI Behaviour Prompt", List.of(
                 ChatColor.GRAY + (settings.prompt().isBlank() ? "No character prompt configured" : abbreviate(settings.prompt(), 48)),
-                ChatColor.YELLOW + "Click to enter the character prompt")));
+                ChatColor.YELLOW + "Click to enter the character prompt",
+                ChatColor.DARK_GRAY + "Saving a prompt starts conversations; enter 'clear' to disable")));
         inventory.setItem(13, item(Material.COMPARATOR, "Mode: " + settings.mode().displayName(), List.of(
                 ChatColor.GRAY + "Respond is the safest default",
                 ChatColor.YELLOW + "Click to cycle Respond / React / Decide")));
-        inventory.setItem(15, item(Material.OBSERVER, "AI Triggers", List.of(
-                ChatColor.GRAY + "AI runs only where this action is attached",
-                ChatColor.YELLOW + "Click to view behaviour events")));
+        inventory.setItem(15, item(Material.OBSERVER, "Conversation Triggers", List.of(
+                ChatColor.GRAY + "Nearby chat is always part of an enabled conversation")));
+        inventory.setItem(20, toggleItem(Material.SPYGLASS, "Greet On Approach",
+                settings.greetOnApproach(), "Lets the NPC speak when a player comes close"));
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40};
         AiActionType[] types = AiActionType.values();
         for (int index = 0; index < types.length; index++) {
             AiActionType type = types[index];
-            boolean enabled = type == AiActionType.DO_NOTHING || settings.allowedActions().contains(type);
+            boolean intrinsic = type == AiActionType.SAY || type == AiActionType.DO_NOTHING;
+            boolean enabled = intrinsic || settings.allowedActions().contains(type);
             inventory.setItem(slots[index], item(enabled ? Material.REDSTONE_TORCH : Material.LEVER,
                     type.displayName() + ": " + (enabled ? "Enabled" : "Disabled"), List.of(
                             ChatColor.GRAY + (type.permittedBy(settings.mode()) ? "Available in this mode" : "Requires a higher-control mode"),
-                            type == AiActionType.DO_NOTHING ? ChatColor.DARK_GRAY + "Always available"
+                            intrinsic ? ChatColor.DARK_GRAY + "Part of every AI conversation"
                                     : ChatColor.YELLOW + "Click to toggle")));
         }
         inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
-        inventory.setItem(49, item(Material.LIME_DYE, "Add AI Control", List.of(
-                ChatColor.YELLOW + "Save settings and attach this action")));
+        inventory.setItem(49, item(settings.enabled() ? Material.RED_DYE : Material.LIME_DYE,
+                settings.enabled() ? "Pause AI Conversations" : "Resume AI Conversations", List.of(
+                        ChatColor.GRAY + "Applies to every spawned instance of this preset",
+                        ChatColor.YELLOW + "Click to " + (settings.enabled() ? "pause" : "resume"))));
         openInventory(player, inventory);
+    }
+
+    private String providerStatusLore() {
+        return aiControlService != null && aiControlService.configured()
+                ? ChatColor.GREEN + "OpenRouter is ready"
+                : ChatColor.RED + "OpenRouter: " + providerConfigurationIssue();
+    }
+
+    private String providerConfigurationIssue() {
+        return aiControlService == null ? "service unavailable" : aiControlService.configurationIssue();
     }
 
     private String abbreviate(String value, int max) {
@@ -1253,6 +1291,8 @@ public final class GuiService implements Listener {
             }
             case 13 ->
                 openBehaviours(player, definition, 0);
+            case 23 ->
+                openAiControl(player, definition);
             case 22 ->
                 openCustomBehaviours(player, definition, 0);
             case 15 ->
@@ -1708,8 +1748,6 @@ public final class GuiService implements Listener {
             requestRouteWaitAction(player, action);
         } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             requestRouteFightOptionsAction(player, action);
-        } else if (type == BehaviourActionType.AI_CONTROL) {
-            player.sendMessage(Component.text("Attach AI Control to the Route Point Reached behaviour event."));
         } else if (!type.requiresValue()) {
             RoutePoint updated = setRoutePointAction(action, type, null);
             if (updated != null) {
@@ -1738,8 +1776,7 @@ public final class GuiService implements Listener {
     private void handleAiControlClick(InventoryClickEvent event, Player player, AiControlHolder holder) {
         event.setCancelled(true);
         if (!isTopInventoryClick(event)) return;
-        ActionPickerHolder action = holder.action();
-        NpcDefinition definition = definitionRepository.find(action.key()).orElse(null);
+        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
         if (definition == null) {
             player.closeInventory();
             return;
@@ -1747,9 +1784,14 @@ public final class GuiService implements Listener {
         int slot = event.getRawSlot();
         if (slot == 11) {
             chatInputService.request(player, "Enter the AI character prompt:", value -> {
-                definition.setAiControlSettings(definition.getAiControlSettings().withPrompt(value));
+                boolean wasEnabled = definition.getAiControlSettings().enabled();
+                String prompt = value.equalsIgnoreCase("clear") ? "" : value;
+                definition.setAiControlSettings(definition.getAiControlSettings().withPrompt(prompt));
                 definitionRepository.save(definition);
-                openAiControl(player, definition, action);
+                if (!wasEnabled && definition.getAiControlSettings().enabled() && behaviourService != null) {
+                    behaviourService.greetNearbyPlayers(definition);
+                }
+                openAiControl(player, definition);
             });
             return;
         }
@@ -1757,33 +1799,45 @@ public final class GuiService implements Listener {
             definition.setAiControlSettings(definition.getAiControlSettings()
                     .withMode(definition.getAiControlSettings().mode().next()));
             definitionRepository.save(definition);
-            openAiControl(player, definition, action);
+            openAiControl(player, definition);
             return;
         }
-        if (slot == 15) {
-            openBehaviours(player, definition, action.page());
+        if (slot == 20) {
+            boolean enabling = !definition.getAiControlSettings().greetOnApproach();
+            definition.setAiControlSettings(definition.getAiControlSettings().withGreetOnApproach(
+                    enabling));
+            definitionRepository.save(definition);
+            if (enabling && behaviourService != null) behaviourService.greetNearbyPlayers(definition);
+            openAiControl(player, definition);
             return;
         }
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40};
         for (int index = 0; index < slots.length; index++) {
             if (slot != slots[index]) continue;
             AiActionType type = AiActionType.values()[index];
-            if (type != AiActionType.DO_NOTHING) {
+            if (type != AiActionType.SAY && type != AiActionType.DO_NOTHING) {
                 definition.setAiControlSettings(definition.getAiControlSettings().toggle(type));
                 definitionRepository.save(definition);
             }
-            openAiControl(player, definition, action);
+            openAiControl(player, definition);
             return;
         }
         if (slot == 45) {
-            openActionPicker(player, definition, action.event(), action.customEvent(), action.actionIndex(), action.page());
+            openEditor(player, definition);
         } else if (slot == 49) {
-            if (definition.getAiControlSettings().prompt().isBlank()) {
-                player.sendMessage(Component.text("Configure an AI character prompt before adding AI Control."));
+            AiControlSettings settings = definition.getAiControlSettings();
+            if (!settings.enabled() && settings.prompt().isBlank()) {
+                player.sendMessage(Component.text("Configure an AI character prompt before enabling conversations."));
                 return;
             }
-            setAction(definition, action, BehaviourActionType.AI_CONTROL, null);
-            openBehaviourHome(player, definition, action);
+            definition.setAiControlSettings(settings.withEnabled(!settings.enabled()));
+            definitionRepository.save(definition);
+            if (!settings.enabled() && behaviourService != null) behaviourService.greetNearbyPlayers(definition);
+            if (!settings.enabled() && aiControlService != null && !aiControlService.configured()) {
+                player.sendMessage(Component.text("AI conversations are enabled, but OpenRouter "
+                        + aiControlService.configurationIssue() + ". Check config.yml and restart the server."));
+            }
+            openAiControl(player, definition);
         }
     }
 
@@ -1968,8 +2022,6 @@ public final class GuiService implements Listener {
             requestWaitAction(player, definition, holder);
         } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             requestFightOptionsAction(player, definition, holder);
-        } else if (type == BehaviourActionType.AI_CONTROL) {
-            openAiControl(player, definition, holder);
         } else if (!type.requiresValue()) {
             setAction(definition, holder, type, null);
             openBehaviourHome(player, definition, holder);
@@ -3267,8 +3319,6 @@ public final class GuiService implements Listener {
 
     private Material actionMaterial(BehaviourActionType type) {
         return switch (type) {
-            case AI_CONTROL ->
-                Material.ENDER_EYE;
             case SEND_DIALOG ->
                 Material.WRITABLE_BOOK;
             case SHOW_HOLO_DIALOG ->
@@ -3510,7 +3560,7 @@ public final class GuiService implements Listener {
         }
     }
 
-    private record AiControlHolder(ActionPickerHolder action) implements InventoryHolder {
+    private record AiControlHolder(String key) implements InventoryHolder {
         @Override public Inventory getInventory() { return null; }
     }
 

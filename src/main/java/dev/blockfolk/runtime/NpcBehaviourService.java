@@ -46,7 +46,6 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.block.BlockRedstoneEvent;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
@@ -65,7 +64,9 @@ import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
+import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 public final class NpcBehaviourService implements Listener {
 
@@ -250,6 +251,20 @@ public final class NpcBehaviourService implements Listener {
         observedEntities.remove(instance.getId());
         entityNearbyCooldownUntilTick.remove(instance.getId());
         if (aiControlService != null) aiControlService.forget(instance);
+    }
+
+    /** Greets players who are already nearby when conversations or greetings are enabled. */
+    public void greetNearbyPlayers(NpcDefinition definition) {
+        if (!definition.getAiControlSettings().enabled()
+                || !definition.getAiControlSettings().greetOnApproach()) return;
+        for (NpcInstance instance : instances.findByDefinition(definition)) {
+            Location location = instance.getLocation();
+            if (location.getWorld() == null) continue;
+            location.getWorld().getPlayers().stream()
+                    .filter(player -> player.getLocation().distanceSquared(location) <= APPROACH_RANGE_SQUARED)
+                    .forEach(player -> invokeAi(BehaviourEvent.PLAYER_APPROACH,
+                            "Player " + player.getName() + " is near the NPC.", instance, definition, player));
+        }
     }
 
     public MovementProfile movementFor(NpcInstance instance, NpcDefinition definition) {
@@ -446,19 +461,24 @@ public final class NpcBehaviourService implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onPlayerChat(AsyncPlayerChatEvent event) {
+    public void onPlayerChat(AsyncChatEvent event) {
         Player player = event.getPlayer();
-        String message = event.getMessage();
+        String message = PlainTextComponentSerializer.plainText().serialize(event.message());
         Bukkit.getScheduler().runTask(plugin, () -> {
             for (NpcInstance instance : List.copyOf(instances.findAll())) {
                 Location npcLocation = instance.getLocation();
                 if (npcLocation.getWorld() != player.getWorld()
                         || npcLocation.distanceSquared(player.getLocation()) > 8.0 * 8.0) continue;
                 NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-                if (definition == null || definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT).isEmpty()) continue;
-                if (aiControlService != null) aiControlService.rememberPlayerMessage(definition, player, message);
-                trigger(BehaviourEvent.PLAYER_CHAT, instance, player,
-                        "Player " + player.getName() + " said: \"" + message + "\"");
+                if (definition == null) continue;
+                String detail = "Player " + player.getName() + " said: \"" + message + "\"";
+                if (aiControlService != null && definition.getAiControlSettings().enabled()) {
+                    aiControlService.rememberPlayerMessage(instance, player, message);
+                    invokeAi(BehaviourEvent.PLAYER_CHAT, detail, instance, definition, player);
+                }
+                if (!definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT).isEmpty()) {
+                    trigger(BehaviourEvent.PLAYER_CHAT, instance, player, detail);
+                }
             }
         });
     }
@@ -486,10 +506,6 @@ public final class NpcBehaviourService implements Listener {
             String eventDetail
     ) {
         switch (action.type()) {
-            case AI_CONTROL -> {
-                if (aiControlService != null) aiControlService.invoke(event, eventDetail, instance, definition, actor,
-                        decision -> applyAiDecision(event, decision, instance, definition, actor));
-            }
             case SEND_DIALOG ->
                 sendDialog(event, instance, definition, action.value(), actor);
             case SHOW_HOLO_DIALOG ->
@@ -580,7 +596,8 @@ public final class NpcBehaviourService implements Listener {
             switch (action.type()) {
                 case SAY -> {
                     sendDialog(event, instance, definition, action.text(), actor);
-                    aiControlService.rememberNpcSpeech(definition, actor instanceof Player player ? player : null, action.text());
+                    aiControlService.rememberNpcSpeech(instance, definition,
+                            actor instanceof Player player ? player : null, action.text());
                 }
                 case LOOK_AT -> face(instance, target);
                 case PLAY_ANIMATION -> playAiAnimation(instance, action.animation());
@@ -610,6 +627,12 @@ public final class NpcBehaviourService implements Listener {
                 case DO_NOTHING -> { }
             }
         }
+    }
+
+    private void invokeAi(BehaviourEvent event, String eventDetail, NpcInstance instance,
+            NpcDefinition definition, Entity actor) {
+        if (aiControlService != null) aiControlService.invoke(event, eventDetail, instance, definition, actor,
+                decision -> applyAiDecision(event, decision, instance, definition, actor));
     }
 
     private Entity resolveAiTarget(String alias, NpcInstance instance, Entity actor) {
@@ -1261,6 +1284,13 @@ public final class NpcBehaviourService implements Listener {
                 markProximityTransition(key);
                 if (withinRange) {
                     nowNearby.add(key);
+                    NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+                    if (definition != null && definition.getAiControlSettings().enabled()
+                            && definition.getAiControlSettings().greetOnApproach()) {
+                        invokeAi(BehaviourEvent.PLAYER_APPROACH,
+                                "Player " + player.getName() + " approached the NPC.",
+                                instance, definition, player);
+                    }
                     trigger(BehaviourEvent.PLAYER_APPROACH, instance, player);
                 } else {
                     trigger(BehaviourEvent.PLAYER_LEAVES, instance, player);

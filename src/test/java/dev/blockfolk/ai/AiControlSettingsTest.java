@@ -22,4 +22,13 @@ class AiControlSettingsTest {
         AiControlSettings settings = AiControlSettings.defaults().toggle(AiActionType.DO_NOTHING);
         assertTrue(settings.allowedActions().contains(AiActionType.DO_NOTHING));
     }
+
+    @Test
+    void savingPromptEnablesConversationAndSpeechIsIntrinsic() {
+        AiControlSettings settings = AiControlSettings.defaults().withPrompt("Be a friendly guard")
+                .toggle(AiActionType.SAY);
+
+        assertTrue(settings.enabled());
+        assertTrue(settings.allowedActions().contains(AiActionType.SAY));
+    }
 }

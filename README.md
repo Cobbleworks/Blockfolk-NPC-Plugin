@@ -24,17 +24,20 @@ per second, with a minimum duration of 3 seconds.
 Proximity enter/leave transitions are debounced for 3 seconds by default. Adjust
 `proximity-transition-cooldown-seconds` in `config.yml` if needed.
 
-## Experimental AI Control
+## AI Conversations
 
-AI Control is an opt-in behaviour action. Add it to an event in the Event Behaviour
-editor, then configure its character prompt, mode, and allowed actions. Supported
-event-driven inputs include player chat and approach, NPC attack and damage, combat,
-nearby living entities, idle cycles, and route waypoints. The model can only select
-validated actions enabled for that preset; it cannot return commands or executable code.
+AI Conversations are configured directly from an NPC preset's dedicated menu. Enable
+the feature by setting its character prompt, mode, allowed actions, and optional approach
+greeting. Saving a prompt enables conversations automatically; nearby chat is always
+part of an enabled conversation. The NPC reads chat sent within eight blocks so it can
+answer with the recent conversation in context. Each spawned NPC keeps
+its own conversation memory. The model can only select validated actions enabled for
+that preset; it cannot return commands or executable code.
 
 Set `openrouter.api-key` and `openrouter.model` in `config.yml` to enable requests.
-Requests run asynchronously, time out independently, and never delay damage, combat,
-death, routing, or other deterministic behaviour actions.
+Requests run asynchronously and do not delay deterministic NPC behaviour. If players
+speak while a request or cooldown is active, the latest interaction is queued rather
+than silently discarded.
 
 ## Building
 

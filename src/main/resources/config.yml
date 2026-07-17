@@ -6,13 +6,15 @@ proximity-transition-cooldown-seconds: 3
 # Optional. External image URLs work without a key at MineSkin's public rate limit.
 mineskin-api-key: ""
 
-# Experimental AI Control. No requests are made unless an NPC event contains
-# an AI Control action and that preset has a character prompt.
+# Optional AI conversations. Configure and enable these per NPC preset in its
+# dedicated AI Conversations menu. No requests are made for disabled presets.
 openrouter:
   endpoint: "https://openrouter.ai/api/v1/chat/completions"
   api-key: ""
   model: ""
   timeout-seconds: 12
+  # Leaves enough room for reasoning-capable models to still return their JSON decision.
+  max-tokens: 800
 ai-control:
   # Per-NPC protection in addition to trigger-specific event throttling.
   invocation-cooldown-seconds: 2
