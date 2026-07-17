@@ -815,7 +815,7 @@ public final class GuiService implements Listener {
                 settings.greetOnApproach(), "Lets the NPC speak when a player comes close"));
         inventory.setItem(21, toggleItem(Material.SKELETON_SKULL, "React To Nearby Deaths",
                 settings.reactToNearbyDeaths(), "Lets the NPC comment when someone dies within 12 blocks"));
-        inventory.setItem(22, toggleItem(Material.BUNDLE, "Temporary Inventory",
+        inventory.setItem(22, toggleItem(Material.CHEST, "Temporary Inventory",
                 settings.inventoryEnabled(), "Lets the AI see and drop items carried by each spawned instance"));
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
         List<AiActionType> types = java.util.Arrays.stream(AiActionType.values())
