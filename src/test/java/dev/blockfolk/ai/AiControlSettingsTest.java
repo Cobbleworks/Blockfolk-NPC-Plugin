@@ -55,13 +55,15 @@ class AiControlSettingsTest {
     void composesStructuredContextWithHeadings() {
         AiControlSettings settings = AiControlSettings.defaults()
                 .withIdentity("Mira, the village guard")
+                .withLikesDislikes("Likes cake; dislikes zombies")
                 .withGoal("Protect the gate")
                 .withInformation("The market closes at sunset");
 
         assertTrue(settings.systemContext().contains("Identity:\nMira"));
         assertTrue(settings.systemContext().contains("Goal or role:\nProtect"));
+        assertTrue(settings.systemContext().contains("Likes and dislikes:\nLikes cake"));
         assertTrue(settings.systemContext().contains("Knowledge and information:\nThe market"));
-        assertTrue(settings.configuredSectionCount() == 3);
+        assertTrue(settings.configuredSectionCount() == 4);
     }
 
     @Test

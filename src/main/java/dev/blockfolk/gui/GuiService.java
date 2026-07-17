@@ -483,7 +483,7 @@ public final class GuiService implements Listener {
                         : Material.COPPER_GOLEM_STATUE,
                 "AI Behaviour: " + aiStatus, List.of(
                         ChatColor.GRAY + "Context sections: " + ChatColor.WHITE
-                                + ai.configuredSectionCount() + "/4",
+                                + ai.configuredSectionCount() + "/5",
                         providerStatusLore(),
                          ChatColor.GRAY + "Optional chat, approach, and nearby-death reactions",
                          ChatColor.YELLOW + "Click to configure"
@@ -801,6 +801,8 @@ public final class GuiService implements Listener {
                 "What it should accomplish or prioritize"));
         inventory.setItem(13, aiContextItem(Material.KNOWLEDGE_BOOK, "Knowledge / Information", settings.information(),
                 "Facts, lore, rules, and local knowledge it may use"));
+        inventory.setItem(14, aiContextItem(Material.CAKE, "Likes & Dislikes", settings.likesDislikes(),
+                "Things it enjoys, avoids, values, or strongly dislikes"));
         inventory.setItem(15, item(settings.memoryEnabled() ? Material.ENDER_CHEST : Material.CHEST,
                 "Memory: " + (settings.memoryEnabled() ? "Enabled" : "Disabled"), List.of(
                         ChatColor.GRAY + "Long-term facts: " + ChatColor.WHITE + definition.getAiMemories().size()
@@ -1833,7 +1835,7 @@ public final class GuiService implements Listener {
             return;
         }
         int slot = event.getRawSlot();
-        if (slot >= 10 && slot <= 13) {
+        if (slot >= 10 && slot <= 14) {
             requestAiContext(player, definition, slot);
             return;
         }
@@ -1957,6 +1959,7 @@ public final class GuiService implements Listener {
             case 11 -> "personality and behaviour";
             case 12 -> "goal or role";
             case 13 -> "knowledge and information";
+            case 14 -> "likes and dislikes";
             default -> throw new IllegalArgumentException("Unknown AI context slot: " + slot);
         };
         chatInputService.request(player, "Enter the NPC's " + section + ", or 'clear':", value -> {
@@ -1968,6 +1971,7 @@ public final class GuiService implements Listener {
                 case 11 -> current.withBehaviour(normalized);
                 case 12 -> current.withGoal(normalized);
                 case 13 -> current.withInformation(normalized);
+                case 14 -> current.withLikesDislikes(normalized);
                 default -> current;
             });
             definitionRepository.save(definition);

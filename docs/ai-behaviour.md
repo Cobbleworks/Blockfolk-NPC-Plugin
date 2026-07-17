@@ -30,7 +30,8 @@ expiry. Removing or respawning an instance also clears that instance's runtime m
 Each request contains two messages:
 
 1. A system message assembled from the configured Identity, Personality & Behaviour,
-   Goal / Role, and Knowledge / Information sections. Empty sections are omitted.
+   Likes & Dislikes, Goal / Role, and Knowledge / Information sections. Empty sections
+   are omitted.
 2. A user message containing the current event, NPC state, perceived surroundings,
    recent memory, and enabled capabilities.
 

@@ -122,6 +122,7 @@ public final class NpcDefinitionRepository {
         configuration.set("ai-control.mode", null);
         configuration.set("ai-control.identity", ai.identity().isBlank() ? null : ai.identity());
         configuration.set("ai-control.behaviour", ai.behaviour().isBlank() ? null : ai.behaviour());
+        configuration.set("ai-control.likes-dislikes", ai.likesDislikes().isBlank() ? null : ai.likesDislikes());
         configuration.set("ai-control.goal", ai.goal().isBlank() ? null : ai.goal());
         configuration.set("ai-control.information", ai.information().isBlank() ? null : ai.information());
         configuration.set("ai-control.greet-on-approach", ai.greetOnApproach());
@@ -251,17 +252,20 @@ public final class NpcDefinitionRepository {
         String legacyAiPrompt = configuration.getString("ai-control.prompt", "");
         String identity = configuration.getString("ai-control.identity", legacyAiPrompt);
         String behaviour = configuration.getString("ai-control.behaviour", "");
+        String likesDislikes = configuration.getString("ai-control.likes-dislikes", "");
         String goal = configuration.getString("ai-control.goal", "");
         String information = configuration.getString("ai-control.information", "");
         boolean legacyAiEnabled = hasLegacyAiControl(configuration);
         definition.setAiControlSettings(new AiControlSettings(
                 identity,
                 behaviour,
+                likesDislikes,
                 goal,
                 information,
                 allowedAiActions,
                 configuration.getBoolean("ai-control.enabled", legacyAiEnabled
-                        || !identity.isBlank() || !behaviour.isBlank() || !goal.isBlank() || !information.isBlank()),
+                        || !identity.isBlank() || !behaviour.isBlank() || !likesDislikes.isBlank()
+                        || !goal.isBlank() || !information.isBlank()),
                 configuration.getBoolean("ai-control.greet-on-approach", false),
                 configuration.getBoolean("ai-control.respond-to-chat", true),
                 configuration.getBoolean("ai-control.react-to-nearby-deaths", false),
