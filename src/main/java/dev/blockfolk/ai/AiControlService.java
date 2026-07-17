@@ -164,7 +164,7 @@ public final class AiControlService {
             Player player,
             BiConsumer<NpcInstance, AiDecision> resultHandler
     ) {
-        List<GroupParticipant> participants = candidates.stream()
+        List<GroupParticipant> eligibleParticipants = candidates.stream()
                 .map(instance -> definitions.find(instance.getDefinitionKey())
                         .map(definition -> new GroupParticipant(instance, definition,
                                 definition.getAiControlSettings())))
@@ -172,7 +172,7 @@ public final class AiControlService {
                 .filter(participant -> participant.settings().enabled()
                         && participant.settings().hasContext() && participant.settings().respondToChat())
                 .toList();
-        if (participants.isEmpty()) return;
+        if (eligibleParticipants.isEmpty()) return;
         if (!client.configured()) {
             if (!warnedNotConfigured) {
                 warnedNotConfigured = true;
@@ -182,12 +182,30 @@ public final class AiControlService {
         }
 
         UUID groupKey = player.getUniqueId();
+        if (groupInFlight.contains(groupKey)) {
+            pendingGroups.put(groupKey, new PendingGroupInvocation(
+                    eventDetail, List.copyOf(candidates), player, resultHandler));
+            schedulePendingGroup(groupKey, cooldownMillis);
+            return;
+        }
+
+        // An NPC that just walked into range may still be producing its approach greeting.
+        // Do not let that newcomer stall an established conversation; it can join a later
+        // chat request after its current request finishes.
+        List<GroupParticipant> participants = eligibleParticipants.stream()
+                .filter(participant -> !inFlight.contains(participant.instance().getId()))
+                .toList();
+        if (participants.isEmpty()) {
+            pendingGroups.put(groupKey, new PendingGroupInvocation(
+                    eventDetail, List.copyOf(candidates), player, resultHandler));
+            schedulePendingGroup(groupKey, cooldownMillis);
+            return;
+        }
+
         long now = System.currentTimeMillis();
         long previous = participants.stream().mapToLong(participant ->
                 lastInvocation.getOrDefault(participant.instance().getId(), 0L)).max().orElse(0L);
-        boolean participantBusy = participants.stream()
-                .anyMatch(participant -> inFlight.contains(participant.instance().getId()));
-        if (now - previous < cooldownMillis || participantBusy || groupInFlight.contains(groupKey)) {
+        if (now - previous < cooldownMillis) {
             pendingGroups.put(groupKey, new PendingGroupInvocation(
                     eventDetail, List.copyOf(candidates), player, resultHandler));
             schedulePendingGroup(groupKey, Math.max(1L, cooldownMillis - (now - previous)));

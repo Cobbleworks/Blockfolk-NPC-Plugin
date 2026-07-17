@@ -12,6 +12,11 @@ may involve additional nearby NPCs when that is natural, but is explicitly told 
 make every NPC respond merely because it is present. Non-AI On Player Chat actions still
 run independently for every nearby NPC.
 
+An NPC that enters chat range while already handling another AI event (most commonly its
+approach greeting) does not hold up the existing group. Available NPCs answer immediately,
+and the busy newcomer becomes eligible to participate in a later player message after its
+current request finishes.
+
 Opening the NPC preset's admin editor clears AI memory and queued interactions for every
 spawned instance of that preset. Conversation history otherwise has no time or distance
 expiry. Removing or respawning an instance also clears that instance's runtime memory.
