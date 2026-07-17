@@ -105,4 +105,35 @@ class AiDecisionParserTest {
         assertEquals(AiActionType.REMEMBER_FACT, enabled.actions().getFirst().type());
         assertEquals("Alex likes apples", enabled.actions().getFirst().text());
     }
+
+    @Test
+    void moveToAcceptsOnlyPerceivedTargetAliasesWhenEnabled() {
+        AiControlSettings settings = new AiControlSettings("Guide", "", "Show visitors around", "",
+                EnumSet.of(AiActionType.MOVE_TO), true, false, true);
+
+        AiDecision accepted = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"MOVE_TO\",\"target\":\"nearby_location_2\"}]}", settings);
+        AiDecision arbitrary = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"MOVE_TO\",\"target\":\"world_spawn\"}]}", settings);
+
+        assertEquals(AiActionType.MOVE_TO, accepted.actions().getFirst().type());
+        assertEquals("nearby_location_2", accepted.actions().getFirst().target());
+        assertEquals(AiActionType.DO_NOTHING, arbitrary.actions().getFirst().type());
+    }
+
+    @Test
+    void dropItemRequiresInventoryToggleAndSlotAlias() {
+        String response = "{\"actions\":[{\"type\":\"DROP_ITEM\",\"target\":\"inventory_slot_4\"}]}";
+
+        AiDecision disabled = AiDecisionParser.parse(response, AiControlSettings.defaults());
+        AiDecision enabled = AiDecisionParser.parse(response,
+                AiControlSettings.defaults().withInventoryEnabled(true));
+        AiDecision invalidTarget = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"DROP_ITEM\",\"target\":\"diamond\"}]}",
+                AiControlSettings.defaults().withInventoryEnabled(true));
+
+        assertEquals(AiActionType.DO_NOTHING, disabled.actions().getFirst().type());
+        assertEquals(AiActionType.DROP_ITEM, enabled.actions().getFirst().type());
+        assertEquals(AiActionType.DO_NOTHING, invalidTarget.actions().getFirst().type());
+    }
 }

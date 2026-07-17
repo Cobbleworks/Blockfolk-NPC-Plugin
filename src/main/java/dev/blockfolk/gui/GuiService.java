@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -812,9 +813,11 @@ public final class GuiService implements Listener {
                 settings.greetOnApproach(), "Lets the NPC speak when a player comes close"));
         inventory.setItem(21, toggleItem(Material.SKELETON_SKULL, "React To Nearby Deaths",
                 settings.reactToNearbyDeaths(), "Lets the NPC comment when someone dies within 12 blocks"));
+        inventory.setItem(22, toggleItem(Material.BUNDLE, "Temporary Inventory",
+                settings.inventoryEnabled(), "Lets the AI see and drop items carried by each spawned instance"));
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
         List<AiActionType> types = java.util.Arrays.stream(AiActionType.values())
-                .filter(type -> type != AiActionType.REMEMBER_FACT).toList();
+                .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM).toList();
         for (int index = 0; index < types.size(); index++) {
             AiActionType type = types.get(index);
             boolean chatToggle = type == AiActionType.SAY;
@@ -1867,9 +1870,16 @@ public final class GuiService implements Listener {
             openAiControl(player, definition);
             return;
         }
+        if (slot == 22) {
+            AiControlSettings settings = definition.getAiControlSettings();
+            definition.setAiControlSettings(settings.withInventoryEnabled(!settings.inventoryEnabled()));
+            definitionRepository.save(definition);
+            openAiControl(player, definition);
+            return;
+        }
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
         List<AiActionType> types = java.util.Arrays.stream(AiActionType.values())
-                .filter(type -> type != AiActionType.REMEMBER_FACT).toList();
+                .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM).toList();
         for (int index = 0; index < types.size(); index++) {
             if (slot != slots[index]) continue;
             AiActionType type = types.get(index);

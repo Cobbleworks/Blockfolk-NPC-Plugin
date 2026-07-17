@@ -71,4 +71,13 @@ class AiControlSettingsTest {
 
         assertTrue(settings.memoryEnabled());
     }
+
+    @Test
+    void inventorySettingIsOptInAndPreservedByOtherChanges() {
+        AiControlSettings settings = AiControlSettings.defaults().withInventoryEnabled(true)
+                .withIdentity("A courier").withReactToNearbyDeaths(true);
+
+        assertTrue(settings.inventoryEnabled());
+        assertFalse(AiControlSettings.defaults().inventoryEnabled());
+    }
 }

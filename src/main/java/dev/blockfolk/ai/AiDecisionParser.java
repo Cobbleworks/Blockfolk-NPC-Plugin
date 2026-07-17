@@ -46,7 +46,11 @@ public final class AiDecisionParser {
         if (type == AiActionType.REMEMBER_FACT && !settings.memoryEnabled()) {
             return java.util.Optional.empty();
         }
+        if (type == AiActionType.DROP_ITEM && !settings.inventoryEnabled()) {
+            return java.util.Optional.empty();
+        }
         if (type != AiActionType.DO_NOTHING && type != AiActionType.REMEMBER_FACT
+                && type != AiActionType.DROP_ITEM
                 && !settings.allowedActions().contains(type)) {
             return java.util.Optional.empty();
         }
@@ -57,7 +61,7 @@ public final class AiDecisionParser {
         if (type == AiActionType.REMEMBER_FACT && (text == null || text.isBlank())) {
             return java.util.Optional.empty();
         }
-        if (target != null && !TARGETS.contains(target)) return java.util.Optional.empty();
+        if (target != null && !validTarget(type, target)) return java.util.Optional.empty();
         if (requiresTarget(type) && target == null) return java.util.Optional.empty();
         if (type == AiActionType.PLAY_ANIMATION
                 && (animation == null || !ANIMATIONS.contains(animation))) return java.util.Optional.empty();
@@ -65,7 +69,14 @@ public final class AiDecisionParser {
     }
 
     private static boolean requiresTarget(AiActionType type) {
-        return type == AiActionType.FLEE_FROM || type == AiActionType.FOLLOW;
+        return type == AiActionType.FLEE_FROM || type == AiActionType.FOLLOW
+                || type == AiActionType.MOVE_TO || type == AiActionType.DROP_ITEM;
+    }
+
+    private static boolean validTarget(AiActionType type, String target) {
+        if (type == AiActionType.DROP_ITEM) return target.matches("inventory_slot_[1-9][0-9]*");
+        if (TARGETS.contains(target)) return true;
+        return type == AiActionType.MOVE_TO && target.matches("nearby_(location|player|npc|entity)_[1-9][0-9]*");
     }
 
     private static String string(JsonObject object, String name, boolean normalize) {

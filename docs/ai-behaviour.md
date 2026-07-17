@@ -68,6 +68,8 @@ The following state is included when available:
 - whether the NPC is in combat;
 - whether a route is configured;
 - the material held in the main hand.
+- when Temporary Inventory access is enabled, every occupied slot in that spawned
+  instance's temporary inventory, including a safe slot alias, stack size, and material.
 
 Exact NPC or player coordinates are not included.
 
@@ -79,9 +81,13 @@ Perception uses a 12-block radius for players and other Blockfolk NPCs. It inclu
   player triggered the request;
 - up to three nearest Blockfolk NPCs, with display name, rounded distance, and combat
   state;
-- nearby non-player, non-Blockfolk entities grouped by readable entity type, including
-  count, approximate nearest distance, and whether that type contains the triggering
-  entity.
+- up to five nearby non-player, non-Blockfolk entities, with readable entity type,
+  rounded distance, and whether it is the triggering entity;
+- up to five nearest globally saved locations in the same world and within 12 blocks.
+
+Each perceived player, NPC, entity, and saved location has a request-local alias such as
+`nearby_player_1` or `nearby_location_2`. The AI can pass one of those aliases to
+`MOVE_TO`; arbitrary coordinates and unlisted targets are rejected.
 
 Non-player entities are collected from Bukkit's 12-by-12-by-12-axis nearby-entity query.
 They are summarized rather than listed with UUIDs or exact positions. Both visible
@@ -133,10 +139,14 @@ enforces the same list before anything runs. Current capabilities are:
 - follow a player;
 - stop following the current player;
 - walk to and toggle the nearest available button or lever within 12 blocks;
+- move to a perceived saved location, player, Blockfolk NPC, or other entity;
 - return home;
 - start or pause the configured route;
+- when Temporary Inventory access is enabled and the instance carries items, drop one
+  selected inventory stack using its `inventory_slot_N` alias;
 - do nothing, which is always available.
 
 Targeted capabilities may refer only to the triggering player, triggering entity,
-nearest player, nearest attackable entity, or current combat target. The model cannot
-provide arbitrary entity IDs or server commands.
+nearest player, nearest attackable entity, current combat target, or a compatible safe
+alias listed in the request. The model cannot provide arbitrary coordinates, entity IDs,
+or server commands.

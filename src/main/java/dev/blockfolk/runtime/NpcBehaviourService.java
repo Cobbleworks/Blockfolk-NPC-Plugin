@@ -708,6 +708,12 @@ public final class NpcBehaviourService implements Listener {
                 }
                 case UNFOLLOW -> stopFollowing(instance);
                 case INTERACT -> startAiInteraction(instance);
+                case MOVE_TO -> resolveAiMoveTarget(action.target(), instance, actor).ifPresent(targetLocation -> {
+                    stopFollowing(instance);
+                    moveTargets.put(instance.getId(), targetLocation);
+                    instances.stand(instance);
+                    instances.stopNavigating(instance);
+                });
                 case RETURN_HOME -> {
                     stopFollowing(instance);
                     moveTargets.put(instance.getId(), instance.getSpawnLocation());
@@ -725,6 +731,7 @@ public final class NpcBehaviourService implements Listener {
                     aiControlService.rememberFact(definition, action.text());
                     announceMemory(instance, definition);
                 }
+                case DROP_ITEM -> dropAiInventoryItem(instance, definition, action.target());
                 case DO_NOTHING -> { }
             }
         }
@@ -745,6 +752,63 @@ public final class NpcBehaviourService implements Listener {
         }
         if (alias.equals("current_target") && combatService != null) return combatService.currentTarget(instance);
         return null;
+    }
+
+    private java.util.Optional<Location> resolveAiMoveTarget(
+            String alias, NpcInstance instance, Entity actor) {
+        if (alias == null || aiControlService == null) return java.util.Optional.empty();
+        Entity standardTarget = resolveAiTarget(alias, instance, actor);
+        if (standardTarget != null && standardTarget.isValid()) {
+            return java.util.Optional.of(standardTarget.getLocation());
+        }
+        int index = targetIndex(alias);
+        if (index < 0) return java.util.Optional.empty();
+        if (alias.startsWith("nearby_player_")) {
+            return listLocation(aiControlService.nearbyPlayers(instance.getLocation()), index);
+        }
+        if (alias.startsWith("nearby_npc_")) {
+            List<NpcInstance> nearby = aiControlService.nearbyNpcs(instance);
+            return index < nearby.size() ? java.util.Optional.of(nearby.get(index).getLocation())
+                    : java.util.Optional.empty();
+        }
+        if (alias.startsWith("nearby_entity_")) {
+            return listLocation(aiControlService.nearbyEntities(instance.getLocation()), index);
+        }
+        if (alias.startsWith("nearby_location_")) {
+            List<dev.blockfolk.model.NamedLocation> nearby = aiControlService.nearbyLocations(instance.getLocation());
+            if (index >= nearby.size()) return java.util.Optional.empty();
+            return java.util.Optional.ofNullable(nearby.get(index).location().toLocation());
+        }
+        return java.util.Optional.empty();
+    }
+
+    private static java.util.Optional<Location> listLocation(List<? extends Entity> entities, int index) {
+        return index < entities.size() && entities.get(index).isValid()
+                ? java.util.Optional.of(entities.get(index).getLocation()) : java.util.Optional.empty();
+    }
+
+    private static int targetIndex(String alias) {
+        int separator = alias.lastIndexOf('_');
+        if (separator < 0) return -1;
+        try {
+            return Integer.parseInt(alias.substring(separator + 1)) - 1;
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
+    }
+
+    private void dropAiInventoryItem(NpcInstance instance, NpcDefinition definition, String target) {
+        if (!definition.getAiControlSettings().inventoryEnabled() || target == null
+                || !target.startsWith("inventory_slot_")) return;
+        int slot = targetIndex(target);
+        ItemStack[] contents = instance.getTemporaryInventoryContents();
+        if (slot < 0 || slot >= contents.length) return;
+        ItemStack item = contents[slot];
+        Location center = instance.getLocation();
+        if (item == null || item.getType().isAir() || center.getWorld() == null) return;
+        contents[slot] = null;
+        center.getWorld().dropItemNaturally(center, item);
+        updateTemporaryInventory(instance, contents, null);
     }
 
     private void playAiAnimation(NpcInstance instance, String animation) {

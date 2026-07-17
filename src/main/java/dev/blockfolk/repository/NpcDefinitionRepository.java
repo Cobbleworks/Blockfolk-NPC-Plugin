@@ -2,7 +2,6 @@ package dev.blockfolk.repository;
 
 import dev.blockfolk.ai.AiActionType;
 import dev.blockfolk.ai.AiControlSettings;
-import dev.blockfolk.ai.AiMode;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -129,9 +128,10 @@ public final class NpcDefinitionRepository {
         configuration.set("ai-control.respond-to-chat", ai.respondToChat());
         configuration.set("ai-control.react-to-nearby-deaths", ai.reactToNearbyDeaths());
         configuration.set("ai-control.memory.enabled", ai.memoryEnabled());
+        configuration.set("ai-control.inventory.enabled", ai.inventoryEnabled());
         configuration.set("ai-control.memory.facts", definition.getAiMemories());
         configuration.set("ai-control.allowed-actions", ai.allowedActions().stream()
-                .filter(action -> action != AiActionType.REMEMBER_FACT)
+                .filter(action -> action != AiActionType.REMEMBER_FACT && action != AiActionType.DROP_ITEM)
                 .map(action -> action.name().toLowerCase(Locale.ROOT)).sorted().toList());
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<Map<String, Object>> actions = BehaviourActionCodec.encodeList(definition.getBehaviourActions(event));
@@ -265,7 +265,8 @@ public final class NpcDefinitionRepository {
                 configuration.getBoolean("ai-control.greet-on-approach", false),
                 configuration.getBoolean("ai-control.respond-to-chat", true),
                 configuration.getBoolean("ai-control.react-to-nearby-deaths", false),
-                configuration.getBoolean("ai-control.memory.enabled", false)));
+                configuration.getBoolean("ai-control.memory.enabled", false),
+                configuration.getBoolean("ai-control.inventory.enabled", false)));
         definition.setAiMemories(configuration.getStringList("ai-control.memory.facts"));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
