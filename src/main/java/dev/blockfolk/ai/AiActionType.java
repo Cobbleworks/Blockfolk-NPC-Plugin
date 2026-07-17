@@ -5,27 +5,24 @@ import java.util.Locale;
 import java.util.Set;
 
 public enum AiActionType {
-    SAY("Speak", AiMode.RESPOND),
-    PLAY_ANIMATION("Play Animation", AiMode.RESPOND),
-    START_COMBAT("Start Combat", AiMode.REACT),
-    STOP_COMBAT("Stop Combat", AiMode.REACT),
-    FLEE_FROM("Flee", AiMode.REACT),
-    FOLLOW("Follow", AiMode.REACT),
-    RETURN_HOME("Return Home", AiMode.DECIDE),
-    START_ROUTE("Start Route", AiMode.DECIDE),
-    PAUSE_ROUTE("Pause Route", AiMode.DECIDE),
-    DO_NOTHING("Do Nothing", AiMode.RESPOND);
+    SAY("Speak"),
+    PLAY_ANIMATION("Play Animation"),
+    START_COMBAT("Start Combat"),
+    STOP_COMBAT("Stop Combat"),
+    FLEE_FROM("Flee"),
+    FOLLOW("Follow"),
+    RETURN_HOME("Return Home"),
+    START_ROUTE("Start Route"),
+    PAUSE_ROUTE("Pause Route"),
+    DO_NOTHING("Do Nothing");
 
     private final String displayName;
-    private final AiMode minimumMode;
 
-    AiActionType(String displayName, AiMode minimumMode) {
+    AiActionType(String displayName) {
         this.displayName = displayName;
-        this.minimumMode = minimumMode;
     }
 
     public String displayName() { return displayName; }
-    public boolean permittedBy(AiMode mode) { return mode.ordinal() >= minimumMode.ordinal(); }
 
     public static AiActionType fromModel(String value) {
         return valueOf(value.trim().toUpperCase(Locale.ROOT).replace('-', '_'));

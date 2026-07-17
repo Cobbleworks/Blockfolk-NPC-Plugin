@@ -44,8 +44,7 @@ public final class AiDecisionParser {
         } catch (IllegalArgumentException exception) {
             return java.util.Optional.empty();
         }
-        if (type != AiActionType.DO_NOTHING
-                && (!settings.allowedActions().contains(type) || !type.permittedBy(settings.mode()))) {
+        if (type != AiActionType.DO_NOTHING && !settings.allowedActions().contains(type)) {
             return java.util.Optional.empty();
         }
         String text = string(object, "text", false);

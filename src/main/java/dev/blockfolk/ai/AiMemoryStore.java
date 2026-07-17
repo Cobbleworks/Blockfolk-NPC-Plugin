@@ -45,10 +45,6 @@ public final class AiMemoryStore {
         return new ArrayList<>(conversations.getOrDefault(new ConversationKey(instance, player), new ArrayDeque<>()));
     }
 
-    public void forgetConversation(UUID instance, UUID player) {
-        conversations.remove(new ConversationKey(instance, player));
-    }
-
     public void forget(UUID instance) {
         events.remove(instance);
         conversations.keySet().removeIf(key -> key.instance().equals(instance));

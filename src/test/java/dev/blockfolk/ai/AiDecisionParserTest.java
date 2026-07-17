@@ -10,8 +10,8 @@ class AiDecisionParserTest {
 
     @Test
     void validatesActionsIndependently() {
-        AiControlSettings settings = new AiControlSettings("Be Mira", AiMode.REACT,
-                EnumSet.of(AiActionType.SAY, AiActionType.START_COMBAT));
+        AiControlSettings settings = new AiControlSettings("Be Mira", "Direct but fair", "Guard the gate", "",
+                EnumSet.of(AiActionType.SAY, AiActionType.START_COMBAT), true, true, true);
         AiDecision decision = AiDecisionParser.parse("""
                 {"thought":"hidden","actions":[
                   {"type":"SAY","text":"Back away."},
@@ -27,9 +27,9 @@ class AiDecisionParserTest {
     }
 
     @Test
-    void modeCeilingOverridesPresetAllowlist() {
-        AiControlSettings settings = new AiControlSettings("Be Mira", AiMode.RESPOND,
-                EnumSet.of(AiActionType.SAY, AiActionType.START_COMBAT));
+    void disabledCapabilityOverridesModelResponse() {
+        AiControlSettings settings = new AiControlSettings("Be Mira", "", "", "",
+                EnumSet.of(AiActionType.SAY), true, true, true);
         AiDecision decision = AiDecisionParser.parse("""
                 {"actions":[{"type":"START_COMBAT","target":"triggering_player"}]}
                 """, settings);

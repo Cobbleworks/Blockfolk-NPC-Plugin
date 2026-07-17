@@ -1245,17 +1245,12 @@ public final class NpcBehaviourService implements Listener {
             activeInstances.put(instance.getId(), instance);
             Location npcLocation = instance.getLocation();
             if (npcLocation.getWorld() == null) {
-                if (aiControlService != null) aiControlService.updateNearbyPlayers(instance, Set.of());
                 continue;
             }
-            Set<UUID> aiNearbyPlayers = new HashSet<>();
             for (Player player : Bukkit.getOnlinePlayers()) {
                 ProximityKey key = new ProximityKey(instance.getId(), player.getUniqueId());
                 evaluated.add(key);
                 boolean wasNearby = nearbyPlayers.contains(key);
-                boolean withinConversationRange = player.getWorld() == npcLocation.getWorld()
-                        && player.getLocation().distanceSquared(npcLocation) <= APPROACH_RANGE_SQUARED;
-                if (withinConversationRange) aiNearbyPlayers.add(player.getUniqueId());
                 double range = wasNearby ? LEAVE_RANGE_SQUARED : APPROACH_RANGE_SQUARED;
                 boolean withinRange = player.getWorld() == npcLocation.getWorld()
                         && player.getLocation().distanceSquared(npcLocation) <= range;
@@ -1289,7 +1284,6 @@ public final class NpcBehaviourService implements Listener {
                     trigger(BehaviourEvent.PLAYER_LEAVES, instance, player);
                 }
             }
-            if (aiControlService != null) aiControlService.updateNearbyPlayers(instance, aiNearbyPlayers);
         }
         for (ProximityKey key : nearbyPlayers) {
             if (evaluated.contains(key)) {

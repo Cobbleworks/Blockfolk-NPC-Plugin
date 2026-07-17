@@ -119,8 +119,12 @@ public final class NpcDefinitionRepository {
         configuration.set("properties.color", definition.getColor().name().toLowerCase(Locale.ROOT));
         AiControlSettings ai = definition.getAiControlSettings();
         configuration.set("ai-control.enabled", ai.enabled());
-        configuration.set("ai-control.prompt", ai.prompt().isBlank() ? null : ai.prompt());
-        configuration.set("ai-control.mode", ai.mode().name().toLowerCase(Locale.ROOT));
+        configuration.set("ai-control.prompt", null);
+        configuration.set("ai-control.mode", null);
+        configuration.set("ai-control.identity", ai.identity().isBlank() ? null : ai.identity());
+        configuration.set("ai-control.behaviour", ai.behaviour().isBlank() ? null : ai.behaviour());
+        configuration.set("ai-control.goal", ai.goal().isBlank() ? null : ai.goal());
+        configuration.set("ai-control.information", ai.information().isBlank() ? null : ai.information());
         configuration.set("ai-control.greet-on-approach", ai.greetOnApproach());
         configuration.set("ai-control.respond-to-chat", ai.respondToChat());
         configuration.set("ai-control.allowed-actions", ai.allowedActions().stream()
@@ -240,13 +244,20 @@ public final class NpcDefinitionRepository {
             }
         }
         if (allowedAiActions.isEmpty()) allowedAiActions.addAll(AiActionType.safeDefaults());
-        String aiPrompt = configuration.getString("ai-control.prompt", "");
+        String legacyAiPrompt = configuration.getString("ai-control.prompt", "");
+        String identity = configuration.getString("ai-control.identity", legacyAiPrompt);
+        String behaviour = configuration.getString("ai-control.behaviour", "");
+        String goal = configuration.getString("ai-control.goal", "");
+        String information = configuration.getString("ai-control.information", "");
         boolean legacyAiEnabled = hasLegacyAiControl(configuration);
         definition.setAiControlSettings(new AiControlSettings(
-                aiPrompt,
-                AiMode.fromStored(configuration.getString("ai-control.mode")),
+                identity,
+                behaviour,
+                goal,
+                information,
                 allowedAiActions,
-                configuration.getBoolean("ai-control.enabled", legacyAiEnabled),
+                configuration.getBoolean("ai-control.enabled", legacyAiEnabled
+                        || !identity.isBlank() || !behaviour.isBlank() || !goal.isBlank() || !information.isBlank()),
                 configuration.getBoolean("ai-control.greet-on-approach", true),
                 configuration.getBoolean("ai-control.respond-to-chat", true)));
         for (BehaviourEvent event : BehaviourEvent.values()) {

@@ -421,6 +421,7 @@ public final class GuiService implements Listener {
     }
 
     public void openEditor(Player player, NpcDefinition definition) {
+        if (aiControlService != null) aiControlService.resetDefinition(definition);
         int instances = instanceRegistry.findByDefinition(definition).size();
         Inventory inventory = Bukkit.createInventory(new EditorHolder(definition.getKey()), 36,
                 UiText.manageTitle(definition.getDisplayName()));
@@ -478,9 +479,8 @@ public final class GuiService implements Listener {
                 : ai.greetOnApproach() || ai.respondToChat() ? "Active" : "No Triggers";
         inventory.setItem(23, item(Material.ENDER_EYE,
                 "AI Behaviour: " + aiStatus, List.of(
-                        ai.prompt().isBlank()
-                                ? ChatColor.GRAY + "No character prompt configured"
-                                : ChatColor.GRAY + abbreviate(ai.prompt(), 46),
+                        ChatColor.GRAY + "Context sections: " + ChatColor.WHITE
+                                + ai.configuredSectionCount() + "/4",
                         providerStatusLore(),
                          ChatColor.GRAY + "Reads nearby chat; approach greeting is optional",
                          ChatColor.YELLOW + "Click to configure"
@@ -797,13 +797,14 @@ public final class GuiService implements Listener {
                                 ? ChatColor.GREEN + "API key and model were loaded at startup"
                                 : ChatColor.RED + providerConfigurationIssue(),
                         ChatColor.DARK_GRAY + "Restart the server after changing config.yml")));
-        inventory.setItem(11, item(Material.WRITABLE_BOOK, "AI Behaviour Prompt", List.of(
-                ChatColor.GRAY + (settings.prompt().isBlank() ? "No character prompt configured" : abbreviate(settings.prompt(), 48)),
-                ChatColor.YELLOW + "Click to enter the character prompt",
-                ChatColor.DARK_GRAY + "A first prompt activates AI; enter 'clear' to disable")));
-        inventory.setItem(13, item(Material.COMPARATOR, "Mode: " + settings.mode().displayName(), List.of(
-                ChatColor.GRAY + "Respond is the safest default",
-                ChatColor.YELLOW + "Click to cycle Respond / React / Decide")));
+        inventory.setItem(10, aiContextItem(Material.NAME_TAG, "Identity", settings.identity(),
+                "Who this NPC is, its name, history, and role"));
+        inventory.setItem(11, aiContextItem(Material.WRITABLE_BOOK, "Personality & Behaviour", settings.behaviour(),
+                "How it speaks, acts, reacts, and treats others"));
+        inventory.setItem(12, aiContextItem(Material.COMPASS, "Goal / Role", settings.goal(),
+                "What it should accomplish or prioritize"));
+        inventory.setItem(13, aiContextItem(Material.KNOWLEDGE_BOOK, "Knowledge / Information", settings.information(),
+                "Facts, lore, rules, and local knowledge it may use"));
         inventory.setItem(20, toggleItem(Material.SPYGLASS, "Greet On Approach",
                 settings.greetOnApproach(), "Lets the NPC speak when a player comes close"));
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40};
@@ -819,8 +820,7 @@ public final class GuiService implements Listener {
                     displayName + ": " + (enabled ? "Enabled" : "Disabled"), List.of(
                             chatToggle
                                     ? ChatColor.GRAY + "Reads and answers player chat within 8 blocks"
-                                    : ChatColor.GRAY + (type.permittedBy(settings.mode())
-                                            ? "Available in this mode" : "Requires a higher-control mode"),
+                                    : ChatColor.GRAY + "Available when this capability is enabled",
                             intrinsic ? ChatColor.DARK_GRAY + "Always available"
                                     : ChatColor.YELLOW + "Click to toggle")));
         }
@@ -836,6 +836,15 @@ public final class GuiService implements Listener {
                                 : ChatColor.RED + "No requests are made and nearby chat is not read",
                         ChatColor.YELLOW + "Click to " + (settings.enabled() ? "pause" : "resume"))));
         openInventory(player, inventory);
+    }
+
+    private ItemStack aiContextItem(Material material, String name, String value, String description) {
+        return item(material, name, List.of(
+                ChatColor.GRAY + description,
+                value.isBlank() ? ChatColor.DARK_GRAY + "Not configured"
+                        : ChatColor.WHITE + abbreviate(value, 48),
+                ChatColor.YELLOW + "Click to edit; enter 'clear' to remove"
+        ));
     }
 
     private String providerStatusLore() {
@@ -1794,24 +1803,8 @@ public final class GuiService implements Listener {
             return;
         }
         int slot = event.getRawSlot();
-        if (slot == 11) {
-            chatInputService.request(player, "Enter the AI character prompt:", value -> {
-                boolean wasEnabled = definition.getAiControlSettings().enabled();
-                String prompt = value.equalsIgnoreCase("clear") ? "" : value;
-                definition.setAiControlSettings(definition.getAiControlSettings().withPrompt(prompt));
-                definitionRepository.save(definition);
-                if (!wasEnabled && definition.getAiControlSettings().enabled() && behaviourService != null) {
-                    behaviourService.greetNearbyPlayers(definition);
-                }
-                openAiControl(player, definition);
-            });
-            return;
-        }
-        if (slot == 13) {
-            definition.setAiControlSettings(definition.getAiControlSettings()
-                    .withMode(definition.getAiControlSettings().mode().next()));
-            definitionRepository.save(definition);
-            openAiControl(player, definition);
+        if (slot >= 10 && slot <= 13) {
+            requestAiContext(player, definition, slot);
             return;
         }
         if (slot == 20) {
@@ -1842,8 +1835,8 @@ public final class GuiService implements Listener {
             openEditor(player, definition);
         } else if (slot == 49) {
             AiControlSettings settings = definition.getAiControlSettings();
-            if (!settings.enabled() && settings.prompt().isBlank()) {
-                player.sendMessage(Component.text("Configure an AI character prompt before activating AI behaviour."));
+            if (!settings.enabled() && !settings.hasContext()) {
+                player.sendMessage(Component.text("Configure at least one AI context section before activating AI behaviour."));
                 return;
             }
             definition.setAiControlSettings(settings.withEnabled(!settings.enabled()));
@@ -1855,6 +1848,33 @@ public final class GuiService implements Listener {
             }
             openAiControl(player, definition);
         }
+    }
+
+    private void requestAiContext(Player player, NpcDefinition definition, int slot) {
+        String section = switch (slot) {
+            case 10 -> "identity";
+            case 11 -> "personality and behaviour";
+            case 12 -> "goal or role";
+            case 13 -> "knowledge and information";
+            default -> throw new IllegalArgumentException("Unknown AI context slot: " + slot);
+        };
+        chatInputService.request(player, "Enter the NPC's " + section + ", or 'clear':", value -> {
+            boolean wasEnabled = definition.getAiControlSettings().enabled();
+            String normalized = value.equalsIgnoreCase("clear") ? "" : value;
+            AiControlSettings current = definition.getAiControlSettings();
+            definition.setAiControlSettings(switch (slot) {
+                case 10 -> current.withIdentity(normalized);
+                case 11 -> current.withBehaviour(normalized);
+                case 12 -> current.withGoal(normalized);
+                case 13 -> current.withInformation(normalized);
+                default -> current;
+            });
+            definitionRepository.save(definition);
+            if (!wasEnabled && definition.getAiControlSettings().enabled() && behaviourService != null) {
+                behaviourService.greetNearbyPlayers(definition);
+            }
+            openAiControl(player, definition);
+        });
     }
 
     private void handleRoutePointAnimationPickerClick(InventoryClickEvent event, Player player,

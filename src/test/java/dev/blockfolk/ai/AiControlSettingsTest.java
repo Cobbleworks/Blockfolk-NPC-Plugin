@@ -1,6 +1,5 @@
 package dev.blockfolk.ai;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -10,7 +9,6 @@ class AiControlSettingsTest {
     @Test
     void defaultsAreDialogueAndVisualOnly() {
         AiControlSettings settings = AiControlSettings.defaults();
-        assertEquals(AiMode.RESPOND, settings.mode());
         assertTrue(settings.allowedActions().contains(AiActionType.SAY));
         assertTrue(settings.allowedActions().contains(AiActionType.PLAY_ANIMATION));
         assertTrue(!settings.allowedActions().contains(AiActionType.START_COMBAT));
@@ -24,7 +22,7 @@ class AiControlSettingsTest {
 
     @Test
     void savingPromptEnablesConversationAndSpeechIsIntrinsic() {
-        AiControlSettings settings = AiControlSettings.defaults().withPrompt("Be a friendly guard")
+        AiControlSettings settings = AiControlSettings.defaults().withIdentity("A friendly guard")
                 .toggle(AiActionType.SAY);
 
         assertTrue(settings.enabled());
@@ -33,11 +31,24 @@ class AiControlSettingsTest {
 
     @Test
     void nearbyChatResponsesCanBeDisabledWithoutDisablingGreetings() {
-        AiControlSettings settings = AiControlSettings.defaults().withPrompt("Be a guard")
+        AiControlSettings settings = AiControlSettings.defaults().withIdentity("A guard")
                 .withRespondToChat(false);
 
         assertTrue(settings.enabled());
         assertTrue(settings.greetOnApproach());
         assertTrue(!settings.respondToChat());
+    }
+
+    @Test
+    void composesStructuredContextWithHeadings() {
+        AiControlSettings settings = AiControlSettings.defaults()
+                .withIdentity("Mira, the village guard")
+                .withGoal("Protect the gate")
+                .withInformation("The market closes at sunset");
+
+        assertTrue(settings.systemContext().contains("Identity:\nMira"));
+        assertTrue(settings.systemContext().contains("Goal or role:\nProtect"));
+        assertTrue(settings.systemContext().contains("Knowledge and information:\nThe market"));
+        assertTrue(settings.configuredSectionCount() == 3);
     }
 }

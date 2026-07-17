@@ -32,7 +32,6 @@ import dev.blockfolk.runtime.NpcInstanceRegistry;
 public final class AiControlService {
 
     private static final double PERCEPTION_RADIUS = 12.0;
-    private static final long CONVERSATION_RESET_MILLIS = 60_000L;
     private static final String RESULT_RULES = """
             Return only one JSON object with an actions array containing 0 to 3 actions.
             Never return Minecraft commands, code, or extra prose. Use only the available actions and target aliases.
@@ -54,7 +53,7 @@ public final class AiControlService {
     private final Map<UUID, Long> lastInvocation = new ConcurrentHashMap<>();
     private final Map<UUID, PendingInvocation> pending = new HashMap<>();
     private final Set<UUID> pendingScheduled = new HashSet<>();
-    private final Map<ConversationKey, Long> lastNearby = new HashMap<>();
+    private final Map<UUID, Long> generations = new ConcurrentHashMap<>();
     private final long cooldownMillis;
     private volatile boolean warnedNotConfigured;
 
@@ -83,7 +82,7 @@ public final class AiControlService {
             Consumer<AiDecision> resultHandler
     ) {
         AiControlSettings settings = definition.getAiControlSettings();
-        if (!settings.enabled() || settings.prompt().isBlank()) return;
+        if (!settings.enabled() || !settings.hasContext()) return;
         if (!client.configured()) {
             if (!warnedNotConfigured) {
                 warnedNotConfigured = true;
@@ -101,9 +100,10 @@ public final class AiControlService {
         }
         lastInvocation.put(instance.getId(), now);
         String detail = eventDetail == null || eventDetail.isBlank() ? describeEvent(event, actor) : eventDetail;
+        long generation = generations.getOrDefault(instance.getId(), 0L);
         memory.rememberEvent(instance.getId(), detail);
         String context = buildContext(event, detail, instance, definition, actor, settings);
-        client.complete(settings.prompt() + "\n\n" + RESULT_RULES, context)
+        client.complete(settings.systemContext() + "\n\n" + RESULT_RULES, context)
                 .whenComplete((content, error) -> {
                     inFlight.remove(instance.getId());
                     if (error != null) {
@@ -112,7 +112,10 @@ public final class AiControlService {
                     } else {
                         AiDecision decision = AiDecisionParser.parse(content, settings);
                         if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
-                            if (instances.findById(instance.getId()).isPresent()) resultHandler.accept(decision);
+                            if (instances.findById(instance.getId()).isPresent()
+                                    && generations.getOrDefault(instance.getId(), 0L) == generation) {
+                                resultHandler.accept(decision);
+                            }
                         });
                     }
                     if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
@@ -130,35 +133,13 @@ public final class AiControlService {
     }
 
     public void rememberPlayerMessage(NpcInstance instance, Player player, String text) {
-        lastNearby.put(new ConversationKey(instance.getId(), player.getUniqueId()), System.currentTimeMillis());
         memory.rememberMessage(instance.getId(), player.getUniqueId(), player.getName() + ": " + text);
     }
 
     public void rememberNpcSpeech(NpcInstance instance, NpcDefinition definition, Player player, String text) {
         if (player != null) {
-            lastNearby.put(new ConversationKey(instance.getId(), player.getUniqueId()), System.currentTimeMillis());
             memory.rememberMessage(instance.getId(), player.getUniqueId(),
                     definition.getDisplayName() + ": " + text);
-        }
-    }
-
-    public void updateNearbyPlayers(NpcInstance instance, Set<UUID> nearbyPlayers) {
-        long now = System.currentTimeMillis();
-        for (UUID playerId : nearbyPlayers) {
-            ConversationKey key = new ConversationKey(instance.getId(), playerId);
-            Long previous = lastNearby.put(key, now);
-            if (previous != null && now - previous > CONVERSATION_RESET_MILLIS) {
-                memory.forgetConversation(key.instanceId(), key.playerId());
-            }
-        }
-        var iterator = lastNearby.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<ConversationKey, Long> entry = iterator.next();
-            ConversationKey key = entry.getKey();
-            if (!key.instanceId().equals(instance.getId()) || nearbyPlayers.contains(key.playerId())) continue;
-            if (now - entry.getValue() <= CONVERSATION_RESET_MILLIS) continue;
-            memory.forgetConversation(key.instanceId(), key.playerId());
-            iterator.remove();
         }
     }
 
@@ -167,8 +148,19 @@ public final class AiControlService {
         lastInvocation.remove(instance.getId());
         pending.remove(instance.getId());
         pendingScheduled.remove(instance.getId());
-        lastNearby.keySet().removeIf(key -> key.instanceId().equals(instance.getId()));
+        generations.remove(instance.getId());
         memory.forget(instance.getId());
+    }
+
+    /** Clears persistent AI memory and invalidates pending responses for every spawned copy. */
+    public void resetDefinition(NpcDefinition definition) {
+        for (NpcInstance instance : instances.findByDefinition(definition)) {
+            UUID instanceId = instance.getId();
+            generations.merge(instanceId, 1L, Long::sum);
+            lastInvocation.remove(instanceId);
+            pending.remove(instanceId);
+            memory.forget(instanceId);
+        }
     }
 
     private void schedulePending(UUID instanceId, long delayMillis) {
@@ -230,9 +222,8 @@ public final class AiControlService {
                 conversation.forEach(item -> out.append("- ").append(item).append('\n'));
             }
         }
-        out.append("\nMode: ").append(settings.mode().displayName()).append("\nAvailable actions:\n");
-        settings.allowedActions().stream().filter(action -> action.permittedBy(settings.mode()))
-                .sorted().forEach(action -> out.append(action.name()).append('\n'));
+        out.append("\nAvailable actions:\n");
+        settings.allowedActions().stream().sorted().forEach(action -> out.append(action.name()).append('\n'));
         if (!settings.allowedActions().contains(AiActionType.DO_NOTHING)) out.append("DO_NOTHING\n");
         return out.toString();
     }
@@ -310,5 +301,4 @@ public final class AiControlService {
             Consumer<AiDecision> resultHandler
     ) { }
 
-    private record ConversationKey(UUID instanceId, UUID playerId) { }
 }
