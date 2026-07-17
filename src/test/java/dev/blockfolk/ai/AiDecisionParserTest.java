@@ -83,6 +83,25 @@ class AiDecisionParserTest {
     }
 
     @Test
+    void followRequiresAndAcceptsPerceivedPlayerTargets() {
+        AiControlSettings settings = new AiControlSettings("Companion", "", "Stay with visitors", "",
+                EnumSet.of(AiActionType.FOLLOW), true, true, true);
+
+        AiDecision missing = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"FOLLOW\"}]}", settings);
+        AiDecision alias = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"FOLLOW\",\"target\":\"nearby_player_1\"}]}", settings);
+        AiDecision playerName = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"FOLLOW\",\"target\":\"VoidValkon\"}]}", settings);
+
+        assertEquals(AiActionType.DO_NOTHING, missing.actions().getFirst().type());
+        assertEquals(AiActionType.FOLLOW, alias.actions().getFirst().type());
+        assertEquals("nearby_player_1", alias.actions().getFirst().target());
+        assertEquals(AiActionType.FOLLOW, playerName.actions().getFirst().type());
+        assertEquals("voidvalkon", playerName.actions().getFirst().target());
+    }
+
+    @Test
     void preservesLongSpeechForChatChunking() {
         String speech = "x".repeat(500);
 

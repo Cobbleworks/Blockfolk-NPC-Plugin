@@ -751,6 +751,16 @@ public final class NpcBehaviourService implements Listener {
             return combatService.findNearestAttackableTarget(instance);
         }
         if (alias.equals("current_target") && combatService != null) return combatService.currentTarget(instance);
+        if (aiControlService != null) {
+            List<Player> perceivedPlayers = aiControlService.nearbyPlayers(instance.getLocation());
+            if (alias.startsWith("nearby_player_")) {
+                int index = targetIndex(alias);
+                return index >= 0 && index < perceivedPlayers.size() ? perceivedPlayers.get(index) : null;
+            }
+            return perceivedPlayers.stream()
+                    .filter(player -> player.getName().equalsIgnoreCase(alias))
+                    .findFirst().orElse(null);
+        }
         return null;
     }
 
@@ -982,17 +992,42 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void startFollowing(NpcInstance instance, Player player) {
-        FollowState state = new FollowState();
-        state.playerId = player == null ? null : player.getUniqueId();
-        following.put(instance.getId(), state);
+        FollowState state = following.computeIfAbsent(instance.getId(), ignored -> new FollowState());
+        updateFollowTarget(instance, state, player);
+        state.navigationTarget = null;
+        state.repathTicks = 0;
+        state.moving = false;
         instances.stand(instance);
         instances.stopNavigating(instance);
     }
 
     private void stopFollowing(NpcInstance instance) {
-        if (following.remove(instance.getId()) != null) {
+        FollowState state = following.remove(instance.getId());
+        if (state != null) {
+            notifyFollowChange(instance, onlinePlayer(state.playerId), false);
             instances.stopNavigating(instance);
         }
+    }
+
+    private void updateFollowTarget(NpcInstance instance, FollowState state, Player player) {
+        UUID playerId = player == null ? null : player.getUniqueId();
+        if (java.util.Objects.equals(state.playerId, playerId)) return;
+        notifyFollowChange(instance, onlinePlayer(state.playerId), false);
+        state.playerId = playerId;
+        notifyFollowChange(instance, player, true);
+    }
+
+    private Player onlinePlayer(UUID playerId) {
+        return playerId == null ? null : Bukkit.getPlayer(playerId);
+    }
+
+    private void notifyFollowChange(NpcInstance instance, Player player, boolean started) {
+        if (player == null) return;
+        definitions.find(instance.getDefinitionKey()).ifPresent(definition -> player.sendMessage(
+                Component.text(definition.getDisplayName() + (started
+                                ? " is now following you..."
+                                : " is no longer following you.."), NamedTextColor.GRAY)
+                        .decorate(TextDecoration.ITALIC)));
     }
 
     private void tickFollow(NpcInstance instance) {
@@ -1003,7 +1038,7 @@ public final class NpcBehaviourService implements Listener {
         Player player = state.playerId == null ? null : Bukkit.getPlayer(state.playerId);
         if (!isFollowTarget(instance, player)) {
             player = nearestPlayer(instance).orElse(null);
-            state.playerId = player == null ? null : player.getUniqueId();
+            updateFollowTarget(instance, state, player);
             state.navigationTarget = null;
         }
         if (player == null) {

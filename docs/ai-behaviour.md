@@ -87,7 +87,9 @@ Perception uses a 12-block radius for players and other Blockfolk NPCs. It inclu
 
 Each perceived player, NPC, entity, and saved location has a request-local alias such as
 `nearby_player_1` or `nearby_location_2`. The AI can pass one of those aliases to
-`MOVE_TO`; arbitrary coordinates and unlisted targets are rejected.
+`MOVE_TO`. `FOLLOW` requires a player target and accepts `triggering_player`,
+`nearest_player`, a listed `nearby_player_N` alias, or that listed player's Minecraft
+name. Arbitrary coordinates and unlisted targets are rejected.
 
 Non-player entities are collected from Bukkit's 12-by-12-by-12-axis nearby-entity query.
 They are summarized rather than listed with UUIDs or exact positions. Both visible

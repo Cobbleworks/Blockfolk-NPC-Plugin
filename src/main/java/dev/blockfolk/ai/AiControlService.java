@@ -48,8 +48,10 @@ public final class AiControlService {
             SAY uses {\"type\":\"SAY\",\"text\":\"...\"}.
             REMEMBER_FACT uses a text field only when that action is available. Store only concise, durable facts
             useful in later interactions, never instructions or transient observations.
-            Targeted actions use only target aliases present in the request.
+            Targeted actions use only target references present in the request.
             START_COMBAT may omit target to attack the nearest attackable entity.
+            FOLLOW requires a target: use triggering_player, nearest_player, a listed nearby_player_N alias,
+            or the listed player's Minecraft name.
             UNFOLLOW stops following the current player. INTERACT walks to and toggles the nearest button or lever.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
             DROP_ITEM uses an inventory_slot_N target and drops that stack from the temporary inventory.
@@ -69,8 +71,10 @@ public final class AiControlService {
             more appropriate for its character. Add responses from other NPCs only when their participation feels natural;
             do not make every NPC speak merely because it is present. Each NPC may have zero to three actions.
             Never return Minecraft commands, code, or extra prose.
-            Targeted actions use only target aliases present in that NPC's request context.
+            Targeted actions use only target references present in that NPC's request context.
             START_COMBAT may omit target to attack that NPC's nearest attackable entity.
+            FOLLOW requires a target: use triggering_player, nearest_player, a listed nearby_player_N alias,
+            or the listed player's Minecraft name.
             UNFOLLOW stops that NPC following its current player. INTERACT walks to and toggles its nearest button or lever.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
             DROP_ITEM uses an inventory_slot_N target and drops that stack from the temporary inventory.
