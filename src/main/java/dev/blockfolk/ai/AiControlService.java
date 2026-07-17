@@ -41,6 +41,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 public final class AiControlService {
 
     private static final double PERCEPTION_RADIUS = 12.0;
+    private static final double LOCATION_PERCEPTION_RADIUS = 64.0;
     private static final String RESULT_RULES = """
             Return only one JSON object with an actions array containing 0 to 3 actions.
             Never return Minecraft commands, code, or extra prose. Use only the available actions and target aliases.
@@ -652,7 +653,7 @@ public final class AiControlService {
                 .filter(named -> named.location().toLocation() != null)
                 .filter(named -> named.location().toLocation().getWorld() == center.getWorld())
                 .filter(named -> named.location().toLocation().distanceSquared(center)
-                        <= PERCEPTION_RADIUS * PERCEPTION_RADIUS)
+                        <= LOCATION_PERCEPTION_RADIUS * LOCATION_PERCEPTION_RADIUS)
                 .sorted(Comparator.comparingDouble(named -> named.location().toLocation().distanceSquared(center)))
                 .limit(5).toList();
     }

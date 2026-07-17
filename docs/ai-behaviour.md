@@ -83,7 +83,7 @@ Perception uses a 12-block radius for players and other Blockfolk NPCs. It inclu
   state;
 - up to five nearby non-player, non-Blockfolk entities, with readable entity type,
   rounded distance, and whether it is the triggering entity;
-- up to five nearest globally saved locations in the same world and within 12 blocks.
+- up to five nearest globally saved locations in the same world and within 64 blocks.
 
 Each perceived player, NPC, entity, and saved location has a request-local alias such as
 `nearby_player_1` or `nearby_location_2`. The AI can pass one of those aliases to
