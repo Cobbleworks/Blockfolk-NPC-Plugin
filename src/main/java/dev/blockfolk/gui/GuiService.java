@@ -49,6 +49,7 @@ import dev.blockfolk.model.CustomEvent;
 import dev.blockfolk.model.LootTier;
 import dev.blockfolk.model.NamedLocation;
 import dev.blockfolk.model.NpcDefinition;
+import dev.blockfolk.model.NpcColor;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.NpcQuestion;
 import dev.blockfolk.model.NpcRoute;
@@ -482,6 +483,9 @@ public final class GuiService implements Listener {
     public void openProperties(Player player, NpcDefinition definition) {
         Inventory inventory = Bukkit.createInventory(new PropertiesHolder(definition.getKey()), 27,
                 UiText.title("NPC Properties", definition.getDisplayName()));
+        inventory.setItem(9, toggleItem(Material.PISTON, "Pushable", definition.isPushable(), List.of(
+                LegacyText.GRAY + "Allow players to move the NPC by bumping into it"
+        )));
         inventory.setItem(11, toggleItem(Material.NAME_TAG, "Show Name", definition.isShowName(), List.of(
                 LegacyText.GRAY + "Show the name hologram above the NPC"
         )));
@@ -492,6 +496,11 @@ public final class GuiService implements Listener {
         inventory.setItem(15, toggleItem(Material.HOPPER, "Item Pickup", definition.isItemPickup(), List.of(
                 LegacyText.GRAY + "Pick up nearby dropped item entities",
                 LegacyText.GRAY + "into this instance's temporary inventory"
+        )));
+        NpcColor color = definition.getColor();
+        inventory.setItem(17, item(color.material(), "Name Color", List.of(
+                LegacyText.GRAY + "Current: " + LegacyText.WHITE + color.displayName(),
+                LegacyText.YELLOW + "Click to cycle through concrete colors"
         )));
         inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
         openInventory(player, inventory);
@@ -1225,9 +1234,11 @@ public final class GuiService implements Listener {
             return;
         }
         switch (event.getRawSlot()) {
+            case 9 -> definition.setPushable(!definition.isPushable());
             case 11 -> definition.setShowName(!definition.isShowName());
             case 13 -> definition.setLookAtPlayer(!definition.isLookAtPlayer());
             case 15 -> definition.setItemPickup(!definition.isItemPickup());
+            case 17 -> definition.setColor(definition.getColor().next());
             case 22 -> {
                 openEditor(player, definition);
                 return;

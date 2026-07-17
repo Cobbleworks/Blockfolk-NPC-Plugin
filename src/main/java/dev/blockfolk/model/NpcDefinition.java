@@ -29,6 +29,8 @@ public final class NpcDefinition {
     private boolean showName;
     private boolean lookAtPlayer;
     private boolean itemPickup;
+    private boolean pushable;
+    private NpcColor color;
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
     private Map<String, List<BehaviourAction>> customEventBehaviours;
 
@@ -41,6 +43,8 @@ public final class NpcDefinition {
         this.movementProfile = MovementProfile.disabled();
         this.showName = true;
         this.lookAtPlayer = true;
+        this.pushable = true;
+        this.color = NpcColor.ORANGE;
         this.behaviours = new EnumMap<>(BehaviourEvent.class);
         this.customEventBehaviours = new java.util.LinkedHashMap<>();
     }
@@ -173,6 +177,22 @@ public final class NpcDefinition {
 
     public void setItemPickup(boolean itemPickup) {
         this.itemPickup = itemPickup;
+    }
+
+    public boolean isPushable() {
+        return pushable;
+    }
+
+    public void setPushable(boolean pushable) {
+        this.pushable = pushable;
+    }
+
+    public NpcColor getColor() {
+        return color;
+    }
+
+    public void setColor(NpcColor color) {
+        this.color = color == null ? NpcColor.ORANGE : color;
     }
 
     public List<BehaviourAction> getBehaviourActions(BehaviourEvent event) {

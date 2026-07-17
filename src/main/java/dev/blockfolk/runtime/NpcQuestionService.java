@@ -68,11 +68,12 @@ public final class NpcQuestionService implements Listener {
     }
 
     /** Queues a question. False means an identical active/queued/resolving request was deduplicated. */
-    public boolean enqueue(Player player, NpcInstance instance, String npcName, NpcQuestion question,
+    public boolean enqueue(Player player, NpcInstance instance, String npcName, NamedTextColor npcColor,
+            NpcQuestion question,
             BiConsumer<List<BehaviourAction>, Runnable> resolver) {
         PlayerState state = states.computeIfAbsent(player.getUniqueId(), ignored -> new PlayerState());
         QuestionKey key = new QuestionKey(instance.getId(), question.id());
-        if (!state.questions.offer(new Request(player.getUniqueId(), instance, npcName, question, key,
+        if (!state.questions.offer(new Request(player.getUniqueId(), instance, npcName, npcColor, question, key,
                 UUID.randomUUID(), resolver))) return false;
         activateNext(player.getUniqueId(), state);
         return true;
@@ -146,7 +147,7 @@ public final class NpcQuestionService implements Listener {
     }
 
     private void show(Player player, Request request) {
-        player.sendMessage(UiText.npcDialog(request.npcName, request.question.prompt()));
+        player.sendMessage(UiText.npcDialog(request.npcName, request.question.prompt(), request.npcColor));
         List<QuestionOption> configuredOptions = request.question.configuredOptions();
         for (int index = 0; index < configuredOptions.size(); index++) {
             int optionIndex = index;
@@ -250,6 +251,7 @@ public final class NpcQuestionService implements Listener {
     }
 
     private record QuestionKey(UUID instanceId, UUID questionId) { }
-    private record Request(UUID playerId, NpcInstance instance, String npcName, NpcQuestion question,
-            QuestionKey key, UUID token, BiConsumer<List<BehaviourAction>, Runnable> resolver) { }
+    private record Request(UUID playerId, NpcInstance instance, String npcName, NamedTextColor npcColor,
+            NpcQuestion question, QuestionKey key, UUID token,
+            BiConsumer<List<BehaviourAction>, Runnable> resolver) { }
 }

@@ -18,6 +18,8 @@ class NpcDefinitionTest {
         assertTrue(definition.isShowName());
         assertTrue(definition.isLookAtPlayer());
         assertFalse(definition.isItemPickup());
+        assertTrue(definition.isPushable());
+        assertEquals(NpcColor.ORANGE, definition.getColor());
     }
 
     @Test

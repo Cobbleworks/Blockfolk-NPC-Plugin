@@ -303,7 +303,8 @@ public final class NpcBehaviourService implements Listener {
                     () -> executeSequence(event, parent, index + 1, instance, definition, actor, completion));
             return;
         }
-        questionService.enqueue(player, instance, definition.getDisplayName(), action.question(),
+        questionService.enqueue(player, instance, definition.getDisplayName(), definition.getColor().textColor(),
+                action.question(),
                 (branch, done) -> executeSequence(event, branch, 0, instance, definition, player,
                         () -> executeSequence(event, parent, index + 1, instance, definition, player, done)));
         // A duplicate intentionally stops only this repeated trigger. Its parent
@@ -1119,7 +1120,8 @@ public final class NpcBehaviourService implements Listener {
         if (line == null) {
             return;
         }
-        Component message = UiText.npcDialog(definition.getDisplayName(), line);
+        Component message = UiText.npcDialog(
+                definition.getDisplayName(), line, definition.getColor().textColor());
         if ((event == BehaviourEvent.PLAYER_APPROACH || event == BehaviourEvent.PLAYER_LEAVES)
                 && actor instanceof Player player && player.isOnline()) {
             player.sendMessage(message);

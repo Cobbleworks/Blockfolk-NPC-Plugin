@@ -26,6 +26,7 @@ import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.MovementProfile;
 import dev.blockfolk.model.NpcDefinition;
+import dev.blockfolk.model.NpcColor;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.util.LocationCodec;
 
@@ -111,6 +112,8 @@ public final class NpcDefinitionRepository {
         configuration.set("properties.show-name", definition.isShowName());
         configuration.set("properties.look-at-player", definition.isLookAtPlayer());
         configuration.set("properties.item-pickup", definition.isItemPickup());
+        configuration.set("properties.pushable", definition.isPushable());
+        configuration.set("properties.color", definition.getColor().name().toLowerCase(Locale.ROOT));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<Map<String, Object>> actions = BehaviourActionCodec.encodeList(definition.getBehaviourActions(event));
             configuration.set("behaviours." + event.name().toLowerCase(Locale.ROOT), actions.isEmpty() ? null : actions);
@@ -214,6 +217,8 @@ public final class NpcDefinitionRepository {
         definition.setShowName(configuration.getBoolean("properties.show-name", true));
         definition.setLookAtPlayer(configuration.getBoolean("properties.look-at-player", true));
         definition.setItemPickup(configuration.getBoolean("properties.item-pickup", false));
+        definition.setPushable(configuration.getBoolean("properties.pushable", true));
+        definition.setColor(NpcColor.fromStored(configuration.getString("properties.color")));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
             String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);

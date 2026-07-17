@@ -25,6 +25,13 @@ class UiTextTest {
     }
 
     @Test
+    void npcDialogAcceptsPerNpcNameColor() {
+        Component dialog = UiText.npcDialog("Ada", "Hello there", NamedTextColor.RED);
+
+        assertEquals(NamedTextColor.RED, dialog.color());
+    }
+
+    @Test
     void feedbackPrefixDoesNotMakeTheMessageBold() {
         Component feedback = UiText.success("Saved.");
 

@@ -52,7 +52,11 @@ public final class UiText {
     }
 
     public static Component npcDialog(String npcName, String line) {
-        return Component.text(npcName, NamedTextColor.GOLD)
+        return npcDialog(npcName, line, NamedTextColor.GOLD);
+    }
+
+    public static Component npcDialog(String npcName, String line, NamedTextColor nameColor) {
+        return Component.text(npcName, nameColor == null ? NamedTextColor.GOLD : nameColor)
                 .decorate(TextDecoration.BOLD)
                 .append(plain(": ", NamedTextColor.DARK_GRAY))
                 .append(plain(line, NamedTextColor.WHITE));

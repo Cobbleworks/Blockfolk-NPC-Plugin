@@ -86,10 +86,8 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
             Mannequin mannequin = location.getWorld().spawn(location, Mannequin.class, spawned -> {
                 spawned.setPersistent(true);
                 spawned.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
-                // Both the native immovable flag and Bukkit's non-collidable flag
-                // make the mannequin ineligible for projectile hit detection. Keep
-                // it hittable and use full knockback resistance plus authoritative
-                // route movement to hold it in place instead.
+                // Collision stays enabled so the mannequin remains a hittable entity.
+                // The definition controls native player-bump movement separately.
                 spawned.setImmovable(false);
                 spawned.setAI(false);
                 spawned.setGravity(false);
@@ -281,7 +279,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         mannequin.setCustomNameVisible(definition.isShowName());
         mannequin.setDescription(null);
         mannequin.setInvisible(false);
-        mannequin.setImmovable(false);
+        mannequin.setImmovable(!definition.isPushable());
         mannequin.setCollidable(true);
         mannequin.setRotation(instance.getLocation().getYaw(), instance.getLocation().getPitch());
         mannequin.setProfile(createProfile(instance, definition));
