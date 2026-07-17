@@ -81,4 +81,15 @@ class AiDecisionParserTest {
         assertEquals(List.of(AiActionType.UNFOLLOW, AiActionType.INTERACT),
                 decision.actions().stream().map(AiDecision.Action::type).toList());
     }
+
+    @Test
+    void preservesLongSpeechForChatChunking() {
+        String speech = "x".repeat(500);
+
+        AiDecision decision = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"SAY\",\"text\":\"" + speech + "\"}]}",
+                AiControlSettings.defaults());
+
+        assertEquals(speech, decision.actions().getFirst().text());
+    }
 }

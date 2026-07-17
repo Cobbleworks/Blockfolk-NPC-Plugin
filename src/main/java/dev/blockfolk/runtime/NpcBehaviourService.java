@@ -1506,17 +1506,17 @@ public final class NpcBehaviourService implements Listener {
         if (line == null) {
             return;
         }
-        Component message = UiText.npcDialog(
+        List<Component> messages = UiText.npcDialogMessages(
                 definition.getDisplayName(), line, definition.getColor().textColor());
         if ((event == BehaviourEvent.PLAYER_APPROACH || event == BehaviourEvent.PLAYER_LEAVES)
                 && actor instanceof Player player && player.isOnline()) {
-            player.sendMessage(message);
+            messages.forEach(player::sendMessage);
             return;
         }
         Location location = instance.getLocation();
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getWorld() == location.getWorld() && player.getLocation().distanceSquared(location) <= DIALOG_RANGE_SQUARED) {
-                player.sendMessage(message);
+                messages.forEach(player::sendMessage);
             }
         }
     }
