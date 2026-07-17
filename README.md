@@ -24,6 +24,18 @@ per second, with a minimum duration of 3 seconds.
 Proximity enter/leave transitions are debounced for 3 seconds by default. Adjust
 `proximity-transition-cooldown-seconds` in `config.yml` if needed.
 
+## Experimental AI Control
+
+AI Control is an opt-in behaviour action. Add it to an event in the Event Behaviour
+editor, then configure its character prompt, mode, and allowed actions. Supported
+event-driven inputs include player chat and approach, NPC attack and damage, combat,
+nearby living entities, idle cycles, and route waypoints. The model can only select
+validated actions enabled for that preset; it cannot return commands or executable code.
+
+Set `openrouter.api-key` and `openrouter.model` in `config.yml` to enable requests.
+Requests run asynchronously, time out independently, and never delay damage, combat,
+death, routing, or other deterministic behaviour actions.
+
 ## Building
 
 Blockfolk requires Java 21 and targets Paper 1.21.11.

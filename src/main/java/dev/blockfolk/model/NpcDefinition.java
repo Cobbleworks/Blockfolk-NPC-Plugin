@@ -12,6 +12,8 @@ import java.util.Set;
 import org.bukkit.Location;
 import org.bukkit.inventory.ItemStack;
 
+import dev.blockfolk.ai.AiControlSettings;
+
 public final class NpcDefinition {
 
     private final String key;
@@ -33,6 +35,7 @@ public final class NpcDefinition {
     private NpcColor color;
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
     private Map<String, List<BehaviourAction>> customEventBehaviours;
+    private AiControlSettings aiControlSettings;
 
     public NpcDefinition(String key) {
         this.key = key;
@@ -47,6 +50,7 @@ public final class NpcDefinition {
         this.color = NpcColor.ORANGE;
         this.behaviours = new EnumMap<>(BehaviourEvent.class);
         this.customEventBehaviours = new java.util.LinkedHashMap<>();
+        this.aiControlSettings = AiControlSettings.defaults();
     }
 
     public static NpcDefinition create(String displayName) {
@@ -273,6 +277,12 @@ public final class NpcDefinition {
             }
             collectRouteKeys(action.question().cancelActions(), routeKeys);
         }
+    }
+
+    public AiControlSettings getAiControlSettings() { return aiControlSettings; }
+
+    public void setAiControlSettings(AiControlSettings settings) {
+        aiControlSettings = settings == null ? AiControlSettings.defaults() : settings;
     }
 
     private static ItemStack[] cloneArray(ItemStack[] source, int length) {

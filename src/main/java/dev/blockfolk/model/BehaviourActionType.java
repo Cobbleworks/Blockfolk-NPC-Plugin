@@ -3,6 +3,7 @@ package dev.blockfolk.model;
 import java.util.Locale;
 
 public enum BehaviourActionType {
+    AI_CONTROL("AI Control (Experimental)", false),
     SEND_DIALOG("Send Dialog", true),
     SHOW_HOLO_DIALOG("Show Holo Dialog", true),
     ASK_QUESTION("Ask Question", false),

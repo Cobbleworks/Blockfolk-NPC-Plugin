@@ -1,5 +1,8 @@
 package dev.blockfolk.repository;
 
+import dev.blockfolk.ai.AiActionType;
+import dev.blockfolk.ai.AiControlSettings;
+import dev.blockfolk.ai.AiMode;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -114,6 +117,11 @@ public final class NpcDefinitionRepository {
         configuration.set("properties.item-pickup", definition.isItemPickup());
         configuration.set("properties.pushable", definition.isPushable());
         configuration.set("properties.color", definition.getColor().name().toLowerCase(Locale.ROOT));
+        AiControlSettings ai = definition.getAiControlSettings();
+        configuration.set("ai-control.prompt", ai.prompt().isBlank() ? null : ai.prompt());
+        configuration.set("ai-control.mode", ai.mode().name().toLowerCase(Locale.ROOT));
+        configuration.set("ai-control.allowed-actions", ai.allowedActions().stream()
+                .map(action -> action.name().toLowerCase(Locale.ROOT)).sorted().toList());
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<Map<String, Object>> actions = BehaviourActionCodec.encodeList(definition.getBehaviourActions(event));
             configuration.set("behaviours." + event.name().toLowerCase(Locale.ROOT), actions.isEmpty() ? null : actions);
@@ -219,6 +227,19 @@ public final class NpcDefinitionRepository {
         definition.setItemPickup(configuration.getBoolean("properties.item-pickup", false));
         definition.setPushable(configuration.getBoolean("properties.pushable", true));
         definition.setColor(NpcColor.fromStored(configuration.getString("properties.color")));
+        java.util.EnumSet<AiActionType> allowedAiActions = java.util.EnumSet.noneOf(AiActionType.class);
+        for (String stored : configuration.getStringList("ai-control.allowed-actions")) {
+            try {
+                allowedAiActions.add(AiActionType.fromModel(stored));
+            } catch (IllegalArgumentException ignored) {
+                plugin.getLogger().warning("Ignoring unknown AI action '" + stored + "' in " + file.getName());
+            }
+        }
+        if (allowedAiActions.isEmpty()) allowedAiActions.addAll(AiActionType.safeDefaults());
+        definition.setAiControlSettings(new AiControlSettings(
+                configuration.getString("ai-control.prompt", ""),
+                AiMode.fromStored(configuration.getString("ai-control.mode")),
+                allowedAiActions));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
             String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);

@@ -107,6 +107,11 @@ public final class NpcCombatService implements Listener {
         return states.containsKey(instance.getId());
     }
 
+    public Entity currentTarget(NpcInstance instance) {
+        CombatState state = states.get(instance.getId());
+        return state == null ? null : Bukkit.getEntity(state.entityId);
+    }
+
     public void setBehaviourService(NpcBehaviourService behaviourService) {
         this.behaviourService = behaviourService;
     }

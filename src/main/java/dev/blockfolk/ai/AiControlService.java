@@ -1,0 +1,240 @@
+package dev.blockfolk.ai;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
+import java.util.logging.Level;
+
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
+
+import dev.blockfolk.model.BehaviourEvent;
+import dev.blockfolk.model.NpcDefinition;
+import dev.blockfolk.model.NpcInstance;
+import dev.blockfolk.repository.NpcDefinitionRepository;
+import dev.blockfolk.runtime.NpcCombatService;
+import dev.blockfolk.runtime.NpcInstanceRegistry;
+
+/** Event-driven OpenRouter bridge. All Bukkit state is captured before the asynchronous request. */
+public final class AiControlService {
+
+    private static final double PERCEPTION_RADIUS = 12.0;
+    private static final String RESULT_RULES = """
+            Return only one JSON object with an actions array containing 0 to 3 actions.
+            Never return Minecraft commands, code, or extra prose. Use only the available actions and target aliases.
+            SAY uses {\"type\":\"SAY\",\"text\":\"...\"}.
+            Targeted actions use target: triggering_player, triggering_entity, nearest_player, or current_target.
+            PLAY_ANIMATION uses animation: wave, jump, sneak, or stand.
+            If no action is appropriate return {\"actions\":[{\"type\":\"DO_NOTHING\"}]}.
+            Keep speech concise and in character. The thought field is optional and never shown to players.
+            """;
+
+    private final Plugin plugin;
+    private final NpcDefinitionRepository definitions;
+    private final NpcInstanceRegistry instances;
+    private final NpcCombatService combat;
+    private final OpenRouterClient client;
+    private final AiMemoryStore memory = new AiMemoryStore();
+    private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Long> lastInvocation = new ConcurrentHashMap<>();
+    private final long cooldownMillis;
+    private volatile boolean warnedNotConfigured;
+
+    public AiControlService(
+            Plugin plugin,
+            NpcDefinitionRepository definitions,
+            NpcInstanceRegistry instances,
+            NpcCombatService combat,
+            OpenRouterClient client,
+            int cooldownSeconds
+    ) {
+        this.plugin = plugin;
+        this.definitions = definitions;
+        this.instances = instances;
+        this.combat = combat;
+        this.client = client;
+        this.cooldownMillis = Math.max(0, cooldownSeconds) * 1000L;
+    }
+
+    public void invoke(
+            BehaviourEvent event,
+            String eventDetail,
+            NpcInstance instance,
+            NpcDefinition definition,
+            Entity actor,
+            Consumer<AiDecision> resultHandler
+    ) {
+        AiControlSettings settings = definition.getAiControlSettings();
+        if (settings.prompt().isBlank()) return;
+        if (!client.configured()) {
+            if (!warnedNotConfigured) {
+                warnedNotConfigured = true;
+                plugin.getLogger().warning("AI Control is configured on an NPC, but openrouter.api-key or model is empty.");
+            }
+            return;
+        }
+        long now = System.currentTimeMillis();
+        long previous = lastInvocation.getOrDefault(instance.getId(), 0L);
+        if (now - previous < cooldownMillis || !inFlight.add(instance.getId())) return;
+        lastInvocation.put(instance.getId(), now);
+        String detail = eventDetail == null || eventDetail.isBlank() ? describeEvent(event, actor) : eventDetail;
+        memory.rememberEvent(instance.getId(), detail);
+        String context = buildContext(event, detail, instance, definition, actor, settings);
+        client.complete(settings.prompt() + "\n\n" + RESULT_RULES, context)
+                .whenComplete((content, error) -> {
+                    inFlight.remove(instance.getId());
+                    if (error != null) {
+                        plugin.getLogger().log(Level.WARNING, "AI Control request failed for " + definition.getKey()
+                                + "; deterministic behaviour continues.", error);
+                        return;
+                    }
+                    AiDecision decision = AiDecisionParser.parse(content, settings);
+                    if (!plugin.isEnabled()) return;
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (instances.findById(instance.getId()).isPresent()) resultHandler.accept(decision);
+                    });
+                });
+    }
+
+    public void rememberPlayerMessage(NpcDefinition definition, Player player, String text) {
+        memory.rememberMessage(definition.getKey(), player.getUniqueId(), player.getName() + ": " + text);
+    }
+
+    public void rememberNpcSpeech(NpcDefinition definition, Player player, String text) {
+        if (player != null) memory.rememberMessage(definition.getKey(), player.getUniqueId(),
+                definition.getDisplayName() + ": " + text);
+    }
+
+    public void forget(NpcInstance instance) {
+        inFlight.remove(instance.getId());
+        lastInvocation.remove(instance.getId());
+        memory.forget(instance.getId());
+    }
+
+    private String buildContext(
+            BehaviourEvent event,
+            String detail,
+            NpcInstance instance,
+            NpcDefinition definition,
+            Entity actor,
+            AiControlSettings settings
+    ) {
+        Location location = instance.getLocation();
+        World world = location.getWorld();
+        LivingEntity npc = instances.findEntity(instance).orElse(null);
+        StringBuilder out = new StringBuilder(1200);
+        out.append("Event:\n").append(detail).append("\n\nNPC state:\n")
+                .append("Name: ").append(definition.getDisplayName()).append('\n')
+                .append("World: ").append(world == null ? "unknown" : world.getName()).append('\n');
+        if (npc != null) out.append("Health: ").append(format(npc.getHealth())).append(" / ")
+                .append(format(npc.getMaxHealth())).append('\n');
+        out.append("Combat: ").append(combat != null && combat.isEngaged(instance) ? "active" : "not active").append('\n')
+                .append("Route: ").append(definition.getMovementProfile().enabled() ? "configured" : "not active").append('\n');
+        if (npc != null) out.append("Equipment: main hand ")
+                .append(npc.getEquipment() == null ? "unknown" : readable(npc.getEquipment().getItemInMainHand().getType().name()))
+                .append('\n');
+        appendNearby(out, instance, actor);
+        if (world != null) {
+            out.append("\nEnvironment:\nTime: ").append(timeName(world.getTime()))
+                    .append("\nWeather: ").append(world.hasStorm() ? "raining" : "clear")
+                    .append("\nBiome: ").append(readable(world.getBiome(location).getKey().getKey()))
+                    .append("\nLight: ").append(lightName(location.getBlock().getLightLevel()))
+                    .append("\nIndoors: ").append(world.getHighestBlockYAt(location) > location.getBlockY() ? "likely" : "no")
+                    .append('\n');
+        }
+        List<String> events = memory.recentEvents(instance.getId());
+        if (!events.isEmpty()) {
+            out.append("\nRecent event memory:\n");
+            events.forEach(item -> out.append("- ").append(item).append('\n'));
+        }
+        if (actor instanceof Player player) {
+            List<String> conversation = memory.recentConversation(definition.getKey(), player.getUniqueId());
+            if (!conversation.isEmpty()) {
+                out.append("\nRecent conversation with ").append(player.getName()).append(":\n");
+                conversation.forEach(item -> out.append("- ").append(item).append('\n'));
+            }
+        }
+        out.append("\nMode: ").append(settings.mode().displayName()).append("\nAvailable actions:\n");
+        settings.allowedActions().stream().filter(action -> action.permittedBy(settings.mode()))
+                .sorted().forEach(action -> out.append(action.name()).append('\n'));
+        if (!settings.allowedActions().contains(AiActionType.DO_NOTHING)) out.append("DO_NOTHING\n");
+        return out.toString();
+    }
+
+    private void appendNearby(StringBuilder out, NpcInstance instance, Entity actor) {
+        Location center = instance.getLocation();
+        if (center.getWorld() == null) return;
+        out.append("\nNearby players:\n");
+        center.getWorld().getPlayers().stream()
+                .filter(player -> player.getLocation().distanceSquared(center) <= PERCEPTION_RADIUS * PERCEPTION_RADIUS)
+                .sorted(Comparator.comparingDouble(player -> player.getLocation().distanceSquared(center)))
+                .limit(5).forEach(player -> out.append("- ").append(player.getName()).append(", ")
+                        .append(distance(player.getLocation(), center)).append(" blocks")
+                        .append(player.equals(actor) ? ", triggering player" : "")
+                        .append(", holding ").append(readable(player.getInventory().getItemInMainHand().getType().name())).append('\n'));
+        out.append("Nearby Blockfolk NPCs:\n");
+        instances.findAll().stream().filter(other -> !other.getId().equals(instance.getId()))
+                .filter(other -> other.getLocation().getWorld() == center.getWorld())
+                .filter(other -> other.getLocation().distanceSquared(center) <= PERCEPTION_RADIUS * PERCEPTION_RADIUS)
+                .sorted(Comparator.comparingDouble(other -> other.getLocation().distanceSquared(center))).limit(3)
+                .forEach(other -> definitions.find(other.getDefinitionKey()).ifPresent(definition -> out
+                        .append("- ").append(definition.getDisplayName()).append(", ")
+                        .append(distance(other.getLocation(), center)).append(" blocks, ")
+                        .append(combat != null && combat.isEngaged(other) ? "in combat" : "not in combat").append('\n')));
+
+        Set<Integer> npcEntityIds = new HashSet<>();
+        for (NpcInstance known : instances.findAll()) npcEntityIds.add(known.getEntityId());
+        Map<String, EntityGroup> groups = new HashMap<>();
+        for (Entity entity : center.getWorld().getNearbyEntities(center, PERCEPTION_RADIUS, PERCEPTION_RADIUS, PERCEPTION_RADIUS)) {
+            if (entity instanceof Player || npcEntityIds.contains(entity.getEntityId())) continue;
+            String type = readable(entity.getType().name());
+            EntityGroup group = groups.computeIfAbsent(type, ignored -> new EntityGroup());
+            group.count++;
+            group.distance = Math.min(group.distance, entity.getLocation().distance(center));
+            group.triggering |= entity.equals(actor);
+        }
+        if (!groups.isEmpty()) {
+            out.append("Nearby entities:\n");
+            groups.entrySet().stream().sorted(Comparator.comparingDouble(entry -> entry.getValue().distance)).limit(5)
+                    .forEach(entry -> out.append("- ").append(entry.getValue().count).append(' ').append(entry.getKey())
+                            .append(", approximately ").append(Math.round(entry.getValue().distance)).append(" blocks")
+                            .append(entry.getValue().triggering ? ", triggering entity" : "").append('\n'));
+        }
+    }
+
+    private static String describeEvent(BehaviourEvent event, Entity actor) {
+        String name = event == null ? "Route action invoked AI Control" : event.displayName();
+        return actor == null ? name : name + ". Triggering entity: " + actor.getName();
+    }
+
+    private static String timeName(long time) {
+        if (time < 1000 || time >= 23000) return "dawn";
+        if (time < 12000) return "day";
+        if (time < 13000) return "sunset";
+        return "night";
+    }
+
+    private static String lightName(int light) { return light < 5 ? "dark" : light < 11 ? "dim" : "bright"; }
+    private static String format(double value) { return String.format(Locale.ROOT, "%.1f", value); }
+    private static long distance(Location one, Location two) { return Math.round(Math.sqrt(one.distanceSquared(two))); }
+    private static String readable(String value) { return value.toLowerCase(Locale.ROOT).replace('_', ' '); }
+
+    private static final class EntityGroup {
+        int count;
+        double distance = Double.MAX_VALUE;
+        boolean triggering;
+    }
+}

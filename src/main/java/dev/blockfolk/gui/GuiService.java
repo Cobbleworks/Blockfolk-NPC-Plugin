@@ -68,6 +68,8 @@ import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
 import dev.blockfolk.util.UiText;
+import dev.blockfolk.ai.AiActionType;
+import dev.blockfolk.ai.AiControlSettings;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -766,6 +768,41 @@ public final class GuiService implements Listener {
         openInventory(player, inventory);
     }
 
+    private void openAiControl(Player player, NpcDefinition definition, ActionPickerHolder action) {
+        AiControlSettings settings = definition.getAiControlSettings();
+        Inventory inventory = Bukkit.createInventory(new AiControlHolder(action), 54,
+                Component.text("AI Control (Experimental)"));
+        inventory.setItem(11, item(Material.WRITABLE_BOOK, "AI Behaviour Prompt", List.of(
+                ChatColor.GRAY + (settings.prompt().isBlank() ? "No character prompt configured" : abbreviate(settings.prompt(), 48)),
+                ChatColor.YELLOW + "Click to enter the character prompt")));
+        inventory.setItem(13, item(Material.COMPARATOR, "Mode: " + settings.mode().displayName(), List.of(
+                ChatColor.GRAY + "Respond is the safest default",
+                ChatColor.YELLOW + "Click to cycle Respond / React / Decide")));
+        inventory.setItem(15, item(Material.OBSERVER, "AI Triggers", List.of(
+                ChatColor.GRAY + "AI runs only where this action is attached",
+                ChatColor.YELLOW + "Click to view behaviour events")));
+        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40};
+        AiActionType[] types = AiActionType.values();
+        for (int index = 0; index < types.length; index++) {
+            AiActionType type = types[index];
+            boolean enabled = type == AiActionType.DO_NOTHING || settings.allowedActions().contains(type);
+            inventory.setItem(slots[index], item(enabled ? Material.REDSTONE_TORCH : Material.LEVER,
+                    type.displayName() + ": " + (enabled ? "Enabled" : "Disabled"), List.of(
+                            ChatColor.GRAY + (type.permittedBy(settings.mode()) ? "Available in this mode" : "Requires a higher-control mode"),
+                            type == AiActionType.DO_NOTHING ? ChatColor.DARK_GRAY + "Always available"
+                                    : ChatColor.YELLOW + "Click to toggle")));
+        }
+        inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
+        inventory.setItem(49, item(Material.LIME_DYE, "Add AI Control", List.of(
+                ChatColor.YELLOW + "Save settings and attach this action")));
+        openInventory(player, inventory);
+    }
+
+    private String abbreviate(String value, int max) {
+        String oneLine = value.replace('\n', ' ');
+        return oneLine.length() <= max ? oneLine : oneLine.substring(0, max - 3) + "...";
+    }
+
     private void openBehaviourValuePicker(
             Player player,
             NpcDefinition definition,
@@ -924,6 +961,8 @@ public final class GuiService implements Listener {
             handleCustomBehaviourClick(event, player, customBehaviourHolder);
         } else if (holder instanceof ActionPickerHolder pickerHolder) {
             handleActionPickerClick(event, player, pickerHolder);
+        } else if (holder instanceof AiControlHolder aiControlHolder) {
+            handleAiControlClick(event, player, aiControlHolder);
         } else if (holder instanceof AnimationPickerHolder animationHolder) {
             handleAnimationPickerClick(event, player, animationHolder);
         } else if (holder instanceof BehaviourValuePickerHolder valuePickerHolder) {
@@ -1669,6 +1708,8 @@ public final class GuiService implements Listener {
             requestRouteWaitAction(player, action);
         } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             requestRouteFightOptionsAction(player, action);
+        } else if (type == BehaviourActionType.AI_CONTROL) {
+            player.sendMessage(Component.text("Attach AI Control to the Route Point Reached behaviour event."));
         } else if (!type.requiresValue()) {
             RoutePoint updated = setRoutePointAction(action, type, null);
             if (updated != null) {
@@ -1691,6 +1732,58 @@ public final class GuiService implements Listener {
                     openWaypointActions(player, action.routeKey(), updated);
                 }
             });
+        }
+    }
+
+    private void handleAiControlClick(InventoryClickEvent event, Player player, AiControlHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        ActionPickerHolder action = holder.action();
+        NpcDefinition definition = definitionRepository.find(action.key()).orElse(null);
+        if (definition == null) {
+            player.closeInventory();
+            return;
+        }
+        int slot = event.getRawSlot();
+        if (slot == 11) {
+            chatInputService.request(player, "Enter the AI character prompt:", value -> {
+                definition.setAiControlSettings(definition.getAiControlSettings().withPrompt(value));
+                definitionRepository.save(definition);
+                openAiControl(player, definition, action);
+            });
+            return;
+        }
+        if (slot == 13) {
+            definition.setAiControlSettings(definition.getAiControlSettings()
+                    .withMode(definition.getAiControlSettings().mode().next()));
+            definitionRepository.save(definition);
+            openAiControl(player, definition, action);
+            return;
+        }
+        if (slot == 15) {
+            openBehaviours(player, definition, action.page());
+            return;
+        }
+        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40};
+        for (int index = 0; index < slots.length; index++) {
+            if (slot != slots[index]) continue;
+            AiActionType type = AiActionType.values()[index];
+            if (type != AiActionType.DO_NOTHING) {
+                definition.setAiControlSettings(definition.getAiControlSettings().toggle(type));
+                definitionRepository.save(definition);
+            }
+            openAiControl(player, definition, action);
+            return;
+        }
+        if (slot == 45) {
+            openActionPicker(player, definition, action.event(), action.customEvent(), action.actionIndex(), action.page());
+        } else if (slot == 49) {
+            if (definition.getAiControlSettings().prompt().isBlank()) {
+                player.sendMessage(Component.text("Configure an AI character prompt before adding AI Control."));
+                return;
+            }
+            setAction(definition, action, BehaviourActionType.AI_CONTROL, null);
+            openBehaviourHome(player, definition, action);
         }
     }
 
@@ -1875,6 +1968,8 @@ public final class GuiService implements Listener {
             requestWaitAction(player, definition, holder);
         } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             requestFightOptionsAction(player, definition, holder);
+        } else if (type == BehaviourActionType.AI_CONTROL) {
+            openAiControl(player, definition, holder);
         } else if (!type.requiresValue()) {
             setAction(definition, holder, type, null);
             openBehaviourHome(player, definition, holder);
@@ -3159,11 +3254,21 @@ public final class GuiService implements Listener {
                 Material.COOKED_BEEF;
             case SUNSET ->
                 Material.SUNFLOWER;
+            case PLAYER_CHAT ->
+                Material.WRITABLE_BOOK;
+            case NPC_ATTACKED ->
+                Material.IRON_SWORD;
+            case ENTITY_NEARBY ->
+                Material.OBSERVER;
+            case ROUTE_POINT_REACHED ->
+                Material.POWERED_RAIL;
         };
     }
 
     private Material actionMaterial(BehaviourActionType type) {
         return switch (type) {
+            case AI_CONTROL ->
+                Material.ENDER_EYE;
             case SEND_DIALOG ->
                 Material.WRITABLE_BOOK;
             case SHOW_HOLO_DIALOG ->
@@ -3403,6 +3508,10 @@ public final class GuiService implements Listener {
         public Inventory getInventory() {
             return null;
         }
+    }
+
+    private record AiControlHolder(ActionPickerHolder action) implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
     }
 
     private record WaypointSession(
