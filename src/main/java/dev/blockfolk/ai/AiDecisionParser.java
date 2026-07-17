@@ -60,8 +60,8 @@ public final class AiDecisionParser {
     }
 
     private static boolean requiresTarget(AiActionType type) {
-        return type == AiActionType.LOOK_AT || type == AiActionType.START_COMBAT
-                || type == AiActionType.FLEE_FROM || type == AiActionType.FOLLOW;
+        return type == AiActionType.START_COMBAT || type == AiActionType.FLEE_FROM
+                || type == AiActionType.FOLLOW;
     }
 
     private static String string(JsonObject object, String name, boolean normalize) {

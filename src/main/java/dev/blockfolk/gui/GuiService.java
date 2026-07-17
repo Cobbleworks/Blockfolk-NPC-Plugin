@@ -474,8 +474,10 @@ public final class GuiService implements Listener {
                 LegacyText.YELLOW + "Click to configure"
         )));
         AiControlSettings ai = definition.getAiControlSettings();
+        String aiStatus = !ai.enabled() ? "Paused"
+                : ai.greetOnApproach() || ai.respondToChat() ? "Active" : "No Triggers";
         inventory.setItem(23, item(Material.ENDER_EYE,
-                "AI Conversations: " + (ai.enabled() ? "Enabled" : "Disabled"), List.of(
+                "AI Behaviour: " + aiStatus, List.of(
                         ai.prompt().isBlank()
                                 ? ChatColor.GRAY + "No character prompt configured"
                                 : ChatColor.GRAY + abbreviate(ai.prompt(), 46),
@@ -787,7 +789,7 @@ public final class GuiService implements Listener {
     private void openAiControl(Player player, NpcDefinition definition) {
         AiControlSettings settings = definition.getAiControlSettings();
         Inventory inventory = Bukkit.createInventory(new AiControlHolder(definition.getKey()), 54,
-                Component.text("AI Conversations"));
+                Component.text("AI Behaviour"));
         boolean providerReady = aiControlService != null && aiControlService.configured();
         inventory.setItem(4, item(providerReady ? Material.LIME_DYE : Material.RED_DYE,
                 "OpenRouter: " + (providerReady ? "Ready" : "Not Configured"), List.of(
@@ -798,30 +800,40 @@ public final class GuiService implements Listener {
         inventory.setItem(11, item(Material.WRITABLE_BOOK, "AI Behaviour Prompt", List.of(
                 ChatColor.GRAY + (settings.prompt().isBlank() ? "No character prompt configured" : abbreviate(settings.prompt(), 48)),
                 ChatColor.YELLOW + "Click to enter the character prompt",
-                ChatColor.DARK_GRAY + "Saving a prompt starts conversations; enter 'clear' to disable")));
+                ChatColor.DARK_GRAY + "A first prompt activates AI; enter 'clear' to disable")));
         inventory.setItem(13, item(Material.COMPARATOR, "Mode: " + settings.mode().displayName(), List.of(
                 ChatColor.GRAY + "Respond is the safest default",
                 ChatColor.YELLOW + "Click to cycle Respond / React / Decide")));
-        inventory.setItem(15, item(Material.OBSERVER, "Conversation Triggers", List.of(
-                ChatColor.GRAY + "Nearby chat is always part of an enabled conversation")));
         inventory.setItem(20, toggleItem(Material.SPYGLASS, "Greet On Approach",
                 settings.greetOnApproach(), "Lets the NPC speak when a player comes close"));
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40};
         AiActionType[] types = AiActionType.values();
         for (int index = 0; index < types.length; index++) {
             AiActionType type = types[index];
-            boolean intrinsic = type == AiActionType.SAY || type == AiActionType.DO_NOTHING;
-            boolean enabled = intrinsic || settings.allowedActions().contains(type);
+            boolean chatToggle = type == AiActionType.SAY;
+            boolean intrinsic = type == AiActionType.DO_NOTHING;
+            boolean enabled = chatToggle ? settings.respondToChat()
+                    : intrinsic || settings.allowedActions().contains(type);
+            String displayName = chatToggle ? "Respond to Nearby Chat" : type.displayName();
             inventory.setItem(slots[index], item(enabled ? Material.REDSTONE_TORCH : Material.LEVER,
-                    type.displayName() + ": " + (enabled ? "Enabled" : "Disabled"), List.of(
-                            ChatColor.GRAY + (type.permittedBy(settings.mode()) ? "Available in this mode" : "Requires a higher-control mode"),
-                            intrinsic ? ChatColor.DARK_GRAY + "Part of every AI conversation"
+                    displayName + ": " + (enabled ? "Enabled" : "Disabled"), List.of(
+                            chatToggle
+                                    ? ChatColor.GRAY + "Reads and answers player chat within 8 blocks"
+                                    : ChatColor.GRAY + (type.permittedBy(settings.mode())
+                                            ? "Available in this mode" : "Requires a higher-control mode"),
+                            intrinsic ? ChatColor.DARK_GRAY + "Always available"
                                     : ChatColor.YELLOW + "Click to toggle")));
         }
         inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
-        inventory.setItem(49, item(settings.enabled() ? Material.RED_DYE : Material.LIME_DYE,
-                settings.enabled() ? "Pause AI Conversations" : "Resume AI Conversations", List.of(
+        boolean hasTrigger = settings.greetOnApproach() || settings.respondToChat();
+        String status = !settings.enabled() ? "Paused" : hasTrigger ? "Active" : "No Triggers";
+        Material statusMaterial = !settings.enabled() ? Material.RED_DYE
+                : hasTrigger ? Material.LIME_DYE : Material.YELLOW_DYE;
+        inventory.setItem(49, item(statusMaterial,
+                "AI Behaviour: " + status, List.of(
                         ChatColor.GRAY + "Applies to every spawned instance of this preset",
+                        hasTrigger ? ChatColor.GRAY + "Automatic triggers are configured"
+                                : ChatColor.RED + "No requests are made and nearby chat is not read",
                         ChatColor.YELLOW + "Click to " + (settings.enabled() ? "pause" : "resume"))));
         openInventory(player, inventory);
     }
@@ -1812,10 +1824,14 @@ public final class GuiService implements Listener {
             return;
         }
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40};
-        for (int index = 0; index < slots.length; index++) {
+        for (int index = 0; index < AiActionType.values().length; index++) {
             if (slot != slots[index]) continue;
             AiActionType type = AiActionType.values()[index];
-            if (type != AiActionType.SAY && type != AiActionType.DO_NOTHING) {
+            if (type == AiActionType.SAY) {
+                definition.setAiControlSettings(definition.getAiControlSettings().withRespondToChat(
+                        !definition.getAiControlSettings().respondToChat()));
+                definitionRepository.save(definition);
+            } else if (type != AiActionType.DO_NOTHING) {
                 definition.setAiControlSettings(definition.getAiControlSettings().toggle(type));
                 definitionRepository.save(definition);
             }
@@ -1827,14 +1843,14 @@ public final class GuiService implements Listener {
         } else if (slot == 49) {
             AiControlSettings settings = definition.getAiControlSettings();
             if (!settings.enabled() && settings.prompt().isBlank()) {
-                player.sendMessage(Component.text("Configure an AI character prompt before enabling conversations."));
+                player.sendMessage(Component.text("Configure an AI character prompt before activating AI behaviour."));
                 return;
             }
             definition.setAiControlSettings(settings.withEnabled(!settings.enabled()));
             definitionRepository.save(definition);
             if (!settings.enabled() && behaviourService != null) behaviourService.greetNearbyPlayers(definition);
             if (!settings.enabled() && aiControlService != null && !aiControlService.configured()) {
-                player.sendMessage(Component.text("AI conversations are enabled, but OpenRouter "
+                player.sendMessage(Component.text("AI behaviour is active, but OpenRouter "
                         + aiControlService.configurationIssue() + ". Check config.yml and restart the server."));
             }
             openAiControl(player, definition);

@@ -472,7 +472,8 @@ public final class NpcBehaviourService implements Listener {
                 NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
                 if (definition == null) continue;
                 String detail = "Player " + player.getName() + " said: \"" + message + "\"";
-                if (aiControlService != null && definition.getAiControlSettings().enabled()) {
+                if (aiControlService != null && definition.getAiControlSettings().enabled()
+                        && definition.getAiControlSettings().respondToChat()) {
                     aiControlService.rememberPlayerMessage(instance, player, message);
                     invokeAi(BehaviourEvent.PLAYER_CHAT, detail, instance, definition, player);
                 }
@@ -599,7 +600,6 @@ public final class NpcBehaviourService implements Listener {
                     aiControlService.rememberNpcSpeech(instance, definition,
                             actor instanceof Player player ? player : null, action.text());
                 }
-                case LOOK_AT -> face(instance, target);
                 case PLAY_ANIMATION -> playAiAnimation(instance, action.animation());
                 case START_COMBAT -> {
                     if (combatService != null) combatService.startCombat(instance, target);
@@ -641,18 +641,6 @@ public final class NpcBehaviourService implements Listener {
         if (alias.equals("nearest_player")) return nearestPlayer(instance).orElse(null);
         if (alias.equals("current_target") && combatService != null) return combatService.currentTarget(instance);
         return null;
-    }
-
-    private void face(NpcInstance instance, Entity target) {
-        if (target == null || target.getWorld() != instance.getLocation().getWorld()) return;
-        instances.findEntity(instance).ifPresent(npc -> {
-            Vector direction = target.getLocation().add(0, target.getHeight() * 0.5, 0).toVector()
-                    .subtract(npc.getEyeLocation().toVector());
-            if (direction.lengthSquared() == 0) return;
-            Location facing = npc.getLocation().setDirection(direction);
-            npc.setRotation(facing.getYaw(), facing.getPitch());
-            npc.setBodyYaw(facing.getYaw());
-        });
     }
 
     private void playAiAnimation(NpcInstance instance, String animation) {
@@ -1257,12 +1245,17 @@ public final class NpcBehaviourService implements Listener {
             activeInstances.put(instance.getId(), instance);
             Location npcLocation = instance.getLocation();
             if (npcLocation.getWorld() == null) {
+                if (aiControlService != null) aiControlService.updateNearbyPlayers(instance, Set.of());
                 continue;
             }
+            Set<UUID> aiNearbyPlayers = new HashSet<>();
             for (Player player : Bukkit.getOnlinePlayers()) {
                 ProximityKey key = new ProximityKey(instance.getId(), player.getUniqueId());
                 evaluated.add(key);
                 boolean wasNearby = nearbyPlayers.contains(key);
+                boolean withinConversationRange = player.getWorld() == npcLocation.getWorld()
+                        && player.getLocation().distanceSquared(npcLocation) <= APPROACH_RANGE_SQUARED;
+                if (withinConversationRange) aiNearbyPlayers.add(player.getUniqueId());
                 double range = wasNearby ? LEAVE_RANGE_SQUARED : APPROACH_RANGE_SQUARED;
                 boolean withinRange = player.getWorld() == npcLocation.getWorld()
                         && player.getLocation().distanceSquared(npcLocation) <= range;
@@ -1296,6 +1289,7 @@ public final class NpcBehaviourService implements Listener {
                     trigger(BehaviourEvent.PLAYER_LEAVES, instance, player);
                 }
             }
+            if (aiControlService != null) aiControlService.updateNearbyPlayers(instance, aiNearbyPlayers);
         }
         for (ProximityKey key : nearbyPlayers) {
             if (evaluated.contains(key)) {

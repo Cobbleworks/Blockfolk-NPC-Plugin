@@ -122,6 +122,7 @@ public final class NpcDefinitionRepository {
         configuration.set("ai-control.prompt", ai.prompt().isBlank() ? null : ai.prompt());
         configuration.set("ai-control.mode", ai.mode().name().toLowerCase(Locale.ROOT));
         configuration.set("ai-control.greet-on-approach", ai.greetOnApproach());
+        configuration.set("ai-control.respond-to-chat", ai.respondToChat());
         configuration.set("ai-control.allowed-actions", ai.allowedActions().stream()
                 .map(action -> action.name().toLowerCase(Locale.ROOT)).sorted().toList());
         for (BehaviourEvent event : BehaviourEvent.values()) {
@@ -231,6 +232,7 @@ public final class NpcDefinitionRepository {
         definition.setColor(NpcColor.fromStored(configuration.getString("properties.color")));
         java.util.EnumSet<AiActionType> allowedAiActions = java.util.EnumSet.noneOf(AiActionType.class);
         for (String stored : configuration.getStringList("ai-control.allowed-actions")) {
+            if (stored.trim().replace('-', '_').equalsIgnoreCase("LOOK_AT")) continue;
             try {
                 allowedAiActions.add(AiActionType.fromModel(stored));
             } catch (IllegalArgumentException ignored) {
@@ -245,7 +247,8 @@ public final class NpcDefinitionRepository {
                 AiMode.fromStored(configuration.getString("ai-control.mode")),
                 allowedAiActions,
                 configuration.getBoolean("ai-control.enabled", legacyAiEnabled),
-                configuration.getBoolean("ai-control.greet-on-approach", true)));
+                configuration.getBoolean("ai-control.greet-on-approach", true),
+                configuration.getBoolean("ai-control.respond-to-chat", true)));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
             String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);

@@ -12,7 +12,6 @@ class AiControlSettingsTest {
         AiControlSettings settings = AiControlSettings.defaults();
         assertEquals(AiMode.RESPOND, settings.mode());
         assertTrue(settings.allowedActions().contains(AiActionType.SAY));
-        assertTrue(settings.allowedActions().contains(AiActionType.LOOK_AT));
         assertTrue(settings.allowedActions().contains(AiActionType.PLAY_ANIMATION));
         assertTrue(!settings.allowedActions().contains(AiActionType.START_COMBAT));
     }
@@ -30,5 +29,15 @@ class AiControlSettingsTest {
 
         assertTrue(settings.enabled());
         assertTrue(settings.allowedActions().contains(AiActionType.SAY));
+    }
+
+    @Test
+    void nearbyChatResponsesCanBeDisabledWithoutDisablingGreetings() {
+        AiControlSettings settings = AiControlSettings.defaults().withPrompt("Be a guard")
+                .withRespondToChat(false);
+
+        assertTrue(settings.enabled());
+        assertTrue(settings.greetOnApproach());
+        assertTrue(!settings.respondToChat());
     }
 }

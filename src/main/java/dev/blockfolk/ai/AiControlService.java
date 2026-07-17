@@ -32,6 +32,7 @@ import dev.blockfolk.runtime.NpcInstanceRegistry;
 public final class AiControlService {
 
     private static final double PERCEPTION_RADIUS = 12.0;
+    private static final long CONVERSATION_RESET_MILLIS = 60_000L;
     private static final String RESULT_RULES = """
             Return only one JSON object with an actions array containing 0 to 3 actions.
             Never return Minecraft commands, code, or extra prose. Use only the available actions and target aliases.
@@ -53,6 +54,7 @@ public final class AiControlService {
     private final Map<UUID, Long> lastInvocation = new ConcurrentHashMap<>();
     private final Map<UUID, PendingInvocation> pending = new HashMap<>();
     private final Set<UUID> pendingScheduled = new HashSet<>();
+    private final Map<ConversationKey, Long> lastNearby = new HashMap<>();
     private final long cooldownMillis;
     private volatile boolean warnedNotConfigured;
 
@@ -85,7 +87,7 @@ public final class AiControlService {
         if (!client.configured()) {
             if (!warnedNotConfigured) {
                 warnedNotConfigured = true;
-                plugin.getLogger().warning("AI Control is configured on an NPC, but openrouter.api-key or model is empty.");
+                plugin.getLogger().warning("AI Behaviour is configured on an NPC, but openrouter.api-key or model is empty.");
             }
             return;
         }
@@ -105,7 +107,7 @@ public final class AiControlService {
                 .whenComplete((content, error) -> {
                     inFlight.remove(instance.getId());
                     if (error != null) {
-                        plugin.getLogger().log(Level.WARNING, "AI Control request failed for " + definition.getKey()
+                        plugin.getLogger().log(Level.WARNING, "AI Behaviour request failed for " + definition.getKey()
                                 + "; deterministic behaviour continues.", error);
                     } else {
                         AiDecision decision = AiDecisionParser.parse(content, settings);
@@ -128,12 +130,36 @@ public final class AiControlService {
     }
 
     public void rememberPlayerMessage(NpcInstance instance, Player player, String text) {
+        lastNearby.put(new ConversationKey(instance.getId(), player.getUniqueId()), System.currentTimeMillis());
         memory.rememberMessage(instance.getId(), player.getUniqueId(), player.getName() + ": " + text);
     }
 
     public void rememberNpcSpeech(NpcInstance instance, NpcDefinition definition, Player player, String text) {
-        if (player != null) memory.rememberMessage(instance.getId(), player.getUniqueId(),
-                definition.getDisplayName() + ": " + text);
+        if (player != null) {
+            lastNearby.put(new ConversationKey(instance.getId(), player.getUniqueId()), System.currentTimeMillis());
+            memory.rememberMessage(instance.getId(), player.getUniqueId(),
+                    definition.getDisplayName() + ": " + text);
+        }
+    }
+
+    public void updateNearbyPlayers(NpcInstance instance, Set<UUID> nearbyPlayers) {
+        long now = System.currentTimeMillis();
+        for (UUID playerId : nearbyPlayers) {
+            ConversationKey key = new ConversationKey(instance.getId(), playerId);
+            Long previous = lastNearby.put(key, now);
+            if (previous != null && now - previous > CONVERSATION_RESET_MILLIS) {
+                memory.forgetConversation(key.instanceId(), key.playerId());
+            }
+        }
+        var iterator = lastNearby.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<ConversationKey, Long> entry = iterator.next();
+            ConversationKey key = entry.getKey();
+            if (!key.instanceId().equals(instance.getId()) || nearbyPlayers.contains(key.playerId())) continue;
+            if (now - entry.getValue() <= CONVERSATION_RESET_MILLIS) continue;
+            memory.forgetConversation(key.instanceId(), key.playerId());
+            iterator.remove();
+        }
     }
 
     public void forget(NpcInstance instance) {
@@ -141,6 +167,7 @@ public final class AiControlService {
         lastInvocation.remove(instance.getId());
         pending.remove(instance.getId());
         pendingScheduled.remove(instance.getId());
+        lastNearby.keySet().removeIf(key -> key.instanceId().equals(instance.getId()));
         memory.forget(instance.getId());
     }
 
@@ -252,7 +279,7 @@ public final class AiControlService {
     }
 
     private static String describeEvent(BehaviourEvent event, Entity actor) {
-        String name = event == null ? "Route action invoked AI Control" : event.displayName();
+        String name = event == null ? "AI Behaviour was invoked" : event.displayName();
         return actor == null ? name : name + ". Triggering entity: " + actor.getName();
     }
 
@@ -282,4 +309,6 @@ public final class AiControlService {
             Entity actor,
             Consumer<AiDecision> resultHandler
     ) { }
+
+    private record ConversationKey(UUID instanceId, UUID playerId) { }
 }

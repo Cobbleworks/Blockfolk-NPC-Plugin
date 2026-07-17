@@ -24,15 +24,15 @@ per second, with a minimum duration of 3 seconds.
 Proximity enter/leave transitions are debounced for 3 seconds by default. Adjust
 `proximity-transition-cooldown-seconds` in `config.yml` if needed.
 
-## AI Conversations
+## AI Behaviour
 
-AI Conversations are configured directly from an NPC preset's dedicated menu. Enable
-the feature by setting its character prompt, mode, allowed actions, and optional approach
-greeting. Saving a prompt enables conversations automatically; nearby chat is always
-part of an enabled conversation. The NPC reads chat sent within eight blocks so it can
-answer with the recent conversation in context. Each spawned NPC keeps
-its own conversation memory. The model can only select validated actions enabled for
-that preset; it cannot return commands or executable code.
+AI Behaviour is configured directly from an NPC preset's dedicated menu. Set its
+character prompt, mode, allowed actions, and automatic triggers. The NPC can optionally
+greet approaching players and respond to chat sent within eight blocks. Disabling nearby
+chat responses also stops the NPC from reading that chat. Each spawned NPC keeps its own
+per-player conversation memory, which resets after that player remains outside the
+eight-block interaction range for more than 60 seconds. The model can only select
+validated actions enabled for that preset; it cannot return commands or executable code.
 
 Set `openrouter.api-key` and `openrouter.model` in `config.yml` to enable requests.
 Requests run asynchronously and do not delay deterministic NPC behaviour. If players

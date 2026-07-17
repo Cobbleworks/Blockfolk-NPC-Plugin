@@ -6,7 +6,6 @@ import java.util.Set;
 
 public enum AiActionType {
     SAY("Speak", AiMode.RESPOND),
-    LOOK_AT("Look At Entity", AiMode.RESPOND),
     PLAY_ANIMATION("Play Animation", AiMode.RESPOND),
     START_COMBAT("Start Combat", AiMode.REACT),
     STOP_COMBAT("Stop Combat", AiMode.REACT),
@@ -33,6 +32,6 @@ public enum AiActionType {
     }
 
     public static Set<AiActionType> safeDefaults() {
-        return EnumSet.of(SAY, LOOK_AT, PLAY_ANIMATION, DO_NOTHING);
+        return EnumSet.of(SAY, PLAY_ANIMATION, DO_NOTHING);
     }
 }

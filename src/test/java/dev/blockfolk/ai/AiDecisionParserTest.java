@@ -11,7 +11,7 @@ class AiDecisionParserTest {
     @Test
     void validatesActionsIndependently() {
         AiControlSettings settings = new AiControlSettings("Be Mira", AiMode.REACT,
-                EnumSet.of(AiActionType.SAY, AiActionType.LOOK_AT, AiActionType.START_COMBAT));
+                EnumSet.of(AiActionType.SAY, AiActionType.START_COMBAT));
         AiDecision decision = AiDecisionParser.parse("""
                 {"thought":"hidden","actions":[
                   {"type":"SAY","text":"Back away."},

@@ -8,7 +8,8 @@ public record AiControlSettings(
         AiMode mode,
         Set<AiActionType> allowedActions,
         boolean enabled,
-        boolean greetOnApproach
+        boolean greetOnApproach,
+        boolean respondToChat
 ) {
 
     public AiControlSettings {
@@ -23,21 +24,22 @@ public record AiControlSettings(
     }
 
     public AiControlSettings(String prompt, AiMode mode, Set<AiActionType> allowedActions) {
-        this(prompt, mode, allowedActions, !normalizePrompt(prompt).isBlank(), true);
+        this(prompt, mode, allowedActions, !normalizePrompt(prompt).isBlank(), true, true);
     }
 
     public static AiControlSettings defaults() {
-        return new AiControlSettings("", AiMode.RESPOND, AiActionType.safeDefaults(), false, true);
+        return new AiControlSettings("", AiMode.RESPOND, AiActionType.safeDefaults(), false, true, true);
     }
 
     public AiControlSettings withPrompt(String prompt) {
         String normalized = normalizePrompt(prompt);
+        boolean updatedEnabled = normalized.isBlank() ? false : this.prompt.isBlank() ? true : enabled;
         return new AiControlSettings(normalized, mode, allowedActions,
-                !normalized.isBlank(), greetOnApproach);
+                updatedEnabled, greetOnApproach, respondToChat);
     }
 
     public AiControlSettings withMode(AiMode mode) {
-        return new AiControlSettings(prompt, mode, allowedActions, enabled, greetOnApproach);
+        return new AiControlSettings(prompt, mode, allowedActions, enabled, greetOnApproach, respondToChat);
     }
 
     public AiControlSettings toggle(AiActionType action) {
@@ -45,15 +47,19 @@ public record AiControlSettings(
                 ? EnumSet.noneOf(AiActionType.class) : EnumSet.copyOf(allowedActions);
         if (!updated.remove(action)) updated.add(action);
         updated.add(AiActionType.DO_NOTHING);
-        return new AiControlSettings(prompt, mode, updated, enabled, greetOnApproach);
+        return new AiControlSettings(prompt, mode, updated, enabled, greetOnApproach, respondToChat);
     }
 
     public AiControlSettings withEnabled(boolean enabled) {
-        return new AiControlSettings(prompt, mode, allowedActions, enabled, greetOnApproach);
+        return new AiControlSettings(prompt, mode, allowedActions, enabled, greetOnApproach, respondToChat);
     }
 
     public AiControlSettings withGreetOnApproach(boolean greetOnApproach) {
-        return new AiControlSettings(prompt, mode, allowedActions, enabled, greetOnApproach);
+        return new AiControlSettings(prompt, mode, allowedActions, enabled, greetOnApproach, respondToChat);
+    }
+
+    public AiControlSettings withRespondToChat(boolean respondToChat) {
+        return new AiControlSettings(prompt, mode, allowedActions, enabled, greetOnApproach, respondToChat);
     }
 
     private static String normalizePrompt(String prompt) {

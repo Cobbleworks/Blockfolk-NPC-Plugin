@@ -64,7 +64,7 @@ public final class OpenRouterClient {
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Content-Type", "application/json")
                 .header("HTTP-Referer", "https://github.com/blockfolk")
-                .header("X-Title", "Blockfolk AI Control")
+                .header("X-Title", "Blockfolk AI Behaviour")
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                 .build();
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
