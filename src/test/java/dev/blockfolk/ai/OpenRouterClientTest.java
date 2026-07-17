@@ -24,11 +24,4 @@ class OpenRouterClientTest {
 
         assertTrue(error.getMessage().contains("finish reason: length"));
     }
-
-    @Test
-    void increasesLengthRetryAllowanceWithoutExceedingSafetyCap() {
-        assertEquals(1600, OpenRouterClient.retryTokens(800));
-        assertEquals(4096, OpenRouterClient.retryTokens(3000));
-        assertEquals(4096, OpenRouterClient.retryTokens(4096));
-    }
 }

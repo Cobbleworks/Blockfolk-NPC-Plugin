@@ -35,10 +35,7 @@ Commands, executable code, unrecognized actions, and capabilities disabled in th
 preset are rejected.
 
 The request uses temperature `0.4`, JSON-object response formatting, and the configured
-`openrouter.max-tokens` value (800 by default).
-If a group-chat response ends because that output allowance was exhausted before any
-content was produced, Blockfolk retries it once with twice the allowance, capped at 4096
-tokens. Other failures are not retried.
+`openrouter.max-tokens` value (1600 by default).
 
 ## Current event
 

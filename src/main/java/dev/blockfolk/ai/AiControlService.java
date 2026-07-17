@@ -224,7 +224,7 @@ public final class AiControlService {
         Map<String, AiControlSettings> settingsByAlias = new java.util.LinkedHashMap<>();
         aliases.forEach((alias, participant) -> settingsByAlias.put(alias, participant.settings()));
 
-        client.completeWithLengthRetry(system.toString(), context.toString()).whenComplete((content, error) -> {
+        client.complete(system.toString(), context.toString()).whenComplete((content, error) -> {
             groupInFlight.remove(groupKey);
             participants.forEach(participant -> inFlight.remove(participant.instance().getId()));
             if (error != null) {

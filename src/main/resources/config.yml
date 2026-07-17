@@ -13,9 +13,8 @@ openrouter:
   api-key: ""
   model: ""
   timeout-seconds: 12
-  # Initial output allowance. Group chat retries once at double this value (up to 4096)
-  # if the model exhausts it before returning any content.
-  max-tokens: 800
+  # Output allowance for reasoning and the final JSON decision.
+  max-tokens: 1600
 ai-control:
   # Per-NPC protection in addition to trigger-specific event throttling.
   invocation-cooldown-seconds: 2

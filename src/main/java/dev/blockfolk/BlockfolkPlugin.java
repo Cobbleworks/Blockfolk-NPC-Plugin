@@ -125,7 +125,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 getConfig().getString("openrouter.api-key", ""),
                 getConfig().getString("openrouter.model", ""),
                 getConfig().getInt("openrouter.timeout-seconds", 12),
-                getConfig().getInt("openrouter.max-tokens", 800));
+                getConfig().getInt("openrouter.max-tokens", 1600));
         aiControlService = new AiControlService(this, definitionRepository, instanceRegistry, combatService,
                 openRouterClient, getConfig().getInt("ai-control.invocation-cooldown-seconds", 2));
         behaviourService.setAiControlService(aiControlService);

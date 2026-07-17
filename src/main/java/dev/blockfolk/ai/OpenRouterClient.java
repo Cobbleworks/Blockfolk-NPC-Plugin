@@ -6,7 +6,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -14,8 +13,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 public final class OpenRouterClient {
-
-    private static final int MAX_LENGTH_RETRY_TOKENS = 4096;
 
     private final HttpClient client;
     private final URI endpoint;
@@ -25,7 +22,7 @@ public final class OpenRouterClient {
     private final int maxTokens;
 
     public OpenRouterClient(String endpoint, String apiKey, String model, int timeoutSeconds) {
-        this(endpoint, apiKey, model, timeoutSeconds, 800);
+        this(endpoint, apiKey, model, timeoutSeconds, 1600);
     }
 
     public OpenRouterClient(String endpoint, String apiKey, String model, int timeoutSeconds, int maxTokens) {
@@ -49,29 +46,12 @@ public final class OpenRouterClient {
     }
 
     public CompletableFuture<String> complete(String systemPrompt, String context) {
-        return complete(systemPrompt, context, maxTokens);
-    }
-
-    /** Retries once with a larger output allowance when no content fits in the configured limit. */
-    public CompletableFuture<String> completeWithLengthRetry(String systemPrompt, String context) {
-        return complete(systemPrompt, context).handle((content, error) -> {
-            Throwable cause = unwrap(error);
-            if (cause == null) return CompletableFuture.completedFuture(content);
-            int retryTokens = retryTokens(maxTokens);
-            if (!(cause instanceof OutputLengthException) || retryTokens <= maxTokens) {
-                return CompletableFuture.<String>failedFuture(cause);
-            }
-            return complete(systemPrompt, context, retryTokens);
-        }).thenCompose(result -> result);
-    }
-
-    private CompletableFuture<String> complete(String systemPrompt, String context, int outputTokens) {
         if (!configured()) return CompletableFuture.failedFuture(
                 new IllegalStateException("OpenRouter API key and model are not configured"));
         JsonObject body = new JsonObject();
         body.addProperty("model", model);
         body.addProperty("temperature", 0.4);
-        body.addProperty("max_tokens", outputTokens);
+        body.addProperty("max_tokens", maxTokens);
         JsonObject responseFormat = new JsonObject();
         responseFormat.addProperty("type", "json_object");
         body.add("response_format", responseFormat);
@@ -118,9 +98,6 @@ public final class OpenRouterClient {
             }
             String finishReason = choice.has("finish_reason") && choice.get("finish_reason").isJsonPrimitive()
                     ? choice.get("finish_reason").getAsString() : "unknown";
-            if (finishReason.equalsIgnoreCase("length")) {
-                throw new OutputLengthException("OpenRouter returned no message content (finish reason: length)");
-            }
             throw new IllegalStateException("OpenRouter returned no message content (finish reason: "
                     + finishReason + ")");
         } catch (IllegalStateException exception) {
@@ -137,23 +114,4 @@ public final class OpenRouterClient {
         return message;
     }
 
-    static int retryTokens(int configuredTokens) {
-        return configuredTokens >= MAX_LENGTH_RETRY_TOKENS
-                ? configuredTokens : Math.min(MAX_LENGTH_RETRY_TOKENS, configuredTokens * 2);
-    }
-
-    private static Throwable unwrap(Throwable error) {
-        Throwable current = error;
-        while ((current instanceof CompletionException || current instanceof java.util.concurrent.ExecutionException)
-                && current.getCause() != null) {
-            current = current.getCause();
-        }
-        return current;
-    }
-
-    private static final class OutputLengthException extends IllegalStateException {
-        private OutputLengthException(String message) {
-            super(message);
-        }
-    }
 }
