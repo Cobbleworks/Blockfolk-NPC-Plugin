@@ -476,13 +476,13 @@ public final class GuiService implements Listener {
         )));
         AiControlSettings ai = definition.getAiControlSettings();
         String aiStatus = !ai.enabled() ? "Paused"
-                : ai.greetOnApproach() || ai.respondToChat() ? "Active" : "No Triggers";
+                : ai.greetOnApproach() || ai.respondToChat() || ai.reactToNearbyDeaths() ? "Active" : "No Triggers";
         inventory.setItem(23, item(Material.COPPER_GOLEM_STATUE,
                 "AI Behaviour: " + aiStatus, List.of(
                         ChatColor.GRAY + "Context sections: " + ChatColor.WHITE
                                 + ai.configuredSectionCount() + "/4",
                         providerStatusLore(),
-                         ChatColor.GRAY + "Reads nearby chat; approach greeting is optional",
+                         ChatColor.GRAY + "Optional chat, approach, and nearby-death reactions",
                          ChatColor.YELLOW + "Click to configure"
                  )));
         CombatProfile combat = definition.getCombatProfile();
@@ -800,6 +800,8 @@ public final class GuiService implements Listener {
                 "Facts, lore, rules, and local knowledge it may use"));
         inventory.setItem(20, toggleItem(Material.SPYGLASS, "Greet On Approach",
                 settings.greetOnApproach(), "Lets the NPC speak when a player comes close"));
+        inventory.setItem(21, toggleItem(Material.SKELETON_SKULL, "React To Nearby Deaths",
+                settings.reactToNearbyDeaths(), "Lets the NPC comment when someone dies within 12 blocks"));
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
         AiActionType[] types = AiActionType.values();
         for (int index = 0; index < types.length; index++) {
@@ -818,7 +820,8 @@ public final class GuiService implements Listener {
                                     : ChatColor.YELLOW + "Click to toggle")));
         }
         inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
-        boolean hasTrigger = settings.greetOnApproach() || settings.respondToChat();
+        boolean hasTrigger = settings.greetOnApproach() || settings.respondToChat()
+                || settings.reactToNearbyDeaths();
         String status = !settings.enabled() ? "Paused" : hasTrigger ? "Active" : "No Triggers";
         Material statusMaterial = !settings.enabled() ? Material.RED_DYE
                 : hasTrigger ? Material.LIME_DYE : Material.YELLOW_DYE;
@@ -1806,6 +1809,14 @@ public final class GuiService implements Listener {
                     enabling));
             definitionRepository.save(definition);
             if (enabling && behaviourService != null) behaviourService.greetNearbyPlayers(definition);
+            openAiControl(player, definition);
+            return;
+        }
+        if (slot == 21) {
+            AiControlSettings settings = definition.getAiControlSettings();
+            definition.setAiControlSettings(settings.withReactToNearbyDeaths(
+                    !settings.reactToNearbyDeaths()));
+            definitionRepository.save(definition);
             openAiControl(player, definition);
             return;
         }

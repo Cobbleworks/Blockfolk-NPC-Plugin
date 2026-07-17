@@ -12,6 +12,7 @@ import java.util.function.Consumer;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Pose;
@@ -159,6 +160,10 @@ public final class NpcInstanceRegistry implements Listener {
 
     public Collection<NpcInstance> findAll() {
         return instances.values();
+    }
+
+    public boolean isNavigationEntity(Entity entity) {
+        return navigationService.isNavigator(entity);
     }
 
     public boolean move(NpcInstance instance, Location location) {

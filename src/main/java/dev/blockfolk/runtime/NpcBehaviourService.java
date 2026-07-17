@@ -71,6 +71,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 public final class NpcBehaviourService implements Listener {
 
     private static final double DIALOG_RANGE_SQUARED = 12.0 * 12.0;
+    private static final double NEARBY_DEATH_RANGE_SQUARED = 12.0 * 12.0;
     private static final double APPROACH_RANGE_SQUARED = 8.0 * 8.0;
     private static final double LEAVE_RANGE_SQUARED = 10.0 * 10.0;
     private static final double HEAL_BURST_THRESHOLD = 4.0;
@@ -449,11 +450,70 @@ public final class NpcBehaviourService implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onDeath(EntityDeathEvent event) {
-        instances.findByEntityId(event.getEntity().getEntityId())
-                .ifPresent(instance -> {
-                    trigger(BehaviourEvent.DEATH, instance, null);
-                    Bukkit.getScheduler().runTask(plugin, () -> forget(instance));
-                });
+        NpcInstance deceasedNpc = instances.findByEntityId(event.getEntity().getEntityId()).orElse(null);
+        if (deceasedNpc != null) {
+            trigger(BehaviourEvent.DEATH, deceasedNpc, null);
+            Bukkit.getScheduler().runTask(plugin, () -> forget(deceasedNpc));
+        }
+        notifyNearbyAiOfDeath(event, deceasedNpc);
+    }
+
+    private void notifyNearbyAiOfDeath(EntityDeathEvent event, NpcInstance deceasedNpc) {
+        LivingEntity deceased = event.getEntity();
+        if (instances.isNavigationEntity(deceased)) return;
+        Location deathLocation = deceased.getLocation();
+        Entity killer = event.getDamageSource().getCausingEntity();
+        if (killer == null) killer = event.getDamageSource().getDirectEntity();
+        String detail = nearbyDeathDetail(event, killer);
+        for (NpcInstance observer : List.copyOf(instances.findAll())) {
+            if (deceasedNpc != null && observer.getId().equals(deceasedNpc.getId())) continue;
+            Location observerLocation = observer.getLocation();
+            if (observerLocation.getWorld() != deathLocation.getWorld()
+                    || observerLocation.distanceSquared(deathLocation) > NEARBY_DEATH_RANGE_SQUARED) continue;
+            NpcDefinition definition = definitions.find(observer.getDefinitionKey()).orElse(null);
+            if (definition == null || !definition.getAiControlSettings().enabled()
+                    || !definition.getAiControlSettings().reactToNearbyDeaths()) continue;
+            invokeAi(null, detail + " Distance from the NPC: "
+                    + Math.round(observerLocation.distance(deathLocation)) + " blocks.",
+                    observer, definition, killer);
+        }
+    }
+
+    private String nearbyDeathDetail(EntityDeathEvent event, Entity killer) {
+        LivingEntity deceased = event.getEntity();
+        StringBuilder detail = new StringBuilder("A nearby ").append(entityDescription(deceased)).append(" died.");
+        if (killer != null && !killer.getUniqueId().equals(deceased.getUniqueId())) {
+            detail.append(" Killer: ").append(entityDescription(killer));
+            if (killer instanceof LivingEntity living && living.getEquipment() != null) {
+                Material held = living.getEquipment().getItemInMainHand().getType();
+                if (!held.isAir()) detail.append(", using ").append(readableEntityType(held.name()));
+            }
+            detail.append('.');
+        } else {
+            detail.append(" No killer entity was attributed.");
+        }
+        detail.append(" Damage cause: ")
+                .append(readableEntityType(event.getDamageSource().getDamageType().getKey().getKey())).append('.');
+        Entity direct = event.getDamageSource().getDirectEntity();
+        if (direct != null && (killer == null || !direct.getUniqueId().equals(killer.getUniqueId()))) {
+            detail.append(" Direct cause: ").append(entityDescription(direct)).append('.');
+        }
+        return detail.toString();
+    }
+
+    private String entityDescription(Entity entity) {
+        NpcInstance npc = instances.findByEntityId(entity.getEntityId()).orElse(null);
+        if (npc != null) {
+            return definitions.find(npc.getDefinitionKey())
+                    .map(definition -> "Blockfolk NPC " + definition.getDisplayName())
+                    .orElse("Blockfolk NPC");
+        }
+        if (entity instanceof Player player) return "player " + player.getName();
+        return readableEntityType(entity.getType().name());
+    }
+
+    private static String readableEntityType(String value) {
+        return value.toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -725,6 +785,7 @@ public final class NpcBehaviourService implements Listener {
             List<Entity> nearby = center.getWorld().getNearbyEntities(center, 8, 8, 8).stream()
                     .filter(entity -> entity instanceof LivingEntity && !(entity instanceof Player))
                     .filter(entity -> !npcEntityIds.contains(entity.getEntityId()))
+                    .filter(entity -> !instances.isNavigationEntity(entity))
                     .sorted(Comparator.comparingDouble(entity -> entity.getLocation().distanceSquared(center))).toList();
             Set<UUID> current = nearby.stream().map(Entity::getUniqueId).collect(java.util.stream.Collectors.toSet());
             Set<UUID> previous = observedEntities.put(instance.getId(), current);

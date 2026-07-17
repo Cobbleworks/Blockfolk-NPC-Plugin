@@ -2,8 +2,9 @@
 
 Blockfolk sends an AI request only when the NPC preset is active, at least one context
 section is configured, OpenRouter is configured, and an enabled trigger fires. The two
-automatic triggers are an approach greeting and nearby player chat. Chat is accepted
-within eight blocks of the NPC.
+automatic triggers are an approach greeting, nearby player chat, and an optional nearby
+death reaction. Chat is accepted within eight blocks of the NPC; deaths are observed
+within twelve blocks.
 
 Opening the NPC preset's admin editor clears AI memory and queued interactions for every
 spawned instance of that preset. Conversation history otherwise has no time or distance
@@ -20,9 +21,10 @@ Each request contains two messages:
 
 The system message also requires a single JSON response containing zero to three
 validated actions. It describes the accepted action and target formats, requests concise
-in-character speech, and asks the model to greet on approach or answer nearby chat when
-the corresponding event triggered the request. Commands, executable code, unrecognized
-actions, and capabilities disabled in the preset are rejected.
+in-character speech, and asks the model to greet on approach, answer nearby chat, or
+respond naturally to a nearby death when the corresponding event triggered the request.
+Commands, executable code, unrecognized actions, and capabilities disabled in the
+preset are rejected.
 
 The request uses temperature `0.4`, JSON-object response formatting, and the configured
 `openrouter.max-tokens` value (800 by default).
@@ -33,7 +35,9 @@ The user message begins with a plain-language event description. For automatic A
 behaviour this is currently one of:
 
 - the player's name and the fact that they approached or are already near the NPC;
-- the player's name and exact nearby chat message.
+- the player's name and exact nearby chat message;
+- a nearby death, including victim, rounded distance, Minecraft damage cause, and the
+  killer, held weapon, and direct cause (such as a projectile) when available.
 
 Chat is sent only when Respond to Nearby Chat is enabled. When it is disabled, Blockfolk
 does not store that new chat for later use.
@@ -63,7 +67,8 @@ Perception uses a 12-block radius for players and other Blockfolk NPCs. It inclu
   entity.
 
 Non-player entities are collected from Bukkit's 12-by-12-by-12-axis nearby-entity query.
-They are summarized rather than listed with UUIDs or exact positions.
+They are summarized rather than listed with UUIDs or exact positions. Both visible
+Blockfolk mannequin entities and their invisible husk navigation helpers are excluded.
 
 ## Environment
 

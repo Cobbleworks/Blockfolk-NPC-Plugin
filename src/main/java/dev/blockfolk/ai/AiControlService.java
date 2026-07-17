@@ -49,6 +49,7 @@ public final class AiControlService {
             If no action is appropriate return {\"actions\":[{\"type\":\"DO_NOTHING\"}]}.
             Keep speech concise and in character. The thought field is optional and never shown to players.
             When a player approaches, greet them using SAY. When a nearby player speaks, answer using SAY.
+            For a nearby death, react naturally to the victim, killer, weapon, and cause; SAY something concise or do nothing.
             """;
 
     private final Plugin plugin;
@@ -262,7 +263,8 @@ public final class AiControlService {
         for (NpcInstance known : instances.findAll()) npcEntityIds.add(known.getEntityId());
         Map<String, EntityGroup> groups = new HashMap<>();
         for (Entity entity : center.getWorld().getNearbyEntities(center, PERCEPTION_RADIUS, PERCEPTION_RADIUS, PERCEPTION_RADIUS)) {
-            if (entity instanceof Player || npcEntityIds.contains(entity.getEntityId())) continue;
+            if (entity instanceof Player || npcEntityIds.contains(entity.getEntityId())
+                    || instances.isNavigationEntity(entity)) continue;
             String type = readable(entity.getType().name());
             EntityGroup group = groups.computeIfAbsent(type, ignored -> new EntityGroup());
             group.count++;

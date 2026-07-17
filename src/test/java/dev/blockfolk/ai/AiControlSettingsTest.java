@@ -42,6 +42,16 @@ class AiControlSettingsTest {
     }
 
     @Test
+    void nearbyDeathReactionsAreOptInAndPreservedByOtherChanges() {
+        AiControlSettings defaults = AiControlSettings.defaults();
+        assertFalse(defaults.reactToNearbyDeaths());
+
+        AiControlSettings enabled = defaults.withReactToNearbyDeaths(true).withIdentity("A wary guard");
+        assertTrue(enabled.reactToNearbyDeaths());
+        assertTrue(enabled.enabled());
+    }
+
+    @Test
     void composesStructuredContextWithHeadings() {
         AiControlSettings settings = AiControlSettings.defaults()
                 .withIdentity("Mira, the village guard")

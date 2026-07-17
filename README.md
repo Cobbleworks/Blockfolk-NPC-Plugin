@@ -28,8 +28,10 @@ Proximity enter/leave transitions are debounced for 3 seconds by default. Adjust
 
 AI Behaviour is configured directly from an NPC preset's dedicated menu. Context is
 split into Identity, Personality & Behaviour, Goal / Role, and Knowledge / Information.
-The NPC can optionally greet approaching players and respond to chat sent within eight
-blocks. Disabling nearby chat responses also stops the NPC from reading that chat. Each
+The NPC can optionally greet approaching players, respond to chat sent within eight
+blocks, and comment on deaths within twelve blocks. Death reactions receive the victim,
+killer, held weapon, and Minecraft damage cause when available. Disabling nearby chat
+responses also stops the NPC from reading that chat. Each
 spawned NPC keeps its own per-player conversation memory until an administrator opens
 that NPC preset's editor, which resets AI state globally for its spawned copies. The
 model can only select validated capabilities enabled for that preset; it cannot return

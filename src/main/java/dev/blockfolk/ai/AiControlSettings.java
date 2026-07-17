@@ -11,8 +11,16 @@ public record AiControlSettings(
         Set<AiActionType> allowedActions,
         boolean enabled,
         boolean greetOnApproach,
-        boolean respondToChat
+        boolean respondToChat,
+        boolean reactToNearbyDeaths
 ) {
+
+    public AiControlSettings(String identity, String behaviour, String goal, String information,
+            Set<AiActionType> allowedActions, boolean enabled, boolean greetOnApproach,
+            boolean respondToChat) {
+        this(identity, behaviour, goal, information, allowedActions, enabled, greetOnApproach,
+                respondToChat, false);
+    }
 
     public AiControlSettings {
         identity = normalize(identity);
@@ -28,7 +36,7 @@ public record AiControlSettings(
     }
 
     public static AiControlSettings defaults() {
-        return new AiControlSettings("", "", "", "", AiActionType.safeDefaults(), false, false, true);
+        return new AiControlSettings("", "", "", "", AiActionType.safeDefaults(), false, false, true, false);
     }
 
     public boolean hasContext() {
@@ -71,7 +79,7 @@ public record AiControlSettings(
                 || !normalize(goal).isBlank() || !normalize(information).isBlank();
         boolean updatedEnabled = !hasUpdatedContext ? false : !hadContext || enabled;
         return new AiControlSettings(identity, behaviour, goal, information, allowedActions,
-                updatedEnabled, greetOnApproach, respondToChat);
+                updatedEnabled, greetOnApproach, respondToChat, reactToNearbyDeaths);
     }
 
     public AiControlSettings toggle(AiActionType action) {
@@ -79,22 +87,27 @@ public record AiControlSettings(
         if (!updated.remove(action)) updated.add(action);
         updated.add(AiActionType.DO_NOTHING);
         return new AiControlSettings(identity, behaviour, goal, information, updated,
-                enabled, greetOnApproach, respondToChat);
+                enabled, greetOnApproach, respondToChat, reactToNearbyDeaths);
     }
 
     public AiControlSettings withEnabled(boolean enabled) {
         return new AiControlSettings(identity, behaviour, goal, information, allowedActions,
-                enabled, greetOnApproach, respondToChat);
+                enabled, greetOnApproach, respondToChat, reactToNearbyDeaths);
     }
 
     public AiControlSettings withGreetOnApproach(boolean greetOnApproach) {
         return new AiControlSettings(identity, behaviour, goal, information, allowedActions,
-                enabled, greetOnApproach, respondToChat);
+                enabled, greetOnApproach, respondToChat, reactToNearbyDeaths);
     }
 
     public AiControlSettings withRespondToChat(boolean respondToChat) {
         return new AiControlSettings(identity, behaviour, goal, information, allowedActions,
-                enabled, greetOnApproach, respondToChat);
+                enabled, greetOnApproach, respondToChat, reactToNearbyDeaths);
+    }
+
+    public AiControlSettings withReactToNearbyDeaths(boolean reactToNearbyDeaths) {
+        return new AiControlSettings(identity, behaviour, goal, information, allowedActions,
+                enabled, greetOnApproach, respondToChat, reactToNearbyDeaths);
     }
 
     private static void append(StringBuilder target, String heading, String value) {

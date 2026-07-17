@@ -127,6 +127,7 @@ public final class NpcDefinitionRepository {
         configuration.set("ai-control.information", ai.information().isBlank() ? null : ai.information());
         configuration.set("ai-control.greet-on-approach", ai.greetOnApproach());
         configuration.set("ai-control.respond-to-chat", ai.respondToChat());
+        configuration.set("ai-control.react-to-nearby-deaths", ai.reactToNearbyDeaths());
         configuration.set("ai-control.allowed-actions", ai.allowedActions().stream()
                 .map(action -> action.name().toLowerCase(Locale.ROOT)).sorted().toList());
         for (BehaviourEvent event : BehaviourEvent.values()) {
@@ -259,7 +260,8 @@ public final class NpcDefinitionRepository {
                 configuration.getBoolean("ai-control.enabled", legacyAiEnabled
                         || !identity.isBlank() || !behaviour.isBlank() || !goal.isBlank() || !information.isBlank()),
                 configuration.getBoolean("ai-control.greet-on-approach", false),
-                configuration.getBoolean("ai-control.respond-to-chat", true)));
+                configuration.getBoolean("ai-control.respond-to-chat", true),
+                configuration.getBoolean("ai-control.react-to-nearby-deaths", false)));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
             String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);
