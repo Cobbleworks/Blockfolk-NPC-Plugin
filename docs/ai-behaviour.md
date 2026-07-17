@@ -1,5 +1,9 @@
 # AI Behaviour request context
 
+Requests use OpenRouter with reasoning effort set to `none` for lower-latency gameplay
+responses. An animated `.`, `..`, `...` hologram is shown above an NPC only while its
+request is actively in flight.
+
 Blockfolk sends an AI request only when the NPC preset is active, at least one context
 section is configured, OpenRouter is configured, and an enabled trigger fires. The two
 automatic triggers are an approach greeting, nearby player chat, and an optional nearby

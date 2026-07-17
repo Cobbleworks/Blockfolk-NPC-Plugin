@@ -47,6 +47,10 @@ Requests run asynchronously and do not delay deterministic NPC behaviour. If pla
 speak while a request or cooldown is active, the latest interaction is queued rather
 than silently discarded.
 
+AI requests explicitly disable model reasoning to reduce response latency. While a
+request is in flight, a hologram above each participating NPC cycles through `.`, `..`,
+and `...`; it disappears when the request finishes or fails.
+
 See [AI Behaviour request context](docs/ai-behaviour.md) for the exact state, nearby
 perception, memory, and capability information sent to OpenRouter.
 

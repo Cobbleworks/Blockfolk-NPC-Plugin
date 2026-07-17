@@ -144,6 +144,9 @@ public final class NpcBehaviourService implements Listener {
 
     public void setAiControlService(AiControlService aiControlService) {
         this.aiControlService = aiControlService;
+        if (aiControlService != null) {
+            aiControlService.setProcessingHandlers(dialogService::showProcessing, dialogService::hideProcessing);
+        }
     }
 
     public void start() {

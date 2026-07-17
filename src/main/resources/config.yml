@@ -13,7 +13,7 @@ openrouter:
   api-key: ""
   model: ""
   timeout-seconds: 12
-  # Output allowance for reasoning and the final JSON decision.
+  # Output allowance for the final JSON decision. Reasoning is disabled for lower latency.
   max-tokens: 1600
 ai-control:
   # Per-NPC protection in addition to trigger-specific event throttling.

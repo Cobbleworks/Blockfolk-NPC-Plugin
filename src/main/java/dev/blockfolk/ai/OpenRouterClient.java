@@ -52,6 +52,9 @@ public final class OpenRouterClient {
         body.addProperty("model", model);
         body.addProperty("temperature", 0.4);
         body.addProperty("max_tokens", maxTokens);
+        JsonObject reasoning = new JsonObject();
+        reasoning.addProperty("effort", "none");
+        body.add("reasoning", reasoning);
         JsonObject responseFormat = new JsonObject();
         responseFormat.addProperty("type", "json_object");
         body.add("response_format", responseFormat);

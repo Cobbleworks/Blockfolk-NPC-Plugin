@@ -477,7 +477,9 @@ public final class GuiService implements Listener {
         AiControlSettings ai = definition.getAiControlSettings();
         String aiStatus = !ai.enabled() ? "Paused"
                 : ai.greetOnApproach() || ai.respondToChat() || ai.reactToNearbyDeaths() ? "Active" : "No Triggers";
-        inventory.setItem(23, item(Material.COPPER_GOLEM_STATUE,
+        inventory.setItem(23, item(ai.enabled()
+                        ? Material.OXIDIZED_COPPER_GOLEM_STATUE
+                        : Material.COPPER_GOLEM_STATUE,
                 "AI Behaviour: " + aiStatus, List.of(
                         ChatColor.GRAY + "Context sections: " + ChatColor.WHITE
                                 + ai.configuredSectionCount() + "/4",

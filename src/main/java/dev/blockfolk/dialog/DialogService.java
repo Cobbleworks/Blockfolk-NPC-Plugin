@@ -103,7 +103,30 @@ public final class DialogService {
             displays.put(instance.getId(), runtime);
         }
         runtime.display.text(Component.text(line));
+        runtime.processing = false;
         runtime.overrideSeconds = lineDurationSeconds(line);
+    }
+
+    public void showProcessing(NpcInstance instance) {
+        if (instance.getLocation().getWorld() == null) return;
+        DialogRuntime runtime = displays.get(instance.getId());
+        if (runtime == null || !runtime.display.isValid()) {
+            Location location = instance.getLocation().add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0);
+            TextDisplay display = (TextDisplay) location.getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
+            configureDisplay(display, instance);
+            runtime = new DialogRuntime(display);
+            displays.put(instance.getId(), runtime);
+        }
+        runtime.processing = true;
+        runtime.processingFrame = 0;
+        runtime.display.text(Component.text("."));
+    }
+
+    public void hideProcessing(NpcInstance instance) {
+        DialogRuntime runtime = displays.get(instance.getId());
+        if (runtime == null || !runtime.processing) return;
+        runtime.display.remove();
+        displays.remove(instance.getId());
     }
 
     private void removeTaggedDisplays(UUID instanceId) {
@@ -122,6 +145,11 @@ public final class DialogService {
         Iterator<Map.Entry<UUID, DialogRuntime>> displayIterator = displays.entrySet().iterator();
         while (displayIterator.hasNext()) {
             DialogRuntime runtime = displayIterator.next().getValue();
+            if (runtime.processing) {
+                runtime.processingFrame = (runtime.processingFrame + 1) % 3;
+                runtime.display.text(Component.text(".".repeat(runtime.processingFrame + 1)));
+                continue;
+            }
             if (--runtime.overrideSeconds <= 0) {
                 runtime.display.remove();
                 displayIterator.remove();
@@ -133,6 +161,8 @@ public final class DialogService {
 
         private final TextDisplay display;
         private int overrideSeconds;
+        private boolean processing;
+        private int processingFrame;
 
         private DialogRuntime(TextDisplay display) {
             this.display = display;

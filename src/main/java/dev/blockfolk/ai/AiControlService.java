@@ -88,6 +88,8 @@ public final class AiControlService {
     private final Map<UUID, PendingGroupInvocation> pendingGroups = new HashMap<>();
     private final Set<UUID> pendingGroupScheduled = new HashSet<>();
     private final long cooldownMillis;
+    private Consumer<NpcInstance> processingStarted = ignored -> { };
+    private Consumer<NpcInstance> processingFinished = ignored -> { };
     private volatile boolean warnedNotConfigured;
 
     public AiControlService(
@@ -104,6 +106,11 @@ public final class AiControlService {
         this.combat = combat;
         this.client = client;
         this.cooldownMillis = Math.max(0, cooldownSeconds) * 1000L;
+    }
+
+    public void setProcessingHandlers(Consumer<NpcInstance> started, Consumer<NpcInstance> finished) {
+        processingStarted = started == null ? ignored -> { } : started;
+        processingFinished = finished == null ? ignored -> { } : finished;
     }
 
     public void invoke(
@@ -136,9 +143,12 @@ public final class AiControlService {
         long generation = generations.getOrDefault(instance.getId(), 0L);
         memory.rememberEvent(instance.getId(), detail);
         String context = buildContext(event, detail, instance, definition, actor, settings);
+        processingStarted.accept(instance);
         client.complete(settings.systemContext() + "\n\n" + RESULT_RULES, context)
                 .whenComplete((content, error) -> {
                     inFlight.remove(instance.getId());
+                    if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin,
+                            () -> processingFinished.accept(instance));
                     if (error != null) {
                         plugin.getLogger().log(Level.WARNING, "AI Behaviour request failed for " + definition.getKey()
                                 + "; deterministic behaviour continues.", error);
@@ -246,9 +256,12 @@ public final class AiControlService {
         Map<String, AiControlSettings> settingsByAlias = new java.util.LinkedHashMap<>();
         aliases.forEach((alias, participant) -> settingsByAlias.put(alias, participant.settings()));
 
+        participants.forEach(participant -> processingStarted.accept(participant.instance()));
         client.complete(system.toString(), context.toString()).whenComplete((content, error) -> {
             groupInFlight.remove(groupKey);
             participants.forEach(participant -> inFlight.remove(participant.instance().getId()));
+            if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> participants.forEach(
+                    participant -> processingFinished.accept(participant.instance())));
             if (error != null) {
                 plugin.getLogger().log(Level.WARNING, "AI Behaviour group chat request failed; deterministic behaviour continues.", error);
             } else {
@@ -296,6 +309,7 @@ public final class AiControlService {
     }
 
     public void forget(NpcInstance instance) {
+        processingFinished.accept(instance);
         inFlight.remove(instance.getId());
         lastInvocation.remove(instance.getId());
         pending.remove(instance.getId());
@@ -309,6 +323,7 @@ public final class AiControlService {
     /** Clears runtime conversation/event memory and invalidates pending responses for every spawned copy. */
     public void resetDefinition(NpcDefinition definition) {
         for (NpcInstance instance : instances.findByDefinition(definition)) {
+            processingFinished.accept(instance);
             UUID instanceId = instance.getId();
             generations.merge(instanceId, 1L, Long::sum);
             lastInvocation.remove(instanceId);
