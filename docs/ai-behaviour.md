@@ -1,8 +1,8 @@
 # AI Behaviour request context
 
 Requests use OpenRouter with reasoning effort set to `none` for lower-latency gameplay
-responses. An animated `.`, `..`, `...` hologram is shown above an NPC only while its
-request is actively in flight.
+responses. An animated `Thinking.`, `Thinking..`, `Thinking...` hologram is shown above
+an NPC only while its request is actively in flight.
 
 Blockfolk sends an AI request only when the NPC preset is active, at least one context
 section is configured, OpenRouter is configured, and an enabled trigger fires. The two
@@ -110,6 +110,8 @@ Blockfolk keeps two forms of runtime memory per spawned NPC:
 Only the conversation belonging to the player who triggered the current request is
 included. Conversations are not shared between spawned copies of the same preset, but a
 group chat request supplies each participating NPC's own conversation memory to the model.
+After a coordinated response, every participating NPC stores every spoken line from the
+group turn so later conversations retain the same shared awareness.
 
 An optional third form is long-term preset memory. When enabled, up to 45 durable facts
 are persisted in the NPC definition and included in future requests for every spawned

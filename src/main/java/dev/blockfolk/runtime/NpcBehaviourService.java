@@ -558,7 +558,8 @@ public final class NpcBehaviourService implements Listener {
             if (aiControlService != null && !aiGroup.isEmpty()) {
                 aiControlService.invokeChatGroup(detail, aiGroup, player, (instance, decision) ->
                         definitions.find(instance.getDefinitionKey()).ifPresent(definition ->
-                                applyAiDecision(BehaviourEvent.PLAYER_CHAT, decision, instance, definition, player)));
+                                applyAiDecision(BehaviourEvent.PLAYER_CHAT, decision, instance, definition, player,
+                                        false)));
             }
         });
     }
@@ -671,13 +672,26 @@ public final class NpcBehaviourService implements Listener {
             NpcDefinition definition,
             Entity actor
     ) {
+        applyAiDecision(event, decision, instance, definition, actor, true);
+    }
+
+    private void applyAiDecision(
+            BehaviourEvent event,
+            AiDecision decision,
+            NpcInstance instance,
+            NpcDefinition definition,
+            Entity actor,
+            boolean rememberOwnSpeech
+    ) {
         for (AiDecision.Action action : decision.actions()) {
             Entity target = resolveAiTarget(action.target(), instance, actor);
             switch (action.type()) {
                 case SAY -> {
                     sendDialog(event, instance, definition, action.text(), actor);
-                    aiControlService.rememberNpcSpeech(instance, definition,
-                            actor instanceof Player player ? player : null, action.text());
+                    if (rememberOwnSpeech) {
+                        aiControlService.rememberNpcSpeech(instance, definition,
+                                actor instanceof Player player ? player : null, action.text());
+                    }
                 }
                 case PLAY_ANIMATION -> playAiAnimation(instance, action.animation());
                 case START_COMBAT -> {

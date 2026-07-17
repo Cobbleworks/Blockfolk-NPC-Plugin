@@ -22,6 +22,7 @@ import net.kyori.adventure.text.Component;
 public final class DialogService {
 
     private static final double DIALOG_DISPLAY_Y_OFFSET = 2.4;
+    private static final String PROCESSING_PREFIX = "Thinking";
     private static final int MINIMUM_LINE_DURATION_SECONDS = 3;
     private static final int CHARACTERS_PER_SECOND = 12;
 
@@ -119,7 +120,7 @@ public final class DialogService {
         }
         runtime.processing = true;
         runtime.processingFrame = 0;
-        runtime.display.text(Component.text("."));
+        runtime.display.text(Component.text(PROCESSING_PREFIX + "."));
     }
 
     public void hideProcessing(NpcInstance instance) {
@@ -147,7 +148,8 @@ public final class DialogService {
             DialogRuntime runtime = displayIterator.next().getValue();
             if (runtime.processing) {
                 runtime.processingFrame = (runtime.processingFrame + 1) % 3;
-                runtime.display.text(Component.text(".".repeat(runtime.processingFrame + 1)));
+                runtime.display.text(Component.text(PROCESSING_PREFIX
+                        + ".".repeat(runtime.processingFrame + 1)));
                 continue;
             }
             if (--runtime.overrideSeconds <= 0) {

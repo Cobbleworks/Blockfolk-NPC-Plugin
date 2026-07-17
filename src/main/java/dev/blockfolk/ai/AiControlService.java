@@ -142,29 +142,53 @@ public final class AiControlService {
         String detail = eventDetail == null || eventDetail.isBlank() ? describeEvent(event, actor) : eventDetail;
         long generation = generations.getOrDefault(instance.getId(), 0L);
         memory.rememberEvent(instance.getId(), detail);
-        String context = buildContext(event, detail, instance, definition, actor, settings);
-        processingStarted.accept(instance);
-        client.complete(settings.systemContext() + "\n\n" + RESULT_RULES, context)
-                .whenComplete((content, error) -> {
-                    inFlight.remove(instance.getId());
-                    if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin,
-                            () -> processingFinished.accept(instance));
-                    if (error != null) {
-                        plugin.getLogger().log(Level.WARNING, "AI Behaviour request failed for " + definition.getKey()
-                                + "; deterministic behaviour continues.", error);
-                    } else {
-                        AiDecision decision = AiDecisionParser.parse(content, settings);
+        String context;
+        try {
+            context = buildContext(event, detail, instance, definition, actor, settings);
+        } catch (RuntimeException error) {
+            inFlight.remove(instance.getId());
+            plugin.getLogger().log(Level.WARNING,
+                    "Could not build AI Behaviour context for " + definition.getKey(), error);
+            return;
+        }
+        try {
+            processingStarted.accept(instance);
+        } catch (RuntimeException error) {
+            inFlight.remove(instance.getId());
+            plugin.getLogger().log(Level.WARNING,
+                    "Could not show AI processing state for " + definition.getKey(), error);
+            return;
+        }
+        try {
+            client.complete(settings.systemContext() + "\n\n" + RESULT_RULES, context)
+                    .whenComplete((content, error) -> {
+                        inFlight.remove(instance.getId());
+                        scheduleFinishProcessing(instance);
+                        if (error != null) {
+                            plugin.getLogger().log(Level.WARNING,
+                                    "AI Behaviour request failed for " + definition.getKey()
+                                            + "; deterministic behaviour continues.", error);
+                        } else {
+                            AiDecision decision = AiDecisionParser.parse(content, settings);
+                            if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
+                                if (instances.findById(instance.getId()).isPresent()
+                                        && generations.getOrDefault(instance.getId(), 0L) == generation) {
+                                    resultHandler.accept(decision);
+                                }
+                            });
+                        }
                         if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
-                            if (instances.findById(instance.getId()).isPresent()
-                                    && generations.getOrDefault(instance.getId(), 0L) == generation) {
-                                resultHandler.accept(decision);
+                            if (pending.containsKey(instance.getId())) {
+                                schedulePending(instance.getId(), cooldownMillis);
                             }
                         });
-                    }
-                    if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
-                        if (pending.containsKey(instance.getId())) schedulePending(instance.getId(), cooldownMillis);
                     });
-                });
+        } catch (RuntimeException error) {
+            inFlight.remove(instance.getId());
+            safeFinishProcessing(instance);
+            plugin.getLogger().log(Level.WARNING,
+                    "Could not start AI Behaviour request for " + definition.getKey(), error);
+        }
     }
 
     public boolean configured() {
@@ -196,7 +220,7 @@ public final class AiControlService {
         }
 
         UUID groupKey = player.getUniqueId();
-        if (groupInFlight.contains(groupKey)) {
+        if (!groupInFlight.add(groupKey)) {
             pendingGroups.put(groupKey, new PendingGroupInvocation(
                     eventDetail, List.copyOf(candidates), player, resultHandler));
             schedulePendingGroup(groupKey, cooldownMillis);
@@ -210,6 +234,7 @@ public final class AiControlService {
                 .filter(participant -> !inFlight.contains(participant.instance().getId()))
                 .toList();
         if (participants.isEmpty()) {
+            groupInFlight.remove(groupKey);
             pendingGroups.put(groupKey, new PendingGroupInvocation(
                     eventDetail, List.copyOf(candidates), player, resultHandler));
             schedulePendingGroup(groupKey, cooldownMillis);
@@ -220,14 +245,24 @@ public final class AiControlService {
         long previous = participants.stream().mapToLong(participant ->
                 lastInvocation.getOrDefault(participant.instance().getId(), 0L)).max().orElse(0L);
         if (now - previous < cooldownMillis) {
+            groupInFlight.remove(groupKey);
             pendingGroups.put(groupKey, new PendingGroupInvocation(
                     eventDetail, List.copyOf(candidates), player, resultHandler));
             schedulePendingGroup(groupKey, Math.max(1L, cooldownMillis - (now - previous)));
             return;
         }
-        groupInFlight.add(groupKey);
+        List<GroupParticipant> claimedParticipants = participants.stream()
+                .filter(participant -> inFlight.add(participant.instance().getId()))
+                .toList();
+        if (claimedParticipants.isEmpty()) {
+            groupInFlight.remove(groupKey);
+            pendingGroups.put(groupKey, new PendingGroupInvocation(
+                    eventDetail, List.copyOf(candidates), player, resultHandler));
+            schedulePendingGroup(groupKey, cooldownMillis);
+            return;
+        }
+        participants = claimedParticipants;
         participants.forEach(participant -> {
-            inFlight.add(participant.instance().getId());
             lastInvocation.put(participant.instance().getId(), now);
         });
 
@@ -236,55 +271,131 @@ public final class AiControlService {
         StringBuilder system = new StringBuilder(GROUP_RESULT_RULES);
         StringBuilder context = new StringBuilder("Event:\n").append(eventDetail)
                 .append("\n\nNearby NPC group (closest first):\n");
-        for (int index = 0; index < participants.size(); index++) {
-            GroupParticipant participant = participants.get(index);
-            String alias = "npc_" + (index + 1);
-            aliases.put(alias, participant);
-            requestGenerations.put(participant.instance().getId(),
-                    generations.getOrDefault(participant.instance().getId(), 0L));
-            memory.rememberEvent(participant.instance().getId(), eventDetail);
-            system.append("\n\n").append(alias).append(" (NPC ")
-                    .append(participant.definition().getDisplayName()).append("):\n")
-                    .append(participant.settings().systemContext());
-            context.append("\n=== ").append(alias).append(": ")
-                    .append(participant.definition().getDisplayName())
-                    .append(index == 0 ? " (closest; default speaker)" : "")
-                    .append(" ===\n")
-                    .append(buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail,
-                            participant.instance(), participant.definition(), player, participant.settings()));
+        try {
+            for (int index = 0; index < participants.size(); index++) {
+                GroupParticipant participant = participants.get(index);
+                String alias = "npc_" + (index + 1);
+                aliases.put(alias, participant);
+                requestGenerations.put(participant.instance().getId(),
+                        generations.getOrDefault(participant.instance().getId(), 0L));
+                memory.rememberEvent(participant.instance().getId(), eventDetail);
+                system.append("\n\n").append(alias).append(" (NPC ")
+                        .append(participant.definition().getDisplayName()).append("):\n")
+                        .append(participant.settings().systemContext());
+                context.append("\n=== ").append(alias).append(": ")
+                        .append(participant.definition().getDisplayName())
+                        .append(index == 0 ? " (closest; default speaker)" : "")
+                        .append(" ===\n")
+                        .append(buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail,
+                                participant.instance(), participant.definition(), player, participant.settings()));
+            }
+        } catch (RuntimeException error) {
+            groupInFlight.remove(groupKey);
+            participants.forEach(participant -> inFlight.remove(participant.instance().getId()));
+            plugin.getLogger().log(Level.WARNING, "Could not build AI Behaviour group context", error);
+            return;
         }
         Map<String, AiControlSettings> settingsByAlias = new java.util.LinkedHashMap<>();
         aliases.forEach((alias, participant) -> settingsByAlias.put(alias, participant.settings()));
 
-        participants.forEach(participant -> processingStarted.accept(participant.instance()));
-        client.complete(system.toString(), context.toString()).whenComplete((content, error) -> {
+        List<GroupParticipant> requestParticipants = participants;
+        try {
+            requestParticipants.forEach(participant -> processingStarted.accept(participant.instance()));
+        } catch (RuntimeException error) {
             groupInFlight.remove(groupKey);
-            participants.forEach(participant -> inFlight.remove(participant.instance().getId()));
-            if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> participants.forEach(
-                    participant -> processingFinished.accept(participant.instance())));
-            if (error != null) {
-                plugin.getLogger().log(Level.WARNING, "AI Behaviour group chat request failed; deterministic behaviour continues.", error);
-            } else {
-                Map<String, AiDecision> decisions = AiGroupDecisionParser.parse(content, settingsByAlias);
-                if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> aliases.forEach((alias, participant) -> {
-                    AiDecision decision = decisions.get(alias);
-                    if (decision == null) return;
-                    UUID instanceId = participant.instance().getId();
-                    if (instances.findById(instanceId).isPresent()
-                            && generations.getOrDefault(instanceId, 0L)
-                                    .equals(requestGenerations.get(instanceId))) {
-                        resultHandler.accept(participant.instance(), decision);
-                    }
-                }));
-            }
-            if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
-                participants.forEach(participant -> {
-                    UUID instanceId = participant.instance().getId();
-                    if (pending.containsKey(instanceId)) schedulePending(instanceId, cooldownMillis);
+            requestParticipants.forEach(participant -> inFlight.remove(participant.instance().getId()));
+            requestParticipants.forEach(participant -> safeFinishProcessing(participant.instance()));
+            plugin.getLogger().log(Level.WARNING, "Could not show AI group processing state", error);
+            return;
+        }
+        try {
+            client.complete(system.toString(), context.toString()).whenComplete((content, error) -> {
+                requestParticipants.forEach(participant -> {
+                    inFlight.remove(participant.instance().getId());
+                    scheduleFinishProcessing(participant.instance());
                 });
-                if (pendingGroups.containsKey(groupKey)) schedulePendingGroup(groupKey, cooldownMillis);
+                groupInFlight.remove(groupKey);
+                if (error != null) {
+                    plugin.getLogger().log(Level.WARNING,
+                            "AI Behaviour group chat request failed; deterministic behaviour continues.", error);
+                } else {
+                    Map<String, AiDecision> decisions = AiGroupDecisionParser.parse(content, settingsByAlias);
+                    if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin,
+                            () -> applyGroupDecisions(
+                                    aliases, decisions, requestGenerations, player, resultHandler));
+                }
+                if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
+                    // Group chat is the user-facing interaction, so queue it before
+                    // lower-priority ambient/individual follow-up work.
+                    if (pendingGroups.containsKey(groupKey)) {
+                        schedulePendingGroup(groupKey, cooldownMillis);
+                    }
+                    requestParticipants.forEach(participant -> {
+                        UUID instanceId = participant.instance().getId();
+                        if (pending.containsKey(instanceId)) schedulePending(instanceId, cooldownMillis);
+                    });
+                });
             });
+        } catch (RuntimeException error) {
+            groupInFlight.remove(groupKey);
+            requestParticipants.forEach(participant -> inFlight.remove(participant.instance().getId()));
+            requestParticipants.forEach(participant -> safeFinishProcessing(participant.instance()));
+            plugin.getLogger().log(Level.WARNING, "Could not start AI Behaviour group chat request", error);
+        }
+    }
+
+    private void applyGroupDecisions(
+            Map<String, GroupParticipant> aliases,
+            Map<String, AiDecision> decisions,
+            Map<UUID, Long> requestGenerations,
+            Player player,
+            BiConsumer<NpcInstance, AiDecision> resultHandler
+    ) {
+        Map<String, GroupParticipant> validParticipants = new java.util.LinkedHashMap<>();
+        aliases.forEach((alias, participant) -> {
+            UUID instanceId = participant.instance().getId();
+            if (instances.findById(instanceId).isPresent()
+                    && generations.getOrDefault(instanceId, 0L).equals(requestGenerations.get(instanceId))) {
+                validParticipants.put(alias, participant);
+            }
         });
+
+        // Every participant remembers every spoken line from this coordinated turn.
+        // This is the actual cross-NPC awareness grouping is intended to provide.
+        for (Map.Entry<String, AiDecision> response : decisions.entrySet()) {
+            GroupParticipant speaker = validParticipants.get(response.getKey());
+            if (speaker == null) continue;
+            for (AiDecision.Action action : response.getValue().actions()) {
+                if (action.type() != AiActionType.SAY || action.text() == null || action.text().isBlank()) continue;
+                String line = speaker.definition().getDisplayName() + ": " + action.text();
+                validParticipants.values().forEach(listener -> memory.rememberMessage(
+                        listener.instance().getId(), player.getUniqueId(), line));
+            }
+        }
+
+        validParticipants.forEach((alias, participant) -> {
+            AiDecision decision = decisions.get(alias);
+            if (decision == null) return;
+            try {
+                resultHandler.accept(participant.instance(), decision);
+            } catch (RuntimeException error) {
+                plugin.getLogger().log(Level.WARNING, "Could not apply AI group actions for "
+                        + participant.definition().getKey() + "; continuing with the other NPCs.", error);
+            }
+        });
+    }
+
+    private void safeFinishProcessing(NpcInstance instance) {
+        try {
+            processingFinished.accept(instance);
+        } catch (RuntimeException error) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Could not clear AI processing state for NPC " + instance.getId(), error);
+        }
+    }
+
+    private void scheduleFinishProcessing(NpcInstance instance) {
+        if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> safeFinishProcessing(instance));
     }
 
     public String configurationIssue() {

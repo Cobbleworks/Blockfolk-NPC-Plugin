@@ -48,8 +48,8 @@ speak while a request or cooldown is active, the latest interaction is queued ra
 than silently discarded.
 
 AI requests explicitly disable model reasoning to reduce response latency. While a
-request is in flight, a hologram above each participating NPC cycles through `.`, `..`,
-and `...`; it disappears when the request finishes or fails.
+request is in flight, a hologram above each participating NPC cycles through `Thinking.`,
+`Thinking..`, and `Thinking...`; it disappears when the request finishes or fails.
 
 See [AI Behaviour request context](docs/ai-behaviour.md) for the exact state, nearby
 perception, memory, and capability information sent to OpenRouter.
