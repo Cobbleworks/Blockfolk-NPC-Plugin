@@ -76,6 +76,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 navigationService,
                 dialogService
         );
+        dialogService.setLocationProvider(instanceRegistry::currentLocation);
         chatInputService = new ChatInputService(this, getConfig().getInt("chat-input-timeout-seconds", 60));
         skinResolver = new SkinResolver(
                 getName() + "/" + getPluginMeta().getVersion(),

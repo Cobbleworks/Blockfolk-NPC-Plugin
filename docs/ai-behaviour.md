@@ -83,6 +83,8 @@ Perception uses a 12-block radius for players and other Blockfolk NPCs. It inclu
   state;
 - up to five nearby non-player, non-Blockfolk entities, with readable entity type,
   rounded distance, and whether it is the triggering entity;
+- up to five nearby levers within 12 blocks, including rounded distance and whether
+  each lever is powered;
 - up to five nearest globally saved locations in the same world and within 64 blocks.
 
 Each perceived player, NPC, entity, and saved location has a request-local alias such as

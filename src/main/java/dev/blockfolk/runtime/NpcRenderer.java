@@ -23,6 +23,10 @@ public interface NpcRenderer {
 
     boolean move(NpcInstance instance, Location location);
 
+    default Optional<Location> currentLocation(NpcInstance instance) {
+        return Optional.empty();
+    }
+
     Optional<LivingEntity> findLivingEntity(NpcInstance instance);
 
     void pose(NpcInstance instance, Pose pose);

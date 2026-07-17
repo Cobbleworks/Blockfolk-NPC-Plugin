@@ -16,10 +16,12 @@ import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.Sign;
+import org.bukkit.block.data.Powerable;
 import org.bukkit.block.sign.Side;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -500,7 +502,7 @@ public final class AiControlService {
             Entity actor,
             AiControlSettings settings
     ) {
-        Location location = instance.getLocation();
+        Location location = instances.currentLocation(instance);
         World world = location.getWorld();
         LivingEntity npc = instances.findEntity(instance).orElse(null);
         StringBuilder out = new StringBuilder(1200);
@@ -552,7 +554,7 @@ public final class AiControlService {
     }
 
     private void appendNearby(StringBuilder out, NpcInstance instance, Entity actor) {
-        Location center = instance.getLocation();
+        Location center = instances.currentLocation(instance);
         if (center.getWorld() == null) return;
         out.append("\nNearby players:\n");
         List<Player> nearbyPlayers = nearbyPlayers(center);
@@ -598,6 +600,34 @@ public final class AiControlService {
                         .append(distance(target, center)).append(" blocks\n");
             }
         }
+
+        appendNearbyLevers(out, center);
+    }
+
+    private void appendNearbyLevers(StringBuilder out, Location center) {
+        World world = center.getWorld();
+        if (world == null) return;
+        int radius = (int) PERCEPTION_RADIUS;
+        List<NearbyLever> levers = new ArrayList<>();
+        for (int x = -radius; x <= radius; x++) {
+            for (int y = -radius; y <= radius; y++) {
+                int blockY = center.getBlockY() + y;
+                if (blockY < world.getMinHeight() || blockY >= world.getMaxHeight()) continue;
+                for (int z = -radius; z <= radius; z++) {
+                    if (x * x + y * y + z * z > radius * radius) continue;
+                    Block block = world.getBlockAt(center.getBlockX() + x, blockY,
+                            center.getBlockZ() + z);
+                    if (block.getType() != Material.LEVER
+                            || !(block.getBlockData() instanceof Powerable powerable)) continue;
+                    levers.add(new NearbyLever(block.getLocation().distance(center), powerable.isPowered()));
+                }
+            }
+        }
+        if (levers.isEmpty()) return;
+        out.append("Nearby levers usable with INTERACT:\n");
+        levers.stream().sorted(Comparator.comparingDouble(NearbyLever::distance)).limit(5)
+                .forEach(lever -> out.append("- ").append(Math.round(lever.distance()))
+                        .append(" blocks, ").append(lever.powered() ? "powered" : "unpowered").append('\n'));
     }
 
     private void appendInventory(StringBuilder out, NpcInstance instance, AiControlSettings settings) {
@@ -721,6 +751,8 @@ public final class AiControlService {
     private static String readable(String value) { return value.toLowerCase(Locale.ROOT).replace('_', ' '); }
 
     private record NearbySign(double distance, String text) { }
+
+    private record NearbyLever(double distance, boolean powered) { }
 
     private record PendingInvocation(
             BehaviourEvent event,
