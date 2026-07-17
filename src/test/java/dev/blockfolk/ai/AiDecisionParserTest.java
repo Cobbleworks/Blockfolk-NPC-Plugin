@@ -3,6 +3,7 @@ package dev.blockfolk.ai;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.EnumSet;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
@@ -66,5 +67,18 @@ class AiDecisionParserTest {
                 ```
                 """, AiControlSettings.defaults());
         assertEquals(3, decision.actions().size());
+    }
+
+    @Test
+    void acceptsEnabledUnfollowAndInteractActionsWithoutTargets() {
+        AiControlSettings settings = new AiControlSettings("Caretaker", "", "Operate the gate", "",
+                EnumSet.of(AiActionType.UNFOLLOW, AiActionType.INTERACT), true, true, true);
+
+        AiDecision decision = AiDecisionParser.parse("""
+                {"actions":[{"type":"UNFOLLOW"},{"type":"INTERACT"}]}
+                """, settings);
+
+        assertEquals(List.of(AiActionType.UNFOLLOW, AiActionType.INTERACT),
+                decision.actions().stream().map(AiDecision.Action::type).toList());
     }
 }

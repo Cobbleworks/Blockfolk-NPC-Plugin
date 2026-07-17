@@ -477,7 +477,7 @@ public final class GuiService implements Listener {
         AiControlSettings ai = definition.getAiControlSettings();
         String aiStatus = !ai.enabled() ? "Paused"
                 : ai.greetOnApproach() || ai.respondToChat() ? "Active" : "No Triggers";
-        inventory.setItem(23, item(Material.ENDER_EYE,
+        inventory.setItem(23, item(Material.COPPER_GOLEM_STATUE,
                 "AI Behaviour: " + aiStatus, List.of(
                         ChatColor.GRAY + "Context sections: " + ChatColor.WHITE
                                 + ai.configuredSectionCount() + "/4",
@@ -807,7 +807,7 @@ public final class GuiService implements Listener {
                 "Facts, lore, rules, and local knowledge it may use"));
         inventory.setItem(20, toggleItem(Material.SPYGLASS, "Greet On Approach",
                 settings.greetOnApproach(), "Lets the NPC speak when a player comes close"));
-        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40};
+        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
         AiActionType[] types = AiActionType.values();
         for (int index = 0; index < types.length; index++) {
             AiActionType type = types[index];
@@ -1816,7 +1816,7 @@ public final class GuiService implements Listener {
             openAiControl(player, definition);
             return;
         }
-        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40};
+        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
         for (int index = 0; index < AiActionType.values().length; index++) {
             if (slot != slots[index]) continue;
             AiActionType type = AiActionType.values()[index];

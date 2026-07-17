@@ -74,6 +74,8 @@ When the NPC's world is available, the request includes:
 - biome name;
 - broad light level: dark, dim, or bright;
 - an approximate indoors assessment based on whether blocks exist above the NPC.
+- up to five nearest non-empty signs within 12 blocks, including front and back text,
+  approximate distance, and a per-sign text limit.
 
 ## Memory
 
@@ -98,6 +100,8 @@ enforces the same list before anything runs. Current capabilities are:
   aggression setting;
 - flee from a target;
 - follow a player;
+- stop following the current player;
+- walk to and toggle the nearest available button or lever within 12 blocks;
 - return home;
 - start or pause the configured route;
 - do nothing, which is always available.

@@ -11,6 +11,8 @@ public enum AiActionType {
     STOP_COMBAT("Stop Combat"),
     FLEE_FROM("Flee"),
     FOLLOW("Follow"),
+    UNFOLLOW("Unfollow"),
+    INTERACT("Interact"),
     RETURN_HOME("Return Home"),
     START_ROUTE("Start Route"),
     PAUSE_ROUTE("Pause Route"),

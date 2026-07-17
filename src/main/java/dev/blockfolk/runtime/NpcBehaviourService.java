@@ -84,6 +84,8 @@ public final class NpcBehaviourService implements Listener {
     private static final double ITEM_PICKUP_HORIZONTAL_RANGE = 1.5;
     private static final double ITEM_PICKUP_VERTICAL_RANGE = 1.0;
     private static final long CONTAINER_CLOSE_DELAY_TICKS = 20L;
+    private static final int AI_INTERACT_RANGE = 12;
+    private static final double SWITCH_USE_RANGE_SQUARED = 2.5 * 2.5;
     private static final long IDLE_REPEAT_TICKS = 1L * 20L;
     private final Plugin plugin;
     private final NpcDefinitionRepository definitions;
@@ -97,6 +99,7 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, Location> moveTargets = new HashMap<>();
     private final Map<UUID, FollowState> following = new HashMap<>();
     private final Map<UUID, Object> waypointActionSequences = new HashMap<>();
+    private final Map<UUID, SwitchInteraction> switchInteractions = new HashMap<>();
     private final Map<UUID, Object> idleCycles = new HashMap<>();
     private final Set<ProximityKey> nearbyPlayers = new HashSet<>();
     private final Map<ProximityKey, Long> proximityCooldownUntilTick = new HashMap<>();
@@ -154,6 +157,7 @@ public final class NpcBehaviourService implements Listener {
         moveTargets.clear();
         following.clear();
         waypointActionSequences.clear();
+        switchInteractions.clear();
         idleCycles.clear();
         nearbyPlayers.clear();
         proximityCooldownUntilTick.clear();
@@ -245,6 +249,7 @@ public final class NpcBehaviourService implements Listener {
         moveTargets.remove(instance.getId());
         following.remove(instance.getId());
         waypointActionSequences.remove(instance.getId());
+        switchInteractions.remove(instance.getId());
         idleCycles.remove(instance.getId());
         nearbyPlayers.removeIf(key -> key.instanceId().equals(instance.getId()));
         proximityCooldownUntilTick.keySet().removeIf(key -> key.instanceId().equals(instance.getId()));
@@ -282,7 +287,7 @@ public final class NpcBehaviourService implements Listener {
     }
 
     public boolean isMovingTo(NpcInstance instance) {
-        return moveTargets.containsKey(instance.getId());
+        return moveTargets.containsKey(instance.getId()) || switchInteractions.containsKey(instance.getId());
     }
 
     /**
@@ -613,6 +618,8 @@ public final class NpcBehaviourService implements Listener {
                 case FOLLOW -> {
                     if (target instanceof Player player) startFollowing(instance, player);
                 }
+                case UNFOLLOW -> stopFollowing(instance);
+                case INTERACT -> startAiInteraction(instance);
                 case RETURN_HOME -> {
                     stopFollowing(instance);
                     moveTargets.put(instance.getId(), instance.getSpawnLocation());
@@ -692,13 +699,16 @@ public final class NpcBehaviourService implements Listener {
         Set<UUID> active = new HashSet<>();
         for (NpcInstance instance : instances.findAll()) {
             active.add(instance.getId());
-            tickMoveTo(instance);
-            tickFollow(instance);
+            if (!tickAiInteraction(instance)) {
+                tickMoveTo(instance);
+                tickFollow(instance);
+            }
         }
         routePaused.retainAll(active);
         moveTargets.keySet().retainAll(active);
         following.keySet().retainAll(active);
         waypointActionSequences.keySet().retainAll(active);
+        switchInteractions.keySet().retainAll(active);
         idleCycles.keySet().retainAll(active);
         observedEntities.keySet().retainAll(active);
         entityNearbyCooldownUntilTick.keySet().retainAll(active);
@@ -864,25 +874,129 @@ public final class NpcBehaviourService implements Listener {
                 for (int z = -2; z <= 2; z++) {
                     Block block = center.getBlock().getRelative(x, y, z);
                     if (block.getType() != Material.LEVER && !Tag.BUTTONS.isTagged(block.getType())) continue;
-                    BlockData data = block.getBlockData();
-                    if (!(data instanceof Powerable powerable)) continue;
-                    boolean button = Tag.BUTTONS.isTagged(block.getType());
-                    if (button && powerable.isPowered()) continue;
-                    int oldCurrent = powerable.isPowered() ? 15 : 0;
-                    BlockRedstoneEvent event = new BlockRedstoneEvent(block, oldCurrent, oldCurrent == 0 ? 15 : 0);
-                    Bukkit.getPluginManager().callEvent(event);
-                    powerable.setPowered(event.getNewCurrent() > 0);
-                    block.setBlockData(data, true);
-                    notifyAttachedBlockNeighbors(block, (Switch) data);
-                    if (button && powerable.isPowered()) {
-                        Material pressedType = block.getType();
-                        long releaseDelay = pressedType == Material.STONE_BUTTON
-                                || pressedType == Material.POLISHED_BLACKSTONE_BUTTON ? 20L : 30L;
-                        Location buttonLocation = block.getLocation();
-                        Bukkit.getScheduler().runTaskLater(plugin, () -> releaseButton(buttonLocation), releaseDelay);
-                    }
+                    toggleSwitch(block);
                 }
             }
+        }
+    }
+
+    private void startAiInteraction(NpcInstance instance) {
+        Block target = findNearestSwitch(instance.getLocation());
+        if (target == null) return;
+        stopFollowing(instance);
+        moveTargets.remove(instance.getId());
+        instances.stand(instance);
+        instances.stopNavigating(instance);
+        switchInteractions.put(instance.getId(), new SwitchInteraction(
+                target.getLocation(), interactionDestination(target, instance.getLocation())));
+    }
+
+    private boolean tickAiInteraction(NpcInstance instance) {
+        SwitchInteraction interaction = switchInteractions.get(instance.getId());
+        if (interaction == null) return false;
+        if (combatService != null && combatService.isEngaged(instance)) return true;
+        Block target = interaction.blockLocation().getBlock();
+        if (!isUsableSwitch(target)) {
+            finishAiInteraction(instance);
+            return false;
+        }
+        Location current = instance.getLocation();
+        if (current.getWorld() != target.getWorld()) {
+            finishAiInteraction(instance);
+            return false;
+        }
+        Location switchCenter = target.getLocation().add(0.5, 0.5, 0.5);
+        if (current.distanceSquared(switchCenter) <= SWITCH_USE_RANGE_SQUARED) {
+            toggleSwitch(target);
+            finishAiInteraction(instance);
+            return false;
+        }
+        NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+        if (definition == null) {
+            finishAiInteraction(instance);
+            return false;
+        }
+        WalkingSpeed speed = speedOverrides.getOrDefault(instance.getId(),
+                definition.getMovementProfile().walkingSpeed());
+        NativeNpcNavigationService.NavigationStatus status = instances.navigate(instance,
+                interaction.navigationTarget(), speed);
+        if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED) {
+            toggleSwitch(target);
+            finishAiInteraction(instance);
+            return false;
+        }
+        if (status == NativeNpcNavigationService.NavigationStatus.STALLED) {
+            finishAiInteraction(instance);
+            return false;
+        }
+        return true;
+    }
+
+    private void finishAiInteraction(NpcInstance instance) {
+        switchInteractions.remove(instance.getId());
+        instances.stopNavigating(instance);
+    }
+
+    private Block findNearestSwitch(Location center) {
+        if (center.getWorld() == null) return null;
+        Block nearest = null;
+        double nearestDistance = Double.MAX_VALUE;
+        for (int x = -AI_INTERACT_RANGE; x <= AI_INTERACT_RANGE; x++) {
+            for (int y = -AI_INTERACT_RANGE; y <= AI_INTERACT_RANGE; y++) {
+                int blockY = center.getBlockY() + y;
+                if (blockY < center.getWorld().getMinHeight() || blockY >= center.getWorld().getMaxHeight()) continue;
+                for (int z = -AI_INTERACT_RANGE; z <= AI_INTERACT_RANGE; z++) {
+                    double distance = x * x + y * y + z * z;
+                    if (distance > AI_INTERACT_RANGE * AI_INTERACT_RANGE || distance >= nearestDistance) continue;
+                    Block block = center.getWorld().getBlockAt(center.getBlockX() + x, blockY,
+                            center.getBlockZ() + z);
+                    if (!isUsableSwitch(block)) continue;
+                    nearest = block;
+                    nearestDistance = distance;
+                }
+            }
+        }
+        return nearest;
+    }
+
+    private boolean isUsableSwitch(Block block) {
+        if (block.getType() != Material.LEVER && !Tag.BUTTONS.isTagged(block.getType())) return false;
+        return block.getBlockData() instanceof Powerable powerable
+                && (!Tag.BUTTONS.isTagged(block.getType()) || !powerable.isPowered());
+    }
+
+    private Location interactionDestination(Block target, Location origin) {
+        List<Location> candidates = new ArrayList<>();
+        for (BlockFace face : List.of(BlockFace.NORTH, BlockFace.EAST, BlockFace.SOUTH, BlockFace.WEST)) {
+            for (int yOffset : List.of(0, -1)) {
+                Block feet = target.getRelative(face).getRelative(0, yOffset, 0);
+                if (feet.isPassable() && feet.getRelative(BlockFace.UP).isPassable()
+                        && feet.getRelative(BlockFace.DOWN).getType().isSolid()) {
+                    candidates.add(feet.getLocation().add(0.5, 0, 0.5));
+                }
+            }
+        }
+        return candidates.stream().min(Comparator.comparingDouble(origin::distanceSquared))
+                .orElse(target.getLocation().add(0.5, 0, 0.5));
+    }
+
+    private void toggleSwitch(Block block) {
+        BlockData data = block.getBlockData();
+        if (!(data instanceof Powerable powerable) || !(data instanceof Switch switchData)) return;
+        boolean button = Tag.BUTTONS.isTagged(block.getType());
+        if (button && powerable.isPowered()) return;
+        int oldCurrent = powerable.isPowered() ? 15 : 0;
+        BlockRedstoneEvent event = new BlockRedstoneEvent(block, oldCurrent, oldCurrent == 0 ? 15 : 0);
+        Bukkit.getPluginManager().callEvent(event);
+        powerable.setPowered(event.getNewCurrent() > 0);
+        block.setBlockData(data, true);
+        notifyAttachedBlockNeighbors(block, switchData);
+        if (button && powerable.isPowered()) {
+            Material pressedType = block.getType();
+            long releaseDelay = pressedType == Material.STONE_BUTTON
+                    || pressedType == Material.POLISHED_BLACKSTONE_BUTTON ? 20L : 30L;
+            Location buttonLocation = block.getLocation();
+            Bukkit.getScheduler().runTaskLater(plugin, () -> releaseButton(buttonLocation), releaseDelay);
         }
     }
 
@@ -1363,4 +1477,6 @@ public final class NpcBehaviourService implements Listener {
         private int repathTicks;
         private boolean moving;
     }
+
+    private record SwitchInteraction(Location blockLocation, Location navigationTarget) { }
 }
