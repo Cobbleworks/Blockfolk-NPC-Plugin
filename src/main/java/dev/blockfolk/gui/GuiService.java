@@ -3,6 +3,7 @@ package dev.blockfolk.gui;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -72,6 +73,7 @@ import dev.blockfolk.util.UiText;
 import dev.blockfolk.ai.AiActionType;
 import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.AiControlSettings;
+import dev.blockfolk.ai.MiningTarget;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -109,7 +111,7 @@ public final class GuiService implements Listener {
             Map.entry(17, BehaviourActionType.UNFOLLOW),
             // World and inventory interaction
             Map.entry(19, BehaviourActionType.INTERACT),
-            Map.entry(20, BehaviourActionType.MINE_BLOCKS),
+            Map.entry(20, BehaviourActionType.GATHER_BLOCKS),
             Map.entry(21, BehaviourActionType.TAKE_ITEM),
             Map.entry(22, BehaviourActionType.SHOW_INVENTORY),
             Map.entry(23, BehaviourActionType.DROP_INVENTORY),
@@ -774,6 +776,164 @@ public final class GuiService implements Listener {
         inventory.setItem(ACTION_PICKER_BACK_SLOT, item(Material.BARRIER, "Back", List.of()));
     }
 
+    private void openGatherBlocksPicker(Player player, GatherBlocksPickerHolder holder) {
+        Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Gather Blocks"));
+        List<String> targets = MiningTarget.targets();
+        for (int index = 0; index < targets.size() && index < PAGE_SIZE; index++) {
+            String target = targets.get(index);
+            boolean selected = holder.selected().contains(target);
+            inventory.setItem(index, item(gatherTargetMaterial(target), MiningTarget.displayName(target), List.of(
+                    LegacyText.GRAY + gatherTargetDescription(target),
+                    selected ? LegacyText.GREEN + "Selected" : LegacyText.GRAY + "Not selected",
+                    LegacyText.YELLOW + "Click to " + (selected ? "remove" : "include")
+            )));
+        }
+        inventory.setItem(45, item(Material.BARRIER, "Back", List.of(
+                LegacyText.GRAY + "Discard changes")));
+        inventory.setItem(49, item(holder.selected().isEmpty() ? Material.GRAY_DYE : Material.LIME_DYE,
+                "Save Selection", List.of(
+                        holder.selected().isEmpty()
+                                ? LegacyText.RED + "Select at least one target"
+                                : LegacyText.GRAY + MiningTarget.displaySelection(
+                                        MiningTarget.storedSelection(holder.selected())),
+                        LegacyText.YELLOW + "Click to save")));
+        openInventory(player, inventory);
+    }
+
+    private void openGatherBlocksPicker(Player player, ActionPickerHolder action, NpcDefinition definition) {
+        List<BehaviourAction> actions = action.customEvent() == null
+                ? definition.getBehaviourActions(action.event())
+                : definition.getCustomEventActions(action.customEvent());
+        openGatherBlocksPicker(player, GatherBlocksPickerHolder.definition(
+                action, gatherSelectionAt(actions, action.actionIndex())));
+    }
+
+    private void openGatherBlocksPicker(Player player, RoutePointActionPickerHolder action) {
+        RoutePoint current = currentRoutePoint(action.routeKey(), action.point());
+        List<BehaviourAction> actions = current == null ? List.of() : current.actions();
+        openGatherBlocksPicker(player, GatherBlocksPickerHolder.route(
+                action, gatherSelectionAt(actions, action.actionIndex())));
+    }
+
+    private void openGatherBlocksPicker(Player player, QuestionBranchPickerHolder action) {
+        BehaviourAction parent = questionAction(action.target());
+        List<BehaviourAction> actions = parent == null ? List.of()
+                : questionBranch(parent.question(), action.optionIndex());
+        openGatherBlocksPicker(player, GatherBlocksPickerHolder.question(
+                action, gatherSelectionAt(actions, action.actionIndex())));
+    }
+
+    private List<String> gatherSelectionAt(List<BehaviourAction> actions, int index) {
+        if (index >= 0 && index < actions.size()
+                && actions.get(index).type() == BehaviourActionType.GATHER_BLOCKS) {
+            return MiningTarget.selection(actions.get(index).value());
+        }
+        return List.of("resources");
+    }
+
+    private void handleGatherBlocksPickerClick(InventoryClickEvent event, Player player,
+            GatherBlocksPickerHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        int slot = event.getRawSlot();
+        if (slot == 45) {
+            returnFromGatherBlocksPicker(player, holder);
+            return;
+        }
+        if (slot == 49) {
+            if (holder.selected().isEmpty()) {
+                player.sendMessage(UiText.info("Select at least one block target."));
+                return;
+            }
+            BehaviourAction gather = new BehaviourAction(BehaviourActionType.GATHER_BLOCKS,
+                    MiningTarget.storedSelection(holder.selected()));
+            if (holder.definitionAction() != null) {
+                NpcDefinition definition = definitionRepository.find(holder.definitionAction().key()).orElse(null);
+                if (definition == null) return;
+                setAction(definition, holder.definitionAction(), gather);
+            } else if (holder.routeAction() != null) {
+                setRoutePointAction(holder.routeAction(), gather);
+            } else if (holder.questionAction() != null) {
+                setQuestionBranchAction(holder.questionAction(), gather);
+            }
+            returnFromGatherBlocksPicker(player, holder);
+            return;
+        }
+        List<String> targets = MiningTarget.targets();
+        if (slot < 0 || slot >= targets.size()) return;
+        String target = targets.get(slot);
+        LinkedHashSet<String> selected = new LinkedHashSet<>(holder.selected());
+        if (!selected.remove(target)) {
+            if (target.equals("any")) selected.clear();
+            else selected.remove("any");
+            if (selected.size() >= MiningTarget.MAX_SELECTIONS) {
+                player.sendMessage(UiText.info("Choose up to " + MiningTarget.MAX_SELECTIONS + " targets."));
+                return;
+            }
+            selected.add(target);
+        }
+        openGatherBlocksPicker(player, holder.withSelected(List.copyOf(selected)));
+    }
+
+    private void returnFromGatherBlocksPicker(Player player, GatherBlocksPickerHolder holder) {
+        if (holder.definitionAction() != null) {
+            NpcDefinition definition = definitionRepository.find(holder.definitionAction().key()).orElse(null);
+            if (definition != null) openBehaviourHome(player, definition, holder.definitionAction());
+        } else if (holder.routeAction() != null) {
+            RoutePoint current = currentRoutePoint(
+                    holder.routeAction().routeKey(), holder.routeAction().point());
+            if (current != null) openWaypointActions(player, holder.routeAction().routeKey(), current);
+        } else if (holder.questionAction() != null) {
+            openAfterQuestionBranchPicker(player, holder.questionAction());
+        }
+    }
+
+    private Material gatherTargetMaterial(String target) {
+        return switch (target) {
+            case "resources" -> Material.CHEST;
+            case "ores" -> Material.IRON_PICKAXE;
+            case "wood", "logs" -> Material.IRON_AXE;
+            case "stone" -> Material.STONE;
+            case "any" -> Material.NETHER_STAR;
+            case "coal" -> Material.COAL;
+            case "gold" -> Material.RAW_GOLD;
+            case "iron" -> Material.RAW_IRON;
+            case "copper" -> Material.RAW_COPPER;
+            case "diamond" -> Material.DIAMOND;
+            case "emerald" -> Material.EMERALD;
+            case "redstone" -> Material.REDSTONE;
+            case "lapis" -> Material.LAPIS_LAZULI;
+            case "quartz" -> Material.QUARTZ;
+            case "ancient_debris" -> Material.ANCIENT_DEBRIS;
+            case "obsidian" -> Material.OBSIDIAN;
+            case "oak" -> Material.OAK_LOG;
+            case "spruce" -> Material.SPRUCE_LOG;
+            case "birch" -> Material.BIRCH_LOG;
+            case "jungle" -> Material.JUNGLE_LOG;
+            case "acacia" -> Material.ACACIA_LOG;
+            case "dark_oak" -> Material.DARK_OAK_LOG;
+            case "mangrove" -> Material.MANGROVE_LOG;
+            case "cherry" -> Material.CHERRY_LOG;
+            case "pale_oak" -> Material.PALE_OAK_LOG;
+            case "crimson" -> Material.CRIMSON_STEM;
+            case "warped" -> Material.WARPED_STEM;
+            case "bamboo" -> Material.BAMBOO_BLOCK;
+            default -> Material.PAPER;
+        };
+    }
+
+    private String gatherTargetDescription(String target) {
+        return switch (target) {
+            case "resources" -> "All ores, tree trunks, bamboo, and obsidian";
+            case "ores" -> "All ore blocks and ancient debris";
+            case "wood", "logs" -> "All logs, wood, stems, hyphae, and bamboo";
+            case "stone" -> "Stone, deepslate, netherrack, tuff, and calcite";
+            case "any" -> "Every block allowed by the gathering whitelist";
+            case "obsidian" -> "Obsidian and crying obsidian";
+            default -> "Only the " + MiningTarget.displayName(target) + " resource family";
+        };
+    }
+
     private void openAnimationPicker(Player player, ActionPickerHolder action) {
         Inventory inventory = Bukkit.createInventory(new AnimationPickerHolder(
                 action.key(), action.event(), action.customEvent(), action.actionIndex(), action.page()), 27,
@@ -1042,6 +1202,8 @@ public final class GuiService implements Listener {
             handleTargetsClick(event, player, targetsHolder.key());
         } else if (holder instanceof FightOptionsActionHolder fightOptionsHolder) {
             handleFightOptionsActionClick(event, player, fightOptionsHolder);
+        } else if (holder instanceof GatherBlocksPickerHolder gatherBlocksHolder) {
+            handleGatherBlocksPickerClick(event, player, gatherBlocksHolder);
         } else if (holder instanceof EquipmentHolder equipmentHolder) {
             handleEquipmentClick(event, player, equipmentHolder.key());
         } else if (holder instanceof InstancesHolder instancesHolder) {
@@ -1803,6 +1965,8 @@ public final class GuiService implements Listener {
             requestRouteWaitAction(player, action);
         } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             requestRouteFightOptionsAction(player, action);
+        } else if (type == BehaviourActionType.GATHER_BLOCKS) {
+            openGatherBlocksPicker(player, action);
         } else if (!type.requiresValue()) {
             RoutePoint updated = setRoutePointAction(action, type, null);
             if (updated != null) {
@@ -2172,6 +2336,8 @@ public final class GuiService implements Listener {
             requestWaitAction(player, definition, holder);
         } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             requestFightOptionsAction(player, definition, holder);
+        } else if (type == BehaviourActionType.GATHER_BLOCKS) {
+            openGatherBlocksPicker(player, holder, definition);
         } else if (!type.requiresValue()) {
             setAction(definition, holder, type, null);
             openBehaviourHome(player, definition, holder);
@@ -2882,6 +3048,10 @@ public final class GuiService implements Listener {
             openQuestionBranchRoutePicker(player, holder, "", 0);
             return;
         }
+        if (type == BehaviourActionType.GATHER_BLOCKS) {
+            openGatherBlocksPicker(player, holder);
+            return;
+        }
         if (!type.requiresValue()) {
             setQuestionBranchAction(holder, new BehaviourAction(type, null));
             openAfterQuestionBranchPicker(player, holder);
@@ -3289,6 +3459,7 @@ public final class GuiService implements Listener {
                 || holder instanceof FightingHolder
                 || holder instanceof TargetsHolder
                 || holder instanceof FightOptionsActionHolder
+                || holder instanceof GatherBlocksPickerHolder
                 || holder instanceof InstancesHolder
                 || holder instanceof BehaviourHolder
                 || holder instanceof CustomBehaviourHolder
@@ -3497,7 +3668,7 @@ public final class GuiService implements Listener {
                 Material.CLOCK;
             case INTERACT ->
                 Material.LEVER;
-            case MINE_BLOCKS ->
+            case GATHER_BLOCKS ->
                 Material.IRON_AXE;
             case TAKE_ITEM ->
                 Material.HOPPER;
@@ -3546,6 +3717,9 @@ public final class GuiService implements Listener {
         }
         if (action.type() == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             return FightOptions.fromStored(action.value()).displayName();
+        }
+        if (action.type() == BehaviourActionType.GATHER_BLOCKS) {
+            return MiningTarget.displaySelection(action.value());
         }
         return action.value();
     }
@@ -3671,6 +3845,33 @@ public final class GuiService implements Listener {
         public Inventory getInventory() {
             return null;
         }
+    }
+
+    private record GatherBlocksPickerHolder(
+            ActionPickerHolder definitionAction,
+            RoutePointActionPickerHolder routeAction,
+            QuestionBranchPickerHolder questionAction,
+            List<String> selected
+            ) implements InventoryHolder {
+
+        static GatherBlocksPickerHolder definition(ActionPickerHolder action, List<String> selected) {
+            return new GatherBlocksPickerHolder(action, null, null, List.copyOf(selected));
+        }
+
+        static GatherBlocksPickerHolder route(RoutePointActionPickerHolder action, List<String> selected) {
+            return new GatherBlocksPickerHolder(null, action, null, List.copyOf(selected));
+        }
+
+        static GatherBlocksPickerHolder question(QuestionBranchPickerHolder action, List<String> selected) {
+            return new GatherBlocksPickerHolder(null, null, action, List.copyOf(selected));
+        }
+
+        GatherBlocksPickerHolder withSelected(List<String> updated) {
+            return new GatherBlocksPickerHolder(definitionAction, routeAction, questionAction,
+                    List.copyOf(updated));
+        }
+
+        @Override public Inventory getInventory() { return null; }
     }
 
     private record EquipmentHolder(String key) implements InventoryHolder {

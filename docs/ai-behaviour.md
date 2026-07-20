@@ -165,6 +165,13 @@ enforces the same list before anything runs. Current capabilities are:
   adjacent block;
 - do nothing, which is always available.
 
+The deterministic Gather Blocks behaviour action uses the same target whitelist and
+runtime gathering implementation. Its GUI provides a multi-select target editor for
+normal events, custom events, route waypoints, and question branches. The selection is
+stored on that action (for example `coal,gold`), not in `config.yml`. Deterministic
+gathering collects drops into the NPC's temporary inventory; only overflow is dropped
+naturally.
+
 Targeted capabilities may refer only to the triggering player, triggering entity,
 nearest player, nearest attackable entity, current combat target, or a compatible safe
 alias listed in the request. The model cannot provide arbitrary coordinates, entity IDs,

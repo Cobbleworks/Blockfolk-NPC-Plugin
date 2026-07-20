@@ -1,7 +1,10 @@
 package dev.blockfolk.ai;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.List;
 
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
@@ -33,5 +36,12 @@ class MiningTargetTest {
         assertTrue(MiningTarget.matches(Material.BAMBOO_BLOCK, "bamboo"));
         assertFalse(MiningTarget.matches(Material.OAK_PLANKS, "wood"));
         assertFalse(MiningTarget.matches(Material.BEDROCK, "any"));
+    }
+
+    @Test
+    void storesDeterministicSelectionsForRegularActions() {
+        assertEquals("coal,gold,oak", MiningTarget.storedSelection(List.of("coal", "gold", "oak")));
+        assertEquals(List.of("resources"), MiningTarget.selection(null));
+        assertEquals("Coal, Gold, Oak", MiningTarget.displaySelection("coal,gold,oak"));
     }
 }

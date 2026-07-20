@@ -44,6 +44,11 @@ Autonomous Work, and optionally enable Temporary Inventory to store gathered dro
 The autonomous interval is configured with
 `ai-control.autonomous-interval-seconds`.
 
+The same Gather Blocks operation is available in deterministic behaviour sequences.
+Its inventory editor lets administrators select up to eight target categories or
+materials, and stores that selection directly on the behaviour action. Deterministic
+gathering places drops in the NPC's temporary inventory and drops only overflow items.
+
 Long-term memory is optional per preset. When enabled, the model can save durable facts
 with a validated `REMEMBER_FACT` action. Up to 45 facts survive restarts and are shared by
 the preset's spawned copies; adding another discards the oldest. The AI Behaviour menu

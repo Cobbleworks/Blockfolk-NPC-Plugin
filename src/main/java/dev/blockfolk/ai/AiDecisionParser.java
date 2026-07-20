@@ -74,7 +74,7 @@ public final class AiDecisionParser {
     }
 
     private static boolean validTarget(AiActionType type, String target) {
-        if (type == AiActionType.MINE_BLOCKS) return MiningTarget.valid(target);
+        if (type == AiActionType.GATHER_BLOCKS) return MiningTarget.valid(target);
         if (type == AiActionType.DROP_ITEM) return target.matches("inventory_slot_[1-9][0-9]*");
         if (type == AiActionType.FOLLOW) {
             if (target.equals("triggering_player") || target.equals("nearest_player")) return true;

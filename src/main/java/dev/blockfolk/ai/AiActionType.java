@@ -19,7 +19,7 @@ public enum AiActionType {
     PAUSE_ROUTE("Pause Route"),
     REMEMBER_FACT("Remember Fact"),
     DROP_ITEM("Drop Item"),
-    MINE_BLOCKS("Gather Blocks"),
+    GATHER_BLOCKS("Gather Blocks"),
     DO_NOTHING("Do Nothing");
 
     private final String displayName;

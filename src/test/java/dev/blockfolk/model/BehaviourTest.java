@@ -26,7 +26,7 @@ class BehaviourTest {
         assertEquals(BehaviourActionType.TELEPORT_TO, BehaviourActionType.fromStored("teleport_to"));
         assertEquals(BehaviourActionType.WAIT, BehaviourActionType.fromStored("wait"));
         assertEquals(BehaviourActionType.INTERACT, BehaviourActionType.fromStored("interact"));
-        assertEquals(BehaviourActionType.MINE_BLOCKS, BehaviourActionType.fromStored("mine_blocks"));
+        assertEquals(BehaviourActionType.GATHER_BLOCKS, BehaviourActionType.fromStored("gather_blocks"));
         assertEquals(BehaviourActionType.TAKE_ITEM, BehaviourActionType.fromStored("take_item"));
         assertEquals(BehaviourActionType.SHOW_INVENTORY, BehaviourActionType.fromStored("show_inventory"));
         assertEquals(BehaviourActionType.DROP_INVENTORY, BehaviourActionType.fromStored("drop_inventory"));

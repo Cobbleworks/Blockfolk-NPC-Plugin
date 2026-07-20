@@ -86,10 +86,10 @@ class AiControlSettingsTest {
     @Test
     void autonomousWorkIsOptInAndPreservedByOtherChanges() {
         AiControlSettings settings = AiControlSettings.defaults().withAutonomousEnabled(true)
-                .withIdentity("A miner").toggle(AiActionType.MINE_BLOCKS);
+                .withIdentity("A miner").toggle(AiActionType.GATHER_BLOCKS);
 
         assertTrue(settings.autonomousEnabled());
-        assertTrue(settings.allowedActions().contains(AiActionType.MINE_BLOCKS));
+        assertTrue(settings.allowedActions().contains(AiActionType.GATHER_BLOCKS));
         assertFalse(AiControlSettings.defaults().autonomousEnabled());
     }
 }

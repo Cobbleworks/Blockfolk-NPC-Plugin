@@ -39,6 +39,16 @@ class BehaviourActionCodecTest {
     }
 
     @Test
+    void roundTripsGatherBlockSelections() {
+        BehaviourAction original = new BehaviourAction(
+                BehaviourActionType.GATHER_BLOCKS, "coal,gold,oak");
+
+        BehaviourAction decoded = BehaviourActionCodec.decode(BehaviourActionCodec.encode(original));
+
+        assertEquals(original, decoded);
+    }
+
+    @Test
     void limitsQuestionsToFourAnswers() {
         List<Map<String, Object>> options = java.util.stream.IntStream.range(0, 5)
                 .mapToObj(index -> Map.of("label", "Option " + index, "actions", List.of()))

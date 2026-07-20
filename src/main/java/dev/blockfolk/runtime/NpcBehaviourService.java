@@ -105,7 +105,7 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, FollowState> following = new HashMap<>();
     private final Map<UUID, Object> waypointActionSequences = new HashMap<>();
     private final Map<UUID, SwitchInteraction> switchInteractions = new HashMap<>();
-    private final Map<UUID, MiningTask> miningTasks = new HashMap<>();
+    private final Map<UUID, GatheringTask> gatheringTasks = new HashMap<>();
     private final Map<UUID, Object> idleCycles = new HashMap<>();
     private final Set<ProximityKey> nearbyPlayers = new HashSet<>();
     private final Map<ProximityKey, Long> proximityCooldownUntilTick = new HashMap<>();
@@ -171,7 +171,7 @@ public final class NpcBehaviourService implements Listener {
         following.clear();
         waypointActionSequences.clear();
         switchInteractions.clear();
-        miningTasks.clear();
+        gatheringTasks.clear();
         idleCycles.clear();
         nearbyPlayers.clear();
         proximityCooldownUntilTick.clear();
@@ -264,7 +264,7 @@ public final class NpcBehaviourService implements Listener {
         following.remove(instance.getId());
         waypointActionSequences.remove(instance.getId());
         switchInteractions.remove(instance.getId());
-        miningTasks.remove(instance.getId());
+        gatheringTasks.remove(instance.getId());
         idleCycles.remove(instance.getId());
         nearbyPlayers.removeIf(key -> key.instanceId().equals(instance.getId()));
         proximityCooldownUntilTick.keySet().removeIf(key -> key.instanceId().equals(instance.getId()));
@@ -652,7 +652,7 @@ public final class NpcBehaviourService implements Listener {
             // WAIT is handled by executeSequence: it only delays the next action.
             case WAIT -> { }
             case INTERACT -> interactWithNearbySwitches(instance);
-            case MINE_BLOCKS -> mineNearbyBlocks(instance);
+            case GATHER_BLOCKS -> startGathering(instance, action.value(), true);
             case TAKE_ITEM -> takeNearbyItem(instance, actor);
             case SHOW_INVENTORY -> showInventory(instance, actor);
             case DROP_INVENTORY -> dropInventory(instance);
@@ -741,7 +741,8 @@ public final class NpcBehaviourService implements Listener {
                     announceMemory(instance, definition);
                 }
                 case DROP_ITEM -> dropAiInventoryItem(instance, definition, action.target());
-                case MINE_BLOCKS -> startAiMining(instance, definition, action.target());
+                case GATHER_BLOCKS -> startGathering(instance, action.target(),
+                        definition.getAiControlSettings().inventoryEnabled());
                 case DO_NOTHING -> { }
             }
         }
@@ -901,7 +902,7 @@ public final class NpcBehaviourService implements Listener {
         following.keySet().retainAll(active);
         waypointActionSequences.keySet().retainAll(active);
         switchInteractions.keySet().retainAll(active);
-        miningTasks.keySet().retainAll(active);
+        gatheringTasks.keySet().retainAll(active);
         idleCycles.keySet().retainAll(active);
         observedEntities.keySet().retainAll(active);
         entityNearbyCooldownUntilTick.keySet().retainAll(active);
@@ -914,9 +915,9 @@ public final class NpcBehaviourService implements Listener {
             if (definition == null) continue;
             var settings = definition.getAiControlSettings();
             if (!settings.enabled() || !settings.autonomousEnabled()
-                    || !settings.allowedActions().contains(AiActionType.MINE_BLOCKS)) continue;
+                    || !settings.allowedActions().contains(AiActionType.GATHER_BLOCKS)) continue;
             if (combatService != null && combatService.isEngaged(instance)) continue;
-            if (miningTasks.containsKey(instance.getId())) continue;
+            if (gatheringTasks.containsKey(instance.getId())) continue;
             if (!aiControlService.hasNearbyGatherableBlocks(instance)) continue;
             invokeAi(null, "Autonomous work interval: inspect nearby resources and continue the NPC's goal.",
                     instance, definition, null);
@@ -1015,11 +1016,11 @@ public final class NpcBehaviourService implements Listener {
                 || status == NativeNpcNavigationService.NavigationStatus.STALLED) {
             moveTargets.remove(instance.getId());
             instances.stopNavigating(instance);
-            MiningTask mining = miningTasks.remove(instance.getId());
-            if (mining != null && status == NativeNpcNavigationService.NavigationStatus.ARRIVED
-                    && mining.stand().getWorld() == target.getWorld()
-                    && mining.stand().distanceSquared(target) < 0.01) {
-                mineNearbyBlocks(instance, mining.definition(), mining.target());
+            GatheringTask gathering = gatheringTasks.remove(instance.getId());
+            if (gathering != null && status == NativeNpcNavigationService.NavigationStatus.ARRIVED
+                    && gathering.stand().getWorld() == target.getWorld()
+                    && gathering.stand().distanceSquared(target) < 0.01) {
+                gatherNearbyBlocks(instance, gathering.target(), gathering.collectDrops());
             }
         }
     }
@@ -1281,23 +1282,19 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private boolean mineNearbyBlocks(NpcInstance instance) {
-        return mineNearbyBlocks(instance, null, "any");
-    }
-
-    private void startAiMining(NpcInstance instance, NpcDefinition definition, String target) {
-        if (mineNearbyBlocks(instance, definition, target)) return;
-        Block resource = nearestMineableResource(instance.getLocation(), target);
-        Location stand = resource == null ? null : miningStandLocation(resource);
+    private void startGathering(NpcInstance instance, String target, boolean collectDrops) {
+        if (gatherNearbyBlocks(instance, target, collectDrops)) return;
+        Block resource = nearestGatherableBlock(instance.getLocation(), target);
+        Location stand = resource == null ? null : gatheringStandLocation(resource);
         if (stand == null) return;
         stopFollowing(instance);
-        miningTasks.put(instance.getId(), new MiningTask(definition, target, stand));
+        gatheringTasks.put(instance.getId(), new GatheringTask(target, stand, collectDrops));
         moveTargets.put(instance.getId(), stand);
         instances.stand(instance);
         instances.stopNavigating(instance);
     }
 
-    private Block nearestMineableResource(Location center, String target) {
+    private Block nearestGatherableBlock(Location center, String target) {
         if (center.getWorld() == null) return null;
         Block nearest = null;
         double nearestDistance = Double.MAX_VALUE;
@@ -1312,7 +1309,7 @@ public final class NpcBehaviourService implements Listener {
                     if (!isGatherable(block.getType()) || !MiningTarget.matches(block.getType(), target)
                             || block.getState() instanceof TileState) continue;
                     double distance = block.getLocation().distanceSquared(center);
-                    if (distance < nearestDistance && miningStandLocation(block) != null) {
+                    if (distance < nearestDistance && gatheringStandLocation(block) != null) {
                         nearest = block;
                         nearestDistance = distance;
                     }
@@ -1322,7 +1319,7 @@ public final class NpcBehaviourService implements Listener {
         return nearest;
     }
 
-    private Location miningStandLocation(Block resource) {
+    private Location gatheringStandLocation(Block resource) {
         int[][] offsets = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
         for (int vertical : new int[] {0, -1, 1}) {
             for (int[] offset : offsets) {
@@ -1336,7 +1333,7 @@ public final class NpcBehaviourService implements Listener {
         return null;
     }
 
-    private boolean mineNearbyBlocks(NpcInstance instance, NpcDefinition definition, String target) {
+    private boolean gatherNearbyBlocks(NpcInstance instance, String target, boolean collectDrops) {
         Location feet = instance.getLocation();
         if (feet.getWorld() == null) return false;
         LivingEntity entity = instances.findEntity(instance).orElse(null);
@@ -1344,7 +1341,7 @@ public final class NpcBehaviourService implements Listener {
                 ? null : entity.getEquipment().getItemInMainHand();
         boolean mined = false;
         Inventory carried = null;
-        if (definition != null && definition.getAiControlSettings().inventoryEnabled()) {
+        if (collectDrops) {
             carried = Bukkit.createInventory(null, 27);
             carried.setContents(instance.getTemporaryInventoryContents());
         }
@@ -1359,7 +1356,10 @@ public final class NpcBehaviourService implements Listener {
                     if (!isGatherable(block.getType()) || !MiningTarget.matches(block.getType(), target)
                             || block.getState() instanceof TileState) continue;
                     ItemStack effectiveTool = tool == null ? new ItemStack(Material.AIR) : tool;
-                    for (ItemStack drop : block.getDrops(effectiveTool, entity)) {
+                    var drops = block.getDrops(effectiveTool, entity);
+                    // Do not destroy resources the equipped tool cannot actually harvest.
+                    if (drops.isEmpty()) continue;
+                    for (ItemStack drop : drops) {
                         if (carried == null) {
                             feet.getWorld().dropItemNaturally(block.getLocation(), drop);
                         } else {
@@ -1793,5 +1793,5 @@ public final class NpcBehaviourService implements Listener {
 
     private record SwitchInteraction(Location blockLocation, Location navigationTarget) { }
 
-    private record MiningTask(NpcDefinition definition, String target, Location stand) { }
+    private record GatheringTask(String target, Location stand, boolean collectDrops) { }
 }
