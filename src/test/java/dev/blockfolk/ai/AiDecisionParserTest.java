@@ -155,4 +155,21 @@ class AiDecisionParserTest {
         assertEquals(AiActionType.DROP_ITEM, enabled.actions().getFirst().type());
         assertEquals(AiActionType.DO_NOTHING, invalidTarget.actions().getFirst().type());
     }
+
+    @Test
+    void mineBlocksAcceptsOnlyValidatedResourceSelectionsWhenEnabled() {
+        AiControlSettings settings = AiControlSettings.defaults().toggle(AiActionType.MINE_BLOCKS);
+
+        AiDecision selected = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"MINE_BLOCKS\",\"target\":\"coal,gold\"}]}", settings);
+        AiDecision defaultOres = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"MINE_BLOCKS\"}]}", settings);
+        AiDecision arbitrary = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"MINE_BLOCKS\",\"target\":\"bedrock\"}]}", settings);
+
+        assertEquals(AiActionType.MINE_BLOCKS, selected.actions().getFirst().type());
+        assertEquals("coal,gold", selected.actions().getFirst().target());
+        assertEquals(AiActionType.MINE_BLOCKS, defaultOres.actions().getFirst().type());
+        assertEquals(AiActionType.DO_NOTHING, arbitrary.actions().getFirst().type());
+    }
 }

@@ -37,6 +37,12 @@ that NPC preset's editor, which resets AI state globally for its spawned copies.
 model can only select validated capabilities enabled for that preset; it cannot return
 commands or executable code.
 
+Mine Resources can be combined with Autonomous Work for independent miners. For example,
+set the Goal / Role to `You are a pro miner. Try to gather coal and gold in the mines`,
+enable Mine Resources and Autonomous Work, and optionally enable Temporary Inventory to
+store mined drops. The autonomous interval is configured with
+`ai-control.autonomous-interval-seconds`.
+
 Long-term memory is optional per preset. When enabled, the model can save durable facts
 with a validated `REMEMBER_FACT` action. Up to 45 facts survive restarts and are shared by
 the preset's spawned copies; adding another discards the oldest. The AI Behaviour menu

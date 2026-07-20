@@ -52,6 +52,8 @@ import org.bukkit.util.Vector;
 
 import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.AiDecision;
+import dev.blockfolk.ai.AiActionType;
+import dev.blockfolk.ai.MiningTarget;
 import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.util.UiText;
 import dev.blockfolk.model.ActionLocation;
@@ -103,6 +105,7 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, FollowState> following = new HashMap<>();
     private final Map<UUID, Object> waypointActionSequences = new HashMap<>();
     private final Map<UUID, SwitchInteraction> switchInteractions = new HashMap<>();
+    private final Map<UUID, MiningTask> miningTasks = new HashMap<>();
     private final Map<UUID, Object> idleCycles = new HashMap<>();
     private final Set<ProximityKey> nearbyPlayers = new HashSet<>();
     private final Map<ProximityKey, Long> proximityCooldownUntilTick = new HashMap<>();
@@ -110,6 +113,7 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, Set<UUID>> observedEntities = new HashMap<>();
     private final Map<UUID, Long> entityNearbyCooldownUntilTick = new HashMap<>();
     private final long proximityCooldownTicks;
+    private final long autonomousIntervalTicks;
     private NpcCombatService combatService;
     private AiControlService aiControlService;
     private BukkitTask behaviourTask;
@@ -118,6 +122,7 @@ public final class NpcBehaviourService implements Listener {
     private int playerLookTick;
     private int itemPickupTick;
     private int entityNearbyTick;
+    private long autonomousTick;
     private long customEmissionTick = -1L;
     private int customEmissionsThisTick;
     private boolean redstonePhysicsWarningLogged;
@@ -128,7 +133,8 @@ public final class NpcBehaviourService implements Listener {
             NpcInstanceRegistry instances,
             DialogService dialogService,
             NpcQuestionService questionService,
-            int proximityCooldownSeconds
+            int proximityCooldownSeconds,
+            int autonomousIntervalSeconds
     ) {
         this.plugin = plugin;
         this.definitions = definitions;
@@ -136,6 +142,7 @@ public final class NpcBehaviourService implements Listener {
         this.dialogService = dialogService;
         this.questionService = questionService;
         this.proximityCooldownTicks = Math.max(0L, proximityCooldownSeconds) * 20L;
+        this.autonomousIntervalTicks = Math.max(5L, autonomousIntervalSeconds) * 20L;
     }
 
     public void setCombatService(NpcCombatService combatService) {
@@ -164,6 +171,7 @@ public final class NpcBehaviourService implements Listener {
         following.clear();
         waypointActionSequences.clear();
         switchInteractions.clear();
+        miningTasks.clear();
         idleCycles.clear();
         nearbyPlayers.clear();
         proximityCooldownUntilTick.clear();
@@ -256,6 +264,7 @@ public final class NpcBehaviourService implements Listener {
         following.remove(instance.getId());
         waypointActionSequences.remove(instance.getId());
         switchInteractions.remove(instance.getId());
+        miningTasks.remove(instance.getId());
         idleCycles.remove(instance.getId());
         nearbyPlayers.removeIf(key -> key.instanceId().equals(instance.getId()));
         proximityCooldownUntilTick.keySet().removeIf(key -> key.instanceId().equals(instance.getId()));
@@ -732,6 +741,7 @@ public final class NpcBehaviourService implements Listener {
                     announceMemory(instance, definition);
                 }
                 case DROP_ITEM -> dropAiInventoryItem(instance, definition, action.target());
+                case MINE_BLOCKS -> startAiMining(instance, definition, action.target());
                 case DO_NOTHING -> { }
             }
         }
@@ -858,6 +868,10 @@ public final class NpcBehaviourService implements Listener {
     private void tickBehaviour() {
         currentTick++;
         tickTimeEvents();
+        if (++autonomousTick >= autonomousIntervalTicks) {
+            autonomousTick = 0L;
+            tickAutonomousAi();
+        }
         if (++proximityTick >= 10) {
             proximityTick = 0;
             tickProximity();
@@ -887,9 +901,26 @@ public final class NpcBehaviourService implements Listener {
         following.keySet().retainAll(active);
         waypointActionSequences.keySet().retainAll(active);
         switchInteractions.keySet().retainAll(active);
+        miningTasks.keySet().retainAll(active);
         idleCycles.keySet().retainAll(active);
         observedEntities.keySet().retainAll(active);
         entityNearbyCooldownUntilTick.keySet().retainAll(active);
+    }
+
+    private void tickAutonomousAi() {
+        if (aiControlService == null) return;
+        for (NpcInstance instance : List.copyOf(instances.findAll())) {
+            NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+            if (definition == null) continue;
+            var settings = definition.getAiControlSettings();
+            if (!settings.enabled() || !settings.autonomousEnabled()
+                    || !settings.allowedActions().contains(AiActionType.MINE_BLOCKS)) continue;
+            if (combatService != null && combatService.isEngaged(instance)) continue;
+            if (miningTasks.containsKey(instance.getId())) continue;
+            if (!aiControlService.hasNearbyMineableResources(instance)) continue;
+            invokeAi(null, "Autonomous work interval: inspect nearby resources and continue the NPC's goal.",
+                    instance, definition, null);
+        }
     }
 
     private void tickEntityNearby() {
@@ -984,6 +1015,12 @@ public final class NpcBehaviourService implements Listener {
                 || status == NativeNpcNavigationService.NavigationStatus.STALLED) {
             moveTargets.remove(instance.getId());
             instances.stopNavigating(instance);
+            MiningTask mining = miningTasks.remove(instance.getId());
+            if (mining != null && status == NativeNpcNavigationService.NavigationStatus.ARRIVED
+                    && mining.stand().getWorld() == target.getWorld()
+                    && mining.stand().distanceSquared(target) < 0.01) {
+                mineNearbyBlocks(instance, mining.definition(), mining.target());
+            }
         }
     }
 
@@ -1244,29 +1281,98 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private void mineNearbyBlocks(NpcInstance instance) {
+    private boolean mineNearbyBlocks(NpcInstance instance) {
+        return mineNearbyBlocks(instance, null, "any");
+    }
+
+    private void startAiMining(NpcInstance instance, NpcDefinition definition, String target) {
+        if (mineNearbyBlocks(instance, definition, target)) return;
+        Block resource = nearestMineableResource(instance.getLocation(), target);
+        Location stand = resource == null ? null : miningStandLocation(resource);
+        if (stand == null) return;
+        stopFollowing(instance);
+        miningTasks.put(instance.getId(), new MiningTask(definition, target, stand));
+        moveTargets.put(instance.getId(), stand);
+        instances.stand(instance);
+        instances.stopNavigating(instance);
+    }
+
+    private Block nearestMineableResource(Location center, String target) {
+        if (center.getWorld() == null) return null;
+        Block nearest = null;
+        double nearestDistance = Double.MAX_VALUE;
+        int radius = 8;
+        for (int x = -radius; x <= radius; x++) {
+            for (int y = -radius; y <= radius; y++) {
+                int blockY = center.getBlockY() + y;
+                if (blockY < center.getWorld().getMinHeight() || blockY >= center.getWorld().getMaxHeight()) continue;
+                for (int z = -radius; z <= radius; z++) {
+                    if (x * x + y * y + z * z > radius * radius) continue;
+                    Block block = center.getWorld().getBlockAt(center.getBlockX() + x, blockY, center.getBlockZ() + z);
+                    if (!isMineable(block.getType()) || !MiningTarget.matches(block.getType(), target)
+                            || block.getState() instanceof TileState) continue;
+                    double distance = block.getLocation().distanceSquared(center);
+                    if (distance < nearestDistance && miningStandLocation(block) != null) {
+                        nearest = block;
+                        nearestDistance = distance;
+                    }
+                }
+            }
+        }
+        return nearest;
+    }
+
+    private Location miningStandLocation(Block resource) {
+        int[][] offsets = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        for (int vertical : new int[] {0, -1, 1}) {
+            for (int[] offset : offsets) {
+                Block feet = resource.getRelative(offset[0], vertical, offset[1]);
+                if (feet.isPassable() && feet.getRelative(0, 1, 0).isPassable()
+                        && !feet.getRelative(0, -1, 0).isPassable()) {
+                    return feet.getLocation().add(.5, 0, .5);
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean mineNearbyBlocks(NpcInstance instance, NpcDefinition definition, String target) {
         Location feet = instance.getLocation();
-        if (feet.getWorld() == null) return;
+        if (feet.getWorld() == null) return false;
         LivingEntity entity = instances.findEntity(instance).orElse(null);
         org.bukkit.inventory.ItemStack tool = entity == null || entity.getEquipment() == null
                 ? null : entity.getEquipment().getItemInMainHand();
         boolean mined = false;
+        Inventory carried = null;
+        if (definition != null && definition.getAiControlSettings().inventoryEnabled()) {
+            carried = Bukkit.createInventory(null, 27);
+            carried.setContents(instance.getTemporaryInventoryContents());
+        }
         // The four layers begin at the NPC's feet. The supporting y - 1 layer is never visited.
         for (int y = 0; y < 4; y++) {
             for (int x = -2; x <= 2; x++) {
                 for (int z = -2; z <= 2; z++) {
                     Block block = feet.getBlock().getRelative(x, y, z);
-                    if (!isMineable(block.getType()) || block.getState() instanceof TileState) continue;
+                    if (!isMineable(block.getType()) || !MiningTarget.matches(block.getType(), target)
+                            || block.getState() instanceof TileState) continue;
                     ItemStack effectiveTool = tool == null ? new ItemStack(Material.AIR) : tool;
                     for (ItemStack drop : block.getDrops(effectiveTool, entity)) {
-                        feet.getWorld().dropItemNaturally(block.getLocation(), drop);
+                        if (carried == null) {
+                            feet.getWorld().dropItemNaturally(block.getLocation(), drop);
+                        } else {
+                            for (ItemStack leftover : carried.addItem(drop).values()) {
+                                feet.getWorld().dropItemNaturally(block.getLocation(), leftover);
+                            }
+                        }
                     }
                     block.setType(Material.AIR, true);
                     mined = true;
                 }
             }
         }
+        if (carried != null && mined) updateTemporaryInventory(instance, carried.getContents(), entity);
         if (mined && entity != null) entity.swingMainHand();
+        return mined;
     }
 
     private void takeNearbyItem(NpcInstance instance, Entity actor) {
@@ -1683,4 +1789,6 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private record SwitchInteraction(Location blockLocation, Location navigationTarget) { }
+
+    private record MiningTask(NpcDefinition definition, String target, Location stand) { }
 }

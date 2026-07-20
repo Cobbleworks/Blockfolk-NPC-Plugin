@@ -817,7 +817,9 @@ public final class GuiService implements Listener {
                 settings.reactToNearbyDeaths(), "Lets the NPC comment when someone dies within 12 blocks"));
         inventory.setItem(22, toggleItem(Material.CHEST, "Temporary Inventory",
                 settings.inventoryEnabled(), "Lets the AI see and drop items carried by each spawned instance"));
-        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
+        inventory.setItem(23, toggleItem(Material.CLOCK, "Autonomous Work",
+                settings.autonomousEnabled(), "Lets the NPC periodically pursue nearby work without a player trigger"));
+        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
         List<AiActionType> types = java.util.Arrays.stream(AiActionType.values())
                 .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM).toList();
         for (int index = 0; index < types.size(); index++) {
@@ -837,7 +839,7 @@ public final class GuiService implements Listener {
         }
         inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
         boolean hasTrigger = settings.greetOnApproach() || settings.respondToChat()
-                || settings.reactToNearbyDeaths();
+                || settings.reactToNearbyDeaths() || settings.autonomousEnabled();
         String status = !settings.enabled() ? "Paused" : hasTrigger ? "Active" : "No Triggers";
         Material statusMaterial = !settings.enabled() ? Material.RED_DYE
                 : hasTrigger ? Material.LIME_DYE : Material.YELLOW_DYE;
@@ -1879,7 +1881,14 @@ public final class GuiService implements Listener {
             openAiControl(player, definition);
             return;
         }
-        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
+        if (slot == 23) {
+            AiControlSettings settings = definition.getAiControlSettings();
+            definition.setAiControlSettings(settings.withAutonomousEnabled(!settings.autonomousEnabled()));
+            definitionRepository.save(definition);
+            openAiControl(player, definition);
+            return;
+        }
+        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
         List<AiActionType> types = java.util.Arrays.stream(AiActionType.values())
                 .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM).toList();
         for (int index = 0; index < types.size(); index++) {

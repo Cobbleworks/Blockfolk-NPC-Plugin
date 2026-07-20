@@ -118,7 +118,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 instanceRegistry,
                 dialogService,
                 questionService,
-                getConfig().getInt("proximity-transition-cooldown-seconds", 3)
+                getConfig().getInt("proximity-transition-cooldown-seconds", 3),
+                getConfig().getInt("ai-control.autonomous-interval-seconds", 15)
         );
         behaviourService.setCombatService(combatService);
         OpenRouterClient openRouterClient = new OpenRouterClient(

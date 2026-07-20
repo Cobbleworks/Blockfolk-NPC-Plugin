@@ -130,6 +130,7 @@ public final class NpcDefinitionRepository {
         configuration.set("ai-control.react-to-nearby-deaths", ai.reactToNearbyDeaths());
         configuration.set("ai-control.memory.enabled", ai.memoryEnabled());
         configuration.set("ai-control.inventory.enabled", ai.inventoryEnabled());
+        configuration.set("ai-control.autonomous.enabled", ai.autonomousEnabled());
         configuration.set("ai-control.memory.facts", definition.getAiMemories());
         configuration.set("ai-control.allowed-actions", ai.allowedActions().stream()
                 .filter(action -> action != AiActionType.REMEMBER_FACT && action != AiActionType.DROP_ITEM)
@@ -270,7 +271,8 @@ public final class NpcDefinitionRepository {
                 configuration.getBoolean("ai-control.respond-to-chat", true),
                 configuration.getBoolean("ai-control.react-to-nearby-deaths", false),
                 configuration.getBoolean("ai-control.memory.enabled", false),
-                configuration.getBoolean("ai-control.inventory.enabled", false)));
+                configuration.getBoolean("ai-control.inventory.enabled", false),
+                configuration.getBoolean("ai-control.autonomous.enabled", false)));
         definition.setAiMemories(configuration.getStringList("ai-control.memory.facts"));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
