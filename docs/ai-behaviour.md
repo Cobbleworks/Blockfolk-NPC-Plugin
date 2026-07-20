@@ -9,8 +9,8 @@ section is configured, OpenRouter is configured, and an enabled trigger fires. T
 automatic triggers are an approach greeting, nearby player chat, an optional nearby
 death reaction, and optional autonomous work. Chat is accepted within eight blocks of
 the NPC; deaths are observed within twelve blocks. Autonomous work is checked every 15
-seconds by default and only requests a decision when Mine Resources is enabled and a
-mineable resource is nearby.
+seconds by default and only requests a decision when Gather Blocks is enabled and a
+whitelisted resource block is nearby.
 
 One player chat message creates one group request for all eligible NPCs within range,
 ordered by distance from the player. The closest NPC is the default speaker. The model
@@ -58,7 +58,7 @@ behaviour this is currently one of:
 - the player's name and exact nearby chat message;
 - a nearby death, including victim, rounded distance, Minecraft damage cause, and the
   killer, held weapon, and direct cause (such as a projectile) when available.
-- an autonomous work interval when Mine Resources is enabled and a resource is nearby.
+- an autonomous work interval when Gather Blocks is enabled and a resource is nearby.
 
 Chat is sent only when Respond to Nearby Chat is enabled. When it is disabled, Blockfolk
 does not store that new chat for later use.
@@ -89,7 +89,8 @@ Perception uses a 12-block radius for players and other Blockfolk NPCs. It inclu
   rounded distance, and whether it is the triggering entity;
 - up to five nearby levers within 12 blocks, including rounded distance and whether
   each lever is powered;
-- nearby ores, ancient debris, and obsidian within eight blocks, grouped by material;
+- nearby whitelisted ores, logs, wood, stems, bamboo, ancient debris, and obsidian within
+  eight blocks, grouped by material;
 - up to five nearest globally saved locations in the same world and within 64 blocks.
 
 Each perceived player, NPC, entity, and saved location has a request-local alias such as
@@ -153,9 +154,11 @@ enforces the same list before anything runs. Current capabilities are:
 - start or pause the configured route;
 - when Temporary Inventory access is enabled and the instance carries items, drop one
   selected inventory stack using its `inventory_slot_N` alias;
-- mine nearby ores and resources. The model may select `coal`, `gold`, `iron`, `copper`,
+- gather nearby whitelisted blocks. The model may select `coal`, `gold`, `iron`, `copper`,
   `diamond`, `emerald`, `redstone`, `lapis`, `quartz`, `ancient_debris`, `obsidian`, or
-  `stone`, including comma-separated selections such as `coal,gold`. With Temporary
+  `stone`; generic `wood`/`logs`; or `oak`, `spruce`, `birch`, `jungle`, `acacia`,
+  `dark_oak`, `mangrove`, `cherry`, `pale_oak`, `crimson`, `warped`, and `bamboo`.
+  Targets may be comma-separated, such as `coal,gold` or `oak,spruce`. With Temporary
   Inventory enabled, mined drops are gathered into the instance inventory; overflow is
   dropped naturally. Without it, all drops are placed naturally in the world. When the
   nearest selected resource is outside mining reach, the NPC first paths to a safe

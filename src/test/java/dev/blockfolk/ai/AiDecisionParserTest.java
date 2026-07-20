@@ -162,14 +162,17 @@ class AiDecisionParserTest {
 
         AiDecision selected = AiDecisionParser.parse(
                 "{\"actions\":[{\"type\":\"MINE_BLOCKS\",\"target\":\"coal,gold\"}]}", settings);
-        AiDecision defaultOres = AiDecisionParser.parse(
+        AiDecision defaultResources = AiDecisionParser.parse(
                 "{\"actions\":[{\"type\":\"MINE_BLOCKS\"}]}", settings);
         AiDecision arbitrary = AiDecisionParser.parse(
                 "{\"actions\":[{\"type\":\"MINE_BLOCKS\",\"target\":\"bedrock\"}]}", settings);
+        AiDecision wood = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"MINE_BLOCKS\",\"target\":\"oak,spruce\"}]}", settings);
 
         assertEquals(AiActionType.MINE_BLOCKS, selected.actions().getFirst().type());
         assertEquals("coal,gold", selected.actions().getFirst().target());
-        assertEquals(AiActionType.MINE_BLOCKS, defaultOres.actions().getFirst().type());
+        assertEquals(AiActionType.MINE_BLOCKS, defaultResources.actions().getFirst().type());
         assertEquals(AiActionType.DO_NOTHING, arbitrary.actions().getFirst().type());
+        assertEquals(AiActionType.MINE_BLOCKS, wood.actions().getFirst().type());
     }
 }

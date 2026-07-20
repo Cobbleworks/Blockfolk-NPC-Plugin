@@ -917,7 +917,7 @@ public final class NpcBehaviourService implements Listener {
                     || !settings.allowedActions().contains(AiActionType.MINE_BLOCKS)) continue;
             if (combatService != null && combatService.isEngaged(instance)) continue;
             if (miningTasks.containsKey(instance.getId())) continue;
-            if (!aiControlService.hasNearbyMineableResources(instance)) continue;
+            if (!aiControlService.hasNearbyGatherableBlocks(instance)) continue;
             invokeAi(null, "Autonomous work interval: inspect nearby resources and continue the NPC's goal.",
                     instance, definition, null);
         }
@@ -1309,7 +1309,7 @@ public final class NpcBehaviourService implements Listener {
                 for (int z = -radius; z <= radius; z++) {
                     if (x * x + y * y + z * z > radius * radius) continue;
                     Block block = center.getWorld().getBlockAt(center.getBlockX() + x, blockY, center.getBlockZ() + z);
-                    if (!isMineable(block.getType()) || !MiningTarget.matches(block.getType(), target)
+                    if (!isGatherable(block.getType()) || !MiningTarget.matches(block.getType(), target)
                             || block.getState() instanceof TileState) continue;
                     double distance = block.getLocation().distanceSquared(center);
                     if (distance < nearestDistance && miningStandLocation(block) != null) {
@@ -1348,12 +1348,15 @@ public final class NpcBehaviourService implements Listener {
             carried = Bukkit.createInventory(null, 27);
             carried.setContents(instance.getTemporaryInventoryContents());
         }
-        // The four layers begin at the NPC's feet. The supporting y - 1 layer is never visited.
-        for (int y = 0; y < 4; y++) {
+        // General resources use the original four-layer working area. Whitelisted trunk
+        // blocks continue upward so a single gather action can actually fell a tree.
+        // The supporting y - 1 layer is never visited.
+        for (int y = 0; y < 12; y++) {
             for (int x = -2; x <= 2; x++) {
                 for (int z = -2; z <= 2; z++) {
                     Block block = feet.getBlock().getRelative(x, y, z);
-                    if (!isMineable(block.getType()) || !MiningTarget.matches(block.getType(), target)
+                    if (y >= 4 && !MiningTarget.isWood(block.getType())) continue;
+                    if (!isGatherable(block.getType()) || !MiningTarget.matches(block.getType(), target)
                             || block.getState() instanceof TileState) continue;
                     ItemStack effectiveTool = tool == null ? new ItemStack(Material.AIR) : tool;
                     for (ItemStack drop : block.getDrops(effectiveTool, entity)) {
@@ -1591,8 +1594,8 @@ public final class NpcBehaviourService implements Listener {
         @Override public Inventory getInventory() { return null; }
     }
 
-    private static boolean isMineable(Material material) {
-        return Tag.MINEABLE_PICKAXE.isTagged(material);
+    private static boolean isGatherable(Material material) {
+        return Tag.MINEABLE_PICKAXE.isTagged(material) || Tag.MINEABLE_AXE.isTagged(material);
     }
 
     private java.util.Optional<Player> nearestPlayer(NpcInstance instance) {

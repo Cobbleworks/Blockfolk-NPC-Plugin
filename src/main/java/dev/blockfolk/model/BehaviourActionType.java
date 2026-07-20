@@ -17,7 +17,7 @@ public enum BehaviourActionType {
     TELEPORT_TO("Teleport To", true),
     WAIT("Wait", true),
     INTERACT("Interact", false),
-    MINE_BLOCKS("Mine Blocks", false),
+    MINE_BLOCKS("Gather Blocks", false),
     TAKE_ITEM("Take Item", false),
     SHOW_INVENTORY("Show Inventory", false),
     DROP_INVENTORY("Drop Inventory", false),

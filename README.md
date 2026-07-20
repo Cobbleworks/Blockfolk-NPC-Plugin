@@ -37,10 +37,11 @@ that NPC preset's editor, which resets AI state globally for its spawned copies.
 model can only select validated capabilities enabled for that preset; it cannot return
 commands or executable code.
 
-Mine Resources can be combined with Autonomous Work for independent miners. For example,
+Gather Blocks can be combined with Autonomous Work for independent miners or woodcutters. For example,
 set the Goal / Role to `You are a pro miner. Try to gather coal and gold in the mines`,
-enable Mine Resources and Autonomous Work, and optionally enable Temporary Inventory to
-store mined drops. The autonomous interval is configured with
+or `You are a lumberjack. Gather oak and spruce logs`, enable Gather Blocks and
+Autonomous Work, and optionally enable Temporary Inventory to store gathered drops.
+The autonomous interval is configured with
 `ai-control.autonomous-interval-seconds`.
 
 Long-term memory is optional per preset. When enabled, the model can save durable facts

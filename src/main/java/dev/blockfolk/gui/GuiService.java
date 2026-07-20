@@ -3498,7 +3498,7 @@ public final class GuiService implements Listener {
             case INTERACT ->
                 Material.LEVER;
             case MINE_BLOCKS ->
-                Material.IRON_PICKAXE;
+                Material.IRON_AXE;
             case TAKE_ITEM ->
                 Material.HOPPER;
             case SHOW_INVENTORY ->
