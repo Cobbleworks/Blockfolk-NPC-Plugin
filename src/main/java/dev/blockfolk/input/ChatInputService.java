@@ -27,6 +27,7 @@ public final class ChatInputService implements Listener {
     private final int timeoutSeconds;
     private final Map<UUID, PendingInput> pendingInputs = new HashMap<>();
     private final Set<UUID> requestingInputs = new HashSet<>();
+    private final Set<UUID> consumingChat = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private Consumer<Player> beforeRequest = ignored -> { };
 
     public ChatInputService(Plugin plugin, int timeoutSeconds) {
@@ -58,6 +59,11 @@ public final class ChatInputService implements Listener {
         return pendingInputs.containsKey(player.getUniqueId()) || requestingInputs.contains(player.getUniqueId());
     }
 
+    /** Safe to query from Paper's asynchronous chat event thread. */
+    public boolean isConsumingChat(UUID playerId) {
+        return consumingChat.contains(playerId);
+    }
+
     public void setBeforeRequest(Consumer<Player> beforeRequest) {
         this.beforeRequest = beforeRequest == null ? ignored -> { } : beforeRequest;
     }
@@ -68,6 +74,7 @@ public final class ChatInputService implements Listener {
         }
         pendingInputs.clear();
         requestingInputs.clear();
+        consumingChat.clear();
     }
 
     public void cancel(Player player) {
@@ -80,14 +87,25 @@ public final class ChatInputService implements Listener {
         if (input == null) {
             return;
         }
+        UUID playerId = event.getPlayer().getUniqueId();
+        consumingChat.add(playerId);
         event.setCancelled(true);
         input.timeout.cancel();
         String message = PLAIN_TEXT.serialize(event.message());
         if (message.equalsIgnoreCase("cancel")) {
-            Bukkit.getScheduler().runTask(plugin, () -> event.getPlayer().sendMessage(UiText.warning("Input cancelled.")));
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                event.getPlayer().sendMessage(UiText.warning("Input cancelled."));
+                consumingChat.remove(playerId);
+            });
             return;
         }
-        Bukkit.getScheduler().runTask(plugin, () -> input.consumer.accept(message));
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            try {
+                input.consumer.accept(message);
+            } finally {
+                consumingChat.remove(playerId);
+            }
+        });
     }
 
     @EventHandler

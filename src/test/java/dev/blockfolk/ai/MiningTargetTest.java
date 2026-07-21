@@ -47,4 +47,13 @@ class MiningTargetTest {
         assertEquals(List.of("resources"), MiningTarget.selection(null));
         assertEquals("Coal, Gold, Oak", MiningTarget.displaySelection("coal,gold,oak"));
     }
+
+    @Test
+    void canonicalizesNaturalTreeTargetsReturnedByModels() {
+        assertTrue(MiningTarget.valid("trees"));
+        assertTrue(MiningTarget.valid("nearby trees"));
+        assertEquals("wood", MiningTarget.canonicalSelection("all trees"));
+        assertEquals("oak,spruce", MiningTarget.canonicalSelection("oak logs,spruce trees"));
+        assertTrue(MiningTarget.matches(Material.OAK_LOG, "trees"));
+    }
 }

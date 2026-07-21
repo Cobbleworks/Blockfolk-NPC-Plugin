@@ -54,6 +54,7 @@ import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.AiDecision;
 import dev.blockfolk.ai.MiningTarget;
 import dev.blockfolk.dialog.DialogService;
+import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.util.UiText;
 import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.BehaviourAction;
@@ -96,6 +97,7 @@ public final class NpcBehaviourService implements Listener {
     private final NpcInstanceRegistry instances;
     private final DialogService dialogService;
     private final NpcQuestionService questionService;
+    private final ChatInputService chatInputService;
     private final Set<UUID> lowHealthTriggered = new HashSet<>();
     private final Map<UUID, String> routeOverrides = new HashMap<>();
     private final Map<UUID, WalkingSpeed> speedOverrides = new HashMap<>();
@@ -130,6 +132,7 @@ public final class NpcBehaviourService implements Listener {
             NpcInstanceRegistry instances,
             DialogService dialogService,
             NpcQuestionService questionService,
+            ChatInputService chatInputService,
             int proximityCooldownSeconds
     ) {
         this.plugin = plugin;
@@ -137,6 +140,7 @@ public final class NpcBehaviourService implements Listener {
         this.instances = instances;
         this.dialogService = dialogService;
         this.questionService = questionService;
+        this.chatInputService = chatInputService;
         this.proximityCooldownTicks = Math.max(0L, proximityCooldownSeconds) * 20L;
     }
 
@@ -550,9 +554,15 @@ public final class NpcBehaviourService implements Listener {
                 .ifPresent(instance -> trigger(BehaviourEvent.HEAL, instance, null));
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerChat(AsyncChatEvent event) {
         Player player = event.getPlayer();
+        UUID playerId = player.getUniqueId();
+        // Many chat/channel plugins cancel AsyncChatEvent and publish their own
+        // formatted message. Still treat that as speech, while excluding text that
+        // Blockfolk itself captured for an admin prompt or NPC question.
+        if (event.isCancelled() && (chatInputService.isConsumingChat(playerId)
+                || questionService.isConsumingChat(playerId))) return;
         String message = PlainTextComponentSerializer.plainText().serialize(event.message());
         Bukkit.getScheduler().runTask(plugin, () -> {
             List<NpcInstance> nearby = instances.findAll().stream()
@@ -584,11 +594,18 @@ public final class NpcBehaviourService implements Listener {
                 }
             }
             if (aiControlService != null && !aiGroup.isEmpty()) {
-                aiControlService.invokeChatGroup(detail, aiGroup, player, (instance, decision) ->
-                        definitions.find(instance.getDefinitionKey()).ifPresent(definition ->
-                                executeSequence(BehaviourEvent.PLAYER_CHAT,
-                                        definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT), 0,
-                                        instance, definition, player, detail, () -> { }, decision)));
+                // Claim the processing display as soon as chat is accepted. A chat request can
+                // otherwise wait behind an approach/idle request or the AI cooldown with no
+                // visible acknowledgement. DialogService reference-counts this claim against
+                // any request that is already in flight.
+                aiGroup.forEach(dialogService::showProcessing);
+                aiControlService.invokeChatGroup(detail, aiGroup, player, (instance, decision) -> {
+                    dialogService.hideProcessing(instance);
+                    definitions.find(instance.getDefinitionKey()).ifPresent(definition ->
+                            executeSequence(BehaviourEvent.PLAYER_CHAT,
+                                    definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT), 0,
+                                    instance, definition, player, detail, () -> { }, decision));
+                });
             }
         });
     }

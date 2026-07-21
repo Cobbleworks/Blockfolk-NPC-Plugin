@@ -169,13 +169,20 @@ class AiDecisionParserTest {
                 "{\"actions\":[{\"type\":\"GATHER_BLOCKS\"}]}", settings);
         AiDecision arbitrary = AiDecisionParser.parse(
                 "{\"actions\":[{\"type\":\"GATHER_BLOCKS\",\"target\":\"bedrock\"}]}", settings);
+        AiDecision partlyArbitrary = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"GATHER_BLOCKS\",\"target\":\"coal,bedrock\"}]}", settings);
         AiDecision wood = AiDecisionParser.parse(
                 "{\"actions\":[{\"type\":\"GATHER_BLOCKS\",\"target\":\"oak,spruce\"}]}", settings);
+        AiDecision trees = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"GATHER_BLOCKS\",\"target\":\"all nearby trees\"}]}", settings);
 
         assertEquals(AiActionType.GATHER_BLOCKS, selected.actions().getFirst().type());
         assertEquals("coal,gold", selected.actions().getFirst().target());
         assertEquals(AiActionType.GATHER_BLOCKS, defaultResources.actions().getFirst().type());
         assertEquals(AiActionType.DO_NOTHING, arbitrary.actions().getFirst().type());
+        assertEquals(AiActionType.DO_NOTHING, partlyArbitrary.actions().getFirst().type());
         assertEquals(AiActionType.GATHER_BLOCKS, wood.actions().getFirst().type());
+        assertEquals(AiActionType.GATHER_BLOCKS, trees.actions().getFirst().type());
+        assertEquals("wood", trees.actions().getFirst().target());
     }
 }

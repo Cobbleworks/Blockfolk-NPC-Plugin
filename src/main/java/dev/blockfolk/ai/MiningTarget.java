@@ -26,6 +26,18 @@ public final class MiningTarget {
                 .map(MiningTarget::normalize).allMatch(MiningTarget::validTarget);
     }
 
+    /** Converts model-friendly resource wording to the deterministic stored target names. */
+    public static String canonicalSelection(String value) {
+        if (value == null || value.isBlank()) return null;
+        String[] values = value.split(",");
+        if (values.length > MAX_SELECTIONS) return null;
+        List<String> normalized = Arrays.stream(values).map(MiningTarget::normalize).toList();
+        if (normalized.stream().anyMatch(target -> !validTarget(target))) return null;
+        LinkedHashSet<String> selected = new LinkedHashSet<>();
+        selected.addAll(normalized);
+        return selected.isEmpty() ? null : String.join(",", selected);
+    }
+
     public static List<String> targets() {
         return TARGETS.stream().distinct().toList();
     }
@@ -134,7 +146,25 @@ public final class MiningTarget {
 
     private static String normalize(String value) {
         String normalized = value.trim().toLowerCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
-        return normalized.startsWith("minecraft:") ? normalized.substring("minecraft:".length()) : normalized;
+        normalized = normalized.startsWith("minecraft:")
+                ? normalized.substring("minecraft:".length()) : normalized;
+        while (normalized.startsWith("all_") || normalized.startsWith("nearby_")) {
+            normalized = normalized.substring(normalized.indexOf('_') + 1);
+        }
+        return switch (normalized) {
+            case "tree", "trees", "timber" -> "wood";
+            case "log" -> "logs";
+            default -> normalizeFamilyPlural(normalized);
+        };
+    }
+
+    private static String normalizeFamilyPlural(String value) {
+        for (String suffix : List.of("_trees", "_logs")) {
+            if (!value.endsWith(suffix)) continue;
+            String family = value.substring(0, value.length() - suffix.length());
+            if (TARGETS.contains(family)) return family;
+        }
+        return value;
     }
 
     private static boolean validTarget(String target) {

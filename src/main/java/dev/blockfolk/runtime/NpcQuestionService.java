@@ -43,6 +43,7 @@ public final class NpcQuestionService implements Listener {
     private final ChatInputService chatInput;
     private final int timeoutSeconds;
     private final Map<UUID, PlayerState> states = new HashMap<>();
+    private final java.util.Set<UUID> consumingChat = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private BukkitTask rangeTask;
 
     public NpcQuestionService(Plugin plugin, NpcInstanceRegistry instances, ChatInputService chatInput,
@@ -65,6 +66,7 @@ public final class NpcQuestionService implements Listener {
             if (state.timeout != null) state.timeout.cancel();
         }
         states.clear();
+        consumingChat.clear();
     }
 
     /** Queues a question. False means an identical active/queued/resolving request was deduplicated. */
@@ -99,21 +101,32 @@ public final class NpcQuestionService implements Listener {
         PlayerState state = states.get(event.getPlayer().getUniqueId());
         Request active = state == null ? null : state.active;
         if (active == null) return;
+        UUID playerId = event.getPlayer().getUniqueId();
+        consumingChat.add(playerId);
         event.setCancelled(true);
         String input = PLAIN_TEXT.serialize(event.message()).trim();
         UUID token = active.token;
         Bukkit.getScheduler().runTask(plugin, () -> {
-            if (input.equalsIgnoreCase("cancel")) {
-                cancel(event.getPlayer().getUniqueId(), token);
-                return;
-            }
             try {
-                select(event.getPlayer().getUniqueId(), token, Integer.parseInt(input) - 1);
-            } catch (NumberFormatException exception) {
-                event.getPlayer().sendMessage(Component.text("Type an answer number or 'cancel'.",
-                        NamedTextColor.RED));
+                if (input.equalsIgnoreCase("cancel")) {
+                    cancel(playerId, token);
+                    return;
+                }
+                try {
+                    select(playerId, token, Integer.parseInt(input) - 1);
+                } catch (NumberFormatException exception) {
+                    event.getPlayer().sendMessage(Component.text("Type an answer number or 'cancel'.",
+                            NamedTextColor.RED));
+                }
+            } finally {
+                consumingChat.remove(playerId);
             }
         });
+    }
+
+    /** Safe to query from Paper's asynchronous chat event thread. */
+    public boolean isConsumingChat(UUID playerId) {
+        return consumingChat.contains(playerId);
     }
 
     @EventHandler

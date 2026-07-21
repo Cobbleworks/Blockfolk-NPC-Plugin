@@ -118,6 +118,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 instanceRegistry,
                 dialogService,
                 questionService,
+                chatInputService,
                 getConfig().getInt("proximity-transition-cooldown-seconds", 3)
         );
         behaviourService.setCombatService(combatService);

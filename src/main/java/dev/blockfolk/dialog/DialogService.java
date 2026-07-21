@@ -112,6 +112,7 @@ public final class DialogService {
         }
         runtime.display.text(Component.text(line));
         runtime.processing = false;
+        runtime.processingClaims = 0;
         runtime.remainingTicks = lineDurationSeconds(line) * 20;
     }
 
@@ -126,6 +127,7 @@ public final class DialogService {
             runtime = new DialogRuntime(display, instance);
             displays.put(instance.getId(), runtime);
         }
+        runtime.processingClaims++;
         runtime.processing = true;
         runtime.processingFrame = 0;
         runtime.processingFrameTicks = 0;
@@ -135,6 +137,8 @@ public final class DialogService {
     public void hideProcessing(NpcInstance instance) {
         DialogRuntime runtime = displays.get(instance.getId());
         if (runtime == null || !runtime.processing) return;
+        if (--runtime.processingClaims > 0) return;
+        runtime.processingClaims = 0;
         runtime.display.remove();
         displays.remove(instance.getId());
     }
@@ -185,6 +189,7 @@ public final class DialogService {
         private final NpcInstance instance;
         private int remainingTicks;
         private boolean processing;
+        private int processingClaims;
         private int processingFrame;
         private int processingFrameTicks;
 

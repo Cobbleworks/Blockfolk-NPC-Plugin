@@ -57,6 +57,11 @@ public final class AiDecisionParser {
         String text = string(object, "text", false);
         String target = string(object, "target", true);
         String animation = string(object, "animation", true);
+        if (type == AiActionType.GATHER_BLOCKS && target != null) {
+            String canonicalTarget = MiningTarget.canonicalSelection(target);
+            if (canonicalTarget == null) return java.util.Optional.empty();
+            target = canonicalTarget;
+        }
         if (type == AiActionType.SAY && (text == null || text.isBlank())) return java.util.Optional.empty();
         if (type == AiActionType.REMEMBER_FACT && (text == null || text.isBlank())) {
             return java.util.Optional.empty();
