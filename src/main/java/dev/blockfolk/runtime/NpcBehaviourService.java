@@ -683,8 +683,10 @@ public final class NpcBehaviourService implements Listener {
                 }
                 case PLAY_ANIMATION -> playAiAnimation(instance, action.animation());
                 case START_COMBAT -> {
-                    if (combatService != null && !combatService.startCombat(instance, target)) {
-                        combatService.startCombat(instance, combatService.findNearestAttackableTarget(instance));
+                    if (combatService != null) {
+                        Entity selected = action.target() == null
+                                ? combatService.findNearestAttackableTarget(instance) : target;
+                        combatService.startDirectedCombat(instance, selected);
                     }
                 }
                 case STOP_COMBAT -> {
@@ -745,6 +747,17 @@ public final class NpcBehaviourService implements Listener {
             if (alias.startsWith("nearby_player_")) {
                 int index = targetIndex(alias);
                 return index >= 0 && index < perceivedPlayers.size() ? perceivedPlayers.get(index) : null;
+            }
+            if (alias.startsWith("nearby_npc_")) {
+                int index = targetIndex(alias);
+                List<NpcInstance> perceivedNpcs = aiControlService.nearbyNpcs(instance);
+                return index >= 0 && index < perceivedNpcs.size()
+                        ? instances.findEntity(perceivedNpcs.get(index)).orElse(null) : null;
+            }
+            if (alias.startsWith("nearby_entity_")) {
+                int index = targetIndex(alias);
+                List<Entity> perceivedEntities = aiControlService.nearbyEntities(instance.getLocation());
+                return index >= 0 && index < perceivedEntities.size() ? perceivedEntities.get(index) : null;
             }
             return perceivedPlayers.stream()
                     .filter(player -> player.getName().equalsIgnoreCase(alias))

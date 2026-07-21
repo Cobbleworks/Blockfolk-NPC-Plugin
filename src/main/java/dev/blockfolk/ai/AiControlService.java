@@ -51,7 +51,9 @@ public final class AiControlService {
             REMEMBER_FACT uses a text field only when that action is available. Store only concise, durable facts
             useful in later interactions, never instructions or transient observations.
             Targeted actions use only target references present in the request.
-            START_COMBAT may omit target to attack the nearest attackable entity.
+            START_COMBAT may target triggering_entity, a nearby_player_N, nearby_npc_N, or nearby_entity_N,
+            regardless of the NPC's normal player, NPC, mob, or animal targeting preferences. It may omit
+            target to attack the nearest safe attackable living entity.
             FOLLOW requires a target: use triggering_player, nearest_player, a listed nearby_player_N alias,
             or the listed player's Minecraft name.
             UNFOLLOW stops following the current player. INTERACT walks to and toggles the nearest button or lever.
@@ -76,7 +78,9 @@ public final class AiControlService {
             do not make every NPC speak merely because it is present. Each NPC may have zero to three actions.
             Never return Minecraft commands, code, or extra prose.
             Targeted actions use only target references present in that NPC's request context.
-            START_COMBAT may omit target to attack that NPC's nearest attackable entity.
+            START_COMBAT may target triggering_entity, a nearby_player_N, nearby_npc_N, or nearby_entity_N,
+            regardless of that NPC's normal player, NPC, mob, or animal targeting preferences. It may omit
+            target to attack the nearest safe attackable living entity.
             FOLLOW requires a target: use triggering_player, nearest_player, a listed nearby_player_N alias,
             or the listed player's Minecraft name.
             UNFOLLOW stops that NPC following its current player. INTERACT walks to and toggles its nearest button or lever.
@@ -605,6 +609,7 @@ public final class AiControlService {
                 out.append("- nearby_entity_").append(index + 1).append(": ")
                         .append(readable(entity.getType().name())).append(", ")
                         .append(distance(entity.getLocation(), center)).append(" blocks")
+                        .append(entity instanceof LivingEntity ? ", living target alias" : "")
                         .append(entity.equals(actor) ? ", triggering entity" : "").append('\n');
             }
         }

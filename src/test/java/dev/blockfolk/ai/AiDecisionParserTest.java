@@ -57,6 +57,23 @@ class AiDecisionParserTest {
     }
 
     @Test
+    void startCombatAcceptsPerceivedEntitiesRegardlessOfNormalTargetCategories() {
+        AiControlSettings settings = new AiControlSettings("Guard", "", "Defend this place", "",
+                EnumSet.of(AiActionType.START_COMBAT), true, false, true);
+
+        AiDecision entity = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"nearby_entity_2\"}]}", settings);
+        AiDecision npc = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"nearby_npc_1\"}]}", settings);
+        AiDecision arbitrary = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"some_cow\"}]}", settings);
+
+        assertEquals("nearby_entity_2", entity.actions().getFirst().target());
+        assertEquals("nearby_npc_1", npc.actions().getFirst().target());
+        assertEquals(AiActionType.DO_NOTHING, arbitrary.actions().getFirst().type());
+    }
+
+    @Test
     void enforcesMaximumOfThreeActionsAndAcceptsCodeFences() {
         AiDecision decision = AiDecisionParser.parse("""
                 ```json

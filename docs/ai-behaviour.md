@@ -141,9 +141,9 @@ enforces the same list before anything runs. Current capabilities are:
 
 - Respond to Nearby Chat / speech;
 - play animation;
-- start or stop combat; Start Combat falls back to the nearest attackable entity within
-  16 blocks when the model does not provide a valid target, regardless of the preset's
-  aggression setting;
+- start or stop combat; Start Combat accepts a perceived player, NPC, mob, or animal alias
+  regardless of the preset's normal combat target categories. With no target it selects
+  the nearest safely attackable living entity within 16 blocks;
 - flee from a target;
 - follow a player;
 - stop following the current player;

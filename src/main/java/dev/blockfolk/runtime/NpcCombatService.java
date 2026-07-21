@@ -117,6 +117,11 @@ public final class NpcCombatService implements Listener {
     }
 
     public boolean startCombat(NpcInstance instance, Entity target) {
+        return startDirectedCombat(instance, target);
+    }
+
+    /** Starts explicitly directed combat without consulting normal category targeting preferences. */
+    public boolean startDirectedCombat(NpcInstance instance, Entity target) {
         if (!(target instanceof LivingEntity living) || !isAttackable(instance, living)) {
             return false;
         }
