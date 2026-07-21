@@ -6,8 +6,9 @@ an NPC only while its request is actively in flight.
 
 Blockfolk sends an AI request only when the NPC preset is active, at least one context
 section is configured, OpenRouter is configured, and a `Trigger AI` behaviour action
-runs. It can be placed on any normal event, custom event, question branch, or route
-waypoint. Chat is accepted within eight blocks of the NPC; nearby deaths are observed
+runs. It can be placed on any event exposed by the behaviour editor, custom event,
+question branch, or route waypoint. On Player Chat is configured directly in the AI menu
+and stores the same `Trigger AI` action internally. Chat is accepted within eight blocks of the NPC; nearby deaths are observed
 within twelve blocks. `On Work Available` is checked every 15 seconds by default and
 fires only while a gatherable block is nearby and the NPC is not already fighting or gathering.
 
@@ -18,8 +19,9 @@ in place, including actions inside nested questions.
 One player chat message creates one group request for all eligible NPCs within range,
 ordered by distance from the player. The closest NPC is the default speaker. The model
 may involve additional nearby NPCs when that is natural, but is explicitly told not to
-make every NPC respond merely because it is present. Non-AI On Player Chat actions still
-run independently for every nearby NPC.
+make every NPC respond merely because it is present. Existing non-AI On Player Chat
+actions remain stored and continue to run, but Player Chat is no longer exposed as a
+general-purpose behaviour-editor row.
 
 An NPC that enters chat range while already handling another AI event (most commonly its
 approach greeting) does not hold up the existing group. Available NPCs answer immediately,
@@ -63,7 +65,7 @@ behaviour this may be:
   killer, held weapon, and direct cause (such as a projectile) when available.
 - a work-available interval while gatherable blocks are nearby.
 
-Chat is sent to the AI only when the NPC's On Player Chat sequence contains `Trigger AI`.
+Chat is sent to the AI only when On Player Chat is enabled in the NPC's AI menu.
 
 ## NPC state
 

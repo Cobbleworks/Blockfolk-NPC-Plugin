@@ -121,6 +121,8 @@ public final class GuiService implements Listener {
             Map.entry(28, BehaviourActionType.START_COMBAT),
             Map.entry(29, BehaviourActionType.CHANGE_FIGHT_OPTIONS)
     );
+    private static final List<BehaviourEvent> BEHAVIOUR_EDITOR_EVENTS = java.util.Arrays.stream(
+            BehaviourEvent.values()).filter(event -> event != BehaviourEvent.PLAYER_CHAT).toList();
     private static final int ACTION_PICKER_ANIMATIONS_SLOT = 32;
     private static final int ACTION_PICKER_BACK_SLOT = 49;
     private static final Set<Integer> INVENTORY_EDIT_SLOTS = Set.of(
@@ -675,17 +677,16 @@ public final class GuiService implements Listener {
     }
 
     public void openBehaviours(Player player, NpcDefinition definition, int requestedPage) {
-        BehaviourEvent[] events = BehaviourEvent.values();
-        int pages = Math.max(1, (events.length + 4) / 5);
+        int pages = Math.max(1, (BEHAVIOUR_EDITOR_EVENTS.size() + 4) / 5);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new BehaviourHolder(definition.getKey(), page), 54,
                 UiText.title("Behaviour", definition.getDisplayName()));
         for (int row = 0; row < 5; row++) {
             int eventIndex = page * 5 + row;
-            if (eventIndex >= events.length) {
+            if (eventIndex >= BEHAVIOUR_EDITOR_EVENTS.size()) {
                 break;
             }
-            BehaviourEvent behaviourEvent = events[eventIndex];
+            BehaviourEvent behaviourEvent = BEHAVIOUR_EDITOR_EVENTS.get(eventIndex);
             List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
             inventory.setItem(row * 9, item(eventMaterial(behaviourEvent), behaviourEvent.displayName(),
                     actionSummaryLore(List.of(
@@ -1013,10 +1014,10 @@ public final class GuiService implements Listener {
                         ChatColor.YELLOW + "Left-click to view and edit",
                         ChatColor.YELLOW + "Right-click to " + (settings.memoryEnabled() ? "disable" : "enable"),
                         ChatColor.RED + "Shift-right-click to clear all memories")));
-        inventory.setItem(20, item(Material.ENDER_EYE, "AI Triggers", List.of(
-                ChatColor.GRAY + "Add Trigger AI to any event's action sequence",
-                ChatColor.GRAY + "Examples: player chat, approach, or work available",
-                ChatColor.YELLOW + "Click to open Event Behaviour")));
+        boolean playerChatEnabled = hasDirectAiTrigger(
+                definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT));
+        inventory.setItem(20, toggleItem(Material.WRITABLE_BOOK, "On Player Chat",
+                playerChatEnabled, "Sends player chat within 8 blocks to this NPC's AI"));
         inventory.setItem(22, toggleItem(Material.BARREL, "Temporary Inventory",
                 settings.inventoryEnabled(), "Lets the AI see and drop items carried by each spawned instance"));
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
@@ -1029,7 +1030,7 @@ public final class GuiService implements Listener {
             String displayName = type.displayName();
             inventory.setItem(slots[index], item(enabled ? Material.REDSTONE_TORCH : Material.LEVER,
                     displayName + ": " + (enabled ? "Enabled" : "Disabled"), List.of(
-                            ChatColor.GRAY + "Available when this capability is enabled",
+                            ChatColor.GRAY + aiActionDescription(type),
                             intrinsic ? ChatColor.DARK_GRAY + "Always available"
                                     : ChatColor.YELLOW + "Click to toggle")));
         }
@@ -1063,6 +1064,31 @@ public final class GuiService implements Listener {
             if (containsAiTrigger(action.question().cancelActions())) return true;
         }
         return false;
+    }
+
+    private boolean hasDirectAiTrigger(List<BehaviourAction> actions) {
+        return actions.stream().anyMatch(action -> action.type() == BehaviourActionType.TRIGGER_AI);
+    }
+
+    private String aiActionDescription(AiActionType type) {
+        return switch (type) {
+            case SAY -> "Lets the AI speak to nearby players";
+            case PLAY_ANIMATION -> "Lets the AI play an NPC pose or animation";
+            case START_COMBAT -> "Lets the AI attack a valid perceived target";
+            case STOP_COMBAT -> "Lets the AI stop its current fight";
+            case FLEE_FROM -> "Lets the AI run away from a perceived threat";
+            case FOLLOW -> "Lets the AI follow a nearby player";
+            case UNFOLLOW -> "Lets the AI stop following its current player";
+            case INTERACT -> "Lets the AI use a nearby button or lever";
+            case MOVE_TO -> "Lets the AI walk to a perceived target or saved location";
+            case RETURN_HOME -> "Lets the AI walk back to the NPC's spawn location";
+            case START_ROUTE -> "Lets the AI start or resume the configured route";
+            case PAUSE_ROUTE -> "Lets the AI pause the configured route";
+            case REMEMBER_FACT -> "Lets the AI save facts when long-term memory is enabled";
+            case DROP_ITEM -> "Lets the AI drop items from its temporary inventory";
+            case GATHER_BLOCKS -> "Lets the AI gather selected nearby blocks and resources";
+            case DO_NOTHING -> "Lets the AI deliberately take no action";
+        };
     }
 
     private void openAiMemories(Player player, NpcDefinition definition) {
@@ -1874,10 +1900,10 @@ public final class GuiService implements Listener {
         int row = slot / 9;
         int column = slot % 9 - 2;
         int eventIndex = holder.page() * 5 + row;
-        if (row >= 5 || eventIndex >= BehaviourEvent.values().length) {
+        if (row >= 5 || eventIndex >= BEHAVIOUR_EDITOR_EVENTS.size()) {
             return;
         }
-        BehaviourEvent behaviourEvent = BehaviourEvent.values()[eventIndex];
+        BehaviourEvent behaviourEvent = BEHAVIOUR_EDITOR_EVENTS.get(eventIndex);
         List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
         if (slot % 9 == 0 && handleBehaviourClipboardClick(event, player, actions, pasted -> {
             definition.setBehaviourActions(behaviourEvent, pasted);
@@ -2075,7 +2101,15 @@ public final class GuiService implements Listener {
             return;
         }
         if (slot == 20) {
-            openBehaviours(player, definition, 0);
+            List<BehaviourAction> actions = definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT);
+            if (hasDirectAiTrigger(actions)) {
+                actions.removeIf(action -> action.type() == BehaviourActionType.TRIGGER_AI);
+            } else {
+                actions.add(new BehaviourAction(BehaviourActionType.TRIGGER_AI, null));
+            }
+            definition.setBehaviourActions(BehaviourEvent.PLAYER_CHAT, actions);
+            definitionRepository.save(definition);
+            openAiControl(player, definition);
             return;
         }
         if (slot == 22) {

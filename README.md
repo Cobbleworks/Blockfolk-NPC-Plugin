@@ -29,9 +29,9 @@ Proximity enter/leave transitions are debounced for 3 seconds by default. Adjust
 AI Behaviour is configured directly from an NPC preset's dedicated menu. Context is
 split into Identity, Personality & Behaviour, Goal / Role, and Knowledge / Information.
 Add the `Trigger AI` action to any normal event, custom event, question branch, or route
-waypoint to ask the model for a decision. For example, add it to On Player Approach for
-greetings, On Player Chat for conversation, On Nearby Death for reactions, or On Work
-Available for independent work. Death reactions receive the victim, killer, held weapon,
+waypoint to ask the model for a decision. Nearby player conversation is enabled directly
+with the AI menu's On Player Chat toggle. For other reactions, add `Trigger AI` to events
+such as On Player Approach, On Nearby Death, or On Work Available. Death reactions receive the victim, killer, held weapon,
 and Minecraft damage cause when available. Each
 spawned NPC keeps its own per-player conversation memory until an administrator opens
 that NPC preset's editor, which resets AI state globally for its spawned copies. The
