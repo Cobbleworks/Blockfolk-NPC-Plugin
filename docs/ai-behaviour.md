@@ -8,12 +8,11 @@ Blockfolk sends an AI request only when the NPC preset is active, at least one c
 section is configured, OpenRouter is configured, and a `Trigger AI` behaviour action
 runs. It can be placed on any event exposed by the behaviour editor, custom event,
 question branch, or route waypoint. On Player Chat is configured directly in the AI menu
-and stores the same `Trigger AI` action internally. Chat is accepted within eight blocks of the NPC; nearby deaths are observed
-within twelve blocks. `On Work Available` is checked every 15 seconds by default and
-fires only while a gatherable block is nearby and the NPC is not already fighting or gathering.
+and stores the same `Trigger AI` action internally. Chat is accepted within eight blocks
+of the NPC; nearby deaths are observed within twelve blocks.
 
 Legacy trigger toggles are migrated on load to `Trigger AI` actions on Player Approach,
-Player Chat, Nearby Death, and Work Available. Legacy `AI Control` actions are migrated
+Player Chat, and Nearby Death. Legacy `AI Control` actions are migrated
 in place, including actions inside nested questions.
 
 One player chat message creates one group request for all eligible NPCs within range,
@@ -63,7 +62,7 @@ behaviour this may be:
 - the player's name and exact nearby chat message;
 - a nearby death, including victim, rounded distance, Minecraft damage cause, and the
   killer, held weapon, and direct cause (such as a projectile) when available.
-- a work-available interval while gatherable blocks are nearby.
+- an idle interval when `Trigger AI` is assigned to On Idle.
 
 Chat is sent to the AI only when On Player Chat is enabled in the NPC's AI menu.
 

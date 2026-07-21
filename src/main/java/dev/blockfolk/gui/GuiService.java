@@ -1026,12 +1026,14 @@ public final class GuiService implements Listener {
         for (int index = 0; index < types.size(); index++) {
             AiActionType type = types.get(index);
             boolean intrinsic = type == AiActionType.DO_NOTHING;
-            boolean enabled = intrinsic || settings.allowedActions().contains(type);
+            boolean requiredForPlayerChat = playerChatEnabled && type == AiActionType.SAY;
+            boolean enabled = intrinsic || requiredForPlayerChat || settings.allowedActions().contains(type);
             String displayName = type.displayName();
             inventory.setItem(slots[index], item(enabled ? Material.REDSTONE_TORCH : Material.LEVER,
                     displayName + ": " + (enabled ? "Enabled" : "Disabled"), List.of(
                             ChatColor.GRAY + aiActionDescription(type),
-                            intrinsic ? ChatColor.DARK_GRAY + "Always available"
+                            requiredForPlayerChat ? ChatColor.DARK_GRAY + "Required by On Player Chat"
+                                    : intrinsic ? ChatColor.DARK_GRAY + "Always available"
                                     : ChatColor.YELLOW + "Click to toggle")));
         }
         inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
@@ -2125,7 +2127,10 @@ public final class GuiService implements Listener {
         for (int index = 0; index < types.size(); index++) {
             if (slot != slots[index]) continue;
             AiActionType type = types.get(index);
-            if (type != AiActionType.DO_NOTHING) {
+            boolean playerChatEnabled = hasDirectAiTrigger(
+                    definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT));
+            if (type != AiActionType.DO_NOTHING
+                    && !(type == AiActionType.SAY && playerChatEnabled)) {
                 definition.setAiControlSettings(definition.getAiControlSettings().toggle(type));
                 definitionRepository.save(definition);
             }
@@ -3695,8 +3700,6 @@ public final class GuiService implements Listener {
                 Material.POWERED_RAIL;
             case NEARBY_DEATH ->
                 Material.TOTEM_OF_UNDYING;
-            case WORK_AVAILABLE ->
-                Material.IRON_PICKAXE;
         };
     }
 

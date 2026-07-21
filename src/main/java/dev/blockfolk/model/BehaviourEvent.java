@@ -22,8 +22,7 @@ public enum BehaviourEvent {
     SUNSET("At Sunset"),
     COMBAT_ENTERED("On Combat Entered"),
     COMBAT_EXITED("On Combat Exited"),
-    NEARBY_DEATH("On Nearby Death"),
-    WORK_AVAILABLE("On Work Available");
+    NEARBY_DEATH("On Nearby Death");
 
     private final String displayName;
 

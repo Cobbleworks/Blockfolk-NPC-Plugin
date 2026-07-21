@@ -239,7 +239,7 @@ public final class AiControlService {
         List<GroupParticipant> eligibleParticipants = candidates.stream()
                 .map(instance -> definitions.find(instance.getDefinitionKey())
                         .map(definition -> new GroupParticipant(instance, definition,
-                                definition.getAiControlSettings())))
+                                definition.getAiControlSettings().withActionEnabled(AiActionType.SAY))))
                 .flatMap(java.util.Optional::stream)
                 .filter(participant -> participant.settings().enabled()
                         && participant.settings().hasContext())
@@ -690,10 +690,6 @@ public final class AiControlService {
                 .limit(12)
                 .forEach(entry -> out.append("- ").append(entry.getValue()).append(' ')
                         .append(readable(entry.getKey().name())).append('\n'));
-    }
-
-    public boolean hasNearbyGatherableBlocks(NpcInstance instance) {
-        return !nearbyGatherableResources(instances.currentLocation(instance)).isEmpty();
     }
 
     private Map<Material, Integer> nearbyGatherableResources(Location center) {

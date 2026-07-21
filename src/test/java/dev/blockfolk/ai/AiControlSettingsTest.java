@@ -39,6 +39,17 @@ class AiControlSettingsTest {
     }
 
     @Test
+    void requiredCapabilityCanBeEnabledWithoutChangingOtherSettings() {
+        AiControlSettings settings = AiControlSettings.defaults().withIdentity("A quiet guard")
+                .toggle(AiActionType.SAY).withMemoryEnabled(true)
+                .withActionEnabled(AiActionType.SAY);
+
+        assertTrue(settings.allowedActions().contains(AiActionType.SAY));
+        assertTrue(settings.memoryEnabled());
+        assertTrue(settings.enabled());
+    }
+
+    @Test
     void composesStructuredContextWithHeadings() {
         AiControlSettings settings = AiControlSettings.defaults()
                 .withIdentity("Mira, the village guard")

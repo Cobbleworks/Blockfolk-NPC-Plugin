@@ -131,7 +131,6 @@ public final class NpcDefinitionRepository {
         configuration.set("ai-control.react-to-nearby-deaths", null);
         configuration.set("ai-control.memory.enabled", ai.memoryEnabled());
         configuration.set("ai-control.inventory.enabled", ai.inventoryEnabled());
-        configuration.set("ai-control.autonomous", null);
         configuration.set("ai-control.memory.facts", definition.getAiMemories());
         configuration.set("ai-control.allowed-actions", ai.allowedActions().stream()
                 .filter(action -> action != AiActionType.REMEMBER_FACT && action != AiActionType.DROP_ITEM)
@@ -262,7 +261,6 @@ public final class NpcDefinitionRepository {
         boolean migrateChat = configuration.contains("ai-control.respond-to-chat")
                 && configuration.getBoolean("ai-control.respond-to-chat", false);
         boolean migrateNearbyDeath = configuration.getBoolean("ai-control.react-to-nearby-deaths", false);
-        boolean migrateAutonomousWork = configuration.getBoolean("ai-control.autonomous.enabled", false);
         definition.setAiControlSettings(new AiControlSettings(
                 identity,
                 behaviour,
@@ -341,7 +339,6 @@ public final class NpcDefinitionRepository {
         if (migrateGreeting) addTriggerAi(definition, BehaviourEvent.PLAYER_APPROACH);
         if (migrateChat) addTriggerAi(definition, BehaviourEvent.PLAYER_CHAT);
         if (migrateNearbyDeath) addTriggerAi(definition, BehaviourEvent.NEARBY_DEATH);
-        if (migrateAutonomousWork) addTriggerAi(definition, BehaviourEvent.WORK_AVAILABLE);
         return definition;
     }
 

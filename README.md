@@ -31,22 +31,21 @@ split into Identity, Personality & Behaviour, Goal / Role, and Knowledge / Infor
 Add the `Trigger AI` action to any normal event, custom event, question branch, or route
 waypoint to ask the model for a decision. Nearby player conversation is enabled directly
 with the AI menu's On Player Chat toggle. For other reactions, add `Trigger AI` to events
-such as On Player Approach, On Nearby Death, or On Work Available. Death reactions receive the victim, killer, held weapon,
+such as On Player Approach or On Nearby Death. Death reactions receive the victim, killer, held weapon,
 and Minecraft damage cause when available. Each
 spawned NPC keeps its own per-player conversation memory until an administrator opens
 that NPC preset's editor, which resets AI state globally for its spawned copies. The
 model can only select validated capabilities enabled for that preset; it cannot return
 commands or executable code.
 
-Existing presets are migrated on load: the former greeting, nearby-chat, nearby-death,
-and autonomous-work toggles become Trigger AI actions on their corresponding events.
+Existing presets are migrated on load: the former greeting, nearby-chat, and nearby-death
+toggles become Trigger AI actions on their corresponding events.
 
-Gather Resources can be combined with On Work Available -> Trigger AI for independent
-miners or woodcutters. For example,
+Gather Resources can be combined with On Idle -> Trigger AI for independent miners or
+woodcutters. For example,
 set the Goal / Role to `You are a pro miner. Try to gather coal and gold in the mines`,
 or `You are a builder. Gather nearby sand`, enable Gather Resources, add that trigger,
-and optionally enable Temporary Inventory to store gathered drops. The work check interval
-is configured with `behaviour.work-available-interval-seconds`.
+and optionally enable Temporary Inventory to store gathered drops.
 
 The same Gather Resources operation is available directly in deterministic behaviour
 sequences. Its editor supports broad categories and up to eight exact Minecraft block

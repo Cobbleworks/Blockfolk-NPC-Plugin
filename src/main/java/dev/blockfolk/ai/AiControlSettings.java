@@ -99,6 +99,14 @@ public record AiControlSettings(
                 enabled, memoryEnabled, inventoryEnabled);
     }
 
+    public AiControlSettings withActionEnabled(AiActionType action) {
+        if (allowedActions.contains(action)) return this;
+        EnumSet<AiActionType> updated = EnumSet.copyOf(allowedActions);
+        updated.add(action);
+        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, updated,
+                enabled, memoryEnabled, inventoryEnabled);
+    }
+
     public AiControlSettings withEnabled(boolean enabled) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
                 enabled, memoryEnabled, inventoryEnabled);

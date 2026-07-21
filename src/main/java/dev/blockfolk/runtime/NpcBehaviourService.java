@@ -112,7 +112,6 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, Set<UUID>> observedEntities = new HashMap<>();
     private final Map<UUID, Long> entityNearbyCooldownUntilTick = new HashMap<>();
     private final long proximityCooldownTicks;
-    private final long workAvailableIntervalTicks;
     private NpcCombatService combatService;
     private AiControlService aiControlService;
     private BukkitTask behaviourTask;
@@ -121,7 +120,6 @@ public final class NpcBehaviourService implements Listener {
     private int playerLookTick;
     private int itemPickupTick;
     private int entityNearbyTick;
-    private long workAvailableTick;
     private long customEmissionTick = -1L;
     private int customEmissionsThisTick;
     private boolean redstonePhysicsWarningLogged;
@@ -132,8 +130,7 @@ public final class NpcBehaviourService implements Listener {
             NpcInstanceRegistry instances,
             DialogService dialogService,
             NpcQuestionService questionService,
-            int proximityCooldownSeconds,
-            int workAvailableIntervalSeconds
+            int proximityCooldownSeconds
     ) {
         this.plugin = plugin;
         this.definitions = definitions;
@@ -141,7 +138,6 @@ public final class NpcBehaviourService implements Listener {
         this.dialogService = dialogService;
         this.questionService = questionService;
         this.proximityCooldownTicks = Math.max(0L, proximityCooldownSeconds) * 20L;
-        this.workAvailableIntervalTicks = Math.max(5L, workAvailableIntervalSeconds) * 20L;
     }
 
     public void setCombatService(NpcCombatService combatService) {
@@ -914,10 +910,6 @@ public final class NpcBehaviourService implements Listener {
     private void tickBehaviour() {
         currentTick++;
         tickTimeEvents();
-        if (++workAvailableTick >= workAvailableIntervalTicks) {
-            workAvailableTick = 0L;
-            tickWorkAvailable();
-        }
         if (++proximityTick >= 10) {
             proximityTick = 0;
             tickProximity();
@@ -951,20 +943,6 @@ public final class NpcBehaviourService implements Listener {
         idleCycles.keySet().retainAll(active);
         observedEntities.keySet().retainAll(active);
         entityNearbyCooldownUntilTick.keySet().retainAll(active);
-    }
-
-    private void tickWorkAvailable() {
-        if (aiControlService == null) return;
-        for (NpcInstance instance : List.copyOf(instances.findAll())) {
-            NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-            if (definition == null
-                    || definition.getBehaviourActions(BehaviourEvent.WORK_AVAILABLE).isEmpty()) continue;
-            if (combatService != null && combatService.isEngaged(instance)) continue;
-            if (gatheringTasks.containsKey(instance.getId())) continue;
-            if (!aiControlService.hasNearbyGatherableBlocks(instance)) continue;
-            trigger(BehaviourEvent.WORK_AVAILABLE, instance, null,
-                    "Nearby resources are available. Inspect them and continue the NPC's work goal.");
-        }
     }
 
     private void tickEntityNearby() {
