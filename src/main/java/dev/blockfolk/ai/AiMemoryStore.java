@@ -17,6 +17,7 @@ public final class AiMemoryStore {
     private static final Duration EVENT_AGE = Duration.ofMinutes(5);
     private final Map<UUID, Deque<Entry>> events = new HashMap<>();
     private final Map<ConversationKey, Deque<String>> conversations = new HashMap<>();
+    private final Map<UUID, Deque<String>> sharedConversations = new HashMap<>();
     private final Map<UUID, Deque<String>> activities = new HashMap<>();
 
     public void rememberEvent(UUID instance, String summary) {
@@ -27,11 +28,21 @@ public final class AiMemoryStore {
     }
 
     public void rememberMessage(UUID instance, UUID player, String message) {
+        rememberMessage(instance, player, message, false);
+    }
+
+    public void rememberMessage(UUID instance, UUID player, String message, boolean shared) {
         if (player == null || message == null || message.isBlank()) return;
         Deque<String> memory = conversations.computeIfAbsent(
                 new ConversationKey(instance, player), ignored -> new ArrayDeque<>());
         memory.addLast(message.trim());
         trim(memory, MAX_MESSAGES);
+        if (shared) {
+            Deque<String> sharedMemory = sharedConversations.computeIfAbsent(
+                    instance, ignored -> new ArrayDeque<>());
+            sharedMemory.addLast(message.trim());
+            trim(sharedMemory, MAX_MESSAGES);
+        }
     }
 
     public List<String> recentEvents(UUID instance) {
@@ -45,6 +56,10 @@ public final class AiMemoryStore {
     public List<String> recentConversation(UUID instance, UUID player) {
         if (player == null) return List.of();
         return new ArrayList<>(conversations.getOrDefault(new ConversationKey(instance, player), new ArrayDeque<>()));
+    }
+
+    public List<String> recentSharedConversation(UUID instance) {
+        return new ArrayList<>(sharedConversations.getOrDefault(instance, new ArrayDeque<>()));
     }
 
     public void rememberActivity(UUID instance, String summary) {
@@ -61,6 +76,7 @@ public final class AiMemoryStore {
     public void forget(UUID instance) {
         events.remove(instance);
         activities.remove(instance);
+        sharedConversations.remove(instance);
         conversations.keySet().removeIf(key -> key.instance().equals(instance));
     }
 

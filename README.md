@@ -33,8 +33,9 @@ waypoint to ask the model for a decision. Enabling the AI menu's Speak capabilit
 makes the NPC react to player chat within eight blocks. For other reactions, add `Trigger AI` to events
 such as On Player Approach or On Nearby Death. Death reactions receive the victim, killer, held weapon,
 and Minecraft damage cause when available. Each
-spawned NPC keeps its 20 latest conversation messages per player and its 20 latest AI
-actions for the lifetime of that instance. The
+spawned NPC keeps its 20 latest conversation messages and 20 latest AI actions for the
+lifetime of that instance. Conversation scope can be private per player or shared so
+other players can continue the exchange. The
 model can only select validated capabilities enabled for that preset; it cannot return
 commands or executable code.
 

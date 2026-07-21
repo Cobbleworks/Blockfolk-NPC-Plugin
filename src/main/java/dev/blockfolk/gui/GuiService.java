@@ -1015,6 +1015,14 @@ public final class GuiService implements Listener {
                         ChatColor.RED + "Shift-right-click to clear all memories")));
         boolean playerChatEnabled = hasDirectAiTrigger(
                 definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT));
+        inventory.setItem(20, item(settings.sharedConversations() ? Material.WRITABLE_BOOK : Material.BOOK,
+                "Conversation Scope: " + (settings.sharedConversations() ? "Shared" : "Private"), List.of(
+                        settings.sharedConversations()
+                                ? ChatColor.GRAY + "Players can continue each other's conversations"
+                                : ChatColor.GRAY + "Each player has a separate conversation history",
+                        ChatColor.GRAY + "Keeps the latest 20 messages for the selected scope",
+                        ChatColor.YELLOW + "Click to switch to "
+                                + (settings.sharedConversations() ? "private" : "shared"))));
         inventory.setItem(22, toggleItem(Material.BARREL, "Temporary Inventory",
                 settings.inventoryEnabled(), "Lets the AI see and drop items carried by each spawned instance"));
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
@@ -2101,6 +2109,14 @@ public final class GuiService implements Listener {
         if (slot == 22) {
             AiControlSettings settings = definition.getAiControlSettings();
             definition.setAiControlSettings(settings.withInventoryEnabled(!settings.inventoryEnabled()));
+            definitionRepository.save(definition);
+            openAiControl(player, definition);
+            return;
+        }
+        if (slot == 20) {
+            AiControlSettings settings = definition.getAiControlSettings();
+            definition.setAiControlSettings(
+                    settings.withSharedConversations(!settings.sharedConversations()));
             definitionRepository.save(definition);
             openAiControl(player, definition);
             return;

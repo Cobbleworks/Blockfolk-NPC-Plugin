@@ -126,17 +126,20 @@ class AiDecisionParserTest {
     }
 
     @Test
-    void moveToAcceptsOnlyPerceivedTargetAliasesWhenEnabled() {
+    void moveToAcceptsPerceivedAliasesAndPlayerNamesWhenEnabled() {
         AiControlSettings settings = new AiControlSettings("Guide", "", "Show visitors around", "",
                 EnumSet.of(AiActionType.MOVE_TO), true);
 
         AiDecision accepted = AiDecisionParser.parse(
                 "{\"actions\":[{\"type\":\"MOVE_TO\",\"target\":\"nearby_location_2\"}]}", settings);
         AiDecision arbitrary = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"MOVE_TO\",\"target\":\"world_spawn\"}]}", settings);
+                "{\"actions\":[{\"type\":\"MOVE_TO\",\"target\":\"../../bad\"}]}", settings);
+        AiDecision playerName = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"MOVE_TO\",\"target\":\"VoidValkon\"}]}", settings);
 
         assertEquals(AiActionType.MOVE_TO, accepted.actions().getFirst().type());
         assertEquals("nearby_location_2", accepted.actions().getFirst().target());
+        assertEquals("voidvalkon", playerName.actions().getFirst().target());
         assertEquals(AiActionType.DO_NOTHING, arbitrary.actions().getFirst().type());
     }
 

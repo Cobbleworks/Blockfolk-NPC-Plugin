@@ -178,12 +178,12 @@ public final class BlockfolkPlugin extends JavaPlugin {
         npcRenderer.start();
         dialogService.start();
         routeGuiService.start();
-        instanceRegistry.spawnAll();
-        resolveStoredExternalSkins();
         combatService.start();
         questionService.start();
         behaviourService.start();
         routeMovementService.start();
+        instanceRegistry.spawnAll();
+        resolveStoredExternalSkins();
         getLogger().info(() -> "Blockfolk enabled with " + definitionRepository.findAll().size() + " NPC definitions.");
     }
 

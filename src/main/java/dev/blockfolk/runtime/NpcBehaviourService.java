@@ -799,6 +799,7 @@ public final class NpcBehaviourService implements Listener {
     private Entity resolveAiTarget(String alias, NpcInstance instance, Entity actor) {
         if (alias == null) return null;
         if ((alias.equals("triggering_player") || alias.equals("triggering_entity")) && actor != null) return actor;
+        if (actor instanceof Player player && player.getName().equalsIgnoreCase(alias)) return player;
         if (alias.equals("nearest_player")) return nearestPlayer(instance).orElse(null);
         if (alias.equals("nearest_attackable") && combatService != null) {
             return combatService.findNearestAttackableTarget(instance);

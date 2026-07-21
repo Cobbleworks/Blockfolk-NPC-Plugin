@@ -57,6 +57,7 @@ public final class AiControlService {
             or the listed player's Minecraft name.
             UNFOLLOW stops following the current player. INTERACT walks to and toggles the nearest button or lever.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
+            A listed nearby player's Minecraft name is also a valid player target for targeted actions.
             DROP_ITEM uses an inventory_slot_N target and drops that stack from the temporary inventory.
             GATHER_BLOCKS gathers nearby resources. Its optional target is a comma-separated selection from:
             %s. Prefer targets requested by the NPC's goal.
@@ -82,6 +83,7 @@ public final class AiControlService {
             or the listed player's Minecraft name.
             UNFOLLOW stops that NPC following its current player. INTERACT walks to and toggles its nearest button or lever.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
+            A listed nearby player's Minecraft name is also a valid player target for targeted actions.
             DROP_ITEM uses an inventory_slot_N target and drops that stack from the temporary inventory.
             GATHER_BLOCKS gathers nearby resources. Its optional target is a comma-separated selection from:
             %s.
@@ -398,7 +400,8 @@ public final class AiControlService {
                 if (action.type() != AiActionType.SAY || action.text() == null || action.text().isBlank()) continue;
                 String line = speaker.definition().getDisplayName() + ": " + action.text();
                 validParticipants.values().forEach(listener -> memory.rememberMessage(
-                        listener.instance().getId(), player.getUniqueId(), line));
+                        listener.instance().getId(), player.getUniqueId(), line,
+                        listener.settings().sharedConversations()));
             }
         }
 
@@ -446,13 +449,16 @@ public final class AiControlService {
     }
 
     public void rememberPlayerMessage(NpcInstance instance, Player player, String text) {
-        memory.rememberMessage(instance.getId(), player.getUniqueId(), player.getName() + ": " + text);
+        boolean shared = definitions.find(instance.getDefinitionKey())
+                .map(definition -> definition.getAiControlSettings().sharedConversations()).orElse(false);
+        memory.rememberMessage(instance.getId(), player.getUniqueId(), player.getName() + ": " + text, shared);
     }
 
     public void rememberNpcSpeech(NpcInstance instance, NpcDefinition definition, Player player, String text) {
         if (player != null) {
             memory.rememberMessage(instance.getId(), player.getUniqueId(),
-                    definition.getDisplayName() + ": " + text);
+                    definition.getDisplayName() + ": " + text,
+                    definition.getAiControlSettings().sharedConversations());
         }
     }
 
@@ -570,9 +576,12 @@ public final class AiControlService {
             activities.forEach(item -> out.append("- ").append(item).append('\n'));
         }
         if (actor instanceof Player player) {
-            List<String> conversation = memory.recentConversation(instance.getId(), player.getUniqueId());
+            List<String> conversation = settings.sharedConversations()
+                    ? memory.recentSharedConversation(instance.getId())
+                    : memory.recentConversation(instance.getId(), player.getUniqueId());
             if (!conversation.isEmpty()) {
-                out.append("\nRecent conversation with ").append(player.getName()).append(":\n");
+                out.append(settings.sharedConversations() ? "\nRecent shared conversation:\n"
+                        : "\nRecent conversation with " + player.getName() + ":\n");
                 conversation.forEach(item -> out.append("- ").append(item).append('\n'));
             }
         }

@@ -12,12 +12,13 @@ public record AiControlSettings(
         Set<AiActionType> allowedActions,
         boolean enabled,
         boolean memoryEnabled,
-        boolean inventoryEnabled
+        boolean inventoryEnabled,
+        boolean sharedConversations
 ) {
 
     public AiControlSettings(String identity, String behaviour, String goal, String information,
             Set<AiActionType> allowedActions, boolean enabled) {
-        this(identity, behaviour, "", goal, information, allowedActions, enabled, false, false);
+        this(identity, behaviour, "", goal, information, allowedActions, enabled, false, false, false);
     }
 
     public AiControlSettings {
@@ -36,7 +37,8 @@ public record AiControlSettings(
     }
 
     public static AiControlSettings defaults() {
-        return new AiControlSettings("", "", "", "", "", AiActionType.safeDefaults(), false, false, false);
+        return new AiControlSettings("", "", "", "", "", AiActionType.safeDefaults(),
+                false, false, false, false);
     }
 
     public boolean hasContext() {
@@ -88,7 +90,7 @@ public record AiControlSettings(
                 || !normalize(information).isBlank();
         boolean updatedEnabled = !hasUpdatedContext ? false : !hadContext || enabled;
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                updatedEnabled, memoryEnabled, inventoryEnabled);
+                updatedEnabled, memoryEnabled, inventoryEnabled, sharedConversations);
     }
 
     public AiControlSettings toggle(AiActionType action) {
@@ -96,7 +98,7 @@ public record AiControlSettings(
         if (!updated.remove(action)) updated.add(action);
         updated.add(AiActionType.DO_NOTHING);
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, updated,
-                enabled, memoryEnabled, inventoryEnabled);
+                enabled, memoryEnabled, inventoryEnabled, sharedConversations);
     }
 
     public AiControlSettings withActionEnabled(AiActionType action) {
@@ -104,22 +106,27 @@ public record AiControlSettings(
         EnumSet<AiActionType> updated = EnumSet.copyOf(allowedActions);
         updated.add(action);
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, updated,
-                enabled, memoryEnabled, inventoryEnabled);
+                enabled, memoryEnabled, inventoryEnabled, sharedConversations);
     }
 
     public AiControlSettings withEnabled(boolean enabled) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, memoryEnabled, inventoryEnabled);
+                enabled, memoryEnabled, inventoryEnabled, sharedConversations);
     }
 
     public AiControlSettings withMemoryEnabled(boolean memoryEnabled) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, memoryEnabled, inventoryEnabled);
+                enabled, memoryEnabled, inventoryEnabled, sharedConversations);
     }
 
     public AiControlSettings withInventoryEnabled(boolean inventoryEnabled) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, memoryEnabled, inventoryEnabled);
+                enabled, memoryEnabled, inventoryEnabled, sharedConversations);
+    }
+
+    public AiControlSettings withSharedConversations(boolean sharedConversations) {
+        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
+                enabled, memoryEnabled, inventoryEnabled, sharedConversations);
     }
 
     private static void append(StringBuilder target, String heading, String value) {

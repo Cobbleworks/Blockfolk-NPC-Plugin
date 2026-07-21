@@ -19,6 +19,7 @@ class AiMemoryStoreTest {
         memory.rememberMessage(firstNpc, player, "Player: hello");
 
         assertEquals(1, memory.recentConversation(firstNpc, player).size());
+        assertTrue(memory.recentSharedConversation(firstNpc).isEmpty());
         assertTrue(memory.recentConversation(secondNpc, player).isEmpty());
         memory.forget(firstNpc);
         assertTrue(memory.recentConversation(firstNpc, player).isEmpty());
@@ -35,5 +36,21 @@ class AiMemoryStoreTest {
         assertEquals(20, memory.recentActivities(npc).size());
         assertEquals("Task 6", memory.recentActivities(npc).getFirst());
         assertEquals("Task 25", memory.recentActivities(npc).getLast());
+    }
+
+    @Test
+    void sharedConversationCombinesPlayersAndKeepsTwentyMessages() {
+        AiMemoryStore memory = new AiMemoryStore();
+        UUID npc = UUID.randomUUID();
+        UUID firstPlayer = UUID.randomUUID();
+        UUID secondPlayer = UUID.randomUUID();
+        for (int index = 1; index <= 21; index++) {
+            memory.rememberMessage(npc, index % 2 == 0 ? firstPlayer : secondPlayer,
+                    "Player message " + index, true);
+        }
+
+        assertEquals(20, memory.recentSharedConversation(npc).size());
+        assertEquals("Player message 2", memory.recentSharedConversation(npc).getFirst());
+        assertEquals("Player message 21", memory.recentSharedConversation(npc).getLast());
     }
 }

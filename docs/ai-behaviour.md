@@ -27,10 +27,11 @@ approach greeting) does not hold up the existing group. Available NPCs answer im
 and the busy newcomer becomes eligible to participate in a later player message after its
 current request finishes.
 
-Each spawned instance keeps the 20 latest conversation messages separately for each
-player and the 20 latest accepted AI actions. Opening its admin editor does not clear
-this history. Removing or respawning an instance, or restarting the server, clears its
-runtime history; enabled long-term facts remain persistent.
+Each spawned instance keeps the 20 latest conversation messages and the 20 latest
+accepted AI actions. Conversation Scope controls whether those messages are private per
+player or shared across players, allowing another player to continue the conversation.
+Opening its admin editor does not clear this history. Removing or respawning an instance,
+or restarting the server, clears its runtime history; enabled long-term facts remain persistent.
 
 ## OpenRouter request
 
@@ -98,9 +99,9 @@ Perception uses a 12-block radius for players and other Blockfolk NPCs. It inclu
 
 Each perceived player, NPC, entity, and saved location has a request-local alias such as
 `nearby_player_1` or `nearby_location_2`. The AI can pass one of those aliases to
-`MOVE_TO`. `FOLLOW` requires a player target and accepts `triggering_player`,
-`nearest_player`, a listed `nearby_player_N` alias, or that listed player's Minecraft
-name. Arbitrary coordinates and unlisted targets are rejected.
+`MOVE_TO`. A listed player's Minecraft name is also accepted by player-targeting actions.
+`FOLLOW` accepts `triggering_player`, `nearest_player`, a listed `nearby_player_N` alias,
+or that listed player's name. Arbitrary coordinates and unresolved targets are rejected.
 
 Non-player entities are collected from Bukkit's 12-by-12-by-12-axis nearby-entity query.
 They are summarized rather than listed with UUIDs or exact positions. Both visible

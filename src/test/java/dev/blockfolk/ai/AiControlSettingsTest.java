@@ -81,4 +81,13 @@ class AiControlSettingsTest {
         assertFalse(AiControlSettings.defaults().inventoryEnabled());
     }
 
+    @Test
+    void conversationScopeDefaultsToPrivateAndIsPreserved() {
+        AiControlSettings settings = AiControlSettings.defaults().withSharedConversations(true)
+                .withIdentity("A tavern keeper").withMemoryEnabled(true);
+
+        assertTrue(settings.sharedConversations());
+        assertFalse(AiControlSettings.defaults().sharedConversations());
+    }
+
 }

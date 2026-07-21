@@ -83,6 +83,8 @@ public final class AiDecisionParser {
                     || target.matches("[a-z0-9_]{1,16}");
         }
         if (TARGETS.contains(target)) return true;
+        if ((type == AiActionType.START_COMBAT || type == AiActionType.FLEE_FROM
+                || type == AiActionType.MOVE_TO) && target.matches("[a-z0-9_]{1,16}")) return true;
         return type == AiActionType.MOVE_TO && target.matches("nearby_(location|player|npc|entity)_[1-9][0-9]*");
     }
 
