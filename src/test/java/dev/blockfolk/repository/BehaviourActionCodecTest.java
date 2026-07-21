@@ -39,6 +39,13 @@ class BehaviourActionCodecTest {
     }
 
     @Test
+    void roundTripsAiTriggerWithoutAValue() {
+        BehaviourAction trigger = new BehaviourAction(BehaviourActionType.AI_TRIGGER, null);
+
+        assertEquals(trigger, BehaviourActionCodec.decode(BehaviourActionCodec.encode(trigger)));
+    }
+
+    @Test
     void limitsQuestionsToFourAnswers() {
         List<Map<String, Object>> options = java.util.stream.IntStream.range(0, 5)
                 .mapToObj(index -> Map.of("label", "Option " + index, "actions", List.of()))

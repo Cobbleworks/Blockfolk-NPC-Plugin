@@ -14,6 +14,7 @@ public enum AiActionType {
     UNFOLLOW("Unfollow"),
     INTERACT("Interact"),
     MOVE_TO("Move To"),
+    MINE_BLOCKS("Mine Blocks"),
     RETURN_HOME("Return Home"),
     START_ROUTE("Start Route"),
     PAUSE_ROUTE("Pause Route"),

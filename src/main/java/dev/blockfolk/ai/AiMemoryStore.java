@@ -16,6 +16,7 @@ public final class AiMemoryStore {
     private static final Duration EVENT_AGE = Duration.ofMinutes(5);
     private final Map<UUID, Deque<Entry>> events = new HashMap<>();
     private final Map<ConversationKey, Deque<String>> conversations = new HashMap<>();
+    private static final UUID SHARED_CONVERSATION = new UUID(0L, 0L);
 
     public void rememberEvent(UUID instance, String summary) {
         if (summary == null || summary.isBlank()) return;
@@ -25,9 +26,13 @@ public final class AiMemoryStore {
     }
 
     public void rememberMessage(UUID instance, UUID player, String message) {
+        rememberMessage(instance, player, false, message);
+    }
+
+    public void rememberMessage(UUID instance, UUID player, boolean shared, String message) {
         if (player == null || message == null || message.isBlank()) return;
         Deque<String> memory = conversations.computeIfAbsent(
-                new ConversationKey(instance, player), ignored -> new ArrayDeque<>());
+                new ConversationKey(instance, shared ? SHARED_CONVERSATION : player), ignored -> new ArrayDeque<>());
         memory.addLast(message.trim());
         trim(memory, MAX_MESSAGES);
     }
@@ -41,8 +46,13 @@ public final class AiMemoryStore {
     }
 
     public List<String> recentConversation(UUID instance, UUID player) {
+        return recentConversation(instance, player, false);
+    }
+
+    public List<String> recentConversation(UUID instance, UUID player, boolean shared) {
         if (player == null) return List.of();
-        return new ArrayList<>(conversations.getOrDefault(new ConversationKey(instance, player), new ArrayDeque<>()));
+        UUID scope = shared ? SHARED_CONVERSATION : player;
+        return new ArrayList<>(conversations.getOrDefault(new ConversationKey(instance, scope), new ArrayDeque<>()));
     }
 
     public void forget(UUID instance) {

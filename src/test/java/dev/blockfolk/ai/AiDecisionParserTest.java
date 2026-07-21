@@ -155,4 +155,23 @@ class AiDecisionParserTest {
         assertEquals(AiActionType.DROP_ITEM, enabled.actions().getFirst().type());
         assertEquals(AiActionType.DO_NOTHING, invalidTarget.actions().getFirst().type());
     }
+
+    @Test
+    void miningRequiresCapabilityInventoryAndAResourceTarget() {
+        AiControlSettings enabled = AiControlSettings.defaults().withInventoryEnabled(true)
+                .toggle(AiActionType.MINE_BLOCKS);
+
+        AiDecision accepted = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"MINE_BLOCKS\",\"target\":\"all_ores\"}]}", enabled);
+        AiDecision noInventory = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"MINE_BLOCKS\",\"target\":\"trees\"}]}",
+                enabled.withInventoryEnabled(false));
+        AiDecision noTarget = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"MINE_BLOCKS\"}]}", enabled);
+
+        assertEquals(AiActionType.MINE_BLOCKS, accepted.actions().getFirst().type());
+        assertEquals("all_ores", accepted.actions().getFirst().target());
+        assertEquals(AiActionType.DO_NOTHING, noInventory.actions().getFirst().type());
+        assertEquals(AiActionType.DO_NOTHING, noTarget.actions().getFirst().type());
+    }
 }

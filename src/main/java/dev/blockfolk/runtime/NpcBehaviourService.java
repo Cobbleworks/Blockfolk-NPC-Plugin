@@ -242,7 +242,8 @@ public final class NpcBehaviourService implements Listener {
             NpcDefinition definition = definitions.find(target.getDefinitionKey()).orElse(null);
             if (definition == null) continue;
             List<BehaviourAction> actions = definition.getCustomEventActions(eventName);
-            if (!actions.isEmpty()) executeSequence(null, actions, 0, target, definition, actor, null, () -> { });
+            if (!actions.isEmpty()) executeSequence(null, actions, 0, target, definition, actor,
+                    "Custom event '" + eventName + "' was emitted.", () -> { });
         }
     }
 
@@ -262,20 +263,6 @@ public final class NpcBehaviourService implements Listener {
         observedEntities.remove(instance.getId());
         entityNearbyCooldownUntilTick.remove(instance.getId());
         if (aiControlService != null) aiControlService.forget(instance);
-    }
-
-    /** Greets players who are already nearby when conversations or greetings are enabled. */
-    public void greetNearbyPlayers(NpcDefinition definition) {
-        if (!definition.getAiControlSettings().enabled()
-                || !definition.getAiControlSettings().greetOnApproach()) return;
-        for (NpcInstance instance : instances.findByDefinition(definition)) {
-            Location location = instance.getLocation();
-            if (location.getWorld() == null) continue;
-            location.getWorld().getPlayers().stream()
-                    .filter(player -> player.getLocation().distanceSquared(location) <= APPROACH_RANGE_SQUARED)
-                    .forEach(player -> invokeAi(BehaviourEvent.PLAYER_APPROACH,
-                            "Player " + player.getName() + " is near the NPC.", instance, definition, player));
-        }
     }
 
     public MovementProfile movementFor(NpcInstance instance, NpcDefinition definition) {
@@ -642,6 +629,7 @@ public final class NpcBehaviourService implements Listener {
                     });
             // WAIT is handled by executeSequence: it only delays the next action.
             case WAIT -> { }
+            case AI_TRIGGER -> invokeAi(event, eventDetail, instance, definition, actor);
             case INTERACT -> interactWithNearbySwitches(instance);
             case MINE_BLOCKS -> mineNearbyBlocks(instance);
             case TAKE_ITEM -> takeNearbyItem(instance, actor);
@@ -714,6 +702,7 @@ public final class NpcBehaviourService implements Listener {
                     instances.stand(instance);
                     instances.stopNavigating(instance);
                 });
+                case MINE_BLOCKS -> mineNearbyBlocks(instance, action.target(), true);
                 case RETURN_HOME -> {
                     stopFollowing(instance);
                     moveTargets.put(instance.getId(), instance.getSpawnLocation());
@@ -1245,28 +1234,56 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void mineNearbyBlocks(NpcInstance instance) {
+        mineNearbyBlocks(instance, "mineable_blocks", false);
+    }
+
+    private void mineNearbyBlocks(NpcInstance instance, String requestedTarget, boolean autonomousRange) {
         Location feet = instance.getLocation();
         if (feet.getWorld() == null) return;
         LivingEntity entity = instances.findEntity(instance).orElse(null);
-        org.bukkit.inventory.ItemStack tool = entity == null || entity.getEquipment() == null
+        ItemStack tool = entity == null || entity.getEquipment() == null
                 ? null : entity.getEquipment().getItemInMainHand();
+        Inventory carried = Bukkit.createInventory(null, 27);
+        carried.setContents(instance.getTemporaryInventoryContents());
+        String target = requestedTarget == null ? "mineable_blocks"
+                : requestedTarget.trim().toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
         boolean mined = false;
-        // The four layers begin at the NPC's feet. The supporting y - 1 layer is never visited.
-        for (int y = 0; y < 4; y++) {
-            for (int x = -2; x <= 2; x++) {
-                for (int z = -2; z <= 2; z++) {
+        int minedBlocks = 0;
+        int minY = autonomousRange ? -4 : 0;
+        int maxY = autonomousRange ? 8 : 3;
+        int horizontalRange = autonomousRange ? 5 : 2;
+        int blockLimit = autonomousRange ? 64 : 100;
+        for (int y = minY; y <= maxY && minedBlocks < blockLimit; y++) {
+            for (int x = -horizontalRange; x <= horizontalRange && minedBlocks < blockLimit; x++) {
+                for (int z = -horizontalRange; z <= horizontalRange && minedBlocks < blockLimit; z++) {
+                    if (autonomousRange && x * x + y * y + z * z > 64) continue;
                     Block block = feet.getBlock().getRelative(x, y, z);
-                    if (!isMineable(block.getType()) || block.getState() instanceof TileState) continue;
+                    if (!matchesMiningTarget(block.getType(), target)
+                            || block.getState() instanceof TileState) continue;
                     ItemStack effectiveTool = tool == null ? new ItemStack(Material.AIR) : tool;
-                    for (ItemStack drop : block.getDrops(effectiveTool, entity)) {
-                        feet.getWorld().dropItemNaturally(block.getLocation(), drop);
+                    List<ItemStack> drops = new ArrayList<>(block.getDrops(effectiveTool, entity));
+                    if (drops.isEmpty()) continue;
+                    Inventory updated = Bukkit.createInventory(null, 27);
+                    updated.setContents(carried.getContents());
+                    boolean fits = true;
+                    for (ItemStack drop : drops) {
+                        if (!updated.addItem(drop.clone()).isEmpty()) {
+                            fits = false;
+                            break;
+                        }
                     }
+                    if (!fits) continue;
+                    carried = updated;
                     block.setType(Material.AIR, true);
                     mined = true;
+                    minedBlocks++;
                 }
             }
         }
-        if (mined && entity != null) entity.swingMainHand();
+        if (mined) {
+            updateTemporaryInventory(instance, carried.getContents(), entity);
+            if (entity != null) entity.swingMainHand();
+        }
     }
 
     private void takeNearbyItem(NpcInstance instance, Entity actor) {
@@ -1489,6 +1506,23 @@ public final class NpcBehaviourService implements Listener {
         return Tag.MINEABLE_PICKAXE.isTagged(material);
     }
 
+    private static boolean matchesMiningTarget(Material material, String target) {
+        String name = material.name().toLowerCase(java.util.Locale.ROOT);
+        if (target.equals("ores") || target.equals("all_ores") || target.equals("ore")) {
+            return name.endsWith("_ore") || material == Material.ANCIENT_DEBRIS;
+        }
+        if (target.equals("trees") || target.equals("all_trees") || target.equals("logs")
+                || target.equals("wood")) {
+            return Tag.LOGS.isTagged(material);
+        }
+        if (target.equals("mineable_blocks") || target.equals("all_mineable_blocks")
+                || target.equals("all_blocks")) return isMineable(material);
+        if (name.equals(target)) return isMineable(material) || Tag.LOGS.isTagged(material);
+        String resource = target.endsWith("s") ? target.substring(0, target.length() - 1) : target;
+        return (name.equals(resource + "_ore") || name.equals("deepslate_" + resource + "_ore"))
+                && (name.endsWith("_ore") || material == Material.ANCIENT_DEBRIS);
+    }
+
     private java.util.Optional<Player> nearestPlayer(NpcInstance instance) {
         Location location = instance.getLocation();
         if (location.getWorld() == null) {
@@ -1596,12 +1630,6 @@ public final class NpcBehaviourService implements Listener {
                 if (withinRange) {
                     nowNearby.add(key);
                     NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-                    if (definition != null && definition.getAiControlSettings().enabled()
-                            && definition.getAiControlSettings().greetOnApproach()) {
-                        invokeAi(BehaviourEvent.PLAYER_APPROACH,
-                                "Player " + player.getName() + " approached the NPC.",
-                                instance, definition, player);
-                    }
                     trigger(BehaviourEvent.PLAYER_APPROACH, instance, player);
                 } else {
                     trigger(BehaviourEvent.PLAYER_LEAVES, instance, player);

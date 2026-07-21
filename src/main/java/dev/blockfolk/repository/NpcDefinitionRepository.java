@@ -24,6 +24,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.BehaviourAction;
+import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.MovementProfile;
@@ -125,11 +126,12 @@ public final class NpcDefinitionRepository {
         configuration.set("ai-control.likes-dislikes", ai.likesDislikes().isBlank() ? null : ai.likesDislikes());
         configuration.set("ai-control.goal", ai.goal().isBlank() ? null : ai.goal());
         configuration.set("ai-control.information", ai.information().isBlank() ? null : ai.information());
-        configuration.set("ai-control.greet-on-approach", ai.greetOnApproach());
+        configuration.set("ai-control.greet-on-approach", null);
         configuration.set("ai-control.respond-to-chat", ai.respondToChat());
         configuration.set("ai-control.react-to-nearby-deaths", ai.reactToNearbyDeaths());
         configuration.set("ai-control.memory.enabled", ai.memoryEnabled());
         configuration.set("ai-control.inventory.enabled", ai.inventoryEnabled());
+        configuration.set("ai-control.conversation.shared", ai.sharedConversation());
         configuration.set("ai-control.memory.facts", definition.getAiMemories());
         configuration.set("ai-control.allowed-actions", ai.allowedActions().stream()
                 .filter(action -> action != AiActionType.REMEMBER_FACT && action != AiActionType.DROP_ITEM)
@@ -266,11 +268,11 @@ public final class NpcDefinitionRepository {
                 configuration.getBoolean("ai-control.enabled", legacyAiEnabled
                         || !identity.isBlank() || !behaviour.isBlank() || !likesDislikes.isBlank()
                         || !goal.isBlank() || !information.isBlank()),
-                configuration.getBoolean("ai-control.greet-on-approach", false),
                 configuration.getBoolean("ai-control.respond-to-chat", true),
                 configuration.getBoolean("ai-control.react-to-nearby-deaths", false),
                 configuration.getBoolean("ai-control.memory.enabled", false),
-                configuration.getBoolean("ai-control.inventory.enabled", false)));
+                configuration.getBoolean("ai-control.inventory.enabled", false),
+                configuration.getBoolean("ai-control.conversation.shared", false)));
         definition.setAiMemories(configuration.getStringList("ai-control.memory.facts"));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
@@ -293,7 +295,10 @@ public final class NpcDefinitionRepository {
                 if (type == null) {
                     continue;
                 }
-                if (isLegacyAiControl(type)) continue;
+                if (isLegacyAiControl(type)) {
+                    actions.add(new BehaviourAction(BehaviourActionType.AI_TRIGGER, null));
+                    continue;
+                }
                 try {
                     actions.add(BehaviourActionCodec.decode(entry));
                 } catch (IllegalArgumentException ignored) {
@@ -301,6 +306,14 @@ public final class NpcDefinitionRepository {
                 }
             }
             definition.setBehaviourActions(event, actions);
+        }
+        if (configuration.getBoolean("ai-control.greet-on-approach", false)) {
+            List<BehaviourAction> approach = new ArrayList<>(
+                    definition.getBehaviourActions(BehaviourEvent.PLAYER_APPROACH));
+            if (approach.stream().noneMatch(action -> action.type() == BehaviourActionType.AI_TRIGGER)) {
+                approach.add(new BehaviourAction(BehaviourActionType.AI_TRIGGER, null));
+                definition.setBehaviourActions(BehaviourEvent.PLAYER_APPROACH, approach);
+            }
         }
         ConfigurationSection custom = configuration.getConfigurationSection("custom-event-behaviours");
         if (custom != null) {
@@ -319,6 +332,7 @@ public final class NpcDefinitionRepository {
                         continue;
                     }
                     if (isLegacyAiControl(type)) {
+                        actions.add(new BehaviourAction(BehaviourActionType.AI_TRIGGER, null));
                         continue;
                     }
                     try {
