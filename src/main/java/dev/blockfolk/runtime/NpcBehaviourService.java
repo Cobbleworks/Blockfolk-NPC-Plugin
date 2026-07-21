@@ -1063,7 +1063,8 @@ public final class NpcBehaviourService implements Listener {
             if (gathering != null && status == NativeNpcNavigationService.NavigationStatus.ARRIVED
                     && gathering.stand().getWorld() == target.getWorld()
                     && gathering.stand().distanceSquared(target) < 0.01) {
-                gatherNearbyBlocks(instance, gathering.target(), gathering.collectDrops());
+                gatherNearbyBlocks(instance, gathering.target(), gathering.collectDrops(),
+                        gathering.resource().getBlock());
             }
         }
     }
@@ -1331,7 +1332,8 @@ public final class NpcBehaviourService implements Listener {
         Location stand = resource == null ? null : gatheringStandLocation(resource);
         if (stand == null) return;
         stopFollowing(instance);
-        gatheringTasks.put(instance.getId(), new GatheringTask(target, stand, collectDrops));
+        gatheringTasks.put(instance.getId(), new GatheringTask(
+                target, stand, resource.getLocation(), collectDrops));
         moveTargets.put(instance.getId(), stand);
         instances.stand(instance);
         instances.stopNavigating(instance);
@@ -1377,6 +1379,11 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private boolean gatherNearbyBlocks(NpcInstance instance, String target, boolean collectDrops) {
+        return gatherNearbyBlocks(instance, target, collectDrops, null);
+    }
+
+    private boolean gatherNearbyBlocks(NpcInstance instance, String target, boolean collectDrops,
+            Block approachedResource) {
         Location feet = instance.getLocation();
         if (feet.getWorld() == null) return false;
         LivingEntity entity = instances.findEntity(instance).orElse(null);
@@ -1388,6 +1395,11 @@ public final class NpcBehaviourService implements Listener {
             carried = Bukkit.createInventory(null, 27);
             carried.setContents(instance.getTemporaryInventoryContents());
         }
+        // Keep hold of the resource chosen before navigation. A safe adjacent stand can
+        // be one block above it, outside the upward-only area scan below.
+        if (approachedResource != null) {
+            mined = gatherBlock(approachedResource, target, tool, entity, carried);
+        }
         // General resources use the original four-layer working area. Whitelisted trunk
         // blocks continue upward so a single gather action can actually fell a tree.
         // The supporting y - 1 layer is never visited.
@@ -1396,29 +1408,34 @@ public final class NpcBehaviourService implements Listener {
                 for (int z = -2; z <= 2; z++) {
                     Block block = feet.getBlock().getRelative(x, y, z);
                     if (y >= 4 && !MiningTarget.isWood(block.getType())) continue;
-                    if (!isGatherable(block.getType()) || !MiningTarget.matches(block.getType(), target)
-                            || block.getState() instanceof TileState) continue;
-                    ItemStack effectiveTool = tool == null ? new ItemStack(Material.AIR) : tool;
-                    var drops = block.getDrops(effectiveTool, entity);
-                    // Do not destroy resources the equipped tool cannot actually harvest.
-                    if (drops.isEmpty()) continue;
-                    for (ItemStack drop : drops) {
-                        if (carried == null) {
-                            feet.getWorld().dropItemNaturally(block.getLocation(), drop);
-                        } else {
-                            for (ItemStack leftover : carried.addItem(drop).values()) {
-                                feet.getWorld().dropItemNaturally(block.getLocation(), leftover);
-                            }
-                        }
-                    }
-                    block.setType(Material.AIR, true);
-                    mined = true;
+                    mined |= gatherBlock(block, target, tool, entity, carried);
                 }
             }
         }
         if (carried != null && mined) updateTemporaryInventory(instance, carried.getContents(), entity);
         if (mined && entity != null) entity.swingMainHand();
         return mined;
+    }
+
+    private boolean gatherBlock(Block block, String target, ItemStack tool, LivingEntity entity,
+            Inventory carried) {
+        if (!isGatherable(block.getType()) || !MiningTarget.matches(block.getType(), target)
+                || block.getState() instanceof TileState) return false;
+        ItemStack effectiveTool = tool == null ? new ItemStack(Material.AIR) : tool;
+        var drops = block.getDrops(effectiveTool, entity);
+        // Do not destroy resources the equipped tool cannot actually harvest.
+        if (drops.isEmpty()) return false;
+        for (ItemStack drop : drops) {
+            if (carried == null) {
+                block.getWorld().dropItemNaturally(block.getLocation(), drop);
+            } else {
+                for (ItemStack leftover : carried.addItem(drop).values()) {
+                    block.getWorld().dropItemNaturally(block.getLocation(), leftover);
+                }
+            }
+        }
+        block.setType(Material.AIR, true);
+        return true;
     }
 
     private void takeNearbyItem(NpcInstance instance, Entity actor) {
@@ -1830,5 +1847,5 @@ public final class NpcBehaviourService implements Listener {
 
     private record SwitchInteraction(Location blockLocation, Location navigationTarget) { }
 
-    private record GatheringTask(String target, Location stand, boolean collectDrops) { }
+    private record GatheringTask(String target, Location stand, Location resource, boolean collectDrops) { }
 }

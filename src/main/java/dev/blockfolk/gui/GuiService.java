@@ -481,7 +481,7 @@ public final class GuiService implements Listener {
         AiControlSettings ai = definition.getAiControlSettings();
         boolean hasAiTrigger = hasAiTrigger(definition);
         String aiStatus = !ai.enabled() ? "Paused" : hasAiTrigger ? "Active" : "No Triggers";
-        inventory.setItem(23, item(ai.enabled()
+        inventory.setItem(21, item(ai.enabled()
                         ? Material.OXIDIZED_COPPER_GOLEM_STATUE
                         : Material.COPPER_GOLEM_STATUE,
                 "AI Behaviour: " + aiStatus, List.of(
@@ -1561,7 +1561,7 @@ public final class GuiService implements Listener {
             }
             case 13 ->
                 openBehaviours(player, definition, 0);
-            case 23 ->
+            case 21 ->
                 openAiControl(player, definition);
             case 22 ->
                 openCustomBehaviours(player, definition, 0);
@@ -3669,7 +3669,7 @@ public final class GuiService implements Listener {
     private Material actionMaterial(BehaviourActionType type) {
         return switch (type) {
             case TRIGGER_AI ->
-                Material.ENDER_EYE;
+                Material.OXIDIZED_COPPER_GOLEM_STATUE;
             case SEND_DIALOG ->
                 Material.WRITABLE_BOOK;
             case SHOW_HOLO_DIALOG ->
