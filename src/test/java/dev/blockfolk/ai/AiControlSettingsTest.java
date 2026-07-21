@@ -10,7 +10,6 @@ class AiControlSettingsTest {
     @Test
     void defaultsAreDialogueAndVisualOnly() {
         AiControlSettings settings = AiControlSettings.defaults();
-        assertFalse(settings.greetOnApproach());
         assertTrue(settings.allowedActions().contains(AiActionType.SAY));
         assertTrue(settings.allowedActions().contains(AiActionType.PLAY_ANIMATION));
         assertTrue(!settings.allowedActions().contains(AiActionType.START_COMBAT));
@@ -23,32 +22,20 @@ class AiControlSettingsTest {
     }
 
     @Test
-    void savingPromptEnablesConversationAndSpeechIsIntrinsic() {
-        AiControlSettings settings = AiControlSettings.defaults().withIdentity("A friendly guard")
-                .toggle(AiActionType.SAY);
+    void savingPromptEnablesAiAndSpeechStartsEnabled() {
+        AiControlSettings settings = AiControlSettings.defaults().withIdentity("A friendly guard");
 
         assertTrue(settings.enabled());
         assertTrue(settings.allowedActions().contains(AiActionType.SAY));
     }
 
     @Test
-    void nearbyChatResponsesCanBeDisabledWithoutEnablingGreetings() {
+    void speechCapabilityCanBeDisabledIndependentlyOfEventTriggers() {
         AiControlSettings settings = AiControlSettings.defaults().withIdentity("A guard")
-                .withRespondToChat(false);
+                .toggle(AiActionType.SAY);
 
         assertTrue(settings.enabled());
-        assertFalse(settings.greetOnApproach());
-        assertFalse(settings.respondToChat());
-    }
-
-    @Test
-    void nearbyDeathReactionsAreOptInAndPreservedByOtherChanges() {
-        AiControlSettings defaults = AiControlSettings.defaults();
-        assertFalse(defaults.reactToNearbyDeaths());
-
-        AiControlSettings enabled = defaults.withReactToNearbyDeaths(true).withIdentity("A wary guard");
-        assertTrue(enabled.reactToNearbyDeaths());
-        assertTrue(enabled.enabled());
+        assertFalse(settings.allowedActions().contains(AiActionType.SAY));
     }
 
     @Test
@@ -69,7 +56,7 @@ class AiControlSettingsTest {
     @Test
     void memorySettingIsOptInAndPreservedByOtherChanges() {
         AiControlSettings settings = AiControlSettings.defaults().withMemoryEnabled(true)
-                .withIdentity("A guard").withRespondToChat(false);
+                .withIdentity("A guard");
 
         assertTrue(settings.memoryEnabled());
     }
@@ -77,19 +64,10 @@ class AiControlSettingsTest {
     @Test
     void inventorySettingIsOptInAndPreservedByOtherChanges() {
         AiControlSettings settings = AiControlSettings.defaults().withInventoryEnabled(true)
-                .withIdentity("A courier").withReactToNearbyDeaths(true);
+                .withIdentity("A courier");
 
         assertTrue(settings.inventoryEnabled());
         assertFalse(AiControlSettings.defaults().inventoryEnabled());
     }
 
-    @Test
-    void autonomousWorkIsOptInAndPreservedByOtherChanges() {
-        AiControlSettings settings = AiControlSettings.defaults().withAutonomousEnabled(true)
-                .withIdentity("A miner").toggle(AiActionType.GATHER_BLOCKS);
-
-        assertTrue(settings.autonomousEnabled());
-        assertTrue(settings.allowedActions().contains(AiActionType.GATHER_BLOCKS));
-        assertFalse(AiControlSettings.defaults().autonomousEnabled());
-    }
 }

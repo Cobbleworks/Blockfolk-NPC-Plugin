@@ -7,7 +7,7 @@ import java.util.Locale;
 
 import org.bukkit.Material;
 
-/** Shared validated targets for AI and deterministic GATHER_BLOCKS actions. */
+/** Shared validated targets for AI and deterministic resource-gathering actions. */
 public final class MiningTarget {
 
     public static final int MAX_SELECTIONS = 8;
@@ -23,7 +23,7 @@ public final class MiningTarget {
         if (value == null || value.isBlank()) return true;
         String[] values = value.split(",");
         return values.length <= MAX_SELECTIONS && Arrays.stream(values)
-                .map(MiningTarget::normalize).allMatch(TARGETS::contains);
+                .map(MiningTarget::normalize).allMatch(MiningTarget::validTarget);
     }
 
     public static List<String> targets() {
@@ -31,14 +31,15 @@ public final class MiningTarget {
     }
 
     public static String modelTargetList() {
-        return String.join(", ", targets());
+        return String.join(", ", targets())
+                + ", or an exact lowercase block ID listed in the nearby gatherable blocks (for example dirt or sand)";
     }
 
     public static List<String> selection(String value) {
         if (value == null || value.isBlank()) return List.of("resources");
         LinkedHashSet<String> selected = new LinkedHashSet<>();
         Arrays.stream(value.split(",")).map(MiningTarget::normalize)
-                .filter(TARGETS::contains).limit(MAX_SELECTIONS).forEach(selected::add);
+                .filter(MiningTarget::validTarget).limit(MAX_SELECTIONS).forEach(selected::add);
         return selected.isEmpty() ? List.of("resources") : List.copyOf(selected);
     }
 
@@ -46,7 +47,7 @@ public final class MiningTarget {
         LinkedHashSet<String> selected = new LinkedHashSet<>();
         for (String value : values) {
             String normalized = normalize(value);
-            if (TARGETS.contains(normalized)) selected.add(normalized);
+            if (validTarget(normalized)) selected.add(normalized);
             if (selected.size() == MAX_SELECTIONS) break;
         }
         return selected.isEmpty() ? "resources" : String.join(",", selected);
@@ -76,9 +77,26 @@ public final class MiningTarget {
         return isWood(material.name().toLowerCase(Locale.ROOT));
     }
 
+    /** Allows normal breakable blocks but excludes fluids, portals, air, and unbreakable blocks. */
+    public static boolean isGatherable(Material material) {
+        if (material == null) return false;
+        String name = material.name();
+        return !name.endsWith("_AIR") && material != Material.AIR
+                && material != Material.WATER && material != Material.LAVA
+                && material != Material.FIRE && material != Material.SOUL_FIRE
+                && material != Material.NETHER_PORTAL && material != Material.END_PORTAL
+                && material != Material.END_GATEWAY && material != Material.BEDROCK
+                && material != Material.BARRIER && material != Material.LIGHT
+                && material != Material.COMMAND_BLOCK && material != Material.CHAIN_COMMAND_BLOCK
+                && material != Material.REPEATING_COMMAND_BLOCK && material != Material.STRUCTURE_BLOCK
+                && material != Material.STRUCTURE_VOID && material != Material.JIGSAW
+                && material != Material.END_PORTAL_FRAME && material != Material.MOVING_PISTON
+                && material != Material.PISTON_HEAD;
+    }
+
     private static boolean matchesOne(Material material, String target) {
         String name = material.name().toLowerCase(Locale.ROOT);
-        if (target.equals("any")) return isResource(name) || isStone(name);
+        if (target.equals("any")) return isGatherable(material);
         if (target.equals("ores")) return isOre(name);
         if (target.equals("resources")) return isResource(name);
         if (target.equals("ancient_debris")) return name.equals(target);
@@ -90,7 +108,9 @@ public final class MiningTarget {
             return unstripped.startsWith(target + "_");
         }
         if (target.equals("quartz")) return name.equals("nether_quartz_ore");
-        return name.endsWith("_ore") && name.contains(target);
+        if (name.endsWith("_ore") && name.contains(target)) return true;
+        Material exact = Material.matchMaterial(target);
+        return exact != null && exact == material && isGatherable(exact);
     }
 
     private static boolean isResource(String name) {
@@ -113,6 +133,13 @@ public final class MiningTarget {
     }
 
     private static String normalize(String value) {
-        return value.trim().toLowerCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+        String normalized = value.trim().toLowerCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+        return normalized.startsWith("minecraft:") ? normalized.substring("minecraft:".length()) : normalized;
+    }
+
+    private static boolean validTarget(String target) {
+        if (TARGETS.contains(target)) return true;
+        Material material = Material.matchMaterial(target);
+        return material != null && material.name().equalsIgnoreCase(target) && isGatherable(material);
     }
 }

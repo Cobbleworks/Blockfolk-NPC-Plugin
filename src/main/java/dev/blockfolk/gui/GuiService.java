@@ -99,6 +99,7 @@ public final class GuiService implements Listener {
             Map.entry(3, BehaviourActionType.ASK_QUESTION),
             Map.entry(4, BehaviourActionType.EMIT_EVENT),
             Map.entry(5, BehaviourActionType.RUN_CONSOLE_COMMAND),
+            Map.entry(6, BehaviourActionType.TRIGGER_AI),
             Map.entry(7, BehaviourActionType.WAIT),
             // Movement and navigation
             Map.entry(10, BehaviourActionType.SET_ROUTE),
@@ -478,8 +479,8 @@ public final class GuiService implements Listener {
                 LegacyText.YELLOW + "Click to configure"
         )));
         AiControlSettings ai = definition.getAiControlSettings();
-        String aiStatus = !ai.enabled() ? "Paused"
-                : ai.greetOnApproach() || ai.respondToChat() || ai.reactToNearbyDeaths() ? "Active" : "No Triggers";
+        boolean hasAiTrigger = hasAiTrigger(definition);
+        String aiStatus = !ai.enabled() ? "Paused" : hasAiTrigger ? "Active" : "No Triggers";
         inventory.setItem(23, item(ai.enabled()
                         ? Material.OXIDIZED_COPPER_GOLEM_STATUE
                         : Material.COPPER_GOLEM_STATUE,
@@ -487,7 +488,7 @@ public final class GuiService implements Listener {
                         ChatColor.GRAY + "Context sections: " + ChatColor.WHITE
                                 + ai.configuredSectionCount() + "/5",
                         providerStatusLore(),
-                         ChatColor.GRAY + "Optional chat, approach, and nearby-death reactions",
+                         ChatColor.GRAY + "Invoked by Trigger AI behaviour actions",
                          ChatColor.YELLOW + "Click to configure"
                  )));
         CombatProfile combat = definition.getCombatProfile();
@@ -777,7 +778,7 @@ public final class GuiService implements Listener {
     }
 
     private void openGatherBlocksPicker(Player player, GatherBlocksPickerHolder holder) {
-        Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Gather Blocks"));
+        Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Gather Resources"));
         List<String> targets = MiningTarget.targets();
         for (int index = 0; index < targets.size() && index < PAGE_SIZE; index++) {
             String target = targets.get(index);
@@ -788,8 +789,20 @@ public final class GuiService implements Listener {
                     LegacyText.YELLOW + "Click to " + (selected ? "remove" : "include")
             )));
         }
+        List<String> specific = holder.selected().stream().filter(target -> !targets.contains(target)).toList();
+        for (int index = 0; index < specific.size() && targets.size() + index < PAGE_SIZE; index++) {
+            String target = specific.get(index);
+            inventory.setItem(targets.size() + index, item(gatherTargetMaterial(target),
+                    MiningTarget.displayName(target), List.of(
+                            LegacyText.GRAY + "Specific Minecraft block material",
+                            LegacyText.GREEN + "Selected",
+                            LegacyText.YELLOW + "Click to remove")));
+        }
         inventory.setItem(45, item(Material.BARRIER, "Back", List.of(
                 LegacyText.GRAY + "Discard changes")));
+        inventory.setItem(46, item(Material.NAME_TAG, "Add Specific Blocks", List.of(
+                LegacyText.GRAY + "Enter block IDs such as dirt, sand, or glass",
+                LegacyText.YELLOW + "Click to enter up to " + MiningTarget.MAX_SELECTIONS + " targets")));
         inventory.setItem(49, item(holder.selected().isEmpty() ? Material.GRAY_DYE : Material.LIME_DYE,
                 "Save Selection", List.of(
                         holder.selected().isEmpty()
@@ -860,8 +873,32 @@ public final class GuiService implements Listener {
             return;
         }
         List<String> targets = MiningTarget.targets();
-        if (slot < 0 || slot >= targets.size()) return;
-        String target = targets.get(slot);
+        if (slot == 46) {
+            chatInputService.request(player,
+                    "Enter comma-separated Minecraft block IDs (for example dirt,sand,glass):", value -> {
+                        if (value == null || value.isBlank() || !MiningTarget.valid(value)) {
+                            player.sendMessage(UiText.error("Use valid breakable block IDs, separated by commas."));
+                            openGatherBlocksPicker(player, holder);
+                            return;
+                        }
+                        LinkedHashSet<String> selected = new LinkedHashSet<>(holder.selected());
+                        selected.addAll(MiningTarget.selection(value));
+                        if (selected.size() > MiningTarget.MAX_SELECTIONS) {
+                            player.sendMessage(UiText.info(
+                                    "Choose up to " + MiningTarget.MAX_SELECTIONS + " targets."));
+                            openGatherBlocksPicker(player, holder);
+                            return;
+                        }
+                        openGatherBlocksPicker(player, holder.withSelected(List.copyOf(selected)));
+                    });
+            return;
+        }
+        List<String> specific = holder.selected().stream().filter(target -> !targets.contains(target)).toList();
+        String target;
+        if (slot >= 0 && slot < targets.size()) target = targets.get(slot);
+        else if (slot >= targets.size() && slot < targets.size() + specific.size()) {
+            target = specific.get(slot - targets.size());
+        } else return;
         LinkedHashSet<String> selected = new LinkedHashSet<>(holder.selected());
         if (!selected.remove(target)) {
             if (target.equals("any")) selected.clear();
@@ -918,7 +955,10 @@ public final class GuiService implements Listener {
             case "crimson" -> Material.CRIMSON_STEM;
             case "warped" -> Material.WARPED_STEM;
             case "bamboo" -> Material.BAMBOO_BLOCK;
-            default -> Material.PAPER;
+            default -> {
+                Material material = Material.matchMaterial(target);
+                yield material != null && material.isItem() ? material : Material.PAPER;
+            }
         };
     }
 
@@ -928,9 +968,11 @@ public final class GuiService implements Listener {
             case "ores" -> "All ore blocks and ancient debris";
             case "wood", "logs" -> "All logs, wood, stems, hyphae, and bamboo";
             case "stone" -> "Stone, deepslate, netherrack, tuff, and calcite";
-            case "any" -> "Every block allowed by the gathering whitelist";
+            case "any" -> "Every nearby breakable non-container block";
             case "obsidian" -> "Obsidian and crying obsidian";
-            default -> "Only the " + MiningTarget.displayName(target) + " resource family";
+            default -> Material.matchMaterial(target) != null
+                    ? "Only this exact Minecraft block material"
+                    : "Only the " + MiningTarget.displayName(target) + " resource family";
         };
     }
 
@@ -971,45 +1013,56 @@ public final class GuiService implements Listener {
                         ChatColor.YELLOW + "Left-click to view and edit",
                         ChatColor.YELLOW + "Right-click to " + (settings.memoryEnabled() ? "disable" : "enable"),
                         ChatColor.RED + "Shift-right-click to clear all memories")));
-        inventory.setItem(20, toggleItem(Material.SPYGLASS, "Greet On Approach",
-                settings.greetOnApproach(), "Lets the NPC speak when a player comes close"));
-        inventory.setItem(21, toggleItem(Material.SKELETON_SKULL, "React To Nearby Deaths",
-                settings.reactToNearbyDeaths(), "Lets the NPC comment when someone dies within 12 blocks"));
+        inventory.setItem(20, item(Material.ENDER_EYE, "AI Triggers", List.of(
+                ChatColor.GRAY + "Add Trigger AI to any event's action sequence",
+                ChatColor.GRAY + "Examples: player chat, approach, or work available",
+                ChatColor.YELLOW + "Click to open Event Behaviour")));
         inventory.setItem(22, toggleItem(Material.BARREL, "Temporary Inventory",
                 settings.inventoryEnabled(), "Lets the AI see and drop items carried by each spawned instance"));
-        inventory.setItem(23, toggleItem(Material.CLOCK, "Autonomous Work",
-                settings.autonomousEnabled(), "Lets the NPC periodically pursue nearby work without a player trigger"));
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
         List<AiActionType> types = java.util.Arrays.stream(AiActionType.values())
                 .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM).toList();
         for (int index = 0; index < types.size(); index++) {
             AiActionType type = types.get(index);
-            boolean chatToggle = type == AiActionType.SAY;
             boolean intrinsic = type == AiActionType.DO_NOTHING;
-            boolean enabled = chatToggle ? settings.respondToChat()
-                    : intrinsic || settings.allowedActions().contains(type);
-            String displayName = chatToggle ? "Respond to Nearby Chat" : type.displayName();
+            boolean enabled = intrinsic || settings.allowedActions().contains(type);
+            String displayName = type.displayName();
             inventory.setItem(slots[index], item(enabled ? Material.REDSTONE_TORCH : Material.LEVER,
                     displayName + ": " + (enabled ? "Enabled" : "Disabled"), List.of(
-                            chatToggle
-                                    ? ChatColor.GRAY + "Reads and answers player chat within 8 blocks"
-                                    : ChatColor.GRAY + "Available when this capability is enabled",
+                            ChatColor.GRAY + "Available when this capability is enabled",
                             intrinsic ? ChatColor.DARK_GRAY + "Always available"
                                     : ChatColor.YELLOW + "Click to toggle")));
         }
         inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
-        boolean hasTrigger = settings.greetOnApproach() || settings.respondToChat()
-                || settings.reactToNearbyDeaths() || settings.autonomousEnabled();
+        boolean hasTrigger = hasAiTrigger(definition);
         String status = !settings.enabled() ? "Paused" : hasTrigger ? "Active" : "No Triggers";
         Material statusMaterial = !settings.enabled() ? Material.RED_DYE
                 : hasTrigger ? Material.LIME_DYE : Material.YELLOW_DYE;
         inventory.setItem(49, item(statusMaterial,
                 "AI Behaviour: " + status, List.of(
                         ChatColor.GRAY + "Applies to every spawned instance of this preset",
-                        hasTrigger ? ChatColor.GRAY + "Automatic triggers are configured"
-                                : ChatColor.RED + "No requests are made and nearby chat is not read",
+                        hasTrigger ? ChatColor.GRAY + "Trigger AI actions are configured"
+                                : ChatColor.RED + "Add Trigger AI to an event to make requests",
                         ChatColor.YELLOW + "Click to " + (settings.enabled() ? "pause" : "resume"))));
         openInventory(player, inventory);
+    }
+
+    private boolean hasAiTrigger(NpcDefinition definition) {
+        if (java.util.Arrays.stream(BehaviourEvent.values())
+                .anyMatch(event -> containsAiTrigger(definition.getBehaviourActions(event)))) return true;
+        return definition.getCustomEventNames().stream()
+                .anyMatch(event -> containsAiTrigger(definition.getCustomEventActions(event)));
+    }
+
+    private boolean containsAiTrigger(List<BehaviourAction> actions) {
+        for (BehaviourAction action : actions) {
+            if (action.type() == BehaviourActionType.TRIGGER_AI) return true;
+            if (action.question() == null) continue;
+            if (action.question().options().stream()
+                    .anyMatch(option -> containsAiTrigger(option.actions()))) return true;
+            if (containsAiTrigger(action.question().cancelActions())) return true;
+        }
+        return false;
     }
 
     private void openAiMemories(Player player, NpcDefinition definition) {
@@ -2022,32 +2075,12 @@ public final class GuiService implements Listener {
             return;
         }
         if (slot == 20) {
-            boolean enabling = !definition.getAiControlSettings().greetOnApproach();
-            definition.setAiControlSettings(definition.getAiControlSettings().withGreetOnApproach(
-                    enabling));
-            definitionRepository.save(definition);
-            if (enabling && behaviourService != null) behaviourService.greetNearbyPlayers(definition);
-            openAiControl(player, definition);
-            return;
-        }
-        if (slot == 21) {
-            AiControlSettings settings = definition.getAiControlSettings();
-            definition.setAiControlSettings(settings.withReactToNearbyDeaths(
-                    !settings.reactToNearbyDeaths()));
-            definitionRepository.save(definition);
-            openAiControl(player, definition);
+            openBehaviours(player, definition, 0);
             return;
         }
         if (slot == 22) {
             AiControlSettings settings = definition.getAiControlSettings();
             definition.setAiControlSettings(settings.withInventoryEnabled(!settings.inventoryEnabled()));
-            definitionRepository.save(definition);
-            openAiControl(player, definition);
-            return;
-        }
-        if (slot == 23) {
-            AiControlSettings settings = definition.getAiControlSettings();
-            definition.setAiControlSettings(settings.withAutonomousEnabled(!settings.autonomousEnabled()));
             definitionRepository.save(definition);
             openAiControl(player, definition);
             return;
@@ -2058,11 +2091,7 @@ public final class GuiService implements Listener {
         for (int index = 0; index < types.size(); index++) {
             if (slot != slots[index]) continue;
             AiActionType type = types.get(index);
-            if (type == AiActionType.SAY) {
-                definition.setAiControlSettings(definition.getAiControlSettings().withRespondToChat(
-                        !definition.getAiControlSettings().respondToChat()));
-                definitionRepository.save(definition);
-            } else if (type != AiActionType.DO_NOTHING) {
+            if (type != AiActionType.DO_NOTHING) {
                 definition.setAiControlSettings(definition.getAiControlSettings().toggle(type));
                 definitionRepository.save(definition);
             }
@@ -2079,7 +2108,6 @@ public final class GuiService implements Listener {
             }
             definition.setAiControlSettings(settings.withEnabled(!settings.enabled()));
             definitionRepository.save(definition);
-            if (!settings.enabled() && behaviourService != null) behaviourService.greetNearbyPlayers(definition);
             if (!settings.enabled() && aiControlService != null && !aiControlService.configured()) {
                 player.sendMessage(Component.text("AI behaviour is active, but OpenRouter "
                         + aiControlService.configurationIssue() + ". Check config.yml and restart the server."));
@@ -2136,7 +2164,6 @@ public final class GuiService implements Listener {
             default -> throw new IllegalArgumentException("Unknown AI context slot: " + slot);
         };
         chatInputService.request(player, "Enter the NPC's " + section + ", or 'clear':", value -> {
-            boolean wasEnabled = definition.getAiControlSettings().enabled();
             String normalized = value.equalsIgnoreCase("clear") ? "" : value;
             AiControlSettings current = definition.getAiControlSettings();
             definition.setAiControlSettings(switch (slot) {
@@ -2148,9 +2175,6 @@ public final class GuiService implements Listener {
                 default -> current;
             });
             definitionRepository.save(definition);
-            if (!wasEnabled && definition.getAiControlSettings().enabled() && behaviourService != null) {
-                behaviourService.greetNearbyPlayers(definition);
-            }
             openAiControl(player, definition);
         });
     }
@@ -3635,11 +3659,17 @@ public final class GuiService implements Listener {
                 Material.OBSERVER;
             case ROUTE_POINT_REACHED ->
                 Material.POWERED_RAIL;
+            case NEARBY_DEATH ->
+                Material.TOTEM_OF_UNDYING;
+            case WORK_AVAILABLE ->
+                Material.IRON_PICKAXE;
         };
     }
 
     private Material actionMaterial(BehaviourActionType type) {
         return switch (type) {
+            case TRIGGER_AI ->
+                Material.ENDER_EYE;
             case SEND_DIALOG ->
                 Material.WRITABLE_BOOK;
             case SHOW_HOLO_DIALOG ->

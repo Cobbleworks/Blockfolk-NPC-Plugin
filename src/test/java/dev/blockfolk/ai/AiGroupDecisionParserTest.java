@@ -52,6 +52,6 @@ class AiGroupDecisionParserTest {
     }
 
     private static AiControlSettings settings(EnumSet<AiActionType> actions) {
-        return new AiControlSettings("Character", "", "", "", actions, true, false, true);
+        return new AiControlSettings("Character", "", "", "", actions, true);
     }
 }

@@ -3,6 +3,7 @@ package dev.blockfolk.model;
 import java.util.Locale;
 
 public enum BehaviourActionType {
+    TRIGGER_AI("Trigger AI", false),
     SEND_DIALOG("Send Dialog", true),
     SHOW_HOLO_DIALOG("Show Holo Dialog", true),
     ASK_QUESTION("Ask Question", false),
@@ -17,7 +18,7 @@ public enum BehaviourActionType {
     TELEPORT_TO("Teleport To", true),
     WAIT("Wait", true),
     INTERACT("Interact", false),
-    GATHER_BLOCKS("Gather Blocks", true),
+    GATHER_BLOCKS("Gather Resources", true),
     TAKE_ITEM("Take Item", false),
     SHOW_INVENTORY("Show Inventory", false),
     DROP_INVENTORY("Drop Inventory", false),
@@ -51,6 +52,8 @@ public enum BehaviourActionType {
 
     public static BehaviourActionType fromStored(String value) {
         String normalized = value.trim().toUpperCase(Locale.ROOT);
+        if (normalized.equals("AI_CONTROL")) return TRIGGER_AI;
+        if (normalized.equals("MINE_BLOCKS")) return GATHER_BLOCKS;
         return valueOf(normalized);
     }
 }

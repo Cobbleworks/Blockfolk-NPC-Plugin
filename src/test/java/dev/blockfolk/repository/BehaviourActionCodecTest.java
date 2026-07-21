@@ -49,6 +49,13 @@ class BehaviourActionCodecTest {
     }
 
     @Test
+    void migratesLegacyAiControlAction() {
+        BehaviourAction decoded = BehaviourActionCodec.decode(Map.of("type", "ai_control"));
+
+        assertEquals(new BehaviourAction(BehaviourActionType.TRIGGER_AI, null), decoded);
+    }
+
+    @Test
     void limitsQuestionsToFourAnswers() {
         List<Map<String, Object>> options = java.util.stream.IntStream.range(0, 5)
                 .mapToObj(index -> Map.of("label", "Option " + index, "actions", List.of()))

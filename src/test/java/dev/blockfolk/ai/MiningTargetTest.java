@@ -24,10 +24,11 @@ class MiningTargetTest {
         assertTrue(MiningTarget.matches(Material.CRYING_OBSIDIAN, "obsidian"));
         assertTrue(MiningTarget.matches(Material.ANCIENT_DEBRIS, "resources"));
         assertFalse(MiningTarget.valid("bedrock"));
+        assertTrue(MiningTarget.valid("dirt,sand,glass"));
     }
 
     @Test
-    void matchesWhitelistedTreeFamiliesWithoutAllowingArbitraryBlocks() {
+    void matchesTreeFamiliesAndAllowsArbitrarySafeBlocks() {
         assertTrue(MiningTarget.matches(Material.OAK_LOG, "wood"));
         assertTrue(MiningTarget.matches(Material.OAK_LOG, "oak"));
         assertFalse(MiningTarget.matches(Material.DARK_OAK_LOG, "oak"));
@@ -35,6 +36,8 @@ class MiningTargetTest {
         assertTrue(MiningTarget.matches(Material.WARPED_STEM, "warped"));
         assertTrue(MiningTarget.matches(Material.BAMBOO_BLOCK, "bamboo"));
         assertFalse(MiningTarget.matches(Material.OAK_PLANKS, "wood"));
+        assertTrue(MiningTarget.matches(Material.OAK_PLANKS, "any"));
+        assertTrue(MiningTarget.matches(Material.DIRT, "dirt"));
         assertFalse(MiningTarget.matches(Material.BEDROCK, "any"));
     }
 

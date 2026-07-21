@@ -28,26 +28,32 @@ Proximity enter/leave transitions are debounced for 3 seconds by default. Adjust
 
 AI Behaviour is configured directly from an NPC preset's dedicated menu. Context is
 split into Identity, Personality & Behaviour, Goal / Role, and Knowledge / Information.
-The NPC can optionally greet approaching players, respond to chat sent within eight
-blocks, and comment on deaths within twelve blocks. Death reactions receive the victim,
-killer, held weapon, and Minecraft damage cause when available. Disabling nearby chat
-responses also stops the NPC from reading that chat. Each
+Add the `Trigger AI` action to any normal event, custom event, question branch, or route
+waypoint to ask the model for a decision. For example, add it to On Player Approach for
+greetings, On Player Chat for conversation, On Nearby Death for reactions, or On Work
+Available for independent work. Death reactions receive the victim, killer, held weapon,
+and Minecraft damage cause when available. Each
 spawned NPC keeps its own per-player conversation memory until an administrator opens
 that NPC preset's editor, which resets AI state globally for its spawned copies. The
 model can only select validated capabilities enabled for that preset; it cannot return
 commands or executable code.
 
-Gather Blocks can be combined with Autonomous Work for independent miners or woodcutters. For example,
-set the Goal / Role to `You are a pro miner. Try to gather coal and gold in the mines`,
-or `You are a lumberjack. Gather oak and spruce logs`, enable Gather Blocks and
-Autonomous Work, and optionally enable Temporary Inventory to store gathered drops.
-The autonomous interval is configured with
-`ai-control.autonomous-interval-seconds`.
+Existing presets are migrated on load: the former greeting, nearby-chat, nearby-death,
+and autonomous-work toggles become Trigger AI actions on their corresponding events.
 
-The same Gather Blocks operation is available in deterministic behaviour sequences.
-Its inventory editor lets administrators select up to eight target categories or
-materials, and stores that selection directly on the behaviour action. Deterministic
-gathering places drops in the NPC's temporary inventory and drops only overflow items.
+Gather Resources can be combined with On Work Available -> Trigger AI for independent
+miners or woodcutters. For example,
+set the Goal / Role to `You are a pro miner. Try to gather coal and gold in the mines`,
+or `You are a builder. Gather nearby sand`, enable Gather Resources, add that trigger,
+and optionally enable Temporary Inventory to store gathered drops. The work check interval
+is configured with `behaviour.work-available-interval-seconds`.
+
+The same Gather Resources operation is available directly in deterministic behaviour
+sequences. Its editor supports broad categories and up to eight exact Minecraft block
+IDs, and stores that selection directly on the behaviour action. `Any` includes every
+breakable non-container block; fluids, portals, and unbreakable blocks remain protected.
+Deterministic gathering places drops in the NPC's temporary inventory and drops only
+overflow items.
 
 Long-term memory is optional per preset. When enabled, the model can save durable facts
 with a validated `REMEMBER_FACT` action. Up to 45 facts survive restarts and are shared by
@@ -55,7 +61,8 @@ the preset's spawned copies; adding another discards the oldest. The AI Behaviou
 provides a 45-slot memory editor for adding, editing, deleting, or clearing these facts.
 
 Set `openrouter.api-key` and `openrouter.model` in `config.yml` to enable requests.
-Requests run asynchronously and do not delay deterministic NPC behaviour. If players
+Requests run asynchronously. Actions after Trigger AI wait until its decision has been
+applied or the request has failed. If players
 speak while a request or cooldown is active, the latest interaction is queued rather
 than silently discarded.
 

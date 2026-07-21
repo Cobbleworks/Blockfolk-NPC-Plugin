@@ -12,7 +12,7 @@ class AiDecisionParserTest {
     @Test
     void validatesActionsIndependently() {
         AiControlSettings settings = new AiControlSettings("Be Mira", "Direct but fair", "Guard the gate", "",
-                EnumSet.of(AiActionType.SAY, AiActionType.START_COMBAT), true, true, true);
+                EnumSet.of(AiActionType.SAY, AiActionType.START_COMBAT), true);
         AiDecision decision = AiDecisionParser.parse("""
                 {"thought":"hidden","actions":[
                   {"type":"SAY","text":"Back away."},
@@ -30,7 +30,7 @@ class AiDecisionParserTest {
     @Test
     void disabledCapabilityOverridesModelResponse() {
         AiControlSettings settings = new AiControlSettings("Be Mira", "", "", "",
-                EnumSet.of(AiActionType.SAY), true, true, true);
+                EnumSet.of(AiActionType.SAY), true);
         AiDecision decision = AiDecisionParser.parse("""
                 {"actions":[{"type":"START_COMBAT","target":"triggering_player"}]}
                 """, settings);
@@ -47,7 +47,7 @@ class AiDecisionParserTest {
     @Test
     void startCombatMaySelectNearestAttackableImplicitly() {
         AiControlSettings settings = new AiControlSettings("Guard", "", "Defend this place", "",
-                EnumSet.of(AiActionType.START_COMBAT), true, true, true);
+                EnumSet.of(AiActionType.START_COMBAT), true);
 
         AiDecision decision = AiDecisionParser.parse("""
                 {"actions":[{"type":"START_COMBAT"}]}
@@ -72,7 +72,7 @@ class AiDecisionParserTest {
     @Test
     void acceptsEnabledUnfollowAndInteractActionsWithoutTargets() {
         AiControlSettings settings = new AiControlSettings("Caretaker", "", "Operate the gate", "",
-                EnumSet.of(AiActionType.UNFOLLOW, AiActionType.INTERACT), true, true, true);
+                EnumSet.of(AiActionType.UNFOLLOW, AiActionType.INTERACT), true);
 
         AiDecision decision = AiDecisionParser.parse("""
                 {"actions":[{"type":"UNFOLLOW"},{"type":"INTERACT"}]}
@@ -85,7 +85,7 @@ class AiDecisionParserTest {
     @Test
     void followRequiresAndAcceptsPerceivedPlayerTargets() {
         AiControlSettings settings = new AiControlSettings("Companion", "", "Stay with visitors", "",
-                EnumSet.of(AiActionType.FOLLOW), true, true, true);
+                EnumSet.of(AiActionType.FOLLOW), true);
 
         AiDecision missing = AiDecisionParser.parse(
                 "{\"actions\":[{\"type\":\"FOLLOW\"}]}", settings);
@@ -128,7 +128,7 @@ class AiDecisionParserTest {
     @Test
     void moveToAcceptsOnlyPerceivedTargetAliasesWhenEnabled() {
         AiControlSettings settings = new AiControlSettings("Guide", "", "Show visitors around", "",
-                EnumSet.of(AiActionType.MOVE_TO), true, false, true);
+                EnumSet.of(AiActionType.MOVE_TO), true);
 
         AiDecision accepted = AiDecisionParser.parse(
                 "{\"actions\":[{\"type\":\"MOVE_TO\",\"target\":\"nearby_location_2\"}]}", settings);

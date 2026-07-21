@@ -18,5 +18,6 @@ openrouter:
 ai-control:
   # Per-NPC protection in addition to trigger-specific event throttling.
   invocation-cooldown-seconds: 2
-  # How often NPCs with Autonomous Work enabled may inspect and act on nearby resources.
-  autonomous-interval-seconds: 15
+behaviour:
+  # How often On Work Available checks for nearby gatherable blocks.
+  work-available-interval-seconds: 15

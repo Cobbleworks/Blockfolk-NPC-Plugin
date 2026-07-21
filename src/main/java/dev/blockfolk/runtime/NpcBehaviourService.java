@@ -52,7 +52,6 @@ import org.bukkit.util.Vector;
 
 import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.AiDecision;
-import dev.blockfolk.ai.AiActionType;
 import dev.blockfolk.ai.MiningTarget;
 import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.util.UiText;
@@ -113,7 +112,7 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, Set<UUID>> observedEntities = new HashMap<>();
     private final Map<UUID, Long> entityNearbyCooldownUntilTick = new HashMap<>();
     private final long proximityCooldownTicks;
-    private final long autonomousIntervalTicks;
+    private final long workAvailableIntervalTicks;
     private NpcCombatService combatService;
     private AiControlService aiControlService;
     private BukkitTask behaviourTask;
@@ -122,7 +121,7 @@ public final class NpcBehaviourService implements Listener {
     private int playerLookTick;
     private int itemPickupTick;
     private int entityNearbyTick;
-    private long autonomousTick;
+    private long workAvailableTick;
     private long customEmissionTick = -1L;
     private int customEmissionsThisTick;
     private boolean redstonePhysicsWarningLogged;
@@ -134,7 +133,7 @@ public final class NpcBehaviourService implements Listener {
             DialogService dialogService,
             NpcQuestionService questionService,
             int proximityCooldownSeconds,
-            int autonomousIntervalSeconds
+            int workAvailableIntervalSeconds
     ) {
         this.plugin = plugin;
         this.definitions = definitions;
@@ -142,7 +141,7 @@ public final class NpcBehaviourService implements Listener {
         this.dialogService = dialogService;
         this.questionService = questionService;
         this.proximityCooldownTicks = Math.max(0L, proximityCooldownSeconds) * 20L;
-        this.autonomousIntervalTicks = Math.max(5L, autonomousIntervalSeconds) * 20L;
+        this.workAvailableIntervalTicks = Math.max(5L, workAvailableIntervalSeconds) * 20L;
     }
 
     public void setCombatService(NpcCombatService combatService) {
@@ -273,20 +272,6 @@ public final class NpcBehaviourService implements Listener {
         if (aiControlService != null) aiControlService.forget(instance);
     }
 
-    /** Greets players who are already nearby when conversations or greetings are enabled. */
-    public void greetNearbyPlayers(NpcDefinition definition) {
-        if (!definition.getAiControlSettings().enabled()
-                || !definition.getAiControlSettings().greetOnApproach()) return;
-        for (NpcInstance instance : instances.findByDefinition(definition)) {
-            Location location = instance.getLocation();
-            if (location.getWorld() == null) continue;
-            location.getWorld().getPlayers().stream()
-                    .filter(player -> player.getLocation().distanceSquared(location) <= APPROACH_RANGE_SQUARED)
-                    .forEach(player -> invokeAi(BehaviourEvent.PLAYER_APPROACH,
-                            "Player " + player.getName() + " is near the NPC.", instance, definition, player));
-        }
-    }
-
     public MovementProfile movementFor(NpcInstance instance, NpcDefinition definition) {
         String route = routeOverrides.get(instance.getId());
         WalkingSpeed speed = speedOverrides.getOrDefault(instance.getId(), definition.getMovementProfile().walkingSpeed());
@@ -331,6 +316,20 @@ public final class NpcBehaviourService implements Listener {
             String eventDetail,
             Runnable completion
     ) {
+        executeSequence(event, actions, index, instance, definition, actor, eventDetail, completion, null);
+    }
+
+    private void executeSequence(
+            BehaviourEvent event,
+            java.util.List<BehaviourAction> actions,
+            int index,
+            NpcInstance instance,
+            NpcDefinition definition,
+            Entity actor,
+            String eventDetail,
+            Runnable completion,
+            AiDecision suppliedAiDecision
+    ) {
         if (instances.findAll().stream().noneMatch(candidate -> candidate.getId().equals(instance.getId()))) {
             completion.run();
             return;
@@ -341,32 +340,49 @@ public final class NpcBehaviourService implements Listener {
         }
         BehaviourAction action = actions.get(index);
         if (action.type() == BehaviourActionType.ASK_QUESTION) {
-            askQuestion(event, actions, index, action, instance, definition, actor, eventDetail, completion);
+            askQuestion(event, actions, index, action, instance, definition, actor, eventDetail, completion,
+                    suppliedAiDecision);
+            return;
+        }
+        if (action.type() == BehaviourActionType.TRIGGER_AI) {
+            if (suppliedAiDecision != null) {
+                applyAiDecision(event, suppliedAiDecision, instance, definition, actor, false);
+                executeSequence(event, actions, index + 1, instance, definition, actor,
+                        eventDetail, completion, null);
+                return;
+            }
+            invokeAi(event, eventDetail, instance, definition, actor,
+                    () -> executeSequence(event, actions, index + 1, instance, definition, actor,
+                            eventDetail, completion));
             return;
         }
         execute(event, action, instance, definition, actor, eventDetail);
         long delayTicks = delayAfter(action);
         if (delayTicks <= 0L) {
-            executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail, completion);
+            executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail, completion,
+                    suppliedAiDecision);
         } else {
             Bukkit.getScheduler().runTaskLater(plugin,
-                    () -> executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail, completion), delayTicks);
+                    () -> executeSequence(event, actions, index + 1, instance, definition, actor,
+                            eventDetail, completion, suppliedAiDecision), delayTicks);
         }
     }
 
     private void askQuestion(BehaviourEvent event, List<BehaviourAction> parent, int index,
             BehaviourAction action, NpcInstance instance, NpcDefinition definition, Entity actor,
-            String eventDetail, Runnable completion) {
+            String eventDetail, Runnable completion, AiDecision suppliedAiDecision) {
         Player player = questionPlayer(instance, actor);
         if (player == null) {
-            executeSequence(event, action.question().cancelActions(), 0, instance, definition, actor, eventDetail,
-                    () -> executeSequence(event, parent, index + 1, instance, definition, actor, eventDetail, completion));
+            executeSequence(event, action.question().cancelActions(), 0, instance, definition, actor,
+                    eventDetail, () -> executeSequence(event, parent, index + 1, instance, definition, actor,
+                            eventDetail, completion), suppliedAiDecision);
             return;
         }
         questionService.enqueue(player, instance, definition.getDisplayName(), definition.getColor().textColor(),
                 action.question(),
-                (branch, done) -> executeSequence(event, branch, 0, instance, definition, player, eventDetail,
-                        () -> executeSequence(event, parent, index + 1, instance, definition, player, eventDetail, done)));
+                (branch, done) -> executeSequence(event, branch, 0, instance, definition, player,
+                        eventDetail, () -> executeSequence(event, parent, index + 1, instance, definition,
+                                player, eventDetail, done), suppliedAiDecision));
         // A duplicate intentionally stops only this repeated trigger. Its parent
         // continuation is not run, preventing idle loops from producing side effects.
     }
@@ -485,11 +501,10 @@ public final class NpcBehaviourService implements Listener {
             if (observerLocation.getWorld() != deathLocation.getWorld()
                     || observerLocation.distanceSquared(deathLocation) > NEARBY_DEATH_RANGE_SQUARED) continue;
             NpcDefinition definition = definitions.find(observer.getDefinitionKey()).orElse(null);
-            if (definition == null || !definition.getAiControlSettings().enabled()
-                    || !definition.getAiControlSettings().reactToNearbyDeaths()) continue;
-            invokeAi(null, detail + " Distance from the NPC: "
-                    + Math.round(observerLocation.distance(deathLocation)) + " blocks.",
-                    observer, definition, killer);
+            if (definition == null
+                    || definition.getBehaviourActions(BehaviourEvent.NEARBY_DEATH).isEmpty()) continue;
+            trigger(BehaviourEvent.NEARBY_DEATH, observer, killer, detail + " Distance from the NPC: "
+                    + Math.round(observerLocation.distance(deathLocation)) + " blocks.");
         }
     }
 
@@ -555,22 +570,42 @@ public final class NpcBehaviourService implements Listener {
             for (NpcInstance instance : nearby) {
                 NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
                 if (definition == null) continue;
+                List<BehaviourAction> chatActions = definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT);
+                boolean hasAiAction = containsTriggerAi(chatActions);
+                boolean groupedAi = aiControlService != null && definition.getAiControlSettings().enabled()
+                        && definition.getAiControlSettings().hasContext()
+                        && chatActions.stream()
+                                .anyMatch(action -> action.type() == BehaviourActionType.TRIGGER_AI);
                 if (aiControlService != null && definition.getAiControlSettings().enabled()
-                        && definition.getAiControlSettings().respondToChat()) {
+                        && definition.getAiControlSettings().hasContext() && hasAiAction) {
                     aiControlService.rememberPlayerMessage(instance, player, message);
+                }
+                if (groupedAi) {
                     aiGroup.add(instance);
                 }
-                if (!definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT).isEmpty()) {
+                if (!groupedAi && !chatActions.isEmpty()) {
                     trigger(BehaviourEvent.PLAYER_CHAT, instance, player, detail);
                 }
             }
             if (aiControlService != null && !aiGroup.isEmpty()) {
                 aiControlService.invokeChatGroup(detail, aiGroup, player, (instance, decision) ->
                         definitions.find(instance.getDefinitionKey()).ifPresent(definition ->
-                                applyAiDecision(BehaviourEvent.PLAYER_CHAT, decision, instance, definition, player,
-                                        false)));
+                                executeSequence(BehaviourEvent.PLAYER_CHAT,
+                                        definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT), 0,
+                                        instance, definition, player, detail, () -> { }, decision)));
             }
         });
+    }
+
+    private boolean containsTriggerAi(List<BehaviourAction> actions) {
+        for (BehaviourAction action : actions) {
+            if (action.type() == BehaviourActionType.TRIGGER_AI) return true;
+            if (action.question() == null) continue;
+            if (action.question().options().stream()
+                    .anyMatch(option -> containsTriggerAi(option.actions()))) return true;
+            if (containsTriggerAi(action.question().cancelActions())) return true;
+        }
+        return false;
     }
 
     private void checkLowHealth(NpcInstance instance, Entity actor) {
@@ -596,6 +631,7 @@ public final class NpcBehaviourService implements Listener {
             String eventDetail
     ) {
         switch (action.type()) {
+            case TRIGGER_AI -> { /* Asynchronous and handled by executeSequence. */ }
             case SEND_DIALOG ->
                 sendDialog(event, instance, definition, action.value(), actor);
             case SHOW_HOLO_DIALOG ->
@@ -749,9 +785,18 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void invokeAi(BehaviourEvent event, String eventDetail, NpcInstance instance,
-            NpcDefinition definition, Entity actor) {
-        if (aiControlService != null) aiControlService.invoke(event, eventDetail, instance, definition, actor,
-                decision -> applyAiDecision(event, decision, instance, definition, actor));
+            NpcDefinition definition, Entity actor, Runnable completion) {
+        if (aiControlService == null) {
+            completion.run();
+            return;
+        }
+        aiControlService.invoke(event, eventDetail, instance, definition, actor, decision -> {
+            try {
+                applyAiDecision(event, decision, instance, definition, actor);
+            } finally {
+                completion.run();
+            }
+        });
     }
 
     private Entity resolveAiTarget(String alias, NpcInstance instance, Entity actor) {
@@ -869,9 +914,9 @@ public final class NpcBehaviourService implements Listener {
     private void tickBehaviour() {
         currentTick++;
         tickTimeEvents();
-        if (++autonomousTick >= autonomousIntervalTicks) {
-            autonomousTick = 0L;
-            tickAutonomousAi();
+        if (++workAvailableTick >= workAvailableIntervalTicks) {
+            workAvailableTick = 0L;
+            tickWorkAvailable();
         }
         if (++proximityTick >= 10) {
             proximityTick = 0;
@@ -908,19 +953,17 @@ public final class NpcBehaviourService implements Listener {
         entityNearbyCooldownUntilTick.keySet().retainAll(active);
     }
 
-    private void tickAutonomousAi() {
+    private void tickWorkAvailable() {
         if (aiControlService == null) return;
         for (NpcInstance instance : List.copyOf(instances.findAll())) {
             NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-            if (definition == null) continue;
-            var settings = definition.getAiControlSettings();
-            if (!settings.enabled() || !settings.autonomousEnabled()
-                    || !settings.allowedActions().contains(AiActionType.GATHER_BLOCKS)) continue;
+            if (definition == null
+                    || definition.getBehaviourActions(BehaviourEvent.WORK_AVAILABLE).isEmpty()) continue;
             if (combatService != null && combatService.isEngaged(instance)) continue;
             if (gatheringTasks.containsKey(instance.getId())) continue;
             if (!aiControlService.hasNearbyGatherableBlocks(instance)) continue;
-            invokeAi(null, "Autonomous work interval: inspect nearby resources and continue the NPC's goal.",
-                    instance, definition, null);
+            trigger(BehaviourEvent.WORK_AVAILABLE, instance, null,
+                    "Nearby resources are available. Inspect them and continue the NPC's work goal.");
         }
     }
 
@@ -1595,7 +1638,7 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private static boolean isGatherable(Material material) {
-        return Tag.MINEABLE_PICKAXE.isTagged(material) || Tag.MINEABLE_AXE.isTagged(material);
+        return MiningTarget.isGatherable(material);
     }
 
     private java.util.Optional<Player> nearestPlayer(NpcInstance instance) {
@@ -1704,14 +1747,8 @@ public final class NpcBehaviourService implements Listener {
                 markProximityTransition(key);
                 if (withinRange) {
                     nowNearby.add(key);
-                    NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-                    if (definition != null && definition.getAiControlSettings().enabled()
-                            && definition.getAiControlSettings().greetOnApproach()) {
-                        invokeAi(BehaviourEvent.PLAYER_APPROACH,
-                                "Player " + player.getName() + " approached the NPC.",
-                                instance, definition, player);
-                    }
-                    trigger(BehaviourEvent.PLAYER_APPROACH, instance, player);
+                    trigger(BehaviourEvent.PLAYER_APPROACH, instance, player,
+                            "Player " + player.getName() + " approached the NPC.");
                 } else {
                     trigger(BehaviourEvent.PLAYER_LEAVES, instance, player);
                 }

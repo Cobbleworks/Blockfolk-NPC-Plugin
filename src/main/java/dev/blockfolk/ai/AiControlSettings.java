@@ -11,41 +11,13 @@ public record AiControlSettings(
         String information,
         Set<AiActionType> allowedActions,
         boolean enabled,
-        boolean greetOnApproach,
-        boolean respondToChat,
-        boolean reactToNearbyDeaths,
         boolean memoryEnabled,
-        boolean inventoryEnabled,
-        boolean autonomousEnabled
+        boolean inventoryEnabled
 ) {
 
     public AiControlSettings(String identity, String behaviour, String goal, String information,
-            Set<AiActionType> allowedActions, boolean enabled, boolean greetOnApproach,
-            boolean respondToChat) {
-        this(identity, behaviour, "", goal, information, allowedActions, enabled, greetOnApproach,
-                respondToChat, false, false, false, false);
-    }
-
-    public AiControlSettings(String identity, String behaviour, String goal, String information,
-            Set<AiActionType> allowedActions, boolean enabled, boolean greetOnApproach,
-            boolean respondToChat, boolean reactToNearbyDeaths) {
-        this(identity, behaviour, "", goal, information, allowedActions, enabled, greetOnApproach,
-                respondToChat, reactToNearbyDeaths, false, false, false);
-    }
-
-    public AiControlSettings(String identity, String behaviour, String goal, String information,
-            Set<AiActionType> allowedActions, boolean enabled, boolean greetOnApproach,
-            boolean respondToChat, boolean reactToNearbyDeaths, boolean memoryEnabled) {
-        this(identity, behaviour, "", goal, information, allowedActions, enabled, greetOnApproach,
-                respondToChat, reactToNearbyDeaths, memoryEnabled, false, false);
-    }
-
-    public AiControlSettings(String identity, String behaviour, String goal, String information,
-            Set<AiActionType> allowedActions, boolean enabled, boolean greetOnApproach,
-            boolean respondToChat, boolean reactToNearbyDeaths, boolean memoryEnabled,
-            boolean inventoryEnabled) {
-        this(identity, behaviour, "", goal, information, allowedActions, enabled, greetOnApproach,
-                respondToChat, reactToNearbyDeaths, memoryEnabled, inventoryEnabled, false);
+            Set<AiActionType> allowedActions, boolean enabled) {
+        this(identity, behaviour, "", goal, information, allowedActions, enabled, false, false);
     }
 
     public AiControlSettings {
@@ -59,14 +31,12 @@ public record AiControlSettings(
         EnumSet<AiActionType> normalized = EnumSet.copyOf(allowedActions);
         normalized.remove(AiActionType.REMEMBER_FACT);
         normalized.remove(AiActionType.DROP_ITEM);
-        normalized.add(AiActionType.SAY);
         normalized.add(AiActionType.DO_NOTHING);
         allowedActions = Set.copyOf(normalized);
     }
 
     public static AiControlSettings defaults() {
-        return new AiControlSettings("", "", "", "", "", AiActionType.safeDefaults(), false, false, true,
-                false, false, false, false);
+        return new AiControlSettings("", "", "", "", "", AiActionType.safeDefaults(), false, false, false);
     }
 
     public boolean hasContext() {
@@ -118,8 +88,7 @@ public record AiControlSettings(
                 || !normalize(information).isBlank();
         boolean updatedEnabled = !hasUpdatedContext ? false : !hadContext || enabled;
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                updatedEnabled, greetOnApproach, respondToChat, reactToNearbyDeaths, memoryEnabled,
-                inventoryEnabled, autonomousEnabled);
+                updatedEnabled, memoryEnabled, inventoryEnabled);
     }
 
     public AiControlSettings toggle(AiActionType action) {
@@ -127,50 +96,22 @@ public record AiControlSettings(
         if (!updated.remove(action)) updated.add(action);
         updated.add(AiActionType.DO_NOTHING);
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, updated,
-                enabled, greetOnApproach, respondToChat, reactToNearbyDeaths, memoryEnabled,
-                inventoryEnabled, autonomousEnabled);
+                enabled, memoryEnabled, inventoryEnabled);
     }
 
     public AiControlSettings withEnabled(boolean enabled) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, greetOnApproach, respondToChat, reactToNearbyDeaths, memoryEnabled,
-                inventoryEnabled, autonomousEnabled);
-    }
-
-    public AiControlSettings withGreetOnApproach(boolean greetOnApproach) {
-        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, greetOnApproach, respondToChat, reactToNearbyDeaths, memoryEnabled,
-                inventoryEnabled, autonomousEnabled);
-    }
-
-    public AiControlSettings withRespondToChat(boolean respondToChat) {
-        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, greetOnApproach, respondToChat, reactToNearbyDeaths, memoryEnabled,
-                inventoryEnabled, autonomousEnabled);
-    }
-
-    public AiControlSettings withReactToNearbyDeaths(boolean reactToNearbyDeaths) {
-        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, greetOnApproach, respondToChat, reactToNearbyDeaths, memoryEnabled,
-                inventoryEnabled, autonomousEnabled);
+                enabled, memoryEnabled, inventoryEnabled);
     }
 
     public AiControlSettings withMemoryEnabled(boolean memoryEnabled) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, greetOnApproach, respondToChat, reactToNearbyDeaths, memoryEnabled,
-                inventoryEnabled, autonomousEnabled);
+                enabled, memoryEnabled, inventoryEnabled);
     }
 
     public AiControlSettings withInventoryEnabled(boolean inventoryEnabled) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, greetOnApproach, respondToChat, reactToNearbyDeaths, memoryEnabled,
-                inventoryEnabled, autonomousEnabled);
-    }
-
-    public AiControlSettings withAutonomousEnabled(boolean autonomousEnabled) {
-        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, greetOnApproach, respondToChat, reactToNearbyDeaths, memoryEnabled,
-                inventoryEnabled, autonomousEnabled);
+                enabled, memoryEnabled, inventoryEnabled);
     }
 
     private static void append(StringBuilder target, String heading, String value) {

@@ -24,6 +24,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.BehaviourAction;
+import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.MovementProfile;
@@ -125,12 +126,12 @@ public final class NpcDefinitionRepository {
         configuration.set("ai-control.likes-dislikes", ai.likesDislikes().isBlank() ? null : ai.likesDislikes());
         configuration.set("ai-control.goal", ai.goal().isBlank() ? null : ai.goal());
         configuration.set("ai-control.information", ai.information().isBlank() ? null : ai.information());
-        configuration.set("ai-control.greet-on-approach", ai.greetOnApproach());
-        configuration.set("ai-control.respond-to-chat", ai.respondToChat());
-        configuration.set("ai-control.react-to-nearby-deaths", ai.reactToNearbyDeaths());
+        configuration.set("ai-control.greet-on-approach", null);
+        configuration.set("ai-control.respond-to-chat", null);
+        configuration.set("ai-control.react-to-nearby-deaths", null);
         configuration.set("ai-control.memory.enabled", ai.memoryEnabled());
         configuration.set("ai-control.inventory.enabled", ai.inventoryEnabled());
-        configuration.set("ai-control.autonomous.enabled", ai.autonomousEnabled());
+        configuration.set("ai-control.autonomous", null);
         configuration.set("ai-control.memory.facts", definition.getAiMemories());
         configuration.set("ai-control.allowed-actions", ai.allowedActions().stream()
                 .filter(action -> action != AiActionType.REMEMBER_FACT && action != AiActionType.DROP_ITEM)
@@ -257,6 +258,11 @@ public final class NpcDefinitionRepository {
         String goal = configuration.getString("ai-control.goal", "");
         String information = configuration.getString("ai-control.information", "");
         boolean legacyAiEnabled = hasLegacyAiControl(configuration);
+        boolean migrateGreeting = configuration.getBoolean("ai-control.greet-on-approach", false);
+        boolean migrateChat = configuration.contains("ai-control.respond-to-chat")
+                && configuration.getBoolean("ai-control.respond-to-chat", false);
+        boolean migrateNearbyDeath = configuration.getBoolean("ai-control.react-to-nearby-deaths", false);
+        boolean migrateAutonomousWork = configuration.getBoolean("ai-control.autonomous.enabled", false);
         definition.setAiControlSettings(new AiControlSettings(
                 identity,
                 behaviour,
@@ -267,12 +273,8 @@ public final class NpcDefinitionRepository {
                 configuration.getBoolean("ai-control.enabled", legacyAiEnabled
                         || !identity.isBlank() || !behaviour.isBlank() || !likesDislikes.isBlank()
                         || !goal.isBlank() || !information.isBlank()),
-                configuration.getBoolean("ai-control.greet-on-approach", false),
-                configuration.getBoolean("ai-control.respond-to-chat", true),
-                configuration.getBoolean("ai-control.react-to-nearby-deaths", false),
                 configuration.getBoolean("ai-control.memory.enabled", false),
-                configuration.getBoolean("ai-control.inventory.enabled", false),
-                configuration.getBoolean("ai-control.autonomous.enabled", false)));
+                configuration.getBoolean("ai-control.inventory.enabled", false)));
         definition.setAiMemories(configuration.getStringList("ai-control.memory.facts"));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
@@ -295,7 +297,10 @@ public final class NpcDefinitionRepository {
                 if (type == null) {
                     continue;
                 }
-                if (isLegacyAiControl(type)) continue;
+                if (isLegacyAiControl(type)) {
+                    actions.add(new BehaviourAction(BehaviourActionType.TRIGGER_AI, null));
+                    continue;
+                }
                 try {
                     actions.add(BehaviourActionCodec.decode(entry));
                 } catch (IllegalArgumentException ignored) {
@@ -321,6 +326,7 @@ public final class NpcDefinitionRepository {
                         continue;
                     }
                     if (isLegacyAiControl(type)) {
+                        actions.add(new BehaviourAction(BehaviourActionType.TRIGGER_AI, null));
                         continue;
                     }
                     try {
@@ -332,7 +338,19 @@ public final class NpcDefinitionRepository {
                 definition.setCustomEventActions(eventName, actions);
             }
         }
+        if (migrateGreeting) addTriggerAi(definition, BehaviourEvent.PLAYER_APPROACH);
+        if (migrateChat) addTriggerAi(definition, BehaviourEvent.PLAYER_CHAT);
+        if (migrateNearbyDeath) addTriggerAi(definition, BehaviourEvent.NEARBY_DEATH);
+        if (migrateAutonomousWork) addTriggerAi(definition, BehaviourEvent.WORK_AVAILABLE);
         return definition;
+    }
+
+    private static void addTriggerAi(NpcDefinition definition, BehaviourEvent event) {
+        List<BehaviourAction> actions = definition.getBehaviourActions(event);
+        if (actions.stream().noneMatch(action -> action.type() == BehaviourActionType.TRIGGER_AI)) {
+            actions.add(new BehaviourAction(BehaviourActionType.TRIGGER_AI, null));
+            definition.setBehaviourActions(event, actions);
+        }
     }
 
     private static boolean isLegacyAiControl(Object type) {

@@ -5,12 +5,15 @@ responses. An animated `Thinking.`, `Thinking..`, `Thinking...` hologram is show
 an NPC only while its request is actively in flight.
 
 Blockfolk sends an AI request only when the NPC preset is active, at least one context
-section is configured, OpenRouter is configured, and an enabled trigger fires. The
-automatic triggers are an approach greeting, nearby player chat, an optional nearby
-death reaction, and optional autonomous work. Chat is accepted within eight blocks of
-the NPC; deaths are observed within twelve blocks. Autonomous work is checked every 15
-seconds by default and only requests a decision when Gather Blocks is enabled and a
-whitelisted resource block is nearby.
+section is configured, OpenRouter is configured, and a `Trigger AI` behaviour action
+runs. It can be placed on any normal event, custom event, question branch, or route
+waypoint. Chat is accepted within eight blocks of the NPC; nearby deaths are observed
+within twelve blocks. `On Work Available` is checked every 15 seconds by default and
+fires only while a gatherable block is nearby and the NPC is not already fighting or gathering.
+
+Legacy trigger toggles are migrated on load to `Trigger AI` actions on Player Approach,
+Player Chat, Nearby Death, and Work Available. Legacy `AI Control` actions are migrated
+in place, including actions inside nested questions.
 
 One player chat message creates one group request for all eligible NPCs within range,
 ordered by distance from the player. The closest NPC is the default speaker. The model
@@ -51,17 +54,16 @@ The request uses temperature `0.4`, JSON-object response formatting, and the con
 
 ## Current event
 
-The user message begins with a plain-language event description. For automatic AI
-behaviour this is currently one of:
+The user message begins with a plain-language event description. For common AI
+behaviour this may be:
 
 - the player's name and the fact that they approached or are already near the NPC;
 - the player's name and exact nearby chat message;
 - a nearby death, including victim, rounded distance, Minecraft damage cause, and the
   killer, held weapon, and direct cause (such as a projectile) when available.
-- an autonomous work interval when Gather Blocks is enabled and a resource is nearby.
+- a work-available interval while gatherable blocks are nearby.
 
-Chat is sent only when Respond to Nearby Chat is enabled. When it is disabled, Blockfolk
-does not store that new chat for later use.
+Chat is sent to the AI only when the NPC's On Player Chat sequence contains `Trigger AI`.
 
 ## NPC state
 
@@ -89,8 +91,7 @@ Perception uses a 12-block radius for players and other Blockfolk NPCs. It inclu
   rounded distance, and whether it is the triggering entity;
 - up to five nearby levers within 12 blocks, including rounded distance and whether
   each lever is powered;
-- nearby whitelisted ores, logs, wood, stems, bamboo, ancient debris, and obsidian within
-  eight blocks, grouped by material;
+- nearby breakable non-container blocks within eight blocks, grouped by material;
 - up to five nearest globally saved locations in the same world and within 64 blocks.
 
 Each perceived player, NPC, entity, and saved location has a request-local alias such as
@@ -140,7 +141,7 @@ from the AI Behaviour memory menu, or shift-right-click its Memory entry to clea
 The request lists only the capabilities enabled for the preset. The response parser
 enforces the same list before anything runs. Current capabilities are:
 
-- Respond to Nearby Chat / speech;
+- speech;
 - play animation;
 - start or stop combat; Start Combat falls back to the nearest attackable entity within
   16 blocks when the model does not provide a valid target, regardless of the preset's
@@ -154,10 +155,11 @@ enforces the same list before anything runs. Current capabilities are:
 - start or pause the configured route;
 - when Temporary Inventory access is enabled and the instance carries items, drop one
   selected inventory stack using its `inventory_slot_N` alias;
-- gather nearby whitelisted blocks. The model may select `coal`, `gold`, `iron`, `copper`,
+- gather nearby resources. The model may select `coal`, `gold`, `iron`, `copper`,
   `diamond`, `emerald`, `redstone`, `lapis`, `quartz`, `ancient_debris`, `obsidian`, or
   `stone`; generic `wood`/`logs`; or `oak`, `spruce`, `birch`, `jungle`, `acacia`,
-  `dark_oak`, `mangrove`, `cherry`, `pale_oak`, `crimson`, `warped`, and `bamboo`.
+  `dark_oak`, `mangrove`, `cherry`, `pale_oak`, `crimson`, `warped`, and `bamboo`, or
+  an exact lowercase Minecraft block ID included in its perception.
   Targets may be comma-separated, such as `coal,gold` or `oak,spruce`. With Temporary
   Inventory enabled, mined drops are gathered into the instance inventory; overflow is
   dropped naturally. Without it, all drops are placed naturally in the world. When the
@@ -165,10 +167,12 @@ enforces the same list before anything runs. Current capabilities are:
   adjacent block;
 - do nothing, which is always available.
 
-The deterministic Gather Blocks behaviour action uses the same target whitelist and
+The deterministic Gather Resources behaviour action uses the same target validation and
 runtime gathering implementation. Its GUI provides a multi-select target editor for
 normal events, custom events, route waypoints, and question branches. The selection is
-stored on that action (for example `coal,gold`), not in `config.yml`. Deterministic
+stored on that action (for example `coal,gold` or `dirt,sand`), not in `config.yml`. `Any`
+allows all breakable non-container blocks; fluids, portals, and unbreakable blocks are
+always excluded. Deterministic
 gathering collects drops into the NPC's temporary inventory; only overflow is dropped
 naturally.
 
