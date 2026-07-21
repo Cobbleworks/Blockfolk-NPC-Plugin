@@ -23,4 +23,17 @@ class AiMemoryStoreTest {
         memory.forget(firstNpc);
         assertTrue(memory.recentConversation(firstNpc, player).isEmpty());
     }
+
+    @Test
+    void keepsTheTwentyLatestAiActivities() {
+        AiMemoryStore memory = new AiMemoryStore();
+        UUID npc = UUID.randomUUID();
+        for (int index = 1; index <= 25; index++) {
+            memory.rememberActivity(npc, "Task " + index);
+        }
+
+        assertEquals(20, memory.recentActivities(npc).size());
+        assertEquals("Task 6", memory.recentActivities(npc).getFirst());
+        assertEquals("Task 25", memory.recentActivities(npc).getLast());
+    }
 }

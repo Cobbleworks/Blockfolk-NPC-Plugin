@@ -103,7 +103,6 @@ public final class AiControlService {
     private final Map<UUID, Long> lastInvocation = new ConcurrentHashMap<>();
     private final Map<UUID, PendingInvocation> pending = new HashMap<>();
     private final Set<UUID> pendingScheduled = new HashSet<>();
-    private final Map<UUID, Long> generations = new ConcurrentHashMap<>();
     private final Set<UUID> groupInFlight = ConcurrentHashMap.newKeySet();
     private final Map<UUID, PendingGroupInvocation> pendingGroups = new HashMap<>();
     private final Set<UUID> pendingGroupScheduled = new HashSet<>();
@@ -167,7 +166,6 @@ public final class AiControlService {
         }
         lastInvocation.put(instance.getId(), now);
         String detail = eventDetail == null || eventDetail.isBlank() ? describeEvent(event, actor) : eventDetail;
-        long generation = generations.getOrDefault(instance.getId(), 0L);
         memory.rememberEvent(instance.getId(), detail);
         String context;
         try {
@@ -202,11 +200,8 @@ public final class AiControlService {
                         } else {
                             AiDecision decision = AiDecisionParser.parse(content, settings);
                             if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
-                                if (instances.findById(instance.getId()).isPresent()
-                                        && generations.getOrDefault(instance.getId(), 0L) == generation) {
+                                if (instances.findById(instance.getId()).isPresent()) {
                                     resultHandler.accept(decision);
-                                } else if (instances.findById(instance.getId()).isPresent()) {
-                                    resultHandler.accept(new AiDecision(List.of()));
                                 }
                             });
                         }
@@ -301,7 +296,6 @@ public final class AiControlService {
         });
 
         Map<String, GroupParticipant> aliases = new java.util.LinkedHashMap<>();
-        Map<UUID, Long> requestGenerations = new HashMap<>();
         StringBuilder system = new StringBuilder(GROUP_RESULT_RULES);
         StringBuilder context = new StringBuilder("Event:\n").append(eventDetail)
                 .append("\n\nNearby NPC group (closest first):\n");
@@ -310,8 +304,6 @@ public final class AiControlService {
                 GroupParticipant participant = participants.get(index);
                 String alias = "npc_" + (index + 1);
                 aliases.put(alias, participant);
-                requestGenerations.put(participant.instance().getId(),
-                        generations.getOrDefault(participant.instance().getId(), 0L));
                 memory.rememberEvent(participant.instance().getId(), eventDetail);
                 system.append("\n\n").append(alias).append(" (NPC ")
                         .append(participant.definition().getDisplayName()).append("):\n")
@@ -360,7 +352,7 @@ public final class AiControlService {
                     Map<String, AiDecision> decisions = AiGroupDecisionParser.parse(content, settingsByAlias);
                     if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin,
                             () -> applyGroupDecisions(
-                                    aliases, decisions, requestGenerations, player, resultHandler));
+                                    aliases, decisions, player, resultHandler));
                 }
                 if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
                     // Group chat is the user-facing interaction, so queue it before
@@ -386,18 +378,14 @@ public final class AiControlService {
     private void applyGroupDecisions(
             Map<String, GroupParticipant> aliases,
             Map<String, AiDecision> decisions,
-            Map<UUID, Long> requestGenerations,
             Player player,
             BiConsumer<NpcInstance, AiDecision> resultHandler
     ) {
         Map<String, GroupParticipant> validParticipants = new java.util.LinkedHashMap<>();
         aliases.forEach((alias, participant) -> {
             UUID instanceId = participant.instance().getId();
-            if (instances.findById(instanceId).isPresent()
-                    && generations.getOrDefault(instanceId, 0L).equals(requestGenerations.get(instanceId))) {
+            if (instances.findById(instanceId).isPresent()) {
                 validParticipants.put(alias, participant);
-            } else if (instances.findById(instanceId).isPresent()) {
-                resultHandler.accept(participant.instance(), new AiDecision(List.of()));
             }
         });
 
@@ -468,6 +456,21 @@ public final class AiControlService {
         }
     }
 
+    public void rememberAction(NpcInstance instance, AiDecision.Action action) {
+        if (action == null || action.type() == AiActionType.SAY
+                || action.type() == AiActionType.DO_NOTHING) return;
+        StringBuilder summary = new StringBuilder(action.type().displayName());
+        if (action.target() != null && !action.target().isBlank()) {
+            summary.append(": ").append(action.target().replace('_', ' '));
+        } else if (action.animation() != null && !action.animation().isBlank()) {
+            summary.append(": ").append(action.animation());
+        } else if (action.type() == AiActionType.REMEMBER_FACT
+                && action.text() != null && !action.text().isBlank()) {
+            summary.append(": ").append(action.text());
+        }
+        memory.rememberActivity(instance.getId(), summary.toString());
+    }
+
     public void rememberFact(NpcDefinition definition, String fact) {
         if (!definition.getAiControlSettings().memoryEnabled() || fact == null || fact.isBlank()) return;
         definition.addAiMemory(fact);
@@ -480,31 +483,9 @@ public final class AiControlService {
         lastInvocation.remove(instance.getId());
         pending.remove(instance.getId());
         pendingScheduled.remove(instance.getId());
-        generations.remove(instance.getId());
         memory.forget(instance.getId());
         pendingGroups.entrySet().removeIf(entry -> entry.getValue().candidates().stream()
                 .anyMatch(candidate -> candidate.getId().equals(instance.getId())));
-    }
-
-    /** Clears runtime conversation/event memory and invalidates pending responses for every spawned copy. */
-    public void resetDefinition(NpcDefinition definition) {
-        for (NpcInstance instance : instances.findByDefinition(definition)) {
-            processingFinished.accept(instance);
-            UUID instanceId = instance.getId();
-            generations.merge(instanceId, 1L, Long::sum);
-            lastInvocation.remove(instanceId);
-            PendingInvocation cancelled = pending.remove(instanceId);
-            if (cancelled != null) cancelled.resultHandler().accept(new AiDecision(List.of()));
-            memory.forget(instanceId);
-        }
-        pendingGroups.entrySet().removeIf(entry -> {
-            PendingGroupInvocation invocation = entry.getValue();
-            boolean affected = invocation.candidates().stream()
-                    .anyMatch(candidate -> candidate.getDefinitionKey().equals(definition.getKey()));
-            if (affected) invocation.candidates().forEach(instance -> invocation.resultHandler().accept(
-                    instance, new AiDecision(List.of())));
-            return affected;
-        });
     }
 
     private void schedulePending(UUID instanceId, long delayMillis) {
@@ -582,6 +563,11 @@ public final class AiControlService {
         if (!events.isEmpty()) {
             out.append("\nRecent event memory:\n");
             events.forEach(item -> out.append("- ").append(item).append('\n'));
+        }
+        List<String> activities = memory.recentActivities(instance.getId());
+        if (!activities.isEmpty()) {
+            out.append("\nRecent AI actions (newest last):\n");
+            activities.forEach(item -> out.append("- ").append(item).append('\n'));
         }
         if (actor instanceof Player player) {
             List<String> conversation = memory.recentConversation(instance.getId(), player.getUniqueId());

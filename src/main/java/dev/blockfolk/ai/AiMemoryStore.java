@@ -13,9 +13,11 @@ import java.util.UUID;
 public final class AiMemoryStore {
     private static final int MAX_EVENTS = 10;
     private static final int MAX_MESSAGES = 20;
+    private static final int MAX_ACTIVITIES = 20;
     private static final Duration EVENT_AGE = Duration.ofMinutes(5);
     private final Map<UUID, Deque<Entry>> events = new HashMap<>();
     private final Map<ConversationKey, Deque<String>> conversations = new HashMap<>();
+    private final Map<UUID, Deque<String>> activities = new HashMap<>();
 
     public void rememberEvent(UUID instance, String summary) {
         if (summary == null || summary.isBlank()) return;
@@ -45,8 +47,20 @@ public final class AiMemoryStore {
         return new ArrayList<>(conversations.getOrDefault(new ConversationKey(instance, player), new ArrayDeque<>()));
     }
 
+    public void rememberActivity(UUID instance, String summary) {
+        if (summary == null || summary.isBlank()) return;
+        Deque<String> memory = activities.computeIfAbsent(instance, ignored -> new ArrayDeque<>());
+        memory.addLast(summary.trim());
+        trim(memory, MAX_ACTIVITIES);
+    }
+
+    public List<String> recentActivities(UUID instance) {
+        return new ArrayList<>(activities.getOrDefault(instance, new ArrayDeque<>()));
+    }
+
     public void forget(UUID instance) {
         events.remove(instance);
+        activities.remove(instance);
         conversations.keySet().removeIf(key -> key.instance().equals(instance));
     }
 

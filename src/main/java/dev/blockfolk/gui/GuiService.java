@@ -427,7 +427,6 @@ public final class GuiService implements Listener {
     }
 
     public void openEditor(Player player, NpcDefinition definition) {
-        if (aiControlService != null) aiControlService.resetDefinition(definition);
         int instances = instanceRegistry.findByDefinition(definition).size();
         Inventory inventory = Bukkit.createInventory(new EditorHolder(definition.getKey()), 36,
                 UiText.manageTitle(definition.getDisplayName()));
@@ -1016,8 +1015,6 @@ public final class GuiService implements Listener {
                         ChatColor.RED + "Shift-right-click to clear all memories")));
         boolean playerChatEnabled = hasDirectAiTrigger(
                 definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT));
-        inventory.setItem(20, toggleItem(Material.WRITABLE_BOOK, "On Player Chat",
-                playerChatEnabled, "Sends player chat within 8 blocks to this NPC's AI"));
         inventory.setItem(22, toggleItem(Material.BARREL, "Temporary Inventory",
                 settings.inventoryEnabled(), "Lets the AI see and drop items carried by each spawned instance"));
         int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
@@ -1026,14 +1023,13 @@ public final class GuiService implements Listener {
         for (int index = 0; index < types.size(); index++) {
             AiActionType type = types.get(index);
             boolean intrinsic = type == AiActionType.DO_NOTHING;
-            boolean requiredForPlayerChat = playerChatEnabled && type == AiActionType.SAY;
-            boolean enabled = intrinsic || requiredForPlayerChat || settings.allowedActions().contains(type);
+            boolean enabled = type == AiActionType.SAY ? playerChatEnabled
+                    : intrinsic || settings.allowedActions().contains(type);
             String displayName = type.displayName();
             inventory.setItem(slots[index], item(enabled ? Material.REDSTONE_TORCH : Material.LEVER,
                     displayName + ": " + (enabled ? "Enabled" : "Disabled"), List.of(
                             ChatColor.GRAY + aiActionDescription(type),
-                            requiredForPlayerChat ? ChatColor.DARK_GRAY + "Required by On Player Chat"
-                                    : intrinsic ? ChatColor.DARK_GRAY + "Always available"
+                            intrinsic ? ChatColor.DARK_GRAY + "Always available"
                                     : ChatColor.YELLOW + "Click to toggle")));
         }
         inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
@@ -1045,7 +1041,7 @@ public final class GuiService implements Listener {
                 "AI Behaviour: " + status, List.of(
                         ChatColor.GRAY + "Applies to every spawned instance of this preset",
                         hasTrigger ? ChatColor.GRAY + "Trigger AI actions are configured"
-                                : ChatColor.RED + "Add Trigger AI to an event to make requests",
+                                : ChatColor.RED + "Enable Speak or add Trigger AI to an event",
                         ChatColor.YELLOW + "Click to " + (settings.enabled() ? "pause" : "resume"))));
         openInventory(player, inventory);
     }
@@ -1074,7 +1070,7 @@ public final class GuiService implements Listener {
 
     private String aiActionDescription(AiActionType type) {
         return switch (type) {
-            case SAY -> "Lets the AI speak to nearby players";
+            case SAY -> "Lets the AI speak and react to player chat within 8 blocks";
             case PLAY_ANIMATION -> "Lets the AI play an NPC pose or animation";
             case START_COMBAT -> "Lets the AI attack a valid perceived target";
             case STOP_COMBAT -> "Lets the AI stop its current fight";
@@ -2102,18 +2098,6 @@ public final class GuiService implements Listener {
             }
             return;
         }
-        if (slot == 20) {
-            List<BehaviourAction> actions = definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT);
-            if (hasDirectAiTrigger(actions)) {
-                actions.removeIf(action -> action.type() == BehaviourActionType.TRIGGER_AI);
-            } else {
-                actions.add(new BehaviourAction(BehaviourActionType.TRIGGER_AI, null));
-            }
-            definition.setBehaviourActions(BehaviourEvent.PLAYER_CHAT, actions);
-            definitionRepository.save(definition);
-            openAiControl(player, definition);
-            return;
-        }
         if (slot == 22) {
             AiControlSettings settings = definition.getAiControlSettings();
             definition.setAiControlSettings(settings.withInventoryEnabled(!settings.inventoryEnabled()));
@@ -2127,10 +2111,10 @@ public final class GuiService implements Listener {
         for (int index = 0; index < types.size(); index++) {
             if (slot != slots[index]) continue;
             AiActionType type = types.get(index);
-            boolean playerChatEnabled = hasDirectAiTrigger(
-                    definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT));
-            if (type != AiActionType.DO_NOTHING
-                    && !(type == AiActionType.SAY && playerChatEnabled)) {
+            if (type == AiActionType.SAY) {
+                toggleAiSpeech(definition);
+                definitionRepository.save(definition);
+            } else if (type != AiActionType.DO_NOTHING) {
                 definition.setAiControlSettings(definition.getAiControlSettings().toggle(type));
                 definitionRepository.save(definition);
             }
@@ -2153,6 +2137,22 @@ public final class GuiService implements Listener {
             }
             openAiControl(player, definition);
         }
+    }
+
+    private void toggleAiSpeech(NpcDefinition definition) {
+        List<BehaviourAction> actions = definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT);
+        boolean enabled = hasDirectAiTrigger(actions);
+        if (enabled) {
+            actions.removeIf(action -> action.type() == BehaviourActionType.TRIGGER_AI);
+            if (definition.getAiControlSettings().allowedActions().contains(AiActionType.SAY)) {
+                definition.setAiControlSettings(definition.getAiControlSettings().toggle(AiActionType.SAY));
+            }
+        } else {
+            actions.add(new BehaviourAction(BehaviourActionType.TRIGGER_AI, null));
+            definition.setAiControlSettings(
+                    definition.getAiControlSettings().withActionEnabled(AiActionType.SAY));
+        }
+        definition.setBehaviourActions(BehaviourEvent.PLAYER_CHAT, actions);
     }
 
     private void handleAiMemoryClick(InventoryClickEvent event, Player player, AiMemoryHolder holder) {

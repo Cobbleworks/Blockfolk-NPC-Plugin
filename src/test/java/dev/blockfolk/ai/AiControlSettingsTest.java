@@ -30,7 +30,7 @@ class AiControlSettingsTest {
     }
 
     @Test
-    void speechCapabilityCanBeDisabledIndependentlyOfEventTriggers() {
+    void speechCapabilityCanBeDisabledInStoredSettings() {
         AiControlSettings settings = AiControlSettings.defaults().withIdentity("A guard")
                 .toggle(AiActionType.SAY);
 

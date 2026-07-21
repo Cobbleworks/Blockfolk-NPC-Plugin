@@ -777,6 +777,7 @@ public final class NpcBehaviourService implements Listener {
                         definition.getAiControlSettings().inventoryEnabled());
                 case DO_NOTHING -> { }
             }
+            aiControlService.rememberAction(instance, action);
         }
     }
 

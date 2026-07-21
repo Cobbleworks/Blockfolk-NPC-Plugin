@@ -7,8 +7,8 @@ an NPC only while its request is actively in flight.
 Blockfolk sends an AI request only when the NPC preset is active, at least one context
 section is configured, OpenRouter is configured, and a `Trigger AI` behaviour action
 runs. It can be placed on any event exposed by the behaviour editor, custom event,
-question branch, or route waypoint. On Player Chat is configured directly in the AI menu
-and stores the same `Trigger AI` action internally. Chat is accepted within eight blocks
+question branch, or route waypoint. Enabling Speak in the AI menu also enables nearby
+player-chat reactions and stores the required `Trigger AI` action internally. Chat is accepted within eight blocks
 of the NPC; nearby deaths are observed within twelve blocks.
 
 Legacy trigger toggles are migrated on load to `Trigger AI` actions on Player Approach,
@@ -27,9 +27,10 @@ approach greeting) does not hold up the existing group. Available NPCs answer im
 and the busy newcomer becomes eligible to participate in a later player message after its
 current request finishes.
 
-Opening the NPC preset's admin editor clears AI memory and queued interactions for every
-spawned instance of that preset. Conversation history otherwise has no time or distance
-expiry. Removing or respawning an instance also clears that instance's runtime memory.
+Each spawned instance keeps the 20 latest conversation messages separately for each
+player and the 20 latest accepted AI actions. Opening its admin editor does not clear
+this history. Removing or respawning an instance, or restarting the server, clears its
+runtime history; enabled long-term facts remain persistent.
 
 ## OpenRouter request
 
@@ -64,7 +65,7 @@ behaviour this may be:
   killer, held weapon, and direct cause (such as a projectile) when available.
 - an idle interval when `Trigger AI` is assigned to On Idle.
 
-Chat is sent to the AI only when On Player Chat is enabled in the NPC's AI menu.
+Chat is sent to the AI only when Speak is enabled in the NPC's AI menu.
 
 ## NPC state
 
