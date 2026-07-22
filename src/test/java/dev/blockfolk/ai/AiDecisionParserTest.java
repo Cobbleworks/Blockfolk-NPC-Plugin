@@ -11,8 +11,8 @@ class AiDecisionParserTest {
 
     @Test
     void validatesActionsIndependently() {
-        AiControlSettings settings = new AiControlSettings("Be Mira", "Direct but fair", "Guard the gate", "",
-                EnumSet.of(AiActionType.SAY, AiActionType.START_COMBAT), true, true, true);
+        AiControlSettings settings = settings("Be Mira", "Direct but fair", "Guard the gate",
+                EnumSet.of(AiActionType.SAY, AiActionType.START_COMBAT));
         AiDecision decision = AiDecisionParser.parse("""
                 {"thought":"hidden","actions":[
                   {"type":"SAY","text":"Back away."},
@@ -29,8 +29,7 @@ class AiDecisionParserTest {
 
     @Test
     void disabledCapabilityOverridesModelResponse() {
-        AiControlSettings settings = new AiControlSettings("Be Mira", "", "", "",
-                EnumSet.of(AiActionType.SAY), true, true, true);
+        AiControlSettings settings = settings("Be Mira", "", "", EnumSet.of(AiActionType.SAY));
         AiDecision decision = AiDecisionParser.parse("""
                 {"actions":[{"type":"START_COMBAT","target":"triggering_player"}]}
                 """, settings);
@@ -46,8 +45,8 @@ class AiDecisionParserTest {
 
     @Test
     void startCombatMaySelectNearestAttackableImplicitly() {
-        AiControlSettings settings = new AiControlSettings("Guard", "", "Defend this place", "",
-                EnumSet.of(AiActionType.START_COMBAT), true, true, true);
+        AiControlSettings settings = settings("Guard", "", "Defend this place",
+                EnumSet.of(AiActionType.START_COMBAT));
 
         AiDecision decision = AiDecisionParser.parse("""
                 {"actions":[{"type":"START_COMBAT"}]}
@@ -58,8 +57,8 @@ class AiDecisionParserTest {
 
     @Test
     void startCombatAcceptsPerceivedEntitiesRegardlessOfNormalTargetCategories() {
-        AiControlSettings settings = new AiControlSettings("Guard", "", "Defend this place", "",
-                EnumSet.of(AiActionType.START_COMBAT), true, false, true);
+        AiControlSettings settings = settings("Guard", "", "Defend this place",
+                EnumSet.of(AiActionType.START_COMBAT));
 
         AiDecision entity = AiDecisionParser.parse(
                 "{\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"nearby_entity_2\"}]}", settings);
@@ -88,8 +87,8 @@ class AiDecisionParserTest {
 
     @Test
     void acceptsEnabledUnfollowAndInteractActionsWithoutTargets() {
-        AiControlSettings settings = new AiControlSettings("Caretaker", "", "Operate the gate", "",
-                EnumSet.of(AiActionType.UNFOLLOW, AiActionType.INTERACT), true, true, true);
+        AiControlSettings settings = settings("Caretaker", "", "Operate the gate",
+                EnumSet.of(AiActionType.UNFOLLOW, AiActionType.INTERACT));
 
         AiDecision decision = AiDecisionParser.parse("""
                 {"actions":[{"type":"UNFOLLOW"},{"type":"INTERACT"}]}
@@ -101,8 +100,8 @@ class AiDecisionParserTest {
 
     @Test
     void followRequiresAndAcceptsPerceivedPlayerTargets() {
-        AiControlSettings settings = new AiControlSettings("Companion", "", "Stay with visitors", "",
-                EnumSet.of(AiActionType.FOLLOW), true, true, true);
+        AiControlSettings settings = settings("Companion", "", "Stay with visitors",
+                EnumSet.of(AiActionType.FOLLOW));
 
         AiDecision missing = AiDecisionParser.parse(
                 "{\"actions\":[{\"type\":\"FOLLOW\"}]}", settings);
@@ -144,8 +143,8 @@ class AiDecisionParserTest {
 
     @Test
     void moveToAcceptsOnlyPerceivedTargetAliasesWhenEnabled() {
-        AiControlSettings settings = new AiControlSettings("Guide", "", "Show visitors around", "",
-                EnumSet.of(AiActionType.MOVE_TO), true, false, true);
+        AiControlSettings settings = settings("Guide", "", "Show visitors around",
+                EnumSet.of(AiActionType.MOVE_TO));
 
         AiDecision accepted = AiDecisionParser.parse(
                 "{\"actions\":[{\"type\":\"MOVE_TO\",\"target\":\"nearby_location_2\"}]}", settings);
@@ -190,5 +189,11 @@ class AiDecisionParserTest {
         assertEquals("all_ores", accepted.actions().getFirst().target());
         assertEquals(AiActionType.DO_NOTHING, noInventory.actions().getFirst().type());
         assertEquals(AiActionType.DO_NOTHING, noTarget.actions().getFirst().type());
+    }
+
+    private static AiControlSettings settings(String identity, String behaviour, String goal,
+            EnumSet<AiActionType> actions) {
+        return new AiControlSettings(identity, behaviour, "", goal, "", actions,
+                true, true, false, false, false, false);
     }
 }

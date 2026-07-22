@@ -1,7 +1,6 @@
 package dev.blockfolk.repository;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -23,11 +22,13 @@ import dev.blockfolk.model.RoutePoint;
 public final class RouteRepository {
 
     private final File file;
+    private final DebouncedYamlWriter writer;
     private final Map<String, NpcRoute> routes = new LinkedHashMap<>();
     private final List<String> routeOrder = new java.util.ArrayList<>();
 
     public RouteRepository(JavaPlugin plugin) {
         this.file = new File(plugin.getDataFolder(), "routes.yml");
+        this.writer = new DebouncedYamlWriter(plugin);
     }
 
     public void loadAll() {
@@ -136,6 +137,10 @@ public final class RouteRepository {
     }
 
     private void saveAll() {
+        writer.queue(file, this::serialize);
+    }
+
+    private YamlConfiguration serialize() {
         YamlConfiguration configuration = new YamlConfiguration();
         configuration.set("order", routeOrder);
         ConfigurationSection root = configuration.createSection("routes");
@@ -156,11 +161,11 @@ public final class RouteRepository {
                 }
             }
         }
-        try {
-            configuration.save(file);
-        } catch (IOException exception) {
-            throw new IllegalStateException("Could not save NPC routes.", exception);
-        }
+        return configuration;
+    }
+
+    public void flush() {
+        writer.flush();
     }
 
     private List<BehaviourAction> loadActions(ConfigurationSection point) {

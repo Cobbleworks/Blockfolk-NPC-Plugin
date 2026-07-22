@@ -230,7 +230,7 @@ public final class NpcQuestionService implements Listener {
 
     private boolean valid(Request request, Player player) {
         if (player == null || !player.isOnline()) return false;
-        if (instances.findAll().stream().noneMatch(candidate -> candidate.getId().equals(request.instance.getId()))) {
+        if (instances.findById(request.instance.getId()).isEmpty()) {
             return false;
         }
         Location npc = request.instance.getLocation();

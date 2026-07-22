@@ -8,6 +8,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import dev.blockfolk.util.TextUtil;
+
 /** Parses a group response while enforcing each NPC's own enabled capabilities. */
 public final class AiGroupDecisionParser {
 
@@ -16,7 +18,7 @@ public final class AiGroupDecisionParser {
     public static Map<String, AiDecision> parse(String json, Map<String, AiControlSettings> participants) {
         Map<String, AiDecision> accepted = new LinkedHashMap<>();
         try {
-            JsonObject root = JsonParser.parseString(stripFence(json)).getAsJsonObject();
+            JsonObject root = JsonParser.parseString(TextUtil.stripCodeFence(json)).getAsJsonObject();
             JsonArray responses = root.has("responses") && root.get("responses").isJsonArray()
                     ? root.getAsJsonArray("responses") : new JsonArray();
             for (JsonElement element : responses) {
@@ -44,11 +46,4 @@ public final class AiGroupDecisionParser {
         }
     }
 
-    private static String stripFence(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        if (!trimmed.startsWith("```")) return trimmed;
-        int newline = trimmed.indexOf('\n');
-        int end = trimmed.lastIndexOf("```");
-        return newline >= 0 && end > newline ? trimmed.substring(newline + 1, end).trim() : trimmed;
-    }
 }

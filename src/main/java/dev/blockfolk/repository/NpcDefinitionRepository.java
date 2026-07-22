@@ -3,7 +3,6 @@ package dev.blockfolk.repository;
 import dev.blockfolk.ai.AiActionType;
 import dev.blockfolk.ai.AiControlSettings;
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -38,6 +37,7 @@ public final class NpcDefinitionRepository {
     private final JavaPlugin plugin;
     private final File definitionsFolder;
     private final File orderFile;
+    private final DebouncedYamlWriter writer;
     private final Map<String, NpcDefinition> definitions = new LinkedHashMap<>();
     private final List<String> definitionOrder = new ArrayList<>();
 
@@ -45,6 +45,7 @@ public final class NpcDefinitionRepository {
         this.plugin = plugin;
         this.definitionsFolder = new File(plugin.getDataFolder(), "definitions");
         this.orderFile = new File(plugin.getDataFolder(), "definition-order.yml");
+        this.writer = new DebouncedYamlWriter(plugin);
     }
 
     public void loadAll() {
@@ -87,6 +88,11 @@ public final class NpcDefinitionRepository {
             saveOrder();
         }
         File file = new File(definitionsFolder, definition.getKey() + ".yml");
+        writer.queue(file, () -> serialize(definition));
+        return definition;
+    }
+
+    private YamlConfiguration serialize(NpcDefinition definition) {
         YamlConfiguration configuration = new YamlConfiguration();
         configuration.set("key", definition.getKey());
         configuration.set("display-name", definition.getDisplayName());
@@ -119,14 +125,11 @@ public final class NpcDefinitionRepository {
         configuration.set("properties.color", definition.getColor().name().toLowerCase(Locale.ROOT));
         AiControlSettings ai = definition.getAiControlSettings();
         configuration.set("ai-control.enabled", ai.enabled());
-        configuration.set("ai-control.prompt", null);
-        configuration.set("ai-control.mode", null);
         configuration.set("ai-control.identity", ai.identity().isBlank() ? null : ai.identity());
         configuration.set("ai-control.behaviour", ai.behaviour().isBlank() ? null : ai.behaviour());
         configuration.set("ai-control.likes-dislikes", ai.likesDislikes().isBlank() ? null : ai.likesDislikes());
         configuration.set("ai-control.goal", ai.goal().isBlank() ? null : ai.goal());
         configuration.set("ai-control.information", ai.information().isBlank() ? null : ai.information());
-        configuration.set("ai-control.greet-on-approach", null);
         configuration.set("ai-control.respond-to-chat", ai.respondToChat());
         configuration.set("ai-control.react-to-nearby-deaths", ai.reactToNearbyDeaths());
         configuration.set("ai-control.memory.enabled", ai.memoryEnabled());
@@ -145,12 +148,7 @@ public final class NpcDefinitionRepository {
                     definition.getCustomEventActions(eventName));
             configuration.set("custom-event-behaviours." + encodeEventName(eventName), actions);
         }
-        try {
-            configuration.save(file);
-        } catch (IOException exception) {
-            throw new IllegalStateException("Could not save NPC definition " + definition.getKey(), exception);
-        }
-        return definition;
+        return configuration;
     }
 
     public void reorder(List<String> orderedKeys) {
@@ -169,14 +167,9 @@ public final class NpcDefinitionRepository {
         if (definitions.remove(definition.getKey()) == null) {
             return false;
         }
-        int orderIndex = definitionOrder.indexOf(definition.getKey());
         definitionOrder.remove(definition.getKey());
         File file = new File(definitionsFolder, definition.getKey() + ".yml");
-        if (file.exists() && !file.delete()) {
-            definitions.put(definition.getKey(), definition);
-            definitionOrder.add(Math.max(0, orderIndex), definition.getKey());
-            throw new IllegalStateException("Could not delete NPC definition " + definition.getKey());
-        }
+        writer.delete(file);
         saveOrder();
         return true;
     }
@@ -198,13 +191,17 @@ public final class NpcDefinitionRepository {
     }
 
     private void saveOrder() {
+        writer.queue(orderFile, this::serializeOrder);
+    }
+
+    private YamlConfiguration serializeOrder() {
         YamlConfiguration configuration = new YamlConfiguration();
         configuration.set("order", definitionOrder);
-        try {
-            configuration.save(orderFile);
-        } catch (IOException exception) {
-            throw new IllegalStateException("Could not save NPC definition order", exception);
-        }
+        return configuration;
+    }
+
+    public void flush() {
+        writer.flush();
     }
 
     private NpcDefinition load(File file) {
@@ -243,7 +240,6 @@ public final class NpcDefinitionRepository {
         definition.setColor(NpcColor.fromStored(configuration.getString("properties.color")));
         java.util.EnumSet<AiActionType> allowedAiActions = java.util.EnumSet.noneOf(AiActionType.class);
         for (String stored : configuration.getStringList("ai-control.allowed-actions")) {
-            if (stored.trim().replace('-', '_').equalsIgnoreCase("LOOK_AT")) continue;
             try {
                 allowedAiActions.add(AiActionType.fromModel(stored));
             } catch (IllegalArgumentException ignored) {
@@ -251,13 +247,11 @@ public final class NpcDefinitionRepository {
             }
         }
         if (allowedAiActions.isEmpty()) allowedAiActions.addAll(AiActionType.safeDefaults());
-        String legacyAiPrompt = configuration.getString("ai-control.prompt", "");
-        String identity = configuration.getString("ai-control.identity", legacyAiPrompt);
+        String identity = configuration.getString("ai-control.identity", "");
         String behaviour = configuration.getString("ai-control.behaviour", "");
         String likesDislikes = configuration.getString("ai-control.likes-dislikes", "");
         String goal = configuration.getString("ai-control.goal", "");
         String information = configuration.getString("ai-control.information", "");
-        boolean legacyAiEnabled = hasLegacyAiControl(configuration);
         definition.setAiControlSettings(new AiControlSettings(
                 identity,
                 behaviour,
@@ -265,9 +259,7 @@ public final class NpcDefinitionRepository {
                 goal,
                 information,
                 allowedAiActions,
-                configuration.getBoolean("ai-control.enabled", legacyAiEnabled
-                        || !identity.isBlank() || !behaviour.isBlank() || !likesDislikes.isBlank()
-                        || !goal.isBlank() || !information.isBlank()),
+                configuration.getBoolean("ai-control.enabled", false),
                 configuration.getBoolean("ai-control.respond-to-chat", true),
                 configuration.getBoolean("ai-control.react-to-nearby-deaths", false),
                 configuration.getBoolean("ai-control.memory.enabled", false),
@@ -275,45 +267,8 @@ public final class NpcDefinitionRepository {
                 configuration.getBoolean("ai-control.conversation.shared", false)));
         definition.setAiMemories(configuration.getStringList("ai-control.memory.facts"));
         for (BehaviourEvent event : BehaviourEvent.values()) {
-            List<BehaviourAction> actions = new ArrayList<>();
             String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);
-            if (!configuration.contains(path)) {
-                path = switch (event) {
-                    // Pre-Sunrise/Noon/Sunset definitions used these event keys.
-                    case SUNRISE ->
-                        "behaviours.dawn";
-                    case NOON ->
-                        "behaviours.midday";
-                    case SUNSET ->
-                        "behaviours.morning";
-                    default ->
-                        path;
-                };
-            }
-            for (Map<?, ?> entry : configuration.getMapList(path)) {
-                Object type = entry.get("type");
-                if (type == null) {
-                    continue;
-                }
-                if (isLegacyAiControl(type)) {
-                    actions.add(new BehaviourAction(BehaviourActionType.AI_TRIGGER, null));
-                    continue;
-                }
-                try {
-                    actions.add(BehaviourActionCodec.decode(entry));
-                } catch (IllegalArgumentException ignored) {
-                    plugin.getLogger().warning(() -> "Ignoring unknown behaviour action '" + type + "' in " + file.getName());
-                }
-            }
-            definition.setBehaviourActions(event, actions);
-        }
-        if (configuration.getBoolean("ai-control.greet-on-approach", false)) {
-            List<BehaviourAction> approach = new ArrayList<>(
-                    definition.getBehaviourActions(BehaviourEvent.PLAYER_APPROACH));
-            if (approach.stream().noneMatch(action -> action.type() == BehaviourActionType.AI_TRIGGER)) {
-                approach.add(new BehaviourAction(BehaviourActionType.AI_TRIGGER, null));
-                definition.setBehaviourActions(BehaviourEvent.PLAYER_APPROACH, approach);
-            }
+            definition.setBehaviourActions(event, decodeActions(configuration.getMapList(path), file, "behaviour"));
         }
         ConfigurationSection custom = configuration.getConfigurationSection("custom-event-behaviours");
         if (custom != null) {
@@ -325,47 +280,26 @@ public final class NpcDefinitionRepository {
                     plugin.getLogger().warning(() -> "Ignoring malformed custom event name in " + file.getName());
                     continue;
                 }
-                List<BehaviourAction> actions = new ArrayList<>();
-                for (Map<?, ?> entry : custom.getMapList(encodedName)) {
-                    Object type = entry.get("type");
-                    if (type == null) {
-                        continue;
-                    }
-                    if (isLegacyAiControl(type)) {
-                        actions.add(new BehaviourAction(BehaviourActionType.AI_TRIGGER, null));
-                        continue;
-                    }
-                    try {
-                        actions.add(BehaviourActionCodec.decode(entry));
-                    } catch (IllegalArgumentException ignored) {
-                        plugin.getLogger().warning(() -> "Ignoring unknown custom-event action '" + type + "' in " + file.getName());
-                    }
-                }
-                definition.setCustomEventActions(eventName, actions);
+                definition.setCustomEventActions(eventName,
+                        decodeActions(custom.getMapList(encodedName), file, "custom-event"));
             }
         }
         return definition;
     }
 
-    private static boolean isLegacyAiControl(Object type) {
-        return type.toString().trim().replace('-', '_').equalsIgnoreCase("AI_CONTROL");
-    }
-
-    private static boolean hasLegacyAiControl(ConfigurationSection configuration) {
-        for (BehaviourEvent event : BehaviourEvent.values()) {
-            for (Map<?, ?> entry : configuration.getMapList(
-                    "behaviours." + event.name().toLowerCase(Locale.ROOT))) {
-                if (entry.get("type") != null && isLegacyAiControl(entry.get("type"))) return true;
+    private List<BehaviourAction> decodeActions(List<Map<?, ?>> storedActions, File file, String kind) {
+        List<BehaviourAction> actions = new ArrayList<>();
+        for (Map<?, ?> entry : storedActions) {
+            Object type = entry.get("type");
+            if (type == null) continue;
+            try {
+                actions.add(BehaviourActionCodec.decode(entry));
+            } catch (IllegalArgumentException ignored) {
+                plugin.getLogger().warning(() ->
+                        "Ignoring unknown " + kind + " action '" + type + "' in " + file.getName());
             }
         }
-        ConfigurationSection custom = configuration.getConfigurationSection("custom-event-behaviours");
-        if (custom == null) return false;
-        for (String event : custom.getKeys(false)) {
-            for (Map<?, ?> entry : custom.getMapList(event)) {
-                if (entry.get("type") != null && isLegacyAiControl(entry.get("type"))) return true;
-            }
-        }
-        return false;
+        return actions;
     }
 
     private static String encodeEventName(String value) {

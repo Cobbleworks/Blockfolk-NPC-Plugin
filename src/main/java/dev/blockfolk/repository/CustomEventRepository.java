@@ -1,7 +1,6 @@
 package dev.blockfolk.repository;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -19,10 +18,14 @@ import dev.blockfolk.model.CustomEvent;
 
 public final class CustomEventRepository {
     private final File file;
+    private final DebouncedYamlWriter writer;
     private final Map<String, CustomEvent> events = new LinkedHashMap<>();
     private final List<String> eventOrder = new java.util.ArrayList<>();
 
-    public CustomEventRepository(JavaPlugin plugin) { this.file = new File(plugin.getDataFolder(), "custom-events.yml"); }
+    public CustomEventRepository(JavaPlugin plugin) {
+        this.file = new File(plugin.getDataFolder(), "custom-events.yml");
+        this.writer = new DebouncedYamlWriter(plugin);
+    }
 
     public void loadAll() {
         events.clear();
@@ -84,6 +87,10 @@ public final class CustomEventRepository {
     }
 
     private void saveAll() {
+        writer.queue(file, this::serialize);
+    }
+
+    private YamlConfiguration serialize() {
         YamlConfiguration configuration = new YamlConfiguration();
         configuration.set("order", eventOrder);
         ConfigurationSection root = configuration.createSection("events");
@@ -94,7 +101,10 @@ public final class CustomEventRepository {
             section.set("description", event.getDescription().isBlank() ? null : event.getDescription());
             section.set("icon", event.getIcon());
         }
-        try { configuration.save(file); }
-        catch (IOException exception) { throw new IllegalStateException("Could not save custom events.", exception); }
+        return configuration;
+    }
+
+    public void flush() {
+        writer.flush();
     }
 }

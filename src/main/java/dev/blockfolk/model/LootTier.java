@@ -28,10 +28,6 @@ public enum LootTier {
         return icon;
     }
 
-    public double dropChance() {
-        return dropChance;
-    }
-
     public int dropChancePercent() {
         return (int) Math.round(dropChance * 100);
     }

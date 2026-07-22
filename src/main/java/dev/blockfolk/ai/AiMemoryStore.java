@@ -25,10 +25,6 @@ public final class AiMemoryStore {
         trim(memory, MAX_EVENTS);
     }
 
-    public void rememberMessage(UUID instance, UUID player, String message) {
-        rememberMessage(instance, player, false, message);
-    }
-
     public void rememberMessage(UUID instance, UUID player, boolean shared, String message) {
         if (player == null || message == null || message.isBlank()) return;
         Deque<String> memory = conversations.computeIfAbsent(
@@ -43,10 +39,6 @@ public final class AiMemoryStore {
         Instant cutoff = Instant.now().minus(EVENT_AGE);
         while (!memory.isEmpty() && memory.getFirst().time().isBefore(cutoff)) memory.removeFirst();
         return memory.stream().map(Entry::summary).toList();
-    }
-
-    public List<String> recentConversation(UUID instance, UUID player) {
-        return recentConversation(instance, player, false);
     }
 
     public List<String> recentConversation(UUID instance, UUID player, boolean shared) {

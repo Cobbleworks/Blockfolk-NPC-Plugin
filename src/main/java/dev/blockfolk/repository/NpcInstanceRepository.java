@@ -1,7 +1,6 @@
 package dev.blockfolk.repository;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -18,9 +17,11 @@ import dev.blockfolk.util.LocationCodec;
 public final class NpcInstanceRepository {
 
     private final File file;
+    private final DebouncedYamlWriter writer;
 
     public NpcInstanceRepository(JavaPlugin plugin) {
         this.file = new File(plugin.getDataFolder(), "instances.yml");
+        this.writer = new DebouncedYamlWriter(plugin);
     }
 
     public List<NpcInstance> loadAll() {
@@ -55,6 +56,10 @@ public final class NpcInstanceRepository {
     }
 
     public void saveAll(Collection<NpcInstance> instances) {
+        writer.queue(file, () -> serialize(instances));
+    }
+
+    private YamlConfiguration serialize(Collection<NpcInstance> instances) {
         YamlConfiguration configuration = new YamlConfiguration();
         ConfigurationSection root = configuration.createSection("instances");
         for (NpcInstance instance : instances) {
@@ -63,10 +68,10 @@ public final class NpcInstanceRepository {
             LocationCodec.write(section.createSection("location"), instance.getLocation());
             LocationCodec.write(section.createSection("spawn-location"), instance.getSpawnLocation());
         }
-        try {
-            configuration.save(file);
-        } catch (IOException exception) {
-            throw new IllegalStateException("Could not save NPC instances.", exception);
-        }
+        return configuration;
+    }
+
+    public void flush() {
+        writer.flush();
     }
 }

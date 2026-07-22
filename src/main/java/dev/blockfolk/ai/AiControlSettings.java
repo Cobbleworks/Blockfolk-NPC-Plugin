@@ -18,35 +18,6 @@ public record AiControlSettings(
         boolean sharedConversation
 ) {
 
-    public AiControlSettings(String identity, String behaviour, String goal, String information,
-            Set<AiActionType> allowedActions, boolean enabled, boolean ignoredLegacyGreeting,
-            boolean respondToChat) {
-        this(identity, behaviour, "", goal, information, allowedActions, enabled,
-                respondToChat, false, false, false, false);
-    }
-
-    public AiControlSettings(String identity, String behaviour, String goal, String information,
-            Set<AiActionType> allowedActions, boolean enabled, boolean ignoredLegacyGreeting,
-            boolean respondToChat, boolean reactToNearbyDeaths) {
-        this(identity, behaviour, "", goal, information, allowedActions, enabled,
-                respondToChat, reactToNearbyDeaths, false, false, false);
-    }
-
-    public AiControlSettings(String identity, String behaviour, String goal, String information,
-            Set<AiActionType> allowedActions, boolean enabled, boolean ignoredLegacyGreeting,
-            boolean respondToChat, boolean reactToNearbyDeaths, boolean memoryEnabled) {
-        this(identity, behaviour, "", goal, information, allowedActions, enabled,
-                respondToChat, reactToNearbyDeaths, memoryEnabled, false, false);
-    }
-
-    public AiControlSettings(String identity, String behaviour, String goal, String information,
-            Set<AiActionType> allowedActions, boolean enabled, boolean ignoredLegacyGreeting,
-            boolean respondToChat, boolean reactToNearbyDeaths, boolean memoryEnabled,
-            boolean inventoryEnabled) {
-        this(identity, behaviour, "", goal, information, allowedActions, enabled,
-                respondToChat, reactToNearbyDeaths, memoryEnabled, inventoryEnabled, false);
-    }
-
     public AiControlSettings {
         identity = normalize(identity);
         behaviour = normalize(behaviour);

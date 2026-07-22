@@ -86,14 +86,6 @@ public record CombatProfile(
                 targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance, showBossBar, droppedExperience);
     }
 
-    public boolean hasSightTargets() {
-        return targetMobs || targetAnimals || targetPlayers || targetNpcs;
-    }
-
-    public boolean hasTargets() {
-        return hasSightTargets();
-    }
-
     public boolean alliedWith(CombatProfile other) {
         return other != null && alliance != null && alliance.equals(other.alliance);
     }

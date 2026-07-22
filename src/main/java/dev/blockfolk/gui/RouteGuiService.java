@@ -242,7 +242,7 @@ public final class RouteGuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Reorder Routes"));
         renderReorder(inventory, holder);
         player.openInventory(inventory);
-        restoreReorderCursor(player, holder);
+        ReorderSupport.restoreCursor(player, holder, this::reorderItem);
     }
 
     private void renderReorder(Inventory inventory, ReorderRoutesHolder holder) {
@@ -274,6 +274,10 @@ public final class RouteGuiService implements Listener {
         meta.getPersistentDataContainer().set(reorderRouteKey, PersistentDataType.STRING, route.getKey());
         icon.setItemMeta(meta);
         return icon;
+    }
+
+    private ItemStack reorderItem(String key, int index) {
+        return routeRepository.find(key).map(route -> reorderItem(route, index)).orElse(null);
     }
 
     public void stop() {
@@ -335,7 +339,7 @@ public final class RouteGuiService implements Listener {
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         if (event.getInventory().getHolder() instanceof ReorderRoutesHolder) {
-            clearReorderCursor(event.getPlayer());
+            ReorderSupport.clearCursor(event.getPlayer(), reorderRouteKey);
         }
     }
 
@@ -676,7 +680,7 @@ public final class RouteGuiService implements Listener {
             return;
         }
         if (slot == 48) {
-            clearReorderSelection(player, holder);
+            ReorderSupport.clearSelection(player, holder, reorderRouteKey);
             try {
                 routeRepository.reorder(holder.keys);
                 player.sendMessage(UiText.success("Route order saved."));
@@ -689,53 +693,12 @@ public final class RouteGuiService implements Listener {
             return;
         }
         if (slot == 50) {
-            clearReorderSelection(player, holder);
+            ReorderSupport.clearSelection(player, holder, reorderRouteKey);
             openRoutes(player, holder.returnFolder, holder.returnPage);
             return;
         }
-        if (slot < 0 || slot >= PAGE_SIZE) return;
-        int targetIndex = Math.min(holder.page * PAGE_SIZE + slot, holder.keys.size() - 1);
-        if (targetIndex < 0) return;
-        if (holder.selectedKey == null) {
-            int sourceIndex = holder.page * PAGE_SIZE + slot;
-            if (sourceIndex >= holder.keys.size() || !isEmpty(player.getItemOnCursor())) return;
-            holder.selectedKey = holder.keys.get(sourceIndex);
-            event.getView().getTopInventory().setItem(slot, null);
-            restoreReorderCursor(player, holder);
-            return;
-        }
-        int sourceIndex = holder.keys.indexOf(holder.selectedKey);
-        if (sourceIndex >= 0 && sourceIndex != targetIndex) {
-            String moved = holder.keys.remove(sourceIndex);
-            holder.keys.add(targetIndex, moved);
-        }
-        clearReorderSelection(player, holder);
-        renderReorder(event.getView().getTopInventory(), holder);
-    }
-
-    private void restoreReorderCursor(Player player, ReorderRoutesHolder holder) {
-        if (holder.selectedKey == null) return;
-        routeRepository.find(holder.selectedKey).ifPresent(route ->
-                player.setItemOnCursor(reorderItem(route, holder.keys.indexOf(holder.selectedKey))));
-    }
-
-    private void clearReorderSelection(Player player, ReorderRoutesHolder holder) {
-        holder.selectedKey = null;
-        clearReorderCursor(player);
-    }
-
-    private void clearReorderCursor(org.bukkit.entity.HumanEntity player) {
-        ItemStack cursor = player.getItemOnCursor();
-        ItemMeta meta = isEmpty(cursor) ? null : cursor.getItemMeta();
-        if (meta != null
-                && meta.getPersistentDataContainer()
-                        .has(reorderRouteKey, PersistentDataType.STRING)) {
-            player.setItemOnCursor(null);
-        }
-    }
-
-    private boolean isEmpty(ItemStack item) {
-        return item == null || item.getType().isAir();
+        ReorderSupport.selectOrMove(event, player, holder, PAGE_SIZE, reorderRouteKey,
+                this::reorderItem, inventory -> renderReorder(inventory, holder));
     }
 
     private void handleDeleteClick(InventoryClickEvent event, Player player, DeleteRouteHolder holder) {
@@ -1013,40 +976,20 @@ public final class RouteGuiService implements Listener {
         void open(Player player, String routeKey, RoutePoint point);
     }
 
-    private record RoutesHolder(String folder, int page) implements InventoryHolder {
+    private record RoutesHolder(String folder, int page) implements GuiHolder { }
 
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
+    private record LocationsHolder(int page, String returnFolder, int returnPage) implements GuiHolder { }
 
-    private record LocationsHolder(int page, String returnFolder, int returnPage) implements InventoryHolder {
-        @Override public Inventory getInventory() { return null; }
-    }
-
-    private static final class ReorderRoutesHolder implements InventoryHolder {
-        private final List<String> keys;
+    private static final class ReorderRoutesHolder extends ReorderSupport.ReorderState {
         private final String returnFolder;
         private final int returnPage;
-        private int page;
-        private String selectedKey;
 
         private ReorderRoutesHolder(List<String> keys, String returnFolder, int returnPage) {
-            this.keys = keys;
+            super(keys);
             this.returnFolder = returnFolder;
             this.returnPage = returnPage;
         }
-
-        @Override
-        public Inventory getInventory() { return null; }
     }
 
-    private record DeleteRouteHolder(String routeKey, String folder, int page) implements InventoryHolder {
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
+    private record DeleteRouteHolder(String routeKey, String folder, int page) implements GuiHolder { }
 }

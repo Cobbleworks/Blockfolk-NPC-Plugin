@@ -1,7 +1,6 @@
 package dev.blockfolk.repository;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -18,10 +17,12 @@ import dev.blockfolk.model.NamedLocation;
 public final class LocationRepository {
 
     private final File file;
+    private final DebouncedYamlWriter writer;
     private final Map<String, NamedLocation> locations = new LinkedHashMap<>();
 
     public LocationRepository(JavaPlugin plugin) {
         this.file = new File(plugin.getDataFolder(), "locations.yml");
+        this.writer = new DebouncedYamlWriter(plugin);
     }
 
     public void loadAll() {
@@ -73,6 +74,10 @@ public final class LocationRepository {
     }
 
     private void saveAll() {
+        writer.queue(file, this::serialize);
+    }
+
+    private YamlConfiguration serialize() {
         YamlConfiguration configuration = new YamlConfiguration();
         ConfigurationSection root = configuration.createSection("locations");
         for (NamedLocation named : locations.values()) {
@@ -84,10 +89,10 @@ public final class LocationRepository {
             section.set("z", named.location().z());
             section.set("icon", named.icon());
         }
-        try {
-            configuration.save(file);
-        } catch (IOException exception) {
-            throw new IllegalStateException("Could not save global locations.", exception);
-        }
+        return configuration;
+    }
+
+    public void flush() {
+        writer.flush();
     }
 }

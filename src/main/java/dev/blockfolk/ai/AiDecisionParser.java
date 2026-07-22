@@ -9,6 +9,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import dev.blockfolk.util.TextUtil;
+
 public final class AiDecisionParser {
 
     private static final int MAX_ACTIONS = 3;
@@ -21,7 +23,7 @@ public final class AiDecisionParser {
     public static AiDecision parse(String json, AiControlSettings settings) {
         List<AiDecision.Action> accepted = new ArrayList<>();
         try {
-            JsonObject root = JsonParser.parseString(stripFence(json)).getAsJsonObject();
+            JsonObject root = JsonParser.parseString(TextUtil.stripCodeFence(json)).getAsJsonObject();
             JsonArray actions = root.has("actions") && root.get("actions").isJsonArray()
                     ? root.getAsJsonArray("actions") : new JsonArray();
             for (JsonElement element : actions) {
@@ -102,14 +104,6 @@ public final class AiDecisionParser {
         } catch (RuntimeException ignored) {
             return null;
         }
-    }
-
-    private static String stripFence(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        if (!trimmed.startsWith("```")) return trimmed;
-        int newline = trimmed.indexOf('\n');
-        int end = trimmed.lastIndexOf("```");
-        return newline >= 0 && end > newline ? trimmed.substring(newline + 1, end).trim() : trimmed;
     }
 
     private static AiDecision doNothing() {

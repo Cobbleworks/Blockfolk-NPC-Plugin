@@ -17,12 +17,12 @@ class AiMemoryStoreTest {
         UUID secondNpc = UUID.randomUUID();
         UUID player = UUID.randomUUID();
 
-        memory.rememberMessage(firstNpc, player, "Player: hello");
+        memory.rememberMessage(firstNpc, player, false, "Player: hello");
 
-        assertEquals(1, memory.recentConversation(firstNpc, player).size());
-        assertTrue(memory.recentConversation(secondNpc, player).isEmpty());
+        assertEquals(1, memory.recentConversation(firstNpc, player, false).size());
+        assertTrue(memory.recentConversation(secondNpc, player, false).isEmpty());
         memory.forget(firstNpc);
-        assertTrue(memory.recentConversation(firstNpc, player).isEmpty());
+        assertTrue(memory.recentConversation(firstNpc, player, false).isEmpty());
     }
 
     @Test

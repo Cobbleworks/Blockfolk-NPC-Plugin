@@ -54,6 +54,7 @@ import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.AiDecision;
 import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.util.UiText;
+import dev.blockfolk.util.EntityHealth;
 import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
@@ -309,7 +310,7 @@ public final class NpcBehaviourService implements Listener {
             String eventDetail,
             Runnable completion
     ) {
-        if (instances.findAll().stream().noneMatch(candidate -> candidate.getId().equals(instance.getId()))) {
+        if (instances.findById(instance.getId()).isEmpty()) {
             completion.run();
             return;
         }
@@ -423,7 +424,8 @@ public final class NpcBehaviourService implements Listener {
         String detail = "The NPC took " + String.format(java.util.Locale.ROOT, "%.1f", event.getFinalDamage())
                 + " damage" + (actor == null ? "." : " from " + actor.getName() + ".")
                 + (npc == null ? "" : " Current health: "
-                        + String.format(java.util.Locale.ROOT, "%.1f / %.1f", Math.max(0, npc.getHealth() - event.getFinalDamage()), npc.getMaxHealth()) + ".");
+                        + String.format(java.util.Locale.ROOT, "%.1f / %.1f",
+                                Math.max(0, npc.getHealth() - event.getFinalDamage()), EntityHealth.maximum(npc)) + ".");
         // An attack is more specific and higher-priority than generic damage,
         // so it gets the first opportunity to invoke a throttled AI action.
         if (actor != null) trigger(BehaviourEvent.NPC_ATTACKED, instance, actor,
@@ -859,9 +861,9 @@ public final class NpcBehaviourService implements Listener {
 
     private void tickBehaviour() {
         currentTick++;
-        tickTimeEvents();
         if (++proximityTick >= 10) {
             proximityTick = 0;
+            tickTimeEvents();
             tickProximity();
         }
         if (++playerLookTick >= PLAYER_LOOK_INTERVAL_TICKS) {
@@ -876,22 +878,25 @@ public final class NpcBehaviourService implements Listener {
             entityNearbyTick = 0;
             tickEntityNearby();
         }
-        Set<UUID> active = new HashSet<>();
+        boolean cleanRuntimeState = currentTick % 20L == 0L;
+        Set<UUID> active = cleanRuntimeState ? new HashSet<>() : null;
         for (NpcInstance instance : instances.findAll()) {
-            active.add(instance.getId());
+            if (cleanRuntimeState) active.add(instance.getId());
             if (!tickAiInteraction(instance)) {
                 tickMoveTo(instance);
                 tickFollow(instance);
             }
         }
-        routePaused.retainAll(active);
-        moveTargets.keySet().retainAll(active);
-        following.keySet().retainAll(active);
-        waypointActionSequences.keySet().retainAll(active);
-        switchInteractions.keySet().retainAll(active);
-        idleCycles.keySet().retainAll(active);
-        observedEntities.keySet().retainAll(active);
-        entityNearbyCooldownUntilTick.keySet().retainAll(active);
+        if (cleanRuntimeState) {
+            routePaused.retainAll(active);
+            moveTargets.keySet().retainAll(active);
+            following.keySet().retainAll(active);
+            waypointActionSequences.keySet().retainAll(active);
+            switchInteractions.keySet().retainAll(active);
+            idleCycles.keySet().retainAll(active);
+            observedEntities.keySet().retainAll(active);
+            entityNearbyCooldownUntilTick.keySet().retainAll(active);
+        }
     }
 
     private void tickEntityNearby() {
@@ -1642,7 +1647,6 @@ public final class NpcBehaviourService implements Listener {
                 markProximityTransition(key);
                 if (withinRange) {
                     nowNearby.add(key);
-                    NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
                     trigger(BehaviourEvent.PLAYER_APPROACH, instance, player);
                 } else {
                     trigger(BehaviourEvent.PLAYER_LEAVES, instance, player);

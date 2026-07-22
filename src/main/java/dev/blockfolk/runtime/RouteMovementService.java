@@ -9,7 +9,6 @@ import java.util.UUID;
 
 import org.bukkit.Location;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import dev.blockfolk.model.MovementProfile;
@@ -49,12 +48,7 @@ public final class RouteMovementService {
 
     public void start() {
         stop();
-        task = new BukkitRunnable() {
-            @Override
-            public void run() {
-                tick();
-            }
-        }.runTaskTimer(plugin, 1L, 1L);
+        task = org.bukkit.Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
     }
 
     public void stop() {

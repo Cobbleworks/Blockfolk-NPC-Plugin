@@ -217,18 +217,17 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 getLogger().log(Level.SEVERE, "Failed to save NPC instances during shutdown.", exception);
             }
         }
+        if (definitionRepository != null) definitionRepository.flush();
+        if (instanceRepository != null) instanceRepository.flush();
+        if (routeRepository != null) routeRepository.flush();
+        if (locationRepository != null) locationRepository.flush();
+        if (customEventRepository != null) customEventRepository.flush();
         if (dialogService != null) {
             dialogService.stop();
         }
         if (npcRenderer != null) {
             npcRenderer.stop();
         }
-    }
-
-    public NpcDefinition createDefinition(String name) {
-        NpcDefinition definition = NpcDefinition.create(name);
-        definitionRepository.save(definition);
-        return definition;
     }
 
     private void openMainGui(Player player) {

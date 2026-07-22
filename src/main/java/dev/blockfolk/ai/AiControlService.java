@@ -37,6 +37,8 @@ import dev.blockfolk.repository.LocationRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.runtime.NpcCombatService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
+import dev.blockfolk.util.EntityHealth;
+import dev.blockfolk.util.TextUtil;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 /** Event-driven OpenRouter bridge. All Bukkit state is captured before the asynchronous request. */
@@ -531,7 +533,7 @@ public final class AiControlService {
                 .append("Name: ").append(definition.getDisplayName()).append('\n')
                 .append("World: ").append(world == null ? "unknown" : world.getName()).append('\n');
         if (npc != null) out.append("Health: ").append(format(npc.getHealth())).append(" / ")
-                .append(format(npc.getMaxHealth())).append('\n');
+                .append(format(EntityHealth.maximum(npc))).append('\n');
         out.append("Combat: ").append(combat != null && combat.isEngaged(instance) ? "active" : "not active").append('\n')
                 .append("Route: ").append(definition.getMovementProfile().enabled() ? "configured" : "not active").append('\n');
         if (npc != null) out.append("Equipment: main hand ")
@@ -771,7 +773,7 @@ public final class AiControlService {
                     if (front.isBlank() && back.isBlank()) continue;
                     String text = front.equals(back) || back.isBlank() ? front
                             : front.isBlank() ? back : "front: " + front + "; back: " + back;
-                    signs.add(new NearbySign(block.getLocation().distance(center), abbreviate(text, 200)));
+                    signs.add(new NearbySign(block.getLocation().distance(center), TextUtil.abbreviate(text, 200)));
                 }
             }
         }
@@ -787,10 +789,6 @@ public final class AiControlService {
                 .map(PlainTextComponentSerializer.plainText()::serialize)
                 .map(String::trim).filter(line -> !line.isBlank())
                 .collect(java.util.stream.Collectors.joining(" / "));
-    }
-
-    private static String abbreviate(String value, int max) {
-        return value.length() <= max ? value : value.substring(0, max - 3) + "...";
     }
 
     private static String describeEvent(BehaviourEvent event, Entity actor) {
