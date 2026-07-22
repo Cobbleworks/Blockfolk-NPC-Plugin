@@ -483,7 +483,7 @@ public final class GuiService implements Listener {
         )));
         AiControlSettings ai = definition.getAiControlSettings();
         String aiStatus = !ai.enabled() ? "Paused"
-                : aiGuiService.hasTrigger(definition) || ai.respondToChat() || ai.reactToNearbyDeaths() ? "Active" : "No Triggers";
+                : aiGuiService.hasTrigger(definition) || ai.respondToChat() ? "Active" : "No Triggers";
         inventory.setItem(23, item(ai.enabled()
                         ? Material.OXIDIZED_COPPER_GOLEM_STATUE
                         : Material.COPPER_GOLEM_STATUE,
@@ -491,7 +491,7 @@ public final class GuiService implements Listener {
                         LegacyText.GRAY + "Context sections: " + LegacyText.WHITE
                                 + ai.configuredSectionCount() + "/5",
                         aiGuiService.providerStatusLore(),
-                         LegacyText.GRAY + "Triggered by behaviours, chat, and nearby deaths",
+                         LegacyText.GRAY + "Triggered by behaviours and chat",
                          LegacyText.YELLOW + "Click to configure"
                  )));
         CombatProfile combat = definition.getCombatProfile();

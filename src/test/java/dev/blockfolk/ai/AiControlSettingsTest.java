@@ -40,16 +40,6 @@ class AiControlSettingsTest {
     }
 
     @Test
-    void nearbyDeathReactionsAreOptInAndPreservedByOtherChanges() {
-        AiControlSettings defaults = AiControlSettings.defaults();
-        assertFalse(defaults.reactToNearbyDeaths());
-
-        AiControlSettings enabled = defaults.withReactToNearbyDeaths(true).withIdentity("A wary guard");
-        assertTrue(enabled.reactToNearbyDeaths());
-        assertTrue(enabled.enabled());
-    }
-
-    @Test
     void composesStructuredContextWithHeadings() {
         AiControlSettings settings = AiControlSettings.defaults()
                 .withIdentity("Mira, the village guard")
@@ -75,7 +65,7 @@ class AiControlSettingsTest {
     @Test
     void inventorySettingIsOptInAndPreservedByOtherChanges() {
         AiControlSettings settings = AiControlSettings.defaults().withInventoryEnabled(true)
-                .withIdentity("A courier").withReactToNearbyDeaths(true);
+                .withIdentity("A courier").withRespondToChat(false);
 
         assertTrue(settings.inventoryEnabled());
         assertFalse(AiControlSettings.defaults().inventoryEnabled());

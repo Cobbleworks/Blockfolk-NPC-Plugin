@@ -30,9 +30,8 @@ AI Behaviour is configured directly from an NPC preset's dedicated menu. Context
 split into Identity, Personality & Behaviour, Goal / Role, and Knowledge / Information.
 Add the oxidized-copper-golem `AI Trigger` action to any behaviour sequence to invoke the
 AI for approaches, leaves, combat, custom events, or other supported events. The NPC can
-also respond to chat within eight blocks and comment on deaths within twelve blocks.
-Death reactions receive the victim, killer, held weapon, and Minecraft damage cause when
-available. Disabling nearby chat responses also stops the NPC from reading that chat.
+also respond to chat within eight blocks. Disabling nearby chat responses also stops the
+NPC from reading that chat.
 Each spawned NPC can keep private per-player conversation memory or one shared
 conversation for all players until an administrator opens that NPC preset's editor,
 which resets AI state globally for its spawned copies. The

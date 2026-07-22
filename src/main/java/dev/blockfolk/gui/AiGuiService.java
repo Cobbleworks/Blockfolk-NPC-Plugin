@@ -89,8 +89,6 @@ final class AiGuiService {
                 settings.sharedConversation(), settings.sharedConversation()
                         ? "All players share this NPC instance's conversation"
                         : "Each player has a separate conversation with this NPC instance"));
-        inventory.setItem(21, toggleItem(Material.SKELETON_SKULL, "React To Nearby Deaths",
-                settings.reactToNearbyDeaths(), "Lets the NPC comment when someone dies within 12 blocks"));
         inventory.setItem(22, toggleItem(Material.CHEST, "Temporary Inventory",
                 settings.inventoryEnabled(), "Lets the AI see, mine into, and drop items carried by each instance"));
         for (int index = 0; index < ACTION_TYPES.size(); index++) {
@@ -108,7 +106,7 @@ final class AiGuiService {
                                     : LegacyText.YELLOW + "Click to toggle")));
         }
         inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
-        boolean hasTrigger = hasTrigger(definition) || settings.respondToChat() || settings.reactToNearbyDeaths();
+        boolean hasTrigger = hasTrigger(definition) || settings.respondToChat();
         String status = !settings.enabled() ? "Paused" : hasTrigger ? "Active" : "No Triggers";
         Material statusMaterial = !settings.enabled() ? Material.RED_DYE
                 : hasTrigger ? Material.LIME_DYE : Material.YELLOW_DYE;
@@ -189,9 +187,6 @@ final class AiGuiService {
         if (slot == 20) {
             AiControlSettings settings = definition.getAiControlSettings();
             definition.setAiControlSettings(settings.withSharedConversation(!settings.sharedConversation()));
-        } else if (slot == 21) {
-            AiControlSettings settings = definition.getAiControlSettings();
-            definition.setAiControlSettings(settings.withReactToNearbyDeaths(!settings.reactToNearbyDeaths()));
         } else if (slot == 22) {
             AiControlSettings settings = definition.getAiControlSettings();
             definition.setAiControlSettings(settings.withInventoryEnabled(!settings.inventoryEnabled()));

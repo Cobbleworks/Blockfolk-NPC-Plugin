@@ -12,7 +12,6 @@ public record AiControlSettings(
         Set<AiActionType> allowedActions,
         boolean enabled,
         boolean respondToChat,
-        boolean reactToNearbyDeaths,
         boolean memoryEnabled,
         boolean inventoryEnabled,
         boolean sharedConversation
@@ -36,7 +35,7 @@ public record AiControlSettings(
 
     public static AiControlSettings defaults() {
         return new AiControlSettings("", "", "", "", "", AiActionType.safeDefaults(), false, true,
-                false, false, false, false);
+                false, false, false);
     }
 
     public boolean hasContext() {
@@ -88,7 +87,7 @@ public record AiControlSettings(
                 || !normalize(information).isBlank();
         boolean updatedEnabled = !hasUpdatedContext ? false : !hadContext || enabled;
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                updatedEnabled, respondToChat, reactToNearbyDeaths, memoryEnabled,
+                updatedEnabled, respondToChat, memoryEnabled,
                 inventoryEnabled, sharedConversation);
     }
 
@@ -97,43 +96,37 @@ public record AiControlSettings(
         if (!updated.remove(action)) updated.add(action);
         updated.add(AiActionType.DO_NOTHING);
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, updated,
-                enabled, respondToChat, reactToNearbyDeaths, memoryEnabled,
+                enabled, respondToChat, memoryEnabled,
                 inventoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withEnabled(boolean enabled) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, respondToChat, reactToNearbyDeaths, memoryEnabled,
+                enabled, respondToChat, memoryEnabled,
                 inventoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withRespondToChat(boolean respondToChat) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, respondToChat, reactToNearbyDeaths, memoryEnabled,
-                inventoryEnabled, sharedConversation);
-    }
-
-    public AiControlSettings withReactToNearbyDeaths(boolean reactToNearbyDeaths) {
-        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, respondToChat, reactToNearbyDeaths, memoryEnabled,
+                enabled, respondToChat, memoryEnabled,
                 inventoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withMemoryEnabled(boolean memoryEnabled) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, respondToChat, reactToNearbyDeaths, memoryEnabled,
+                enabled, respondToChat, memoryEnabled,
                 inventoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withInventoryEnabled(boolean inventoryEnabled) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, respondToChat, reactToNearbyDeaths, memoryEnabled,
+                enabled, respondToChat, memoryEnabled,
                 inventoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withSharedConversation(boolean sharedConversation) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, respondToChat, reactToNearbyDeaths, memoryEnabled,
+                enabled, respondToChat, memoryEnabled,
                 inventoryEnabled, sharedConversation);
     }
 

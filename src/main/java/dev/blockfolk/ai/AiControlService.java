@@ -68,7 +68,6 @@ public final class AiControlService {
             If no action is appropriate return {\"actions\":[{\"type\":\"DO_NOTHING\"}]}.
             Keep speech concise and in character. The thought field is optional and never shown to players.
             React naturally to the event that invoked you. When a nearby player speaks, answer using SAY.
-            For a nearby death, react naturally to the victim, killer, weapon, and cause; SAY something concise or do nothing.
             """;
     private static final String GROUP_RESULT_RULES = """
             You coordinate a group of nearby NPCs reacting to one player's chat message.

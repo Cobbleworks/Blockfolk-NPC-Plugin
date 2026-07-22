@@ -7,8 +7,7 @@ an NPC only while its request is actively in flight.
 Blockfolk sends an AI request only when the NPC preset is active, at least one context
 section is configured, OpenRouter is configured, and a trigger fires. `AI Trigger` can be
 placed in any standard, custom-event, waypoint, or question-branch behaviour sequence.
-Nearby player chat and optional nearby-death reactions can also trigger requests directly.
-Chat is accepted within eight blocks of the NPC; deaths are observed within twelve blocks.
+Nearby player chat can also trigger requests directly within eight blocks of the NPC.
 
 One player chat message creates one group request for all eligible NPCs within range,
 ordered by distance from the player. The closest NPC is the default speaker. The model
@@ -50,13 +49,10 @@ The request uses temperature `0.4`, JSON-object response formatting, and the con
 ## Current event
 
 The user message begins with a plain-language event description. It may describe any
-event routed through an `AI Trigger`, nearby chat, or a nearby death. Examples include:
+event routed through an `AI Trigger` or nearby chat. Examples include:
 
 - the player's name and the fact that they approached or are already near the NPC;
 - the player's name and exact nearby chat message;
-- a nearby death, including victim, rounded distance, Minecraft damage cause, and the
-  killer, held weapon, and direct cause (such as a projectile) when available.
-
 Chat is sent only when Respond to Nearby Chat is enabled. When it is disabled, Blockfolk
 does not store that new chat for later use.
 
