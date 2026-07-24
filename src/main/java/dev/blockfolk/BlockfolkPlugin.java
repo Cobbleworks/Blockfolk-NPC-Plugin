@@ -31,6 +31,8 @@ import dev.blockfolk.runtime.RouteMovementService;
 import dev.blockfolk.util.ResolvedSkin;
 import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
+import dev.blockfolk.ai.AiControlService;
+import dev.blockfolk.ai.OpenRouterClient;
 
 public final class BlockfolkPlugin extends JavaPlugin {
 
@@ -52,6 +54,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private NpcBehaviourService behaviourService;
     private NpcQuestionService questionService;
     private SkinResolver skinResolver;
+    private AiControlService aiControlService;
 
     @Override
     public void onEnable() {
@@ -73,6 +76,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 navigationService,
                 dialogService
         );
+        dialogService.setLocationProvider(instanceRegistry::currentLocation);
         chatInputService = new ChatInputService(this, getConfig().getInt("chat-input-timeout-seconds", 60));
         skinResolver = new SkinResolver(
                 getName() + "/" + getPluginMeta().getVersion(),
@@ -117,6 +121,17 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 getConfig().getInt("proximity-transition-cooldown-seconds", 3)
         );
         behaviourService.setCombatService(combatService);
+        OpenRouterClient openRouterClient = new OpenRouterClient(
+                getConfig().getString("openrouter.endpoint", "https://openrouter.ai/api/v1/chat/completions"),
+                getConfig().getString("openrouter.api-key", ""),
+                getConfig().getString("openrouter.model", ""),
+                getConfig().getInt("openrouter.timeout-seconds", 12),
+                getConfig().getInt("openrouter.max-tokens", 1600));
+        aiControlService = new AiControlService(this, definitionRepository, instanceRegistry, combatService,
+                locationRepository,
+                openRouterClient, getConfig().getInt("ai-control.invocation-cooldown-seconds", 2));
+        behaviourService.setAiControlService(aiControlService);
+        guiService.setAiControlService(aiControlService);
         combatService.setBehaviourService(behaviourService);
         guiService.setBehaviourService(behaviourService);
         instanceRegistry.setSpawnListener((instance, definition) -> {

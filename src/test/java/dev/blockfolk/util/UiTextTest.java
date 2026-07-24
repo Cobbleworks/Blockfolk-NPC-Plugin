@@ -2,6 +2,8 @@ package dev.blockfolk.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
 import net.kyori.adventure.text.Component;
@@ -55,5 +57,29 @@ class UiTextTest {
         Component title = UiText.title("Equipment", "Ada");
 
         assertEquals(NamedTextColor.GREEN, title.children().getFirst().color());
+    }
+
+    @Test
+    void splitsLongNpcDialogAtWordBoundaries() {
+        String first = "word ".repeat(47) + "word";
+        String second = "another short message";
+
+        assertEquals(List.of(first, second), UiText.splitNpcDialog(first + " " + second));
+    }
+
+    @Test
+    void hardSplitsLongWordsWithoutBreakingSurrogatePairs() {
+        String text = "a".repeat(239) + "👋" + "b";
+
+        List<String> messages = UiText.splitNpcDialog(text);
+
+        assertEquals(List.of("a".repeat(239), "👋b"), messages);
+    }
+
+    @Test
+    void splitNpcDialogAcceptsPerNpcNameColor() {
+        List<Component> messages = UiText.npcDialogMessages("Ada", "Hello there", NamedTextColor.RED);
+
+        assertEquals(NamedTextColor.RED, messages.getFirst().color());
     }
 }

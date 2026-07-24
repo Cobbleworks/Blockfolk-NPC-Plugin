@@ -12,6 +12,7 @@ import java.util.function.Consumer;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Pose;
@@ -161,6 +162,10 @@ public final class NpcInstanceRegistry implements Listener {
         return instances.values();
     }
 
+    public boolean isNavigationEntity(Entity entity) {
+        return navigationService.isNavigator(entity);
+    }
+
     public boolean move(NpcInstance instance, Location location) {
         return move(instance, location, false);
     }
@@ -224,6 +229,16 @@ public final class NpcInstanceRegistry implements Listener {
             return Optional.empty();
         }
         return renderer.findLivingEntity(instance);
+    }
+
+    /** Returns the rendered position, including movement caused by entity collisions. */
+    public Location currentLocation(NpcInstance instance) {
+        if (!instances.containsKey(instance.getId())) {
+            return instance.getLocation();
+        }
+        Location location = renderer.currentLocation(instance).orElseGet(instance::getLocation);
+        instance.setLocation(location);
+        return location.clone();
     }
 
     public void pose(NpcInstance instance, Pose pose) {

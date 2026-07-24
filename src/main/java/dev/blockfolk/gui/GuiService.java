@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -68,6 +69,9 @@ import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
 import dev.blockfolk.util.UiText;
+import dev.blockfolk.ai.AiActionType;
+import dev.blockfolk.ai.AiControlService;
+import dev.blockfolk.ai.AiControlSettings;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -140,6 +144,7 @@ public final class GuiService implements Listener {
     private final NamespacedKey waypointTokenKey;
     private final NamespacedKey reorderIconKey;
     private NpcBehaviourService behaviourService;
+    private AiControlService aiControlService;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
     private final Map<String, String> pendingSkinUrls = new HashMap<>();
     private final Map<UUID, WaypointSession> waypointSessions = new HashMap<>();
@@ -179,6 +184,10 @@ public final class GuiService implements Listener {
 
     public void setBehaviourService(NpcBehaviourService behaviourService) {
         this.behaviourService = behaviourService;
+    }
+
+    public void setAiControlService(AiControlService aiControlService) {
+        this.aiControlService = aiControlService;
     }
 
     public void stop() {
@@ -413,6 +422,7 @@ public final class GuiService implements Listener {
     }
 
     public void openEditor(Player player, NpcDefinition definition) {
+        if (aiControlService != null) aiControlService.resetDefinition(definition);
         int instances = instanceRegistry.findByDefinition(definition).size();
         Inventory inventory = Bukkit.createInventory(new EditorHolder(definition.getKey()), 36,
                 UiText.manageTitle(definition.getDisplayName()));
@@ -465,6 +475,19 @@ public final class GuiService implements Listener {
                 LegacyText.GRAY + "React to globally emitted custom events",
                 LegacyText.YELLOW + "Click to configure"
         )));
+        AiControlSettings ai = definition.getAiControlSettings();
+        String aiStatus = !ai.enabled() ? "Paused"
+                : ai.greetOnApproach() || ai.respondToChat() || ai.reactToNearbyDeaths() ? "Active" : "No Triggers";
+        inventory.setItem(23, item(ai.enabled()
+                        ? Material.OXIDIZED_COPPER_GOLEM_STATUE
+                        : Material.COPPER_GOLEM_STATUE,
+                "AI Behaviour: " + aiStatus, List.of(
+                        ChatColor.GRAY + "Context sections: " + ChatColor.WHITE
+                                + ai.configuredSectionCount() + "/5",
+                        providerStatusLore(),
+                         ChatColor.GRAY + "Optional chat, approach, and nearby-death reactions",
+                         ChatColor.YELLOW + "Click to configure"
+                 )));
         CombatProfile combat = definition.getCombatProfile();
         inventory.setItem(15, item(Material.IRON_SWORD, "Fighting", List.of(
                 LegacyText.GRAY + "Health: " + LegacyText.WHITE + healthLabel(combat),
@@ -766,6 +789,109 @@ public final class GuiService implements Listener {
         openInventory(player, inventory);
     }
 
+    private void openAiControl(Player player, NpcDefinition definition) {
+        AiControlSettings settings = definition.getAiControlSettings();
+        Inventory inventory = Bukkit.createInventory(new AiControlHolder(definition.getKey()), 54,
+                Component.text("AI Behaviour"));
+        inventory.setItem(10, aiContextItem(Material.NAME_TAG, "Identity", settings.identity(),
+                "Who this NPC is, its name, history, and role"));
+        inventory.setItem(11, aiContextItem(Material.WRITABLE_BOOK, "Personality & Behaviour", settings.behaviour(),
+                "How it speaks, acts, reacts, and treats others"));
+        inventory.setItem(12, aiContextItem(Material.COMPASS, "Goal / Role", settings.goal(),
+                "What it should accomplish or prioritize"));
+        inventory.setItem(13, aiContextItem(Material.KNOWLEDGE_BOOK, "Knowledge / Information", settings.information(),
+                "Facts, lore, rules, and local knowledge it may use"));
+        inventory.setItem(14, aiContextItem(Material.CAKE, "Likes & Dislikes", settings.likesDislikes(),
+                "Things it enjoys, avoids, values, or strongly dislikes"));
+        inventory.setItem(15, item(settings.memoryEnabled() ? Material.ENDER_CHEST : Material.CHEST,
+                "Memory: " + (settings.memoryEnabled() ? "Enabled" : "Disabled"), List.of(
+                        ChatColor.GRAY + "Long-term facts: " + ChatColor.WHITE + definition.getAiMemories().size()
+                                + ChatColor.GRAY + " / " + NpcDefinition.MAX_AI_MEMORIES,
+                        ChatColor.GRAY + "Enabled memories provide context and let the AI remember facts",
+                        ChatColor.YELLOW + "Left-click to view and edit",
+                        ChatColor.YELLOW + "Right-click to " + (settings.memoryEnabled() ? "disable" : "enable"),
+                        ChatColor.RED + "Shift-right-click to clear all memories")));
+        inventory.setItem(20, toggleItem(Material.SPYGLASS, "Greet On Approach",
+                settings.greetOnApproach(), "Lets the NPC speak when a player comes close"));
+        inventory.setItem(21, toggleItem(Material.SKELETON_SKULL, "React To Nearby Deaths",
+                settings.reactToNearbyDeaths(), "Lets the NPC comment when someone dies within 12 blocks"));
+        inventory.setItem(22, toggleItem(Material.CHEST, "Temporary Inventory",
+                settings.inventoryEnabled(), "Lets the AI see and drop items carried by each spawned instance"));
+        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
+        List<AiActionType> types = java.util.Arrays.stream(AiActionType.values())
+                .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM).toList();
+        for (int index = 0; index < types.size(); index++) {
+            AiActionType type = types.get(index);
+            boolean chatToggle = type == AiActionType.SAY;
+            boolean intrinsic = type == AiActionType.DO_NOTHING;
+            boolean enabled = chatToggle ? settings.respondToChat()
+                    : intrinsic || settings.allowedActions().contains(type);
+            String displayName = chatToggle ? "Respond to Nearby Chat" : type.displayName();
+            inventory.setItem(slots[index], item(enabled ? Material.REDSTONE_TORCH : Material.LEVER,
+                    displayName + ": " + (enabled ? "Enabled" : "Disabled"), List.of(
+                            chatToggle
+                                    ? ChatColor.GRAY + "Reads and answers player chat within 8 blocks"
+                                    : ChatColor.GRAY + "Available when this capability is enabled",
+                            intrinsic ? ChatColor.DARK_GRAY + "Always available"
+                                    : ChatColor.YELLOW + "Click to toggle")));
+        }
+        inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
+        boolean hasTrigger = settings.greetOnApproach() || settings.respondToChat()
+                || settings.reactToNearbyDeaths();
+        String status = !settings.enabled() ? "Paused" : hasTrigger ? "Active" : "No Triggers";
+        Material statusMaterial = !settings.enabled() ? Material.RED_DYE
+                : hasTrigger ? Material.LIME_DYE : Material.YELLOW_DYE;
+        inventory.setItem(49, item(statusMaterial,
+                "AI Behaviour: " + status, List.of(
+                        ChatColor.GRAY + "Applies to every spawned instance of this preset",
+                        hasTrigger ? ChatColor.GRAY + "Automatic triggers are configured"
+                                : ChatColor.RED + "No requests are made and nearby chat is not read",
+                        ChatColor.YELLOW + "Click to " + (settings.enabled() ? "pause" : "resume"))));
+        openInventory(player, inventory);
+    }
+
+    private void openAiMemories(Player player, NpcDefinition definition) {
+        Inventory inventory = Bukkit.createInventory(new AiMemoryHolder(definition.getKey()), 54,
+                UiText.title("Memory", definition.getDisplayName()));
+        List<String> memories = definition.getAiMemories();
+        for (int index = 0; index < memories.size(); index++) {
+            inventory.setItem(index, item(Material.PAPER, "Memory " + (index + 1), List.of(
+                    ChatColor.WHITE + abbreviate(memories.get(index), 96),
+                    ChatColor.YELLOW + "Left-click to edit",
+                    ChatColor.RED + "Right-click to delete")));
+        }
+        inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
+        inventory.setItem(49, item(Material.LIME_DYE, "Add Memory", List.of(
+                ChatColor.GRAY + "The oldest memory is discarded when all 45 slots are full",
+                ChatColor.YELLOW + "Click to add a fact")));
+        GuiLayout.fillMainBar(inventory);
+        openInventory(player, inventory);
+    }
+
+    private ItemStack aiContextItem(Material material, String name, String value, String description) {
+        return item(material, name, List.of(
+                ChatColor.GRAY + description,
+                value.isBlank() ? ChatColor.DARK_GRAY + "Not configured"
+                        : ChatColor.WHITE + abbreviate(value, 48),
+                ChatColor.YELLOW + "Click to edit; enter 'clear' to remove"
+        ));
+    }
+
+    private String providerStatusLore() {
+        return aiControlService != null && aiControlService.configured()
+                ? ChatColor.GREEN + "OpenRouter is ready"
+                : ChatColor.RED + "OpenRouter: " + providerConfigurationIssue();
+    }
+
+    private String providerConfigurationIssue() {
+        return aiControlService == null ? "service unavailable" : aiControlService.configurationIssue();
+    }
+
+    private String abbreviate(String value, int max) {
+        String oneLine = value.replace('\n', ' ');
+        return oneLine.length() <= max ? oneLine : oneLine.substring(0, max - 3) + "...";
+    }
+
     private void openBehaviourValuePicker(
             Player player,
             NpcDefinition definition,
@@ -924,6 +1050,10 @@ public final class GuiService implements Listener {
             handleCustomBehaviourClick(event, player, customBehaviourHolder);
         } else if (holder instanceof ActionPickerHolder pickerHolder) {
             handleActionPickerClick(event, player, pickerHolder);
+        } else if (holder instanceof AiControlHolder aiControlHolder) {
+            handleAiControlClick(event, player, aiControlHolder);
+        } else if (holder instanceof AiMemoryHolder aiMemoryHolder) {
+            handleAiMemoryClick(event, player, aiMemoryHolder);
         } else if (holder instanceof AnimationPickerHolder animationHolder) {
             handleAnimationPickerClick(event, player, animationHolder);
         } else if (holder instanceof BehaviourValuePickerHolder valuePickerHolder) {
@@ -1214,6 +1344,8 @@ public final class GuiService implements Listener {
             }
             case 13 ->
                 openBehaviours(player, definition, 0);
+            case 23 ->
+                openAiControl(player, definition);
             case 22 ->
                 openCustomBehaviours(player, definition, 0);
             case 15 ->
@@ -1692,6 +1824,162 @@ public final class GuiService implements Listener {
                 }
             });
         }
+    }
+
+    private void handleAiControlClick(InventoryClickEvent event, Player player, AiControlHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
+        if (definition == null) {
+            player.closeInventory();
+            return;
+        }
+        int slot = event.getRawSlot();
+        if (slot >= 10 && slot <= 14) {
+            requestAiContext(player, definition, slot);
+            return;
+        }
+        if (slot == 15) {
+            if (event.getClick() == ClickType.SHIFT_RIGHT) {
+                definition.clearAiMemories();
+                definitionRepository.save(definition);
+                player.sendMessage(UiText.info("Cleared all memories for " + definition.getDisplayName() + "."));
+                openAiControl(player, definition);
+            } else if (event.isRightClick()) {
+                AiControlSettings settings = definition.getAiControlSettings();
+                definition.setAiControlSettings(settings.withMemoryEnabled(!settings.memoryEnabled()));
+                definitionRepository.save(definition);
+                openAiControl(player, definition);
+            } else {
+                openAiMemories(player, definition);
+            }
+            return;
+        }
+        if (slot == 20) {
+            boolean enabling = !definition.getAiControlSettings().greetOnApproach();
+            definition.setAiControlSettings(definition.getAiControlSettings().withGreetOnApproach(
+                    enabling));
+            definitionRepository.save(definition);
+            if (enabling && behaviourService != null) behaviourService.greetNearbyPlayers(definition);
+            openAiControl(player, definition);
+            return;
+        }
+        if (slot == 21) {
+            AiControlSettings settings = definition.getAiControlSettings();
+            definition.setAiControlSettings(settings.withReactToNearbyDeaths(
+                    !settings.reactToNearbyDeaths()));
+            definitionRepository.save(definition);
+            openAiControl(player, definition);
+            return;
+        }
+        if (slot == 22) {
+            AiControlSettings settings = definition.getAiControlSettings();
+            definition.setAiControlSettings(settings.withInventoryEnabled(!settings.inventoryEnabled()));
+            definitionRepository.save(definition);
+            openAiControl(player, definition);
+            return;
+        }
+        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
+        List<AiActionType> types = java.util.Arrays.stream(AiActionType.values())
+                .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM).toList();
+        for (int index = 0; index < types.size(); index++) {
+            if (slot != slots[index]) continue;
+            AiActionType type = types.get(index);
+            if (type == AiActionType.SAY) {
+                definition.setAiControlSettings(definition.getAiControlSettings().withRespondToChat(
+                        !definition.getAiControlSettings().respondToChat()));
+                definitionRepository.save(definition);
+            } else if (type != AiActionType.DO_NOTHING) {
+                definition.setAiControlSettings(definition.getAiControlSettings().toggle(type));
+                definitionRepository.save(definition);
+            }
+            openAiControl(player, definition);
+            return;
+        }
+        if (slot == 45) {
+            openEditor(player, definition);
+        } else if (slot == 49) {
+            AiControlSettings settings = definition.getAiControlSettings();
+            if (!settings.enabled() && !settings.hasContext()) {
+                player.sendMessage(Component.text("Configure at least one AI context section before activating AI behaviour."));
+                return;
+            }
+            definition.setAiControlSettings(settings.withEnabled(!settings.enabled()));
+            definitionRepository.save(definition);
+            if (!settings.enabled() && behaviourService != null) behaviourService.greetNearbyPlayers(definition);
+            if (!settings.enabled() && aiControlService != null && !aiControlService.configured()) {
+                player.sendMessage(Component.text("AI behaviour is active, but OpenRouter "
+                        + aiControlService.configurationIssue() + ". Check config.yml and restart the server."));
+            }
+            openAiControl(player, definition);
+        }
+    }
+
+    private void handleAiMemoryClick(InventoryClickEvent event, Player player, AiMemoryHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event)) return;
+        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
+        if (definition == null) {
+            player.closeInventory();
+            return;
+        }
+        int slot = event.getRawSlot();
+        if (slot == 45) {
+            openAiControl(player, definition);
+            return;
+        }
+        if (slot == 49) {
+            requestAiMemory(player, definition, -1);
+            return;
+        }
+        if (slot < 0 || slot >= definition.getAiMemories().size()) return;
+        if (event.isRightClick()) {
+            definition.removeAiMemory(slot);
+            definitionRepository.save(definition);
+            openAiMemories(player, definition);
+        } else {
+            requestAiMemory(player, definition, slot);
+        }
+    }
+
+    private void requestAiMemory(Player player, NpcDefinition definition, int index) {
+        String prompt = index < 0 ? "Enter a fact for the NPC to remember:"
+                : "Edit this memory, or enter 'clear' to delete it:";
+        chatInputService.request(player, prompt, value -> {
+            if (index < 0) definition.addAiMemory(value);
+            else definition.setAiMemory(index, value.equalsIgnoreCase("clear") ? "" : value);
+            definitionRepository.save(definition);
+            openAiMemories(player, definition);
+        });
+    }
+
+    private void requestAiContext(Player player, NpcDefinition definition, int slot) {
+        String section = switch (slot) {
+            case 10 -> "identity";
+            case 11 -> "personality and behaviour";
+            case 12 -> "goal or role";
+            case 13 -> "knowledge and information";
+            case 14 -> "likes and dislikes";
+            default -> throw new IllegalArgumentException("Unknown AI context slot: " + slot);
+        };
+        chatInputService.request(player, "Enter the NPC's " + section + ", or 'clear':", value -> {
+            boolean wasEnabled = definition.getAiControlSettings().enabled();
+            String normalized = value.equalsIgnoreCase("clear") ? "" : value;
+            AiControlSettings current = definition.getAiControlSettings();
+            definition.setAiControlSettings(switch (slot) {
+                case 10 -> current.withIdentity(normalized);
+                case 11 -> current.withBehaviour(normalized);
+                case 12 -> current.withGoal(normalized);
+                case 13 -> current.withInformation(normalized);
+                case 14 -> current.withLikesDislikes(normalized);
+                default -> current;
+            });
+            definitionRepository.save(definition);
+            if (!wasEnabled && definition.getAiControlSettings().enabled() && behaviourService != null) {
+                behaviourService.greetNearbyPlayers(definition);
+            }
+            openAiControl(player, definition);
+        });
     }
 
     private void handleRoutePointAnimationPickerClick(InventoryClickEvent event, Player player,
@@ -3159,6 +3447,14 @@ public final class GuiService implements Listener {
                 Material.COOKED_BEEF;
             case SUNSET ->
                 Material.SUNFLOWER;
+            case PLAYER_CHAT ->
+                Material.WRITABLE_BOOK;
+            case NPC_ATTACKED ->
+                Material.IRON_SWORD;
+            case ENTITY_NEARBY ->
+                Material.OBSERVER;
+            case ROUTE_POINT_REACHED ->
+                Material.POWERED_RAIL;
         };
     }
 
@@ -3403,6 +3699,14 @@ public final class GuiService implements Listener {
         public Inventory getInventory() {
             return null;
         }
+    }
+
+    private record AiControlHolder(String key) implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record AiMemoryHolder(String key) implements InventoryHolder {
+        @Override public Inventory getInventory() { return null; }
     }
 
     private record WaypointSession(

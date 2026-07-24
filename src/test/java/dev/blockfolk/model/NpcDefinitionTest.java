@@ -72,4 +72,16 @@ class NpcDefinitionTest {
                 "day-patrol", "village/night-patrol", "emergency", "market-loop", "return-home"),
                 definition.getReferencedRouteKeys());
     }
+
+    @Test
+    void longTermMemoryDiscardsTheOldestFactAtCapacity() {
+        NpcDefinition definition = NpcDefinition.create("Guard");
+        for (int index = 0; index <= NpcDefinition.MAX_AI_MEMORIES; index++) {
+            definition.addAiMemory("fact " + index);
+        }
+
+        assertEquals(NpcDefinition.MAX_AI_MEMORIES, definition.getAiMemories().size());
+        assertEquals("fact 1", definition.getAiMemories().getFirst());
+        assertEquals("fact " + NpcDefinition.MAX_AI_MEMORIES, definition.getAiMemories().getLast());
+    }
 }

@@ -139,6 +139,15 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     }
 
     @Override
+    public Optional<Location> currentLocation(NpcInstance instance) {
+        Mannequin mannequin = findEntity(instance);
+        if (mannequin == null) {
+            return Optional.empty();
+        }
+        return Optional.of(mannequin.getLocation().subtract(0.0, jumpOffset(instance.getId()), 0.0));
+    }
+
+    @Override
     public Optional<LivingEntity> findLivingEntity(NpcInstance instance) {
         return Optional.ofNullable(findEntity(instance));
     }

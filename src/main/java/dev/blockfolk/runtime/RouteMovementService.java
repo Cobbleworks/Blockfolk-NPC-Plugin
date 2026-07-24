@@ -151,6 +151,8 @@ public final class RouteMovementService {
             int nextIndex = (progress.targetIndex() + 1) % progress.orderedPoints().size();
             progressByInstance.put(instance.getId(), progress.withTargetIndex(nextIndex));
             behaviourService.triggerWaypointActions(targetPoint.actions(), instance);
+            behaviourService.trigger(dev.blockfolk.model.BehaviourEvent.ROUTE_POINT_REACHED,
+                    instance, null, "The NPC reached a route waypoint.");
         } else if (status == NativeNpcNavigationService.NavigationStatus.STALLED) {
             int nextIndex = (progress.targetIndex() + 1) % progress.orderedPoints().size();
             progressByInstance.put(instance.getId(), progress.withTargetIndex(nextIndex));

@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -22,17 +23,23 @@ import net.kyori.adventure.text.Component;
 public final class DialogService {
 
     private static final double DIALOG_DISPLAY_Y_OFFSET = 2.4;
+    private static final String PROCESSING_PREFIX = "Thinking";
     private static final int MINIMUM_LINE_DURATION_SECONDS = 3;
     private static final int CHARACTERS_PER_SECOND = 12;
 
     private final Plugin plugin;
     private final NamespacedKey instanceKey;
     private final Map<UUID, DialogRuntime> displays = new HashMap<>();
+    private Function<NpcInstance, Location> locationProvider = NpcInstance::getLocation;
     private BukkitTask task;
 
     public DialogService(Plugin plugin) {
         this.plugin = plugin;
         this.instanceKey = new NamespacedKey(plugin, "dialog-instance-id");
+    }
+
+    public void setLocationProvider(Function<NpcInstance, Location> locationProvider) {
+        this.locationProvider = locationProvider == null ? NpcInstance::getLocation : locationProvider;
     }
 
     public static int lineDurationSeconds(String line) {
@@ -45,7 +52,7 @@ public final class DialogService {
     }
 
     public void start() {
-        task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 20L, 20L);
+        task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
     }
 
     public void stop() {
@@ -68,7 +75,7 @@ public final class DialogService {
     }
 
     public void move(NpcInstance instance) {
-        Location location = instance.getLocation();
+        Location location = locationProvider.apply(instance);
         if (location.getWorld() == null) {
             return;
         }
@@ -91,19 +98,45 @@ public final class DialogService {
      * text length.
      */
     public void showHologram(NpcInstance instance, NpcDefinition definition, String line) {
-        if (line == null || line.isBlank() || instance.getLocation().getWorld() == null) {
+        Location npcLocation = locationProvider.apply(instance);
+        if (line == null || line.isBlank() || npcLocation.getWorld() == null) {
             return;
         }
         DialogRuntime runtime = displays.get(instance.getId());
         if (runtime == null || !runtime.display.isValid()) {
-            Location location = instance.getLocation().add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0);
+            Location location = npcLocation.add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0);
             TextDisplay display = (TextDisplay) location.getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
             configureDisplay(display, instance);
-            runtime = new DialogRuntime(display);
+            runtime = new DialogRuntime(display, instance);
             displays.put(instance.getId(), runtime);
         }
         runtime.display.text(Component.text(line));
-        runtime.overrideSeconds = lineDurationSeconds(line);
+        runtime.processing = false;
+        runtime.remainingTicks = lineDurationSeconds(line) * 20;
+    }
+
+    public void showProcessing(NpcInstance instance) {
+        Location npcLocation = locationProvider.apply(instance);
+        if (npcLocation.getWorld() == null) return;
+        DialogRuntime runtime = displays.get(instance.getId());
+        if (runtime == null || !runtime.display.isValid()) {
+            Location location = npcLocation.add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0);
+            TextDisplay display = (TextDisplay) location.getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
+            configureDisplay(display, instance);
+            runtime = new DialogRuntime(display, instance);
+            displays.put(instance.getId(), runtime);
+        }
+        runtime.processing = true;
+        runtime.processingFrame = 0;
+        runtime.processingFrameTicks = 0;
+        runtime.display.text(Component.text(PROCESSING_PREFIX + "."));
+    }
+
+    public void hideProcessing(NpcInstance instance) {
+        DialogRuntime runtime = displays.get(instance.getId());
+        if (runtime == null || !runtime.processing) return;
+        runtime.display.remove();
+        displays.remove(instance.getId());
     }
 
     private void removeTaggedDisplays(UUID instanceId) {
@@ -122,7 +155,24 @@ public final class DialogService {
         Iterator<Map.Entry<UUID, DialogRuntime>> displayIterator = displays.entrySet().iterator();
         while (displayIterator.hasNext()) {
             DialogRuntime runtime = displayIterator.next().getValue();
-            if (--runtime.overrideSeconds <= 0) {
+            if (!runtime.display.isValid()) {
+                displayIterator.remove();
+                continue;
+            }
+            Location location = locationProvider.apply(runtime.instance);
+            if (location.getWorld() != null) {
+                runtime.display.teleport(location.add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0));
+            }
+            if (runtime.processing) {
+                if (++runtime.processingFrameTicks >= 20) {
+                    runtime.processingFrameTicks = 0;
+                    runtime.processingFrame = (runtime.processingFrame + 1) % 3;
+                    runtime.display.text(Component.text(PROCESSING_PREFIX
+                            + ".".repeat(runtime.processingFrame + 1)));
+                }
+                continue;
+            }
+            if (--runtime.remainingTicks <= 0) {
                 runtime.display.remove();
                 displayIterator.remove();
             }
@@ -132,10 +182,15 @@ public final class DialogService {
     private static final class DialogRuntime {
 
         private final TextDisplay display;
-        private int overrideSeconds;
+        private final NpcInstance instance;
+        private int remainingTicks;
+        private boolean processing;
+        private int processingFrame;
+        private int processingFrameTicks;
 
-        private DialogRuntime(TextDisplay display) {
+        private DialogRuntime(TextDisplay display, NpcInstance instance) {
             this.display = display;
+            this.instance = instance;
         }
     }
 }

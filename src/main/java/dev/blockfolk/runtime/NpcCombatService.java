@@ -107,18 +107,39 @@ public final class NpcCombatService implements Listener {
         return states.containsKey(instance.getId());
     }
 
+    public Entity currentTarget(NpcInstance instance) {
+        CombatState state = states.get(instance.getId());
+        return state == null ? null : Bukkit.getEntity(state.entityId);
+    }
+
     public void setBehaviourService(NpcBehaviourService behaviourService) {
         this.behaviourService = behaviourService;
     }
 
-    public void startCombat(NpcInstance instance, Entity target) {
+    public boolean startCombat(NpcInstance instance, Entity target) {
         if (!(target instanceof LivingEntity living) || !isAttackable(instance, living)) {
-            return;
+            return false;
         }
         NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
         if (definition != null && !definition.getCombatProfile().invulnerable()) {
             engage(instance, definition, CombatMode.FIGHT, living);
+            return true;
         }
+        return false;
+    }
+
+    /** Finds the closest entity the NPC may legally attack, independent of aggression settings. */
+    public LivingEntity findNearestAttackableTarget(NpcInstance instance) {
+        LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
+        if (npc == null) return null;
+        return npc.getNearbyEntities(SIGHT_RANGE, SIGHT_RANGE, SIGHT_RANGE).stream()
+                .filter(LivingEntity.class::isInstance)
+                .map(LivingEntity.class::cast)
+                .filter(target -> isAttackable(instance, target))
+                .filter(target -> target.getLocation().distanceSquared(npc.getLocation()) <= SIGHT_RANGE * SIGHT_RANGE)
+                .filter(npc::hasLineOfSight)
+                .min(Comparator.comparingDouble(target -> target.getLocation().distanceSquared(npc.getLocation())))
+                .orElse(null);
     }
 
     public void exitCombat(NpcInstance instance) {

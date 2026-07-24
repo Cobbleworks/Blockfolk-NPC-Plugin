@@ -1,0 +1,26 @@
+package dev.blockfolk.ai;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.UUID;
+
+import org.junit.jupiter.api.Test;
+
+class AiMemoryStoreTest {
+
+    @Test
+    void conversationsAreScopedToOneSpawnedNpc() {
+        AiMemoryStore memory = new AiMemoryStore();
+        UUID firstNpc = UUID.randomUUID();
+        UUID secondNpc = UUID.randomUUID();
+        UUID player = UUID.randomUUID();
+
+        memory.rememberMessage(firstNpc, player, "Player: hello");
+
+        assertEquals(1, memory.recentConversation(firstNpc, player).size());
+        assertTrue(memory.recentConversation(secondNpc, player).isEmpty());
+        memory.forget(firstNpc);
+        assertTrue(memory.recentConversation(firstNpc, player).isEmpty());
+    }
+}

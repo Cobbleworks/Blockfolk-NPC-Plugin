@@ -1,5 +1,7 @@
 package dev.blockfolk.repository;
 
+import dev.blockfolk.ai.AiActionType;
+import dev.blockfolk.ai.AiControlSettings;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -114,6 +116,24 @@ public final class NpcDefinitionRepository {
         configuration.set("properties.item-pickup", definition.isItemPickup());
         configuration.set("properties.pushable", definition.isPushable());
         configuration.set("properties.color", definition.getColor().name().toLowerCase(Locale.ROOT));
+        AiControlSettings ai = definition.getAiControlSettings();
+        configuration.set("ai-control.enabled", ai.enabled());
+        configuration.set("ai-control.prompt", null);
+        configuration.set("ai-control.mode", null);
+        configuration.set("ai-control.identity", ai.identity().isBlank() ? null : ai.identity());
+        configuration.set("ai-control.behaviour", ai.behaviour().isBlank() ? null : ai.behaviour());
+        configuration.set("ai-control.likes-dislikes", ai.likesDislikes().isBlank() ? null : ai.likesDislikes());
+        configuration.set("ai-control.goal", ai.goal().isBlank() ? null : ai.goal());
+        configuration.set("ai-control.information", ai.information().isBlank() ? null : ai.information());
+        configuration.set("ai-control.greet-on-approach", ai.greetOnApproach());
+        configuration.set("ai-control.respond-to-chat", ai.respondToChat());
+        configuration.set("ai-control.react-to-nearby-deaths", ai.reactToNearbyDeaths());
+        configuration.set("ai-control.memory.enabled", ai.memoryEnabled());
+        configuration.set("ai-control.inventory.enabled", ai.inventoryEnabled());
+        configuration.set("ai-control.memory.facts", definition.getAiMemories());
+        configuration.set("ai-control.allowed-actions", ai.allowedActions().stream()
+                .filter(action -> action != AiActionType.REMEMBER_FACT && action != AiActionType.DROP_ITEM)
+                .map(action -> action.name().toLowerCase(Locale.ROOT)).sorted().toList());
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<Map<String, Object>> actions = BehaviourActionCodec.encodeList(definition.getBehaviourActions(event));
             configuration.set("behaviours." + event.name().toLowerCase(Locale.ROOT), actions.isEmpty() ? null : actions);
@@ -219,6 +239,39 @@ public final class NpcDefinitionRepository {
         definition.setItemPickup(configuration.getBoolean("properties.item-pickup", false));
         definition.setPushable(configuration.getBoolean("properties.pushable", true));
         definition.setColor(NpcColor.fromStored(configuration.getString("properties.color")));
+        java.util.EnumSet<AiActionType> allowedAiActions = java.util.EnumSet.noneOf(AiActionType.class);
+        for (String stored : configuration.getStringList("ai-control.allowed-actions")) {
+            if (stored.trim().replace('-', '_').equalsIgnoreCase("LOOK_AT")) continue;
+            try {
+                allowedAiActions.add(AiActionType.fromModel(stored));
+            } catch (IllegalArgumentException ignored) {
+                plugin.getLogger().warning("Ignoring unknown AI action '" + stored + "' in " + file.getName());
+            }
+        }
+        if (allowedAiActions.isEmpty()) allowedAiActions.addAll(AiActionType.safeDefaults());
+        String legacyAiPrompt = configuration.getString("ai-control.prompt", "");
+        String identity = configuration.getString("ai-control.identity", legacyAiPrompt);
+        String behaviour = configuration.getString("ai-control.behaviour", "");
+        String likesDislikes = configuration.getString("ai-control.likes-dislikes", "");
+        String goal = configuration.getString("ai-control.goal", "");
+        String information = configuration.getString("ai-control.information", "");
+        boolean legacyAiEnabled = hasLegacyAiControl(configuration);
+        definition.setAiControlSettings(new AiControlSettings(
+                identity,
+                behaviour,
+                likesDislikes,
+                goal,
+                information,
+                allowedAiActions,
+                configuration.getBoolean("ai-control.enabled", legacyAiEnabled
+                        || !identity.isBlank() || !behaviour.isBlank() || !likesDislikes.isBlank()
+                        || !goal.isBlank() || !information.isBlank()),
+                configuration.getBoolean("ai-control.greet-on-approach", false),
+                configuration.getBoolean("ai-control.respond-to-chat", true),
+                configuration.getBoolean("ai-control.react-to-nearby-deaths", false),
+                configuration.getBoolean("ai-control.memory.enabled", false),
+                configuration.getBoolean("ai-control.inventory.enabled", false)));
+        definition.setAiMemories(configuration.getStringList("ai-control.memory.facts"));
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<BehaviourAction> actions = new ArrayList<>();
             String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);
@@ -240,6 +293,7 @@ public final class NpcDefinitionRepository {
                 if (type == null) {
                     continue;
                 }
+                if (isLegacyAiControl(type)) continue;
                 try {
                     actions.add(BehaviourActionCodec.decode(entry));
                 } catch (IllegalArgumentException ignored) {
@@ -264,6 +318,9 @@ public final class NpcDefinitionRepository {
                     if (type == null) {
                         continue;
                     }
+                    if (isLegacyAiControl(type)) {
+                        continue;
+                    }
                     try {
                         actions.add(BehaviourActionCodec.decode(entry));
                     } catch (IllegalArgumentException ignored) {
@@ -274,6 +331,27 @@ public final class NpcDefinitionRepository {
             }
         }
         return definition;
+    }
+
+    private static boolean isLegacyAiControl(Object type) {
+        return type.toString().trim().replace('-', '_').equalsIgnoreCase("AI_CONTROL");
+    }
+
+    private static boolean hasLegacyAiControl(ConfigurationSection configuration) {
+        for (BehaviourEvent event : BehaviourEvent.values()) {
+            for (Map<?, ?> entry : configuration.getMapList(
+                    "behaviours." + event.name().toLowerCase(Locale.ROOT))) {
+                if (entry.get("type") != null && isLegacyAiControl(entry.get("type"))) return true;
+            }
+        }
+        ConfigurationSection custom = configuration.getConfigurationSection("custom-event-behaviours");
+        if (custom == null) return false;
+        for (String event : custom.getKeys(false)) {
+            for (Map<?, ?> entry : custom.getMapList(event)) {
+                if (entry.get("type") != null && isLegacyAiControl(entry.get("type"))) return true;
+            }
+        }
+        return false;
     }
 
     private static String encodeEventName(String value) {
