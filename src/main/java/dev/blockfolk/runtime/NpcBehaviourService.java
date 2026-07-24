@@ -1,5 +1,6 @@
 package dev.blockfolk.runtime;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -46,6 +48,9 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.block.BlockRedstoneEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
@@ -74,6 +79,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 public final class NpcBehaviourService implements Listener {
 
     private static final double DIALOG_RANGE_SQUARED = 12.0 * 12.0;
+    private static final double CHAT_RANGE_SQUARED = 8.0 * 8.0;
     private static final double APPROACH_RANGE_SQUARED = 8.0 * 8.0;
     private static final double LEAVE_RANGE_SQUARED = 10.0 * 10.0;
     private static final double HEAL_BURST_THRESHOLD = 4.0;
@@ -109,6 +115,7 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, Long> lastWorldTimes = new HashMap<>();
     private final Map<UUID, Set<UUID>> observedEntities = new HashMap<>();
     private final Map<UUID, Long> entityNearbyCooldownUntilTick = new HashMap<>();
+    private final Map<UUID, Location> playerLocationSnapshots = new ConcurrentHashMap<>();
     private final long proximityCooldownTicks;
     private NpcCombatService combatService;
     private AiControlService aiControlService;
@@ -151,6 +158,8 @@ public final class NpcBehaviourService implements Listener {
 
     public void start() {
         stop();
+        Bukkit.getOnlinePlayers().forEach(player ->
+                playerLocationSnapshots.put(player.getUniqueId(), player.getLocation().clone()));
         behaviourTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickBehaviour, 1L, 1L);
     }
 
@@ -170,6 +179,7 @@ public final class NpcBehaviourService implements Listener {
         lastWorldTimes.clear();
         observedEntities.clear();
         entityNearbyCooldownUntilTick.clear();
+        playerLocationSnapshots.clear();
     }
 
     public void trigger(BehaviourEvent event, NpcInstance instance, Entity actor) {
@@ -463,34 +473,65 @@ public final class NpcBehaviourService implements Listener {
     public void onPlayerChat(AsyncChatEvent event) {
         Player player = event.getPlayer();
         String message = PlainTextComponentSerializer.plainText().serialize(event.message());
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            List<NpcInstance> nearby = instances.findAll().stream()
-                    .filter(instance -> instance.getLocation().getWorld() == player.getWorld()
-                            && instance.getLocation().distanceSquared(player.getLocation()) <= 8.0 * 8.0)
-                    .sorted(java.util.Comparator.comparingDouble(
-                            instance -> instance.getLocation().distanceSquared(player.getLocation())))
-                    .toList();
-            List<NpcInstance> aiGroup = new ArrayList<>();
-            String detail = "Player " + player.getName() + " said: \"" + message + "\"";
-            for (NpcInstance instance : nearby) {
-                NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-                if (definition == null) continue;
-                if (aiControlService != null && definition.getAiControlSettings().enabled()
-                        && definition.getAiControlSettings().respondToChat()) {
-                    aiControlService.rememberPlayerMessage(instance, player, message);
-                    aiGroup.add(instance);
-                }
-                if (!definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT).isEmpty()) {
-                    trigger(BehaviourEvent.PLAYER_CHAT, instance, player, detail);
-                }
+        Location chatLocation = playerLocationSnapshots.get(player.getUniqueId());
+        Bukkit.getScheduler().runTask(plugin, () ->
+                handlePlayerChat(player, message,
+                        chatLocation == null ? player.getLocation().clone() : chatLocation));
+    }
+
+    private void handlePlayerChat(Player player, String message, Location chatLocation) {
+        List<NpcInstance> nearby = nearbyChatInstances(instances.findAll(), chatLocation);
+        List<NpcInstance> aiGroup = new ArrayList<>();
+        String detail = "Player " + player.getName() + " said: \"" + message + "\"";
+        for (NpcInstance instance : nearby) {
+            NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+            if (definition == null) continue;
+            if (aiControlService != null && definition.getAiControlSettings().enabled()
+                    && definition.getAiControlSettings().respondToChat()) {
+                aiControlService.rememberPlayerMessage(instance, player, message);
+                aiGroup.add(instance);
             }
-            if (aiControlService != null && !aiGroup.isEmpty()) {
-                aiControlService.invokeChatGroup(detail, aiGroup, player, (instance, decision) ->
-                        definitions.find(instance.getDefinitionKey()).ifPresent(definition ->
-                                applyAiDecision(BehaviourEvent.PLAYER_CHAT, decision, instance, definition, player,
-                                        false)));
+            if (!definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT).isEmpty()) {
+                trigger(BehaviourEvent.PLAYER_CHAT, instance, player, detail);
             }
-        });
+        }
+        if (aiControlService != null && !aiGroup.isEmpty()) {
+            aiControlService.invokeChatGroup(detail, aiGroup, player, (instance, decision) ->
+                    definitions.find(instance.getDefinitionKey()).ifPresent(definition ->
+                            applyAiDecision(BehaviourEvent.PLAYER_CHAT, decision, instance, definition, player,
+                                    false)));
+        }
+    }
+
+    static List<NpcInstance> nearbyChatInstances(Collection<NpcInstance> candidates, Location chatLocation) {
+        return candidates.stream()
+                .filter(instance -> instance.getLocation().getWorld() == chatLocation.getWorld()
+                        && coordinateDistanceSquared(instance.getLocation(), chatLocation) <= CHAT_RANGE_SQUARED)
+                .sorted(java.util.Comparator.comparingDouble(
+                        instance -> coordinateDistanceSquared(instance.getLocation(), chatLocation)))
+                .toList();
+    }
+
+    private static double coordinateDistanceSquared(Location one, Location two) {
+        double x = one.getX() - two.getX();
+        double y = one.getY() - two.getY();
+        double z = one.getZ() - two.getZ();
+        return x * x + y * y + z * z;
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerMove(PlayerMoveEvent event) {
+        playerLocationSnapshots.put(event.getPlayer().getUniqueId(), event.getTo().clone());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        playerLocationSnapshots.put(event.getPlayer().getUniqueId(), event.getPlayer().getLocation().clone());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        playerLocationSnapshots.remove(event.getPlayer().getUniqueId());
     }
 
     private void checkLowHealth(NpcInstance instance, Entity actor) {

@@ -17,9 +17,9 @@ run independently for every nearby NPC.
 
 An NPC that enters chat range while already handling another AI event does not hold up the
 existing group. Available NPCs answer immediately, and the busy newcomer becomes eligible
-to participate in a later player message after its current request finishes. Before queued
-chat runs, its NPC list is checked against the player's current location so NPCs the player
-has left behind do not answer stale messages.
+to participate in a later player message after its current request finishes. Chat range is
+captured when the message is sent. Moving across the eight-block boundary while the request
+is queued therefore does not silently discard the message or change which NPCs heard it.
 
 Opening the NPC preset's admin editor clears AI memory and queued interactions for every
 spawned instance of that preset. Conversation history otherwise has no time or distance

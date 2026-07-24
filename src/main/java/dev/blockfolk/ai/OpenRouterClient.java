@@ -6,6 +6,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -76,7 +77,10 @@ public final class OpenRouterClient {
                         throw new IllegalStateException("OpenRouter returned HTTP " + response.statusCode());
                     }
                     return responseContent(response.body());
-                });
+                })
+                // HttpRequest.timeout normally covers this, but an explicit future
+                // deadline also guarantees callers can clear their in-flight state.
+                .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     static String responseContent(String body) {

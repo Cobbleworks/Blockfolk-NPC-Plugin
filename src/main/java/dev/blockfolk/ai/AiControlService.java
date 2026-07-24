@@ -506,9 +506,6 @@ public final class AiControlService {
             if (invocation == null || !invocation.player().isOnline()) return;
             List<NpcInstance> nearbyCandidates = invocation.candidates().stream()
                     .filter(candidate -> instances.findById(candidate.getId()).isPresent())
-                    .filter(candidate -> candidate.getLocation().getWorld() == invocation.player().getWorld())
-                    .filter(candidate -> candidate.getLocation().distanceSquared(invocation.player().getLocation())
-                            <= 8.0 * 8.0)
                     .toList();
             if (nearbyCandidates.isEmpty()) return;
             invokeChatGroup(invocation.eventDetail(), nearbyCandidates, invocation.player(),
