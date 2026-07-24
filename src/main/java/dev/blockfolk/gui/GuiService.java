@@ -10,7 +10,6 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -69,7 +68,6 @@ import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
 import dev.blockfolk.util.UiText;
-import dev.blockfolk.ai.AiActionType;
 import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.AiControlSettings;
 import net.kyori.adventure.text.Component;
@@ -97,6 +95,7 @@ public final class GuiService implements Listener {
             Map.entry(3, BehaviourActionType.ASK_QUESTION),
             Map.entry(4, BehaviourActionType.EMIT_EVENT),
             Map.entry(5, BehaviourActionType.RUN_CONSOLE_COMMAND),
+            Map.entry(6, BehaviourActionType.AI_TRIGGER),
             Map.entry(7, BehaviourActionType.WAIT),
             // Movement and navigation
             Map.entry(10, BehaviourActionType.SET_ROUTE),
@@ -143,6 +142,7 @@ public final class GuiService implements Listener {
     private final NamespacedKey waypointActionKey;
     private final NamespacedKey waypointTokenKey;
     private final NamespacedKey reorderIconKey;
+    private final AiGuiService aiGuiService;
     private NpcBehaviourService behaviourService;
     private AiControlService aiControlService;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
@@ -180,6 +180,7 @@ public final class GuiService implements Listener {
         this.waypointActionKey = new NamespacedKey(plugin, "behaviour-waypoint-action");
         this.waypointTokenKey = new NamespacedKey(plugin, "behaviour-waypoint-token");
         this.reorderIconKey = new NamespacedKey(plugin, "reorder-definition");
+        this.aiGuiService = new AiGuiService(definitionRepository, chatInputService, this::openEditor);
     }
 
     public void setBehaviourService(NpcBehaviourService behaviourService) {
@@ -188,6 +189,7 @@ public final class GuiService implements Listener {
 
     public void setAiControlService(AiControlService aiControlService) {
         this.aiControlService = aiControlService;
+        this.aiGuiService.setAiControlService(aiControlService);
     }
 
     public void stop() {
@@ -377,7 +379,7 @@ public final class GuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Reorder NPC Presets"));
         renderReorder(inventory, holder);
         openInventory(player, inventory);
-        restoreReorderCursor(player, holder);
+        ReorderSupport.restoreCursor(player, holder, this::reorderIcon);
     }
 
     private void renderReorder(Inventory inventory, ReorderHolder holder) {
@@ -419,6 +421,10 @@ public final class GuiService implements Listener {
         meta.getPersistentDataContainer().set(reorderIconKey, PersistentDataType.STRING, definition.getKey());
         icon.setItemMeta(meta);
         return icon;
+    }
+
+    private ItemStack reorderIcon(String key, int index) {
+        return definitionRepository.find(key).map(definition -> reorderIcon(definition, index)).orElse(null);
     }
 
     public void openEditor(Player player, NpcDefinition definition) {
@@ -477,16 +483,16 @@ public final class GuiService implements Listener {
         )));
         AiControlSettings ai = definition.getAiControlSettings();
         String aiStatus = !ai.enabled() ? "Paused"
-                : ai.greetOnApproach() || ai.respondToChat() || ai.reactToNearbyDeaths() ? "Active" : "No Triggers";
+                : aiGuiService.hasTrigger(definition) || ai.respondToChat() ? "Active" : "No Triggers";
         inventory.setItem(23, item(ai.enabled()
                         ? Material.OXIDIZED_COPPER_GOLEM_STATUE
                         : Material.COPPER_GOLEM_STATUE,
                 "AI Behaviour: " + aiStatus, List.of(
-                        ChatColor.GRAY + "Context sections: " + ChatColor.WHITE
+                        LegacyText.GRAY + "Context sections: " + LegacyText.WHITE
                                 + ai.configuredSectionCount() + "/5",
-                        providerStatusLore(),
-                         ChatColor.GRAY + "Optional chat, approach, and nearby-death reactions",
-                         ChatColor.YELLOW + "Click to configure"
+                        aiGuiService.providerStatusLore(),
+                         LegacyText.GRAY + "Triggered by behaviours and chat",
+                         LegacyText.YELLOW + "Click to configure"
                  )));
         CombatProfile combat = definition.getCombatProfile();
         inventory.setItem(15, item(Material.IRON_SWORD, "Fighting", List.of(
@@ -790,106 +796,7 @@ public final class GuiService implements Listener {
     }
 
     private void openAiControl(Player player, NpcDefinition definition) {
-        AiControlSettings settings = definition.getAiControlSettings();
-        Inventory inventory = Bukkit.createInventory(new AiControlHolder(definition.getKey()), 54,
-                Component.text("AI Behaviour"));
-        inventory.setItem(10, aiContextItem(Material.NAME_TAG, "Identity", settings.identity(),
-                "Who this NPC is, its name, history, and role"));
-        inventory.setItem(11, aiContextItem(Material.WRITABLE_BOOK, "Personality & Behaviour", settings.behaviour(),
-                "How it speaks, acts, reacts, and treats others"));
-        inventory.setItem(12, aiContextItem(Material.COMPASS, "Goal / Role", settings.goal(),
-                "What it should accomplish or prioritize"));
-        inventory.setItem(13, aiContextItem(Material.KNOWLEDGE_BOOK, "Knowledge / Information", settings.information(),
-                "Facts, lore, rules, and local knowledge it may use"));
-        inventory.setItem(14, aiContextItem(Material.CAKE, "Likes & Dislikes", settings.likesDislikes(),
-                "Things it enjoys, avoids, values, or strongly dislikes"));
-        inventory.setItem(15, item(settings.memoryEnabled() ? Material.ENDER_CHEST : Material.CHEST,
-                "Memory: " + (settings.memoryEnabled() ? "Enabled" : "Disabled"), List.of(
-                        ChatColor.GRAY + "Long-term facts: " + ChatColor.WHITE + definition.getAiMemories().size()
-                                + ChatColor.GRAY + " / " + NpcDefinition.MAX_AI_MEMORIES,
-                        ChatColor.GRAY + "Enabled memories provide context and let the AI remember facts",
-                        ChatColor.YELLOW + "Left-click to view and edit",
-                        ChatColor.YELLOW + "Right-click to " + (settings.memoryEnabled() ? "disable" : "enable"),
-                        ChatColor.RED + "Shift-right-click to clear all memories")));
-        inventory.setItem(20, toggleItem(Material.SPYGLASS, "Greet On Approach",
-                settings.greetOnApproach(), "Lets the NPC speak when a player comes close"));
-        inventory.setItem(21, toggleItem(Material.SKELETON_SKULL, "React To Nearby Deaths",
-                settings.reactToNearbyDeaths(), "Lets the NPC comment when someone dies within 12 blocks"));
-        inventory.setItem(22, toggleItem(Material.CHEST, "Temporary Inventory",
-                settings.inventoryEnabled(), "Lets the AI see and drop items carried by each spawned instance"));
-        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
-        List<AiActionType> types = java.util.Arrays.stream(AiActionType.values())
-                .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM).toList();
-        for (int index = 0; index < types.size(); index++) {
-            AiActionType type = types.get(index);
-            boolean chatToggle = type == AiActionType.SAY;
-            boolean intrinsic = type == AiActionType.DO_NOTHING;
-            boolean enabled = chatToggle ? settings.respondToChat()
-                    : intrinsic || settings.allowedActions().contains(type);
-            String displayName = chatToggle ? "Respond to Nearby Chat" : type.displayName();
-            inventory.setItem(slots[index], item(enabled ? Material.REDSTONE_TORCH : Material.LEVER,
-                    displayName + ": " + (enabled ? "Enabled" : "Disabled"), List.of(
-                            chatToggle
-                                    ? ChatColor.GRAY + "Reads and answers player chat within 8 blocks"
-                                    : ChatColor.GRAY + "Available when this capability is enabled",
-                            intrinsic ? ChatColor.DARK_GRAY + "Always available"
-                                    : ChatColor.YELLOW + "Click to toggle")));
-        }
-        inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
-        boolean hasTrigger = settings.greetOnApproach() || settings.respondToChat()
-                || settings.reactToNearbyDeaths();
-        String status = !settings.enabled() ? "Paused" : hasTrigger ? "Active" : "No Triggers";
-        Material statusMaterial = !settings.enabled() ? Material.RED_DYE
-                : hasTrigger ? Material.LIME_DYE : Material.YELLOW_DYE;
-        inventory.setItem(49, item(statusMaterial,
-                "AI Behaviour: " + status, List.of(
-                        ChatColor.GRAY + "Applies to every spawned instance of this preset",
-                        hasTrigger ? ChatColor.GRAY + "Automatic triggers are configured"
-                                : ChatColor.RED + "No requests are made and nearby chat is not read",
-                        ChatColor.YELLOW + "Click to " + (settings.enabled() ? "pause" : "resume"))));
-        openInventory(player, inventory);
-    }
-
-    private void openAiMemories(Player player, NpcDefinition definition) {
-        Inventory inventory = Bukkit.createInventory(new AiMemoryHolder(definition.getKey()), 54,
-                UiText.title("Memory", definition.getDisplayName()));
-        List<String> memories = definition.getAiMemories();
-        for (int index = 0; index < memories.size(); index++) {
-            inventory.setItem(index, item(Material.PAPER, "Memory " + (index + 1), List.of(
-                    ChatColor.WHITE + abbreviate(memories.get(index), 96),
-                    ChatColor.YELLOW + "Left-click to edit",
-                    ChatColor.RED + "Right-click to delete")));
-        }
-        inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
-        inventory.setItem(49, item(Material.LIME_DYE, "Add Memory", List.of(
-                ChatColor.GRAY + "The oldest memory is discarded when all 45 slots are full",
-                ChatColor.YELLOW + "Click to add a fact")));
-        GuiLayout.fillMainBar(inventory);
-        openInventory(player, inventory);
-    }
-
-    private ItemStack aiContextItem(Material material, String name, String value, String description) {
-        return item(material, name, List.of(
-                ChatColor.GRAY + description,
-                value.isBlank() ? ChatColor.DARK_GRAY + "Not configured"
-                        : ChatColor.WHITE + abbreviate(value, 48),
-                ChatColor.YELLOW + "Click to edit; enter 'clear' to remove"
-        ));
-    }
-
-    private String providerStatusLore() {
-        return aiControlService != null && aiControlService.configured()
-                ? ChatColor.GREEN + "OpenRouter is ready"
-                : ChatColor.RED + "OpenRouter: " + providerConfigurationIssue();
-    }
-
-    private String providerConfigurationIssue() {
-        return aiControlService == null ? "service unavailable" : aiControlService.configurationIssue();
-    }
-
-    private String abbreviate(String value, int max) {
-        String oneLine = value.replace('\n', ' ');
-        return oneLine.length() <= max ? oneLine : oneLine.substring(0, max - 3) + "...";
+        aiGuiService.open(player, definition);
     }
 
     private void openBehaviourValuePicker(
@@ -1050,10 +957,8 @@ public final class GuiService implements Listener {
             handleCustomBehaviourClick(event, player, customBehaviourHolder);
         } else if (holder instanceof ActionPickerHolder pickerHolder) {
             handleActionPickerClick(event, player, pickerHolder);
-        } else if (holder instanceof AiControlHolder aiControlHolder) {
-            handleAiControlClick(event, player, aiControlHolder);
-        } else if (holder instanceof AiMemoryHolder aiMemoryHolder) {
-            handleAiMemoryClick(event, player, aiMemoryHolder);
+        } else if (aiGuiService.handles(holder)) {
+            aiGuiService.handleClick(event, player);
         } else if (holder instanceof AnimationPickerHolder animationHolder) {
             handleAnimationPickerClick(event, player, animationHolder);
         } else if (holder instanceof BehaviourValuePickerHolder valuePickerHolder) {
@@ -1122,7 +1027,7 @@ public final class GuiService implements Listener {
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
         if (event.getInventory().getHolder() instanceof ReorderHolder) {
-            clearReorderCursor(event.getPlayer());
+            ReorderSupport.clearCursor(event.getPlayer(), reorderIconKey);
             return;
         }
         if (event.getInventory().getHolder() instanceof NpcInventoryHolder holder) {
@@ -1205,7 +1110,7 @@ public final class GuiService implements Listener {
             return;
         }
         if (slot == 48) {
-            clearReorderSelection(player, holder);
+            ReorderSupport.clearSelection(player, holder, reorderIconKey);
             try {
                 definitionRepository.reorder(holder.keys);
                 player.sendMessage(UiText.success("NPC preset order saved."));
@@ -1218,64 +1123,12 @@ public final class GuiService implements Listener {
             return;
         }
         if (slot == 50) {
-            clearReorderSelection(player, holder);
+            ReorderSupport.clearSelection(player, holder, reorderIconKey);
             openMain(player, holder.returnPage);
             return;
         }
-        if (slot < 0 || slot >= PAGE_SIZE) {
-            return;
-        }
-
-        int targetIndex = Math.min(holder.page * PAGE_SIZE + slot, holder.keys.size() - 1);
-        if (targetIndex < 0) {
-            return;
-        }
-        if (holder.selectedKey == null) {
-            int sourceIndex = holder.page * PAGE_SIZE + slot;
-            if (sourceIndex >= holder.keys.size() || !isEmpty(player.getItemOnCursor())) {
-                return;
-            }
-            holder.selectedKey = holder.keys.get(sourceIndex);
-            event.getView().getTopInventory().setItem(slot, null);
-            restoreReorderCursor(player, holder);
-            return;
-        }
-
-        int sourceIndex = holder.keys.indexOf(holder.selectedKey);
-        if (sourceIndex >= 0 && sourceIndex != targetIndex) {
-            String moved = holder.keys.remove(sourceIndex);
-            holder.keys.add(targetIndex, moved);
-        }
-        clearReorderSelection(player, holder);
-        renderReorder(event.getView().getTopInventory(), holder);
-    }
-
-    private void restoreReorderCursor(Player player, ReorderHolder holder) {
-        if (holder.selectedKey == null) {
-            return;
-        }
-        definitionRepository.find(holder.selectedKey).ifPresent(definition -> {
-            int index = holder.keys.indexOf(holder.selectedKey);
-            player.setItemOnCursor(reorderIcon(definition, index));
-        });
-    }
-
-    private void clearReorderSelection(Player player, ReorderHolder holder) {
-        holder.selectedKey = null;
-        clearReorderCursor(player);
-    }
-
-    private void clearReorderCursor(org.bukkit.entity.HumanEntity player) {
-        ItemStack cursor = player.getItemOnCursor();
-        ItemMeta meta = isEmpty(cursor) ? null : cursor.getItemMeta();
-        if (meta != null
-                && meta.getPersistentDataContainer().has(reorderIconKey, PersistentDataType.STRING)) {
-            player.setItemOnCursor(null);
-        }
-    }
-
-    private boolean isEmpty(ItemStack item) {
-        return item == null || item.getType().isAir();
+        ReorderSupport.selectOrMove(event, player, holder, PAGE_SIZE, reorderIconKey,
+                this::reorderIcon, inventory -> renderReorder(inventory, holder));
     }
 
     private void beginCreate(Player player, int returnPage) {
@@ -1826,162 +1679,6 @@ public final class GuiService implements Listener {
         }
     }
 
-    private void handleAiControlClick(InventoryClickEvent event, Player player, AiControlHolder holder) {
-        event.setCancelled(true);
-        if (!isTopInventoryClick(event)) return;
-        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
-        if (definition == null) {
-            player.closeInventory();
-            return;
-        }
-        int slot = event.getRawSlot();
-        if (slot >= 10 && slot <= 14) {
-            requestAiContext(player, definition, slot);
-            return;
-        }
-        if (slot == 15) {
-            if (event.getClick() == ClickType.SHIFT_RIGHT) {
-                definition.clearAiMemories();
-                definitionRepository.save(definition);
-                player.sendMessage(UiText.info("Cleared all memories for " + definition.getDisplayName() + "."));
-                openAiControl(player, definition);
-            } else if (event.isRightClick()) {
-                AiControlSettings settings = definition.getAiControlSettings();
-                definition.setAiControlSettings(settings.withMemoryEnabled(!settings.memoryEnabled()));
-                definitionRepository.save(definition);
-                openAiControl(player, definition);
-            } else {
-                openAiMemories(player, definition);
-            }
-            return;
-        }
-        if (slot == 20) {
-            boolean enabling = !definition.getAiControlSettings().greetOnApproach();
-            definition.setAiControlSettings(definition.getAiControlSettings().withGreetOnApproach(
-                    enabling));
-            definitionRepository.save(definition);
-            if (enabling && behaviourService != null) behaviourService.greetNearbyPlayers(definition);
-            openAiControl(player, definition);
-            return;
-        }
-        if (slot == 21) {
-            AiControlSettings settings = definition.getAiControlSettings();
-            definition.setAiControlSettings(settings.withReactToNearbyDeaths(
-                    !settings.reactToNearbyDeaths()));
-            definitionRepository.save(definition);
-            openAiControl(player, definition);
-            return;
-        }
-        if (slot == 22) {
-            AiControlSettings settings = definition.getAiControlSettings();
-            definition.setAiControlSettings(settings.withInventoryEnabled(!settings.inventoryEnabled()));
-            definitionRepository.save(definition);
-            openAiControl(player, definition);
-            return;
-        }
-        int[] slots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42};
-        List<AiActionType> types = java.util.Arrays.stream(AiActionType.values())
-                .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM).toList();
-        for (int index = 0; index < types.size(); index++) {
-            if (slot != slots[index]) continue;
-            AiActionType type = types.get(index);
-            if (type == AiActionType.SAY) {
-                definition.setAiControlSettings(definition.getAiControlSettings().withRespondToChat(
-                        !definition.getAiControlSettings().respondToChat()));
-                definitionRepository.save(definition);
-            } else if (type != AiActionType.DO_NOTHING) {
-                definition.setAiControlSettings(definition.getAiControlSettings().toggle(type));
-                definitionRepository.save(definition);
-            }
-            openAiControl(player, definition);
-            return;
-        }
-        if (slot == 45) {
-            openEditor(player, definition);
-        } else if (slot == 49) {
-            AiControlSettings settings = definition.getAiControlSettings();
-            if (!settings.enabled() && !settings.hasContext()) {
-                player.sendMessage(Component.text("Configure at least one AI context section before activating AI behaviour."));
-                return;
-            }
-            definition.setAiControlSettings(settings.withEnabled(!settings.enabled()));
-            definitionRepository.save(definition);
-            if (!settings.enabled() && behaviourService != null) behaviourService.greetNearbyPlayers(definition);
-            if (!settings.enabled() && aiControlService != null && !aiControlService.configured()) {
-                player.sendMessage(Component.text("AI behaviour is active, but OpenRouter "
-                        + aiControlService.configurationIssue() + ". Check config.yml and restart the server."));
-            }
-            openAiControl(player, definition);
-        }
-    }
-
-    private void handleAiMemoryClick(InventoryClickEvent event, Player player, AiMemoryHolder holder) {
-        event.setCancelled(true);
-        if (!isTopInventoryClick(event)) return;
-        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
-        if (definition == null) {
-            player.closeInventory();
-            return;
-        }
-        int slot = event.getRawSlot();
-        if (slot == 45) {
-            openAiControl(player, definition);
-            return;
-        }
-        if (slot == 49) {
-            requestAiMemory(player, definition, -1);
-            return;
-        }
-        if (slot < 0 || slot >= definition.getAiMemories().size()) return;
-        if (event.isRightClick()) {
-            definition.removeAiMemory(slot);
-            definitionRepository.save(definition);
-            openAiMemories(player, definition);
-        } else {
-            requestAiMemory(player, definition, slot);
-        }
-    }
-
-    private void requestAiMemory(Player player, NpcDefinition definition, int index) {
-        String prompt = index < 0 ? "Enter a fact for the NPC to remember:"
-                : "Edit this memory, or enter 'clear' to delete it:";
-        chatInputService.request(player, prompt, value -> {
-            if (index < 0) definition.addAiMemory(value);
-            else definition.setAiMemory(index, value.equalsIgnoreCase("clear") ? "" : value);
-            definitionRepository.save(definition);
-            openAiMemories(player, definition);
-        });
-    }
-
-    private void requestAiContext(Player player, NpcDefinition definition, int slot) {
-        String section = switch (slot) {
-            case 10 -> "identity";
-            case 11 -> "personality and behaviour";
-            case 12 -> "goal or role";
-            case 13 -> "knowledge and information";
-            case 14 -> "likes and dislikes";
-            default -> throw new IllegalArgumentException("Unknown AI context slot: " + slot);
-        };
-        chatInputService.request(player, "Enter the NPC's " + section + ", or 'clear':", value -> {
-            boolean wasEnabled = definition.getAiControlSettings().enabled();
-            String normalized = value.equalsIgnoreCase("clear") ? "" : value;
-            AiControlSettings current = definition.getAiControlSettings();
-            definition.setAiControlSettings(switch (slot) {
-                case 10 -> current.withIdentity(normalized);
-                case 11 -> current.withBehaviour(normalized);
-                case 12 -> current.withGoal(normalized);
-                case 13 -> current.withInformation(normalized);
-                case 14 -> current.withLikesDislikes(normalized);
-                default -> current;
-            });
-            definitionRepository.save(definition);
-            if (!wasEnabled && definition.getAiControlSettings().enabled() && behaviourService != null) {
-                behaviourService.greetNearbyPlayers(definition);
-            }
-            openAiControl(player, definition);
-        });
-    }
-
     private void handleRoutePointAnimationPickerClick(InventoryClickEvent event, Player player,
             RoutePointAnimationPickerHolder holder) {
         event.setCancelled(true);
@@ -2261,12 +1958,7 @@ public final class GuiService implements Listener {
         UUID token = UUID.randomUUID();
         WaypointSession session = new WaypointSession(holder, type, token);
         waypointSessions.put(player.getUniqueId(), session);
-        ItemStack held = player.getInventory().getItemInMainHand();
-        player.getInventory().setItemInMainHand(createWaypointTool(session));
-        if (!held.getType().isAir()) {
-            player.getInventory().addItem(held).values().forEach(leftover
-                    -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
-        }
+        equipWaypointTool(player, session);
         player.closeInventory();
         sendWaypointPrompt(player, type, token);
     }
@@ -2288,7 +1980,7 @@ public final class GuiService implements Listener {
         player.sendMessage(message.append(Component.text("Drop the compass to cancel.", NamedTextColor.YELLOW)));
     }
 
-    private ItemStack createWaypointTool(WaypointSession session) {
+    private ItemStack createWaypointTool(WaypointToolSession session) {
         ItemStack tool = new ItemStack(Material.RECOVERY_COMPASS);
         ItemMeta meta = tool.getItemMeta();
         meta.displayName(LegacyText.component(LegacyText.AQUA + session.type().displayName() + " Waypoint Selector"));
@@ -2405,7 +2097,12 @@ public final class GuiService implements Listener {
     }
 
     private WaypointSession validWaypointSession(Player player, ItemStack item) {
-        WaypointSession session = waypointSessions.get(player.getUniqueId());
+        return validWaypointSession(player, item, waypointSessions);
+    }
+
+    private <T extends WaypointToolSession> T validWaypointSession(
+            Player player, ItemStack item, Map<UUID, T> sessions) {
+        T session = sessions.get(player.getUniqueId());
         if (session == null || item == null || item.getType() != Material.RECOVERY_COMPASS || !item.hasItemMeta()) {
             return null;
         }
@@ -2423,15 +2120,10 @@ public final class GuiService implements Listener {
         if (session == null) {
             return;
         }
-        ItemStack[] contents = player.getInventory().getContents();
-        for (int slot = 0; slot < contents.length; slot++) {
-            if (matchesWaypointTool(contents[slot], session)) {
-                player.getInventory().setItem(slot, null);
-            }
-        }
+        removeWaypointTool(player, session.token());
     }
 
-    private boolean matchesWaypointTool(ItemStack item, WaypointSession session) {
+    private boolean matchesWaypointTool(ItemStack item, UUID token) {
         if (item == null || item.getType() != Material.RECOVERY_COMPASS || !item.hasItemMeta()) {
             return false;
         }
@@ -2439,9 +2131,7 @@ public final class GuiService implements Listener {
         if (meta == null) {
             return false;
         }
-        return session.type().name().equals(meta.getPersistentDataContainer()
-                .get(waypointActionKey, PersistentDataType.STRING))
-                && session.token().toString().equals(meta.getPersistentDataContainer()
+        return token.toString().equals(meta.getPersistentDataContainer()
                         .get(waypointTokenKey, PersistentDataType.STRING));
     }
 
@@ -2452,45 +2142,13 @@ public final class GuiService implements Listener {
         UUID token = UUID.randomUUID();
         RouteActionWaypointSession session = new RouteActionWaypointSession(holder, type, token);
         routeWaypointSessions.put(player.getUniqueId(), session);
-        ItemStack held = player.getInventory().getItemInMainHand();
-        player.getInventory().setItemInMainHand(createRouteWaypointTool(session));
-        if (!held.getType().isAir()) {
-            player.getInventory().addItem(held).values().forEach(leftover
-                    -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
-        }
+        equipWaypointTool(player, session);
         player.closeInventory();
         sendWaypointPrompt(player, type, token);
     }
 
-    private ItemStack createRouteWaypointTool(RouteActionWaypointSession session) {
-        ItemStack tool = new ItemStack(Material.RECOVERY_COMPASS);
-        ItemMeta meta = tool.getItemMeta();
-        meta.displayName(LegacyText.component(LegacyText.AQUA + session.type().displayName() + " Waypoint Selector"));
-        meta.lore(LegacyText.components(List.of(
-                LegacyText.YELLOW + "Right-click a block to select it",
-                LegacyText.GRAY + "The NPC will stand on top of that block",
-                LegacyText.RED + "Drop this compass to cancel"
-        )));
-        meta.setEnchantmentGlintOverride(true);
-        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-        meta.getPersistentDataContainer().set(waypointActionKey, PersistentDataType.STRING, session.type().name());
-        meta.getPersistentDataContainer().set(waypointTokenKey, PersistentDataType.STRING, session.token().toString());
-        tool.setItemMeta(meta);
-        return tool;
-    }
-
     private RouteActionWaypointSession validRouteWaypointSession(Player player, ItemStack item) {
-        RouteActionWaypointSession session = routeWaypointSessions.get(player.getUniqueId());
-        if (session == null || item == null || item.getType() != Material.RECOVERY_COMPASS || !item.hasItemMeta()) {
-            return null;
-        }
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) {
-            return null;
-        }
-        String type = meta.getPersistentDataContainer().get(waypointActionKey, PersistentDataType.STRING);
-        String token = meta.getPersistentDataContainer().get(waypointTokenKey, PersistentDataType.STRING);
-        return session.type().name().equals(type) && session.token().toString().equals(token) ? session : null;
+        return validWaypointSession(player, item, routeWaypointSessions);
     }
 
     private void finishRouteWaypointSelection(Player player) {
@@ -2498,15 +2156,22 @@ public final class GuiService implements Listener {
         if (session == null) {
             return;
         }
+        removeWaypointTool(player, session.token());
+    }
+
+    private void equipWaypointTool(Player player, WaypointToolSession session) {
+        ItemStack held = player.getInventory().getItemInMainHand();
+        player.getInventory().setItemInMainHand(createWaypointTool(session));
+        if (!held.getType().isAir()) {
+            player.getInventory().addItem(held).values().forEach(leftover
+                    -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
+        }
+    }
+
+    private void removeWaypointTool(Player player, UUID token) {
         ItemStack[] contents = player.getInventory().getContents();
         for (int slot = 0; slot < contents.length; slot++) {
-            ItemStack item = contents[slot];
-            ItemMeta meta = item == null ? null : item.getItemMeta();
-            if (item != null && item.getType() == Material.RECOVERY_COMPASS && meta != null
-                    && session.token().toString().equals(meta.getPersistentDataContainer()
-                            .get(waypointTokenKey, PersistentDataType.STRING))) {
-                player.getInventory().setItem(slot, null);
-            }
+            if (matchesWaypointTool(contents[slot], token)) player.getInventory().setItem(slot, null);
         }
     }
 
@@ -3294,7 +2959,9 @@ public final class GuiService implements Listener {
                 || holder instanceof QuestionEditorHolder
                 || holder instanceof QuestionBranchPickerHolder
                 || holder instanceof QuestionBranchRoutePickerHolder
-                || holder instanceof ConfirmationHolder;
+                || holder instanceof QuestionBranchAnimationPickerHolder
+                || holder instanceof ConfirmationHolder
+                || aiGuiService.handles(holder);
     }
 
     private ItemStack definitionIcon(NpcDefinition definition, List<String> lore) {
@@ -3486,6 +3153,8 @@ public final class GuiService implements Listener {
                 Material.ENDER_PEARL;
             case WAIT ->
                 Material.CLOCK;
+            case AI_TRIGGER ->
+                Material.OXIDIZED_COPPER_GOLEM_STATUE;
             case INTERACT ->
                 Material.LEVER;
             case MINE_BLOCKS ->
@@ -3581,66 +3250,32 @@ public final class GuiService implements Listener {
                 + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ();
     }
 
-    private record MainHolder(int page) implements InventoryHolder {
+    private record MainHolder(int page) implements GuiHolder { }
 
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
+    private static final class ReorderHolder extends ReorderSupport.ReorderState {
 
-    private static final class ReorderHolder implements InventoryHolder {
-
-        private final List<String> keys;
         private final int returnPage;
-        private int page;
-        private String selectedKey;
 
         private ReorderHolder(List<String> keys, int returnPage) {
-            this.keys = keys;
+            super(keys);
             this.returnPage = returnPage;
         }
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
     }
 
-    private record EditorHolder(String key) implements InventoryHolder {
+    private record EditorHolder(String key) implements GuiHolder { }
 
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
+    private record PropertiesHolder(String key) implements GuiHolder { }
 
-    private record PropertiesHolder(String key) implements InventoryHolder {
-        @Override public Inventory getInventory() { return null; }
-    }
+    private record FightingHolder(String key) implements GuiHolder { }
 
-    private record FightingHolder(String key) implements InventoryHolder {
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
-
-    private record TargetsHolder(String key) implements InventoryHolder {
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
+    private record TargetsHolder(String key) implements GuiHolder { }
 
     private record FightOptionsActionHolder(
             ActionPickerHolder definitionAction,
             RoutePointActionPickerHolder routeAction,
             QuestionBranchPickerHolder questionAction,
             FightOptions options
-            ) implements InventoryHolder {
+            ) implements GuiHolder {
 
         static FightOptionsActionHolder definition(ActionPickerHolder action, FightOptions options) {
             return new FightOptionsActionHolder(action, null, null, options);
@@ -3658,90 +3293,39 @@ public final class GuiService implements Listener {
             return new FightOptionsActionHolder(definitionAction, routeAction, questionAction, updated);
         }
 
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
     }
 
-    private record EquipmentHolder(String key) implements InventoryHolder {
+    private record EquipmentHolder(String key) implements GuiHolder { }
 
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
+    private record InstancesHolder(String key, int page) implements GuiHolder { }
 
-    private record InstancesHolder(String key, int page) implements InventoryHolder {
+    private record BehaviourHolder(String key, int page) implements GuiHolder { }
 
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
-
-    private record BehaviourHolder(String key, int page) implements InventoryHolder {
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
-
-    private record CustomBehaviourHolder(String key, int page) implements InventoryHolder {
-        @Override public Inventory getInventory() { return null; }
-    }
+    private record CustomBehaviourHolder(String key, int page) implements GuiHolder { }
 
     private record ActionPickerHolder(String key, BehaviourEvent event, String customEvent, int actionIndex, int page)
-            implements InventoryHolder {
+            implements GuiHolder { }
 
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
-
-    private record AiControlHolder(String key) implements InventoryHolder {
-        @Override public Inventory getInventory() { return null; }
-    }
-
-    private record AiMemoryHolder(String key) implements InventoryHolder {
-        @Override public Inventory getInventory() { return null; }
+    private interface WaypointToolSession {
+        BehaviourActionType type();
+        UUID token();
     }
 
     private record WaypointSession(
             ActionPickerHolder action,
             BehaviourActionType type,
             UUID token
-            ) {
+            ) implements WaypointToolSession {
 
     }
 
-    private record RoutePointActionsHolder(String routeKey, RoutePoint point) implements InventoryHolder {
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
+    private record RoutePointActionsHolder(String routeKey, RoutePoint point) implements GuiHolder { }
 
     private record RoutePointActionPickerHolder(String routeKey, RoutePoint point, int actionIndex)
-            implements InventoryHolder {
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
+            implements GuiHolder { }
 
     private record RoutePointAnimationPickerHolder(String routeKey, RoutePoint point, int actionIndex)
-            implements InventoryHolder {
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
+            implements GuiHolder { }
 
     private record RoutePointValuePickerHolder(
             String routeKey,
@@ -3750,34 +3334,20 @@ public final class GuiService implements Listener {
             BehaviourValuePickerType pickerType,
             String folder,
             int page
-            ) implements InventoryHolder {
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
+            ) implements GuiHolder { }
 
     private record RouteActionWaypointSession(
             RoutePointActionPickerHolder action,
             BehaviourActionType type,
             UUID token
-            ) {
+            ) implements WaypointToolSession {
 
     }
 
-    private record SavedLocationPickerHolder(UUID token, int page) implements InventoryHolder {
-        @Override public Inventory getInventory() { return null; }
-    }
+    private record SavedLocationPickerHolder(UUID token, int page) implements GuiHolder { }
 
     private record AnimationPickerHolder(String key, BehaviourEvent event, String customEvent, int actionIndex, int page)
-            implements InventoryHolder {
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
+            implements GuiHolder { }
 
     private record BehaviourValuePickerHolder(
             String key,
@@ -3788,13 +3358,7 @@ public final class GuiService implements Listener {
             BehaviourValuePickerType pickerType,
             String folder,
             int valuePage
-            ) implements InventoryHolder {
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
+            ) implements GuiHolder { }
 
     private record QuestionTarget(String definitionKey, BehaviourEvent event, String customEvent,
             String routeKey, RoutePoint point, int actionIndex, int page) {
@@ -3808,24 +3372,16 @@ public final class GuiService implements Listener {
         }
     }
 
-    private record QuestionEditorHolder(QuestionTarget target) implements InventoryHolder {
-        @Override public Inventory getInventory() { return null; }
-    }
+    private record QuestionEditorHolder(QuestionTarget target) implements GuiHolder { }
 
     private record QuestionBranchPickerHolder(QuestionTarget target, int optionIndex, int actionIndex)
-            implements InventoryHolder {
-        @Override public Inventory getInventory() { return null; }
-    }
+            implements GuiHolder { }
 
     private record QuestionBranchRoutePickerHolder(
-            QuestionBranchPickerHolder action, String folder, int page) implements InventoryHolder {
-        @Override public Inventory getInventory() { return null; }
-    }
+            QuestionBranchPickerHolder action, String folder, int page) implements GuiHolder { }
 
     private record QuestionBranchAnimationPickerHolder(QuestionTarget target, int optionIndex, int actionIndex)
-            implements InventoryHolder {
-        @Override public Inventory getInventory() { return null; }
-    }
+            implements GuiHolder { }
 
     private record BehaviourPickerOption(
             String value,
@@ -3876,13 +3432,7 @@ public final class GuiService implements Listener {
     }
 
     private record ConfirmationHolder(String key, ConfirmationAction action, int returnPage, boolean returnToEditor)
-            implements InventoryHolder {
-
-        @Override
-        public Inventory getInventory() {
-            return null;
-        }
-    }
+            implements GuiHolder { }
 
     private enum ConfirmationAction {
         DELETE_DEFINITION,

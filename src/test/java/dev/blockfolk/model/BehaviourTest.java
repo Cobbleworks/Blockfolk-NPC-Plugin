@@ -41,10 +41,9 @@ class BehaviourTest {
     @Test
     void actionsRemainOrderedAndAreDefensivelyCopied() {
         NpcDefinition definition = new NpcDefinition("guard");
-        definition.addBehaviourAction(BehaviourEvent.SPAWN,
-            new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Ready."));
-        definition.addBehaviourAction(BehaviourEvent.SPAWN,
-            new BehaviourAction(BehaviourActionType.RUN_CONSOLE_COMMAND, "time set night"));
+        definition.setBehaviourActions(BehaviourEvent.SPAWN, List.of(
+            new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Ready."),
+            new BehaviourAction(BehaviourActionType.RUN_CONSOLE_COMMAND, "time set night")));
 
         List<BehaviourAction> actions = definition.getBehaviourActions(BehaviourEvent.SPAWN);
         assertEquals(BehaviourActionType.SEND_DIALOG, actions.get(0).type());

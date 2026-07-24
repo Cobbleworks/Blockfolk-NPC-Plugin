@@ -117,6 +117,11 @@ public final class NpcCombatService implements Listener {
     }
 
     public boolean startCombat(NpcInstance instance, Entity target) {
+        return startDirectedCombat(instance, target);
+    }
+
+    /** Starts explicitly directed combat without consulting normal category targeting preferences. */
+    public boolean startDirectedCombat(NpcInstance instance, Entity target) {
         if (!(target instanceof LivingEntity living) || !isAttackable(instance, living)) {
             return false;
         }
@@ -244,7 +249,9 @@ public final class NpcCombatService implements Listener {
     private void tick() {
         currentTick++;
         Set<UUID> activeBossBars = new HashSet<>();
+        Set<UUID> activeInstances = new HashSet<>();
         for (NpcInstance instance : instanceRegistry.findAll()) {
+            activeInstances.add(instance.getId());
             NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
             LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
             if (definition == null || npc == null || !npc.isValid() || npc.isDead()) {
@@ -278,9 +285,8 @@ public final class NpcCombatService implements Listener {
                 fight(instance, npc, state);
             }
         }
-        states.keySet().removeIf(id -> instanceRegistry.findAll().stream().noneMatch(instance -> instance.getId().equals(id)));
-        fightOptionsOverrides.keySet().removeIf(id -> instanceRegistry.findAll().stream()
-                .noneMatch(instance -> instance.getId().equals(id)));
+        states.keySet().retainAll(activeInstances);
+        fightOptionsOverrides.keySet().retainAll(activeInstances);
         bossBars.entrySet().removeIf(entry -> {
             if (activeBossBars.contains(entry.getKey())) return false;
             entry.getValue().removeAll();
@@ -299,10 +305,12 @@ public final class NpcCombatService implements Listener {
             return;
         }
         activeBossBars.add(instance.getId());
+        boolean updateViewers = currentTick % 5L == 0L || !bossBars.containsKey(instance.getId());
         BossBar bossBar = bossBars.computeIfAbsent(instance.getId(), ignored ->
                 Bukkit.createBossBar(definition.getDisplayName(), BarColor.RED, BarStyle.SOLID));
         bossBar.setTitle(definition.getDisplayName());
         bossBar.setProgress(Math.max(0.0, Math.min(1.0, npc.getHealth() / profile.maxHealth())));
+        if (!updateViewers) return;
 
         Set<Player> nearby = new HashSet<>();
         for (Player player : Bukkit.getOnlinePlayers()) {

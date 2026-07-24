@@ -20,7 +20,7 @@ class NpcRouteTest {
         RoutePoint zero = new RoutePoint("world", 0, 64, 0);
         RoutePoint five = new RoutePoint("world", 5, 64, 0);
         RoutePoint two = new RoutePoint("world", 2, 64, 0);
-        route.setPoints(List.of(ten, zero, five, two));
+        List.of(ten, zero, five, two).forEach(route::addPoint);
         World world = world("world");
 
         List<RoutePoint> ordered = route.logicallyOrdered(new Location(world, 2.6, 65.0, 0.5));
@@ -60,7 +60,7 @@ class NpcRouteTest {
                 new BehaviourAction(BehaviourActionType.WAIT, "10.0")));
         RoutePoint middle = new RoutePoint("world", 5, 64, 0);
         RoutePoint far = new RoutePoint("world", 10, 64, 0);
-        route.setPoints(List.of(far, nearWaiting, middle));
+        List.of(far, nearWaiting, middle).forEach(route::addPoint);
         World world = world("world");
 
         assertEquals(

@@ -109,22 +109,22 @@ public final class CustomEventGuiService implements Listener {
     }
 
     private void openReorder(Player player, ReorderEventsHolder holder, int requestedPage) {
-        int pages = Math.max(1, (holder.names.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int pages = Math.max(1, (holder.keys.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         holder.page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Reorder Custom Events"));
         renderReorder(inventory, holder);
         player.openInventory(inventory);
-        restoreReorderCursor(player, holder);
+        ReorderSupport.restoreCursor(player, holder, this::reorderItem);
     }
 
     private void renderReorder(Inventory inventory, ReorderEventsHolder holder) {
         inventory.clear();
-        int pages = Math.max(1, (holder.names.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int pages = Math.max(1, (holder.keys.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int from = holder.page * PAGE_SIZE;
-        int to = Math.min(from + PAGE_SIZE, holder.names.size());
+        int to = Math.min(from + PAGE_SIZE, holder.keys.size());
         for (int index = from; index < to; index++) {
-            String name = holder.names.get(index);
-            if (name.equals(holder.selectedName)) continue;
+            String name = holder.keys.get(index);
+            if (name.equals(holder.selectedKey)) continue;
             CustomEvent event = events.find(name).orElse(null);
             if (event != null) inventory.setItem(index - from, reorderItem(event, index));
         }
@@ -148,6 +148,10 @@ public final class CustomEventGuiService implements Listener {
         meta.getPersistentDataContainer().set(reorderEventKey, PersistentDataType.STRING, event.getName());
         icon.setItemMeta(meta);
         return icon;
+    }
+
+    private ItemStack reorderItem(String name, int index) {
+        return events.find(name).map(event -> reorderItem(event, index)).orElse(null);
     }
 
     @EventHandler
@@ -176,7 +180,7 @@ public final class CustomEventGuiService implements Listener {
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
         if (event.getInventory().getHolder() instanceof ReorderEventsHolder) {
-            clearReorderCursor(event.getPlayer());
+            ReorderSupport.clearCursor(event.getPlayer(), reorderEventKey);
         }
     }
 
@@ -221,14 +225,14 @@ public final class CustomEventGuiService implements Listener {
             openReorder(player, holder, holder.page - 1);
             return;
         }
-        if (slot == 53 && (holder.page + 1) * PAGE_SIZE < holder.names.size()) {
+        if (slot == 53 && (holder.page + 1) * PAGE_SIZE < holder.keys.size()) {
             openReorder(player, holder, holder.page + 1);
             return;
         }
         if (slot == 48) {
-            clearReorderSelection(player, holder);
+            ReorderSupport.clearSelection(player, holder, reorderEventKey);
             try {
-                events.reorder(holder.names);
+                events.reorder(holder.keys);
                 player.sendMessage(UiText.success("Custom event order saved."));
                 open(player, holder.returnFolder, holder.returnPage);
             } catch (IllegalArgumentException exception) {
@@ -239,52 +243,13 @@ public final class CustomEventGuiService implements Listener {
             return;
         }
         if (slot == 50) {
-            clearReorderSelection(player, holder);
+            ReorderSupport.clearSelection(player, holder, reorderEventKey);
             open(player, holder.returnFolder, holder.returnPage);
             return;
         }
-        if (slot < 0 || slot >= PAGE_SIZE) return;
-        int targetIndex = Math.min(holder.page * PAGE_SIZE + slot, holder.names.size() - 1);
-        if (targetIndex < 0) return;
-        if (holder.selectedName == null) {
-            int sourceIndex = holder.page * PAGE_SIZE + slot;
-            if (sourceIndex >= holder.names.size() || !isEmpty(player.getItemOnCursor())) return;
-            holder.selectedName = holder.names.get(sourceIndex);
-            click.getView().getTopInventory().setItem(slot, null);
-            restoreReorderCursor(player, holder);
-            return;
-        }
-        int sourceIndex = holder.names.indexOf(holder.selectedName);
-        if (sourceIndex >= 0 && sourceIndex != targetIndex) {
-            String moved = holder.names.remove(sourceIndex);
-            holder.names.add(targetIndex, moved);
-        }
-        clearReorderSelection(player, holder);
-        renderReorder(click.getView().getTopInventory(), holder);
+        ReorderSupport.selectOrMove(click, player, holder, PAGE_SIZE, reorderEventKey,
+                this::reorderItem, inventory -> renderReorder(inventory, holder));
     }
-
-    private void restoreReorderCursor(Player player, ReorderEventsHolder holder) {
-        if (holder.selectedName == null) return;
-        events.find(holder.selectedName).ifPresent(event ->
-                player.setItemOnCursor(reorderItem(event, holder.names.indexOf(holder.selectedName))));
-    }
-
-    private void clearReorderSelection(Player player, ReorderEventsHolder holder) {
-        holder.selectedName = null;
-        clearReorderCursor(player);
-    }
-
-    private void clearReorderCursor(org.bukkit.entity.HumanEntity player) {
-        ItemStack cursor = player.getItemOnCursor();
-        ItemMeta meta = isEmpty(cursor) ? null : cursor.getItemMeta();
-        if (meta != null
-                && meta.getPersistentDataContainer()
-                        .has(reorderEventKey, PersistentDataType.STRING)) {
-            player.setItemOnCursor(null);
-        }
-    }
-
-    private boolean isEmpty(ItemStack item) { return item == null || item.getType().isAir(); }
 
     private void requestName(Player player, EventsHolder holder) {
         createEvent(player, "", event -> open(player, parent(event.getName()), 0),
@@ -364,21 +329,16 @@ public final class CustomEventGuiService implements Listener {
         return item;
     }
     private record Entry(boolean folder, String path, String label, int childCount, CustomEvent event) { }
-    private record EventsHolder(String folder, int page) implements InventoryHolder { public Inventory getInventory() { return null; } }
-    private static final class ReorderEventsHolder implements InventoryHolder {
-        private final List<String> names;
+    private record EventsHolder(String folder, int page) implements GuiHolder { }
+    private static final class ReorderEventsHolder extends ReorderSupport.ReorderState {
         private final String returnFolder;
         private final int returnPage;
-        private int page;
-        private String selectedName;
 
         private ReorderEventsHolder(List<String> names, String returnFolder, int returnPage) {
-            this.names = names;
+            super(names);
             this.returnFolder = returnFolder;
             this.returnPage = returnPage;
         }
-
-        public Inventory getInventory() { return null; }
     }
-    private record DeleteHolder(String eventName, String folder, int page) implements InventoryHolder { public Inventory getInventory() { return null; } }
+    private record DeleteHolder(String eventName, String folder, int page) implements GuiHolder { }
 }

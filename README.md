@@ -28,14 +28,20 @@ Proximity enter/leave transitions are debounced for 3 seconds by default. Adjust
 
 AI Behaviour is configured directly from an NPC preset's dedicated menu. Context is
 split into Identity, Personality & Behaviour, Goal / Role, and Knowledge / Information.
-The NPC can optionally greet approaching players, respond to chat sent within eight
-blocks, and comment on deaths within twelve blocks. Death reactions receive the victim,
-killer, held weapon, and Minecraft damage cause when available. Disabling nearby chat
-responses also stops the NPC from reading that chat. Each
-spawned NPC keeps its own per-player conversation memory until an administrator opens
-that NPC preset's editor, which resets AI state globally for its spawned copies. The
+Add the oxidized-copper-golem `AI Trigger` action to any behaviour sequence to invoke the
+AI for approaches, leaves, combat, custom events, or other supported events. The NPC can
+also respond to chat within eight blocks. Disabling nearby chat responses also stops the
+NPC from reading that chat.
+Each spawned NPC can keep private per-player conversation memory or one shared
+conversation for all players until an administrator opens that NPC preset's editor,
+which resets AI state globally for its spawned copies. The
 model can only select validated capabilities enabled for that preset; it cannot return
 commands or executable code.
+
+With Temporary Inventory and Mine Blocks enabled, the AI perceives nearby ores, logs,
+and pickaxe-mineable materials. It can mine a resource group such as all ores or trees;
+drops go directly into that spawned instance's temporary inventory, and blocks are left
+untouched when their drops do not fit.
 
 Long-term memory is optional per preset. When enabled, the model can save durable facts
 with a validated `REMEMBER_FACT` action. Up to 45 facts survive restarts and are shared by

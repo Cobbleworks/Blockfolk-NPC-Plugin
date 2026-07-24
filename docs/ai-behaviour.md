@@ -5,10 +5,9 @@ responses. An animated `Thinking.`, `Thinking..`, `Thinking...` hologram is show
 an NPC only while its request is actively in flight.
 
 Blockfolk sends an AI request only when the NPC preset is active, at least one context
-section is configured, OpenRouter is configured, and an enabled trigger fires. The two
-automatic triggers are an approach greeting, nearby player chat, and an optional nearby
-death reaction. Chat is accepted within eight blocks of the NPC; deaths are observed
-within twelve blocks.
+section is configured, OpenRouter is configured, and a trigger fires. `AI Trigger` can be
+placed in any standard, custom-event, waypoint, or question-branch behaviour sequence.
+Nearby player chat can also trigger requests directly within eight blocks of the NPC.
 
 One player chat message creates one group request for all eligible NPCs within range,
 ordered by distance from the player. The closest NPC is the default speaker. The model
@@ -16,10 +15,11 @@ may involve additional nearby NPCs when that is natural, but is explicitly told 
 make every NPC respond merely because it is present. Non-AI On Player Chat actions still
 run independently for every nearby NPC.
 
-An NPC that enters chat range while already handling another AI event (most commonly its
-approach greeting) does not hold up the existing group. Available NPCs answer immediately,
-and the busy newcomer becomes eligible to participate in a later player message after its
-current request finishes.
+An NPC that enters chat range while already handling another AI event does not hold up the
+existing group. Available NPCs answer immediately, and the busy newcomer becomes eligible
+to participate in a later player message after its current request finishes. Before queued
+chat runs, its NPC list is checked against the player's current location so NPCs the player
+has left behind do not answer stale messages.
 
 Opening the NPC preset's admin editor clears AI memory and queued interactions for every
 spawned instance of that preset. Conversation history otherwise has no time or distance
@@ -38,9 +38,8 @@ Each request contains two messages:
 For single-NPC events, the system message requires a single JSON response containing zero
 to three validated actions. Group chat responses contain a list keyed by safe aliases
 (`npc_1`, `npc_2`, and so on), with up to three actions per responding NPC. It describes
-the accepted action and target formats, requests concise
-in-character speech, and asks the model to greet on approach, answer nearby chat, or
-respond naturally to a nearby death when the corresponding event triggered the request.
+the accepted action and target formats, requests concise in-character speech, and asks
+the model to react naturally to the event that triggered the request.
 Commands, executable code, unrecognized actions, and capabilities disabled in the
 preset are rejected.
 
@@ -49,14 +48,11 @@ The request uses temperature `0.4`, JSON-object response formatting, and the con
 
 ## Current event
 
-The user message begins with a plain-language event description. For automatic AI
-behaviour this is currently one of:
+The user message begins with a plain-language event description. It may describe any
+event routed through an `AI Trigger` or nearby chat. Examples include:
 
 - the player's name and the fact that they approached or are already near the NPC;
 - the player's name and exact nearby chat message;
-- a nearby death, including victim, rounded distance, Minecraft damage cause, and the
-  killer, held weapon, and direct cause (such as a projectile) when available.
-
 Chat is sent only when Respond to Nearby Chat is enabled. When it is disabled, Blockfolk
 does not store that new chat for later use.
 
@@ -87,6 +83,8 @@ Perception uses a 12-block radius for players and other Blockfolk NPCs. It inclu
 - up to five nearby levers within 12 blocks, including rounded distance and whether
   each lever is powered;
 - up to five nearest globally saved locations in the same world and within 64 blocks.
+- counts of reachable ores, logs, and pickaxe-mineable materials, with material aliases
+  accepted by `MINE_BLOCKS`.
 
 Each perceived player, NPC, entity, and saved location has a request-local alias such as
 `nearby_player_1` or `nearby_location_2`. The AI can pass one of those aliases to
@@ -115,12 +113,14 @@ When the NPC's world is available, the request includes:
 Blockfolk keeps two forms of runtime memory per spawned NPC:
 
 - up to ten recent event summaries, retained for five minutes;
-- up to twenty conversation lines per player, retained until an administrator opens
-  that NPC preset's editor or the instance is removed.
+- up to twenty conversation lines, retained until an administrator opens that NPC
+  preset's editor or the instance is removed. The menu selects private per-player history
+  or one shared history for all players on that spawned instance.
 
-Only the conversation belonging to the player who triggered the current request is
-included. Conversations are not shared between spawned copies of the same preset, but a
-group chat request supplies each participating NPC's own conversation memory to the model.
+In Private mode, only the conversation belonging to the triggering player is included.
+In Shared mode, every player reads and contributes to the same conversation. Conversations
+are never shared between spawned copies of the same preset, but a group chat request
+supplies each participating NPC's own conversation memory to the model.
 After a coordinated response, every participating NPC stores every spoken line from the
 group turn so later conversations retain the same shared awareness.
 
@@ -137,9 +137,9 @@ enforces the same list before anything runs. Current capabilities are:
 
 - Respond to Nearby Chat / speech;
 - play animation;
-- start or stop combat; Start Combat falls back to the nearest attackable entity within
-  16 blocks when the model does not provide a valid target, regardless of the preset's
-  aggression setting;
+- start or stop combat; Start Combat accepts a perceived player, NPC, mob, or animal alias
+  regardless of the preset's normal combat target categories. With no target it selects
+  the nearest safely attackable living entity within 16 blocks;
 - flee from a target;
 - follow a player;
 - stop following the current player;
@@ -149,6 +149,10 @@ enforces the same list before anything runs. Current capabilities are:
 - start or pause the configured route;
 - when Temporary Inventory access is enabled and the instance carries items, drop one
   selected inventory stack using its `inventory_slot_N` alias;
+- when Temporary Inventory and Mine Blocks are enabled, mine up to 64 matching reachable
+  blocks within eight blocks using `ores`, `trees`, `mineable_blocks`, or a listed material
+  as the target. Drops are inserted directly into the temporary inventory; a block is not
+  broken if all of its drops will not fit;
 - do nothing, which is always available.
 
 Targeted capabilities may refer only to the triggering player, triggering entity,

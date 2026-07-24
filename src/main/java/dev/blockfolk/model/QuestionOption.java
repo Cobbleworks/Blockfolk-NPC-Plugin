@@ -20,10 +20,6 @@ public record QuestionOption(String label, List<BehaviourAction> actions) {
         return !label.isBlank();
     }
 
-    public QuestionOption withLabel(String label) {
-        return new QuestionOption(label, actions);
-    }
-
     public QuestionOption withActions(List<BehaviourAction> actions) {
         return new QuestionOption(label, actions);
     }

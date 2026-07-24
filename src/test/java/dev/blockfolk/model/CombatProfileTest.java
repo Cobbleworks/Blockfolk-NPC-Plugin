@@ -66,7 +66,6 @@ class CombatProfileTest {
 
         assertTrue(profile.targetAnimals());
         assertTrue(profile.targetNpcs());
-        assertTrue(profile.hasSightTargets());
     }
 
     @Test

@@ -54,6 +54,7 @@ import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.AiDecision;
 import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.util.UiText;
+import dev.blockfolk.util.EntityHealth;
 import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
@@ -73,7 +74,6 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 public final class NpcBehaviourService implements Listener {
 
     private static final double DIALOG_RANGE_SQUARED = 12.0 * 12.0;
-    private static final double NEARBY_DEATH_RANGE_SQUARED = 12.0 * 12.0;
     private static final double APPROACH_RANGE_SQUARED = 8.0 * 8.0;
     private static final double LEAVE_RANGE_SQUARED = 10.0 * 10.0;
     private static final double HEAL_BURST_THRESHOLD = 4.0;
@@ -242,7 +242,8 @@ public final class NpcBehaviourService implements Listener {
             NpcDefinition definition = definitions.find(target.getDefinitionKey()).orElse(null);
             if (definition == null) continue;
             List<BehaviourAction> actions = definition.getCustomEventActions(eventName);
-            if (!actions.isEmpty()) executeSequence(null, actions, 0, target, definition, actor, null, () -> { });
+            if (!actions.isEmpty()) executeSequence(null, actions, 0, target, definition, actor,
+                    "Custom event '" + eventName + "' was emitted.", () -> { });
         }
     }
 
@@ -262,20 +263,6 @@ public final class NpcBehaviourService implements Listener {
         observedEntities.remove(instance.getId());
         entityNearbyCooldownUntilTick.remove(instance.getId());
         if (aiControlService != null) aiControlService.forget(instance);
-    }
-
-    /** Greets players who are already nearby when conversations or greetings are enabled. */
-    public void greetNearbyPlayers(NpcDefinition definition) {
-        if (!definition.getAiControlSettings().enabled()
-                || !definition.getAiControlSettings().greetOnApproach()) return;
-        for (NpcInstance instance : instances.findByDefinition(definition)) {
-            Location location = instance.getLocation();
-            if (location.getWorld() == null) continue;
-            location.getWorld().getPlayers().stream()
-                    .filter(player -> player.getLocation().distanceSquared(location) <= APPROACH_RANGE_SQUARED)
-                    .forEach(player -> invokeAi(BehaviourEvent.PLAYER_APPROACH,
-                            "Player " + player.getName() + " is near the NPC.", instance, definition, player));
-        }
     }
 
     public MovementProfile movementFor(NpcInstance instance, NpcDefinition definition) {
@@ -322,7 +309,7 @@ public final class NpcBehaviourService implements Listener {
             String eventDetail,
             Runnable completion
     ) {
-        if (instances.findAll().stream().noneMatch(candidate -> candidate.getId().equals(instance.getId()))) {
+        if (instances.findById(instance.getId()).isEmpty()) {
             completion.run();
             return;
         }
@@ -436,7 +423,8 @@ public final class NpcBehaviourService implements Listener {
         String detail = "The NPC took " + String.format(java.util.Locale.ROOT, "%.1f", event.getFinalDamage())
                 + " damage" + (actor == null ? "." : " from " + actor.getName() + ".")
                 + (npc == null ? "" : " Current health: "
-                        + String.format(java.util.Locale.ROOT, "%.1f / %.1f", Math.max(0, npc.getHealth() - event.getFinalDamage()), npc.getMaxHealth()) + ".");
+                        + String.format(java.util.Locale.ROOT, "%.1f / %.1f",
+                                Math.max(0, npc.getHealth() - event.getFinalDamage()), EntityHealth.maximum(npc)) + ".");
         // An attack is more specific and higher-priority than generic damage,
         // so it gets the first opportunity to invoke a throttled AI action.
         if (actor != null) trigger(BehaviourEvent.NPC_ATTACKED, instance, actor,
@@ -460,65 +448,6 @@ public final class NpcBehaviourService implements Listener {
             trigger(BehaviourEvent.DEATH, deceasedNpc, null);
             Bukkit.getScheduler().runTask(plugin, () -> forget(deceasedNpc));
         }
-        notifyNearbyAiOfDeath(event, deceasedNpc);
-    }
-
-    private void notifyNearbyAiOfDeath(EntityDeathEvent event, NpcInstance deceasedNpc) {
-        LivingEntity deceased = event.getEntity();
-        if (instances.isNavigationEntity(deceased)) return;
-        Location deathLocation = deceased.getLocation();
-        Entity killer = event.getDamageSource().getCausingEntity();
-        if (killer == null) killer = event.getDamageSource().getDirectEntity();
-        String detail = nearbyDeathDetail(event, killer);
-        for (NpcInstance observer : List.copyOf(instances.findAll())) {
-            if (deceasedNpc != null && observer.getId().equals(deceasedNpc.getId())) continue;
-            Location observerLocation = observer.getLocation();
-            if (observerLocation.getWorld() != deathLocation.getWorld()
-                    || observerLocation.distanceSquared(deathLocation) > NEARBY_DEATH_RANGE_SQUARED) continue;
-            NpcDefinition definition = definitions.find(observer.getDefinitionKey()).orElse(null);
-            if (definition == null || !definition.getAiControlSettings().enabled()
-                    || !definition.getAiControlSettings().reactToNearbyDeaths()) continue;
-            invokeAi(null, detail + " Distance from the NPC: "
-                    + Math.round(observerLocation.distance(deathLocation)) + " blocks.",
-                    observer, definition, killer);
-        }
-    }
-
-    private String nearbyDeathDetail(EntityDeathEvent event, Entity killer) {
-        LivingEntity deceased = event.getEntity();
-        StringBuilder detail = new StringBuilder("A nearby ").append(entityDescription(deceased)).append(" died.");
-        if (killer != null && !killer.getUniqueId().equals(deceased.getUniqueId())) {
-            detail.append(" Killer: ").append(entityDescription(killer));
-            if (killer instanceof LivingEntity living && living.getEquipment() != null) {
-                Material held = living.getEquipment().getItemInMainHand().getType();
-                if (!held.isAir()) detail.append(", using ").append(readableEntityType(held.name()));
-            }
-            detail.append('.');
-        } else {
-            detail.append(" No killer entity was attributed.");
-        }
-        detail.append(" Damage cause: ")
-                .append(readableEntityType(event.getDamageSource().getDamageType().getKey().getKey())).append('.');
-        Entity direct = event.getDamageSource().getDirectEntity();
-        if (direct != null && (killer == null || !direct.getUniqueId().equals(killer.getUniqueId()))) {
-            detail.append(" Direct cause: ").append(entityDescription(direct)).append('.');
-        }
-        return detail.toString();
-    }
-
-    private String entityDescription(Entity entity) {
-        NpcInstance npc = instances.findByEntityId(entity.getEntityId()).orElse(null);
-        if (npc != null) {
-            return definitions.find(npc.getDefinitionKey())
-                    .map(definition -> "Blockfolk NPC " + definition.getDisplayName())
-                    .orElse("Blockfolk NPC");
-        }
-        if (entity instanceof Player player) return "player " + player.getName();
-        return readableEntityType(entity.getType().name());
-    }
-
-    private static String readableEntityType(String value) {
-        return value.toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -642,6 +571,7 @@ public final class NpcBehaviourService implements Listener {
                     });
             // WAIT is handled by executeSequence: it only delays the next action.
             case WAIT -> { }
+            case AI_TRIGGER -> invokeAi(event, eventDetail, instance, definition, actor);
             case INTERACT -> interactWithNearbySwitches(instance);
             case MINE_BLOCKS -> mineNearbyBlocks(instance);
             case TAKE_ITEM -> takeNearbyItem(instance, actor);
@@ -695,8 +625,10 @@ public final class NpcBehaviourService implements Listener {
                 }
                 case PLAY_ANIMATION -> playAiAnimation(instance, action.animation());
                 case START_COMBAT -> {
-                    if (combatService != null && !combatService.startCombat(instance, target)) {
-                        combatService.startCombat(instance, combatService.findNearestAttackableTarget(instance));
+                    if (combatService != null) {
+                        Entity selected = action.target() == null
+                                ? combatService.findNearestAttackableTarget(instance) : target;
+                        combatService.startDirectedCombat(instance, selected);
                     }
                 }
                 case STOP_COMBAT -> {
@@ -714,6 +646,7 @@ public final class NpcBehaviourService implements Listener {
                     instances.stand(instance);
                     instances.stopNavigating(instance);
                 });
+                case MINE_BLOCKS -> mineNearbyBlocks(instance, action.target(), true);
                 case RETURN_HOME -> {
                     stopFollowing(instance);
                     moveTargets.put(instance.getId(), instance.getSpawnLocation());
@@ -756,6 +689,17 @@ public final class NpcBehaviourService implements Listener {
             if (alias.startsWith("nearby_player_")) {
                 int index = targetIndex(alias);
                 return index >= 0 && index < perceivedPlayers.size() ? perceivedPlayers.get(index) : null;
+            }
+            if (alias.startsWith("nearby_npc_")) {
+                int index = targetIndex(alias);
+                List<NpcInstance> perceivedNpcs = aiControlService.nearbyNpcs(instance);
+                return index >= 0 && index < perceivedNpcs.size()
+                        ? instances.findEntity(perceivedNpcs.get(index)).orElse(null) : null;
+            }
+            if (alias.startsWith("nearby_entity_")) {
+                int index = targetIndex(alias);
+                List<Entity> perceivedEntities = aiControlService.nearbyEntities(instance.getLocation());
+                return index >= 0 && index < perceivedEntities.size() ? perceivedEntities.get(index) : null;
             }
             return perceivedPlayers.stream()
                     .filter(player -> player.getName().equalsIgnoreCase(alias))
@@ -857,9 +801,9 @@ public final class NpcBehaviourService implements Listener {
 
     private void tickBehaviour() {
         currentTick++;
-        tickTimeEvents();
         if (++proximityTick >= 10) {
             proximityTick = 0;
+            tickTimeEvents();
             tickProximity();
         }
         if (++playerLookTick >= PLAYER_LOOK_INTERVAL_TICKS) {
@@ -874,22 +818,25 @@ public final class NpcBehaviourService implements Listener {
             entityNearbyTick = 0;
             tickEntityNearby();
         }
-        Set<UUID> active = new HashSet<>();
+        boolean cleanRuntimeState = currentTick % 20L == 0L;
+        Set<UUID> active = cleanRuntimeState ? new HashSet<>() : null;
         for (NpcInstance instance : instances.findAll()) {
-            active.add(instance.getId());
+            if (cleanRuntimeState) active.add(instance.getId());
             if (!tickAiInteraction(instance)) {
                 tickMoveTo(instance);
                 tickFollow(instance);
             }
         }
-        routePaused.retainAll(active);
-        moveTargets.keySet().retainAll(active);
-        following.keySet().retainAll(active);
-        waypointActionSequences.keySet().retainAll(active);
-        switchInteractions.keySet().retainAll(active);
-        idleCycles.keySet().retainAll(active);
-        observedEntities.keySet().retainAll(active);
-        entityNearbyCooldownUntilTick.keySet().retainAll(active);
+        if (cleanRuntimeState) {
+            routePaused.retainAll(active);
+            moveTargets.keySet().retainAll(active);
+            following.keySet().retainAll(active);
+            waypointActionSequences.keySet().retainAll(active);
+            switchInteractions.keySet().retainAll(active);
+            idleCycles.keySet().retainAll(active);
+            observedEntities.keySet().retainAll(active);
+            entityNearbyCooldownUntilTick.keySet().retainAll(active);
+        }
     }
 
     private void tickEntityNearby() {
@@ -1245,28 +1192,56 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void mineNearbyBlocks(NpcInstance instance) {
+        mineNearbyBlocks(instance, "mineable_blocks", false);
+    }
+
+    private void mineNearbyBlocks(NpcInstance instance, String requestedTarget, boolean autonomousRange) {
         Location feet = instance.getLocation();
         if (feet.getWorld() == null) return;
         LivingEntity entity = instances.findEntity(instance).orElse(null);
-        org.bukkit.inventory.ItemStack tool = entity == null || entity.getEquipment() == null
+        ItemStack tool = entity == null || entity.getEquipment() == null
                 ? null : entity.getEquipment().getItemInMainHand();
+        Inventory carried = Bukkit.createInventory(null, 27);
+        carried.setContents(instance.getTemporaryInventoryContents());
+        String target = requestedTarget == null ? "mineable_blocks"
+                : requestedTarget.trim().toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
         boolean mined = false;
-        // The four layers begin at the NPC's feet. The supporting y - 1 layer is never visited.
-        for (int y = 0; y < 4; y++) {
-            for (int x = -2; x <= 2; x++) {
-                for (int z = -2; z <= 2; z++) {
+        int minedBlocks = 0;
+        int minY = autonomousRange ? -4 : 0;
+        int maxY = autonomousRange ? 8 : 3;
+        int horizontalRange = autonomousRange ? 5 : 2;
+        int blockLimit = autonomousRange ? 64 : 100;
+        for (int y = minY; y <= maxY && minedBlocks < blockLimit; y++) {
+            for (int x = -horizontalRange; x <= horizontalRange && minedBlocks < blockLimit; x++) {
+                for (int z = -horizontalRange; z <= horizontalRange && minedBlocks < blockLimit; z++) {
+                    if (autonomousRange && x * x + y * y + z * z > 64) continue;
                     Block block = feet.getBlock().getRelative(x, y, z);
-                    if (!isMineable(block.getType()) || block.getState() instanceof TileState) continue;
+                    if (!matchesMiningTarget(block.getType(), target)
+                            || block.getState() instanceof TileState) continue;
                     ItemStack effectiveTool = tool == null ? new ItemStack(Material.AIR) : tool;
-                    for (ItemStack drop : block.getDrops(effectiveTool, entity)) {
-                        feet.getWorld().dropItemNaturally(block.getLocation(), drop);
+                    List<ItemStack> drops = new ArrayList<>(block.getDrops(effectiveTool, entity));
+                    if (drops.isEmpty()) continue;
+                    Inventory updated = Bukkit.createInventory(null, 27);
+                    updated.setContents(carried.getContents());
+                    boolean fits = true;
+                    for (ItemStack drop : drops) {
+                        if (!updated.addItem(drop.clone()).isEmpty()) {
+                            fits = false;
+                            break;
+                        }
                     }
+                    if (!fits) continue;
+                    carried = updated;
                     block.setType(Material.AIR, true);
                     mined = true;
+                    minedBlocks++;
                 }
             }
         }
-        if (mined && entity != null) entity.swingMainHand();
+        if (mined) {
+            updateTemporaryInventory(instance, carried.getContents(), entity);
+            if (entity != null) entity.swingMainHand();
+        }
     }
 
     private void takeNearbyItem(NpcInstance instance, Entity actor) {
@@ -1489,6 +1464,23 @@ public final class NpcBehaviourService implements Listener {
         return Tag.MINEABLE_PICKAXE.isTagged(material);
     }
 
+    private static boolean matchesMiningTarget(Material material, String target) {
+        String name = material.name().toLowerCase(java.util.Locale.ROOT);
+        if (target.equals("ores") || target.equals("all_ores") || target.equals("ore")) {
+            return name.endsWith("_ore") || material == Material.ANCIENT_DEBRIS;
+        }
+        if (target.equals("trees") || target.equals("all_trees") || target.equals("logs")
+                || target.equals("wood")) {
+            return Tag.LOGS.isTagged(material);
+        }
+        if (target.equals("mineable_blocks") || target.equals("all_mineable_blocks")
+                || target.equals("all_blocks")) return isMineable(material);
+        if (name.equals(target)) return isMineable(material) || Tag.LOGS.isTagged(material);
+        String resource = target.endsWith("s") ? target.substring(0, target.length() - 1) : target;
+        return (name.equals(resource + "_ore") || name.equals("deepslate_" + resource + "_ore"))
+                && (name.endsWith("_ore") || material == Material.ANCIENT_DEBRIS);
+    }
+
     private java.util.Optional<Player> nearestPlayer(NpcInstance instance) {
         Location location = instance.getLocation();
         if (location.getWorld() == null) {
@@ -1595,13 +1587,6 @@ public final class NpcBehaviourService implements Listener {
                 markProximityTransition(key);
                 if (withinRange) {
                     nowNearby.add(key);
-                    NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-                    if (definition != null && definition.getAiControlSettings().enabled()
-                            && definition.getAiControlSettings().greetOnApproach()) {
-                        invokeAi(BehaviourEvent.PLAYER_APPROACH,
-                                "Player " + player.getName() + " approached the NPC.",
-                                instance, definition, player);
-                    }
                     trigger(BehaviourEvent.PLAYER_APPROACH, instance, player);
                 } else {
                     trigger(BehaviourEvent.PLAYER_LEAVES, instance, player);

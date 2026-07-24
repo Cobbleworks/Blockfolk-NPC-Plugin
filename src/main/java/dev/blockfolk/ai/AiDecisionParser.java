@@ -9,6 +9,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import dev.blockfolk.util.TextUtil;
+
 public final class AiDecisionParser {
 
     private static final int MAX_ACTIONS = 3;
@@ -21,7 +23,7 @@ public final class AiDecisionParser {
     public static AiDecision parse(String json, AiControlSettings settings) {
         List<AiDecision.Action> accepted = new ArrayList<>();
         try {
-            JsonObject root = JsonParser.parseString(stripFence(json)).getAsJsonObject();
+            JsonObject root = JsonParser.parseString(TextUtil.stripCodeFence(json)).getAsJsonObject();
             JsonArray actions = root.has("actions") && root.get("actions").isJsonArray()
                     ? root.getAsJsonArray("actions") : new JsonArray();
             for (JsonElement element : actions) {
@@ -49,6 +51,9 @@ public final class AiDecisionParser {
         if (type == AiActionType.DROP_ITEM && !settings.inventoryEnabled()) {
             return java.util.Optional.empty();
         }
+        if (type == AiActionType.MINE_BLOCKS && !settings.inventoryEnabled()) {
+            return java.util.Optional.empty();
+        }
         if (type != AiActionType.DO_NOTHING && type != AiActionType.REMEMBER_FACT
                 && type != AiActionType.DROP_ITEM
                 && !settings.allowedActions().contains(type)) {
@@ -70,11 +75,17 @@ public final class AiDecisionParser {
 
     private static boolean requiresTarget(AiActionType type) {
         return type == AiActionType.FLEE_FROM || type == AiActionType.FOLLOW
-                || type == AiActionType.MOVE_TO || type == AiActionType.DROP_ITEM;
+                || type == AiActionType.MOVE_TO || type == AiActionType.DROP_ITEM
+                || type == AiActionType.MINE_BLOCKS;
     }
 
     private static boolean validTarget(AiActionType type, String target) {
         if (type == AiActionType.DROP_ITEM) return target.matches("inventory_slot_[1-9][0-9]*");
+        if (type == AiActionType.MINE_BLOCKS) return target.matches("[a-z0-9_]{1,64}");
+        if (type == AiActionType.START_COMBAT) {
+            return TARGETS.contains(target)
+                    || target.matches("nearby_(player|npc|entity)_[1-9][0-9]*");
+        }
         if (type == AiActionType.FOLLOW) {
             if (target.equals("triggering_player") || target.equals("nearest_player")) return true;
             if (TARGETS.contains(target)) return false;
@@ -93,14 +104,6 @@ public final class AiDecisionParser {
         } catch (RuntimeException ignored) {
             return null;
         }
-    }
-
-    private static String stripFence(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        if (!trimmed.startsWith("```")) return trimmed;
-        int newline = trimmed.indexOf('\n');
-        int end = trimmed.lastIndexOf("```");
-        return newline >= 0 && end > newline ? trimmed.substring(newline + 1, end).trim() : trimmed;
     }
 
     private static AiDecision doNothing() {

@@ -79,16 +79,6 @@ public final class NpcRoute {
         return List.copyOf(points);
     }
 
-    public void setPoints(List<RoutePoint> points) {
-        this.points.clear();
-        if (points == null) {
-            return;
-        }
-        for (RoutePoint point : points) {
-            addPoint(point);
-        }
-    }
-
     public boolean addPoint(RoutePoint point) {
         Objects.requireNonNull(point, "point");
         if (!points.isEmpty() && !points.getFirst().worldName().equals(point.worldName())) {

@@ -40,6 +40,7 @@ public final class NpcInstanceRegistry implements Listener {
     private final NativeNpcNavigationService navigationService;
     private final DialogService dialogService;
     private final Map<UUID, NpcInstance> instances = new LinkedHashMap<>();
+    private final Map<Integer, UUID> instancesByEntityId = new java.util.HashMap<>();
     private BiConsumer<NpcInstance, NpcDefinition> spawnListener = (instance, definition) -> {
     };
     private Consumer<NpcInstance> relocationListener = instance -> {
@@ -100,6 +101,7 @@ public final class NpcInstanceRegistry implements Listener {
 
     public void loadPersistedInstances() {
         instances.clear();
+        instancesByEntityId.clear();
         for (NpcInstance instance : instanceRepository.loadAll()) {
             if (definitionRepository.find(instance.getDefinitionKey()).isPresent()) {
                 instances.put(instance.getId(), instance);
@@ -125,6 +127,7 @@ public final class NpcInstanceRegistry implements Listener {
         for (NpcInstance instance : instances.values()) {
             if (instance.getDefinitionKey().equals(definition.getKey())) {
                 renderer.refresh(instance, definition);
+                indexEntity(instance);
             }
         }
     }
@@ -138,6 +141,7 @@ public final class NpcInstanceRegistry implements Listener {
                 continue;
             }
             renderer.destroy(instance);
+            instancesByEntityId.values().remove(instance.getId());
             navigationService.destroy(instance);
             dialogService.detach(instance.getId());
             iterator.remove();
@@ -156,6 +160,7 @@ public final class NpcInstanceRegistry implements Listener {
             navigationService.destroy(instance);
             dialogService.detach(instance.getId());
         }
+        instancesByEntityId.clear();
     }
 
     public Collection<NpcInstance> findAll() {
@@ -215,9 +220,8 @@ public final class NpcInstanceRegistry implements Listener {
     }
 
     public Optional<NpcInstance> findByEntityId(int entityId) {
-        return instances.values().stream()
-                .filter(instance -> instance.getEntityId() == entityId)
-                .findFirst();
+        UUID instanceId = instancesByEntityId.get(entityId);
+        return instanceId == null ? Optional.empty() : Optional.ofNullable(instances.get(instanceId));
     }
 
     public Optional<NpcInstance> findById(UUID instanceId) {
@@ -272,6 +276,7 @@ public final class NpcInstanceRegistry implements Listener {
         if (instance == null) {
             return false;
         }
+        instancesByEntityId.remove(instance.getEntityId());
         renderer.destroy(instance);
         navigationService.destroy(instance);
         dialogService.detach(instance.getId());
@@ -284,6 +289,12 @@ public final class NpcInstanceRegistry implements Listener {
         // including displays from the removed chatter system.
         dialogService.detach(instance.getId());
         renderer.spawn(instance, definition);
+        indexEntity(instance);
         spawnListener.accept(instance, definition);
+    }
+
+    private void indexEntity(NpcInstance instance) {
+        instancesByEntityId.values().remove(instance.getId());
+        if (instance.getEntityId() != 0) instancesByEntityId.put(instance.getEntityId(), instance.getId());
     }
 }

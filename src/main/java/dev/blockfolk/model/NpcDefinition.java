@@ -215,10 +215,6 @@ public final class NpcDefinition {
         }
     }
 
-    public void addBehaviourAction(BehaviourEvent event, BehaviourAction action) {
-        behaviours.computeIfAbsent(event, ignored -> new ArrayList<>()).add(action);
-    }
-
     public void removeBehaviourAction(BehaviourEvent event, int index) {
         List<BehaviourAction> actions = behaviours.get(event);
         if (actions == null || index < 0 || index >= actions.size()) {

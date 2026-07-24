@@ -10,7 +10,6 @@ class AiControlSettingsTest {
     @Test
     void defaultsAreDialogueAndVisualOnly() {
         AiControlSettings settings = AiControlSettings.defaults();
-        assertFalse(settings.greetOnApproach());
         assertTrue(settings.allowedActions().contains(AiActionType.SAY));
         assertTrue(settings.allowedActions().contains(AiActionType.PLAY_ANIMATION));
         assertTrue(!settings.allowedActions().contains(AiActionType.START_COMBAT));
@@ -37,18 +36,7 @@ class AiControlSettingsTest {
                 .withRespondToChat(false);
 
         assertTrue(settings.enabled());
-        assertFalse(settings.greetOnApproach());
         assertFalse(settings.respondToChat());
-    }
-
-    @Test
-    void nearbyDeathReactionsAreOptInAndPreservedByOtherChanges() {
-        AiControlSettings defaults = AiControlSettings.defaults();
-        assertFalse(defaults.reactToNearbyDeaths());
-
-        AiControlSettings enabled = defaults.withReactToNearbyDeaths(true).withIdentity("A wary guard");
-        assertTrue(enabled.reactToNearbyDeaths());
-        assertTrue(enabled.enabled());
     }
 
     @Test
@@ -77,9 +65,18 @@ class AiControlSettingsTest {
     @Test
     void inventorySettingIsOptInAndPreservedByOtherChanges() {
         AiControlSettings settings = AiControlSettings.defaults().withInventoryEnabled(true)
-                .withIdentity("A courier").withReactToNearbyDeaths(true);
+                .withIdentity("A courier").withRespondToChat(false);
 
         assertTrue(settings.inventoryEnabled());
         assertFalse(AiControlSettings.defaults().inventoryEnabled());
+    }
+
+    @Test
+    void sharedConversationSettingIsOptInAndPreservedByOtherChanges() {
+        AiControlSettings settings = AiControlSettings.defaults().withSharedConversation(true)
+                .withIdentity("A communal storyteller").withInventoryEnabled(true);
+
+        assertTrue(settings.sharedConversation());
+        assertFalse(AiControlSettings.defaults().sharedConversation());
     }
 }
