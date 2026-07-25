@@ -108,7 +108,9 @@ public final class AiControlService {
     private final Map<UUID, PendingInvocation> pending = new HashMap<>();
     private final Set<UUID> pendingScheduled = new HashSet<>();
     private final Map<UUID, Long> generations = new ConcurrentHashMap<>();
-    private final Set<UUID> groupInFlight = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Long> groupInFlight = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> groupSequences = new ConcurrentHashMap<>();
+    private final Map<UUID, ActiveGroup> activeGroups = new ConcurrentHashMap<>();
     private final Map<UUID, PendingGroupInvocation> pendingGroups = new HashMap<>();
     private final Set<UUID> pendingGroupScheduled = new HashSet<>();
     private final long cooldownMillis;
@@ -188,8 +190,10 @@ public final class AiControlService {
         try {
             client.complete(settings.systemContext() + "\n\n" + RESULT_RULES, context)
                     .whenComplete((content, error) -> {
-                        inFlight.remove(instance.getId());
-                        scheduleFinishProcessing(instance);
+                        if (generations.getOrDefault(instance.getId(), 0L) == generation) {
+                            inFlight.remove(instance.getId());
+                            scheduleFinishProcessing(instance);
+                        }
                         if (error != null) {
                             plugin.getLogger().log(Level.WARNING,
                                     "AI Behaviour request failed for " + definition.getKey()
@@ -246,7 +250,8 @@ public final class AiControlService {
         }
 
         UUID groupKey = player.getUniqueId();
-        if (!groupInFlight.add(groupKey)) {
+        long groupSequence = groupSequences.merge(groupKey, 1L, Long::sum);
+        if (groupInFlight.putIfAbsent(groupKey, groupSequence) != null) {
             pendingGroups.put(groupKey, new PendingGroupInvocation(
                     eventDetail, List.copyOf(candidates), player, resultHandler));
             schedulePendingGroup(groupKey, cooldownMillis);
@@ -259,7 +264,7 @@ public final class AiControlService {
                 .filter(participant -> !inFlight.contains(participant.instance().getId()))
                 .toList();
         if (participants.isEmpty()) {
-            groupInFlight.remove(groupKey);
+            releaseGroup(groupKey, groupSequence);
             pendingGroups.put(groupKey, new PendingGroupInvocation(
                     eventDetail, List.copyOf(candidates), player, resultHandler));
             schedulePendingGroup(groupKey, cooldownMillis);
@@ -270,7 +275,7 @@ public final class AiControlService {
         long previous = participants.stream().mapToLong(participant ->
                 lastInvocation.getOrDefault(participant.instance().getId(), 0L)).max().orElse(0L);
         if (now - previous < cooldownMillis) {
-            groupInFlight.remove(groupKey);
+            releaseGroup(groupKey, groupSequence);
             pendingGroups.put(groupKey, new PendingGroupInvocation(
                     eventDetail, List.copyOf(candidates), player, resultHandler));
             schedulePendingGroup(groupKey, Math.max(1L, cooldownMillis - (now - previous)));
@@ -280,13 +285,16 @@ public final class AiControlService {
                 .filter(participant -> inFlight.add(participant.instance().getId()))
                 .toList();
         if (claimedParticipants.isEmpty()) {
-            groupInFlight.remove(groupKey);
+            releaseGroup(groupKey, groupSequence);
             pendingGroups.put(groupKey, new PendingGroupInvocation(
                     eventDetail, List.copyOf(candidates), player, resultHandler));
             schedulePendingGroup(groupKey, cooldownMillis);
             return;
         }
         participants = claimedParticipants;
+        activeGroups.put(groupKey, new ActiveGroup(groupSequence, participants.stream()
+                .map(participant -> participant.instance().getId())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet())));
         participants.forEach(participant -> {
             lastInvocation.put(participant.instance().getId(), now);
         });
@@ -315,7 +323,7 @@ public final class AiControlService {
                                 participant.instance(), participant.definition(), player, participant.settings()));
             }
         } catch (RuntimeException error) {
-            groupInFlight.remove(groupKey);
+            releaseGroup(groupKey, groupSequence);
             participants.forEach(participant -> inFlight.remove(participant.instance().getId()));
             plugin.getLogger().log(Level.WARNING, "Could not build AI Behaviour group context", error);
             return;
@@ -327,7 +335,7 @@ public final class AiControlService {
         try {
             requestParticipants.forEach(participant -> processingStarted.accept(participant.instance()));
         } catch (RuntimeException error) {
-            groupInFlight.remove(groupKey);
+            releaseGroup(groupKey, groupSequence);
             requestParticipants.forEach(participant -> inFlight.remove(participant.instance().getId()));
             requestParticipants.forEach(participant -> safeFinishProcessing(participant.instance()));
             plugin.getLogger().log(Level.WARNING, "Could not show AI group processing state", error);
@@ -336,10 +344,14 @@ public final class AiControlService {
         try {
             client.complete(system.toString(), context.toString()).whenComplete((content, error) -> {
                 requestParticipants.forEach(participant -> {
-                    inFlight.remove(participant.instance().getId());
-                    scheduleFinishProcessing(participant.instance());
+                    UUID instanceId = participant.instance().getId();
+                    if (generations.getOrDefault(instanceId, 0L)
+                            .equals(requestGenerations.get(instanceId))) {
+                        inFlight.remove(instanceId);
+                        scheduleFinishProcessing(participant.instance());
+                    }
                 });
-                groupInFlight.remove(groupKey);
+                releaseGroup(groupKey, groupSequence);
                 if (error != null) {
                     plugin.getLogger().log(Level.WARNING,
                             "AI Behaviour group chat request failed; deterministic behaviour continues.", error);
@@ -362,7 +374,7 @@ public final class AiControlService {
                 });
             });
         } catch (RuntimeException error) {
-            groupInFlight.remove(groupKey);
+            releaseGroup(groupKey, groupSequence);
             requestParticipants.forEach(participant -> inFlight.remove(participant.instance().getId()));
             requestParticipants.forEach(participant -> safeFinishProcessing(participant.instance()));
             plugin.getLogger().log(Level.WARNING, "Could not start AI Behaviour group chat request", error);
@@ -424,6 +436,13 @@ public final class AiControlService {
         if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> safeFinishProcessing(instance));
     }
 
+    private void releaseGroup(UUID groupKey, long groupSequence) {
+        if (groupInFlight.remove(groupKey, groupSequence)) {
+            activeGroups.computeIfPresent(groupKey, (ignored, activeGroup) ->
+                    activeGroup.sequence() == groupSequence ? null : activeGroup);
+        }
+    }
+
     public String configurationIssue() {
         return client.configurationIssue();
     }
@@ -453,28 +472,45 @@ public final class AiControlService {
 
     public void forget(NpcInstance instance) {
         processingFinished.accept(instance);
-        inFlight.remove(instance.getId());
-        lastInvocation.remove(instance.getId());
-        pending.remove(instance.getId());
-        pendingScheduled.remove(instance.getId());
-        generations.remove(instance.getId());
+        UUID instanceId = instance.getId();
+        generations.merge(instanceId, 1L, Long::sum);
+        inFlight.remove(instanceId);
+        lastInvocation.remove(instanceId);
+        pending.remove(instanceId);
+        pendingScheduled.remove(instanceId);
         memory.forget(instance.getId());
+        releaseGroupsContaining(Set.of(instanceId));
         pendingGroups.entrySet().removeIf(entry -> entry.getValue().candidates().stream()
-                .anyMatch(candidate -> candidate.getId().equals(instance.getId())));
+                .anyMatch(candidate -> candidate.getId().equals(instanceId)));
     }
 
     /** Clears runtime conversation/event memory and invalidates pending responses for every spawned copy. */
     public void resetDefinition(NpcDefinition definition) {
+        Set<UUID> resetInstanceIds = new HashSet<>();
         for (NpcInstance instance : instances.findByDefinition(definition)) {
             processingFinished.accept(instance);
             UUID instanceId = instance.getId();
+            resetInstanceIds.add(instanceId);
             generations.merge(instanceId, 1L, Long::sum);
+            inFlight.remove(instanceId);
             lastInvocation.remove(instanceId);
             pending.remove(instanceId);
             memory.forget(instanceId);
         }
+        releaseGroupsContaining(resetInstanceIds);
         pendingGroups.entrySet().removeIf(entry -> entry.getValue().candidates().stream()
                 .anyMatch(candidate -> candidate.getDefinitionKey().equals(definition.getKey())));
+    }
+
+    private void releaseGroupsContaining(Set<UUID> instanceIds) {
+        if (instanceIds.isEmpty()) return;
+        activeGroups.forEach((groupKey, activeGroup) -> {
+            if (activeGroup.participantIds().stream().noneMatch(instanceIds::contains)) return;
+            Long groupSequence = groupInFlight.get(groupKey);
+            if (groupSequence != null && groupSequence == activeGroup.sequence()) {
+                releaseGroup(groupKey, groupSequence);
+            }
+        });
     }
 
     private void schedulePending(UUID instanceId, long delayMillis) {
@@ -498,7 +534,7 @@ public final class AiControlService {
         long ticks = Math.max(1L, (Math.max(0L, delayMillis) + 49L) / 50L);
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             pendingGroupScheduled.remove(groupKey);
-            if (groupInFlight.contains(groupKey)) {
+            if (groupInFlight.containsKey(groupKey)) {
                 schedulePendingGroup(groupKey, cooldownMillis);
                 return;
             }
@@ -819,6 +855,8 @@ public final class AiControlService {
 
     private record GroupParticipant(
             NpcInstance instance, NpcDefinition definition, AiControlSettings settings) { }
+
+    private record ActiveGroup(long sequence, Set<UUID> participantIds) { }
 
     private record PendingGroupInvocation(
             String eventDetail, List<NpcInstance> candidates, Player player,
