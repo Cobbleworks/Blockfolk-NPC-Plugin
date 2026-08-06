@@ -99,8 +99,8 @@ public final class NpcDefinitionRepository {
         configuration.set("skin-url", definition.getSkinUrl());
         configuration.set("skin-texture-value", definition.getSkinTextureValue());
         configuration.set("skin-texture-signature", definition.getSkinTextureSignature());
-        if (definition.getSpawnpoint() != null) {
-            LocationCodec.write(configuration.createSection("spawnpoint"), definition.getSpawnpoint());
+        if (definition.getStoredSpawnpoint() != null) {
+            LocationCodec.write(configuration.createSection("spawnpoint"), definition.getStoredSpawnpoint());
         }
         configuration.set("inventory.contents", Arrays.asList(definition.getInventoryContents()));
         configuration.set("inventory.armor", Arrays.asList(definition.getArmorContents()));
@@ -118,6 +118,8 @@ public final class NpcDefinitionRepository {
         configuration.set("combat.show-boss-bar", definition.getCombatProfile().showBossBar());
         configuration.set("combat.dropped-experience", definition.getCombatProfile().droppedExperience());
         configuration.set("movement.speed", definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
+        configuration.set("movement.enabled", definition.getMovementProfile().enabled());
+        configuration.set("movement.route", definition.getMovementProfile().routeKey());
         configuration.set("properties.show-name", definition.isShowName());
         configuration.set("properties.look-at-player", definition.isLookAtPlayer());
         configuration.set("properties.item-pickup", definition.isItemPickup());
@@ -213,7 +215,7 @@ public final class NpcDefinitionRepository {
                 configuration.getString("skin-texture-value"),
                 configuration.getString("skin-texture-signature")
         );
-        definition.setSpawnpoint(LocationCodec.read(configuration.getConfigurationSection("spawnpoint")));
+        definition.setStoredSpawnpoint(LocationCodec.readStored(configuration.getConfigurationSection("spawnpoint")));
         definition.setInventoryContents(readItemArray(configuration, "inventory.contents", 36));
         definition.setArmorContents(readItemArray(configuration, "inventory.armor", 4));
         definition.setMainHand(configuration.getItemStack("inventory.main-hand"));
@@ -230,8 +232,16 @@ public final class NpcDefinitionRepository {
                 configuration.getBoolean("combat.show-boss-bar", false),
                 configuration.getInt("combat.dropped-experience", 0)
         ));
-        definition.setMovementProfile(MovementProfile.disabled().withWalkingSpeed(
-                WalkingSpeed.fromStored(configuration.getString("movement.speed"))));
+        WalkingSpeed storedSpeed = WalkingSpeed.fromStored(configuration.getString("movement.speed"));
+        String storedRoute = configuration.getString("movement.route");
+        try {
+            definition.setMovementProfile(configuration.getBoolean("movement.enabled", false) && storedRoute != null
+                    ? MovementProfile.routing(storedRoute, storedSpeed)
+                    : MovementProfile.disabled().withWalkingSpeed(storedSpeed));
+        } catch (IllegalArgumentException ignored) {
+            definition.setMovementProfile(MovementProfile.disabled().withWalkingSpeed(storedSpeed));
+            plugin.getLogger().warning("Ignoring malformed movement route in " + file.getName());
+        }
         definition.setShowName(configuration.getBoolean("properties.show-name", true));
         definition.setLookAtPlayer(configuration.getBoolean("properties.look-at-player", true));
         definition.setItemPickup(configuration.getBoolean("properties.item-pickup", false));

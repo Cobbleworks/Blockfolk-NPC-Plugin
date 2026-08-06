@@ -10,8 +10,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeoutException;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.BiPredicate;
 import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
@@ -123,6 +125,8 @@ public final class AiControlService {
     private Consumer<NpcInstance> processingStarted = ignored -> { };
     private Consumer<NpcInstance> processingFinished = ignored -> { };
     private volatile boolean warnedNotConfigured;
+    private BiPredicate<NpcInstance, NpcDefinition> routeState = (instance, definition) ->
+            definition.getMovementProfile().enabled();
 
     public AiControlService(
             Plugin plugin,
@@ -147,6 +151,11 @@ public final class AiControlService {
         processingFinished = finished == null ? ignored -> { } : finished;
     }
 
+    public void setRouteState(BiPredicate<NpcInstance, NpcDefinition> routeState) {
+        this.routeState = routeState == null ? (instance, definition) -> definition.getMovementProfile().enabled()
+                : routeState;
+    }
+
     public void invoke(
             BehaviourEvent event,
             String eventDetail,
@@ -160,7 +169,8 @@ public final class AiControlService {
         if (!client.configured()) {
             if (!warnedNotConfigured) {
                 warnedNotConfigured = true;
-                plugin.getLogger().warning("AI Behaviour is configured on an NPC, but openrouter.api-key or model is empty.");
+                plugin.getLogger().warning("AI Behaviour is configured on an NPC, but OpenRouter is unavailable: "
+                        + client.configurationIssue() + ".");
             }
             return;
         }
@@ -201,9 +211,7 @@ public final class AiControlService {
                             scheduleFinishProcessing(instance);
                         }
                         if (error != null) {
-                            plugin.getLogger().log(Level.WARNING,
-                                    "AI Behaviour request failed for " + definition.getKey()
-                                            + "; deterministic behaviour continues.", error);
+                            logRequestFailure("AI Behaviour request for " + definition.getKey(), error);
                         } else {
                             AiDecision decision = AiDecisionParser.parse(content, settings);
                             if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
@@ -250,7 +258,8 @@ public final class AiControlService {
         if (!client.configured()) {
             if (!warnedNotConfigured) {
                 warnedNotConfigured = true;
-                plugin.getLogger().warning("AI Behaviour is configured on an NPC, but openrouter.api-key or model is empty.");
+                plugin.getLogger().warning("AI Behaviour is configured on an NPC, but OpenRouter is unavailable: "
+                        + client.configurationIssue() + ".");
             }
             return;
         }
@@ -362,8 +371,7 @@ public final class AiControlService {
                 });
                 releaseGroup(groupKey, groupSequence);
                 if (error != null) {
-                    plugin.getLogger().log(Level.WARNING,
-                            "AI Behaviour group chat request failed; deterministic behaviour continues.", error);
+                    logRequestFailure("AI Behaviour group chat request", error);
                 } else {
                     Map<String, AiDecision> decisions = AiGroupDecisionParser.parse(content, settingsByAlias);
                     if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin,
@@ -388,6 +396,21 @@ public final class AiControlService {
             requestParticipants.forEach(participant -> safeFinishProcessing(participant.instance()));
             plugin.getLogger().log(Level.WARNING, "Could not start AI Behaviour group chat request", error);
         }
+    }
+
+    private void logRequestFailure(String requestDescription, Throwable error) {
+        Throwable cause = error;
+        while (cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+        if (cause instanceof TimeoutException) {
+            plugin.getLogger().warning(requestDescription
+                    + " timed out; deterministic behaviour continues. Increase openrouter.timeout-seconds"
+                    + " if this happens regularly.");
+            return;
+        }
+        plugin.getLogger().log(Level.WARNING,
+                requestDescription + " failed; deterministic behaviour continues.", error);
     }
 
     private void applyGroupDecisions(
@@ -587,7 +610,7 @@ public final class AiControlService {
         if (npc != null) out.append("Health: ").append(format(npc.getHealth())).append(" / ")
                 .append(format(EntityHealth.maximum(npc))).append('\n');
         out.append("Combat: ").append(combat != null && combat.isEngaged(instance) ? "active" : "not active").append('\n')
-                .append("Route: ").append(definition.getMovementProfile().enabled() ? "configured" : "not active").append('\n');
+                .append("Route: ").append(routeState.test(instance, definition) ? "configured" : "not configured").append('\n');
         if (npc != null) out.append("Equipment: main hand ")
                 .append(npc.getEquipment() == null ? "unknown" : readable(npc.getEquipment().getItemInMainHand().getType().name()))
                 .append('\n');
@@ -624,6 +647,8 @@ public final class AiControlService {
         settings.allowedActions().stream().filter(action -> action != AiActionType.REMEMBER_FACT)
                 .filter(action -> action != AiActionType.DROP_ITEM)
                 .filter(action -> action != AiActionType.MINE_BLOCKS || settings.inventoryEnabled())
+                .filter(action -> action != AiActionType.START_ROUTE && action != AiActionType.PAUSE_ROUTE
+                        || routeState.test(instance, definition))
                 .sorted().forEach(action -> out.append(action.name()).append('\n'));
         if (settings.memoryEnabled()) out.append("REMEMBER_FACT\n");
         if (settings.inventoryEnabled() && hasInventoryItems(instance)) out.append("DROP_ITEM\n");
@@ -833,7 +858,7 @@ public final class AiControlService {
 
     public List<NpcInstance> nearbyNpcs(NpcInstance instance) {
         Location center = instance.getLocation();
-        return instances.findAll().stream().filter(other -> !other.getId().equals(instance.getId()))
+        return instances.findActive().stream().filter(other -> !other.getId().equals(instance.getId()))
                 .filter(other -> other.getLocation().getWorld() == center.getWorld())
                 .filter(other -> other.getLocation().distanceSquared(center) <= PERCEPTION_RADIUS * PERCEPTION_RADIUS)
                 .sorted(Comparator.comparingDouble(other -> other.getLocation().distanceSquared(center)))
@@ -843,7 +868,7 @@ public final class AiControlService {
     public List<Entity> nearbyEntities(Location center) {
         if (center.getWorld() == null) return List.of();
         Set<Integer> npcEntityIds = new HashSet<>();
-        for (NpcInstance known : instances.findAll()) npcEntityIds.add(known.getEntityId());
+        for (NpcInstance known : instances.findActive()) npcEntityIds.add(known.getEntityId());
         return center.getWorld().getNearbyEntities(center, PERCEPTION_RADIUS, PERCEPTION_RADIUS, PERCEPTION_RADIUS)
                 .stream().filter(entity -> !(entity instanceof Player))
                 .filter(entity -> !npcEntityIds.contains(entity.getEntityId()) && !instances.isNavigationEntity(entity))

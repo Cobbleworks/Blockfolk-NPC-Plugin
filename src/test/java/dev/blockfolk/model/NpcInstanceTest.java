@@ -8,6 +8,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcInstanceTest {
     @Test
@@ -54,5 +55,19 @@ class NpcInstanceTest {
         NpcInstance instance = new NpcInstance(UUID.randomUUID(), "guard", new Location(null, 0, 0, 0));
         assertEquals(27, instance.getTemporaryInventoryContents().length);
         assertNotSame(instance.getTemporaryInventoryContents(), instance.getTemporaryInventoryContents());
+    }
+
+    @Test
+    void retainsIdentityAndSpawnWhileAwaitingRespawn() {
+        UUID id = UUID.randomUUID();
+        NpcInstance instance = new NpcInstance(id, "guard",
+                new StoredLocation("custom_world", 10, 20, 30, 0, 0),
+                new StoredLocation("custom_world", 1, 2, 3, 0, 0), 12345L);
+
+        assertEquals(id, instance.getId());
+        assertTrue(instance.isAwaitingRespawn());
+        assertEquals("custom_world", instance.getStoredSpawnLocation().worldName());
+        instance.returnToSpawn();
+        assertEquals(instance.getStoredSpawnLocation(), instance.getStoredLocation());
     }
 }

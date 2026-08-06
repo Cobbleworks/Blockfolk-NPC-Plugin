@@ -84,4 +84,45 @@ class NpcDefinitionTest {
         assertEquals("fact 1", definition.getAiMemories().getFirst());
         assertEquals("fact " + NpcDefinition.MAX_AI_MEMORIES, definition.getAiMemories().getLast());
     }
+
+    @Test
+    void removesDeletedRouteReferencesIncludingQuestionBranches() {
+        NpcDefinition definition = NpcDefinition.create("Guard");
+        definition.setMovementProfile(MovementProfile.routing("patrol", WalkingSpeed.FAST));
+        definition.setBehaviourActions(BehaviourEvent.SPAWN, List.of(
+                new BehaviourAction(BehaviourActionType.SET_ROUTE, "patrol"),
+                new BehaviourAction(BehaviourActionType.WAVE, null),
+                BehaviourAction.ask(new NpcQuestion(UUID.randomUUID(), "Choose", List.of(
+                        new QuestionOption("Go", List.of(
+                                new BehaviourAction(BehaviourActionType.SET_ROUTE, "patrol")))),
+                        List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "other"))))));
+
+        assertTrue(definition.removeRouteReferences("patrol"));
+
+        assertEquals(java.util.Set.of("other"), definition.getReferencedRouteKeys());
+        assertFalse(definition.getMovementProfile().enabled());
+        assertEquals(2, definition.getBehaviourActions(BehaviourEvent.SPAWN).size());
+    }
+
+    @Test
+    void copyPreservesEveryVisibleProperty() {
+        NpcDefinition source = NpcDefinition.create("Guard");
+        source.setShowName(false);
+        source.setLookAtPlayer(false);
+        source.setItemPickup(true);
+        source.setPushable(false);
+        source.setColor(NpcColor.BLUE);
+        source.setBehaviourActions(BehaviourEvent.RIGHT_CLICK,
+                List.of(new BehaviourAction(BehaviourActionType.WAVE, null)));
+
+        NpcDefinition copy = source.copyAs("Guard Copy");
+
+        assertFalse(copy.isShowName());
+        assertFalse(copy.isLookAtPlayer());
+        assertTrue(copy.isItemPickup());
+        assertFalse(copy.isPushable());
+        assertEquals(NpcColor.BLUE, copy.getColor());
+        assertEquals(source.getBehaviourActions(BehaviourEvent.RIGHT_CLICK),
+                copy.getBehaviourActions(BehaviourEvent.RIGHT_CLICK));
+    }
 }

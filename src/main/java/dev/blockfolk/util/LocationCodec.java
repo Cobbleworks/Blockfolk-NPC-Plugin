@@ -5,6 +5,8 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 
+import dev.blockfolk.model.StoredLocation;
+
 public final class LocationCodec {
 
     private LocationCodec() {
@@ -19,6 +21,28 @@ public final class LocationCodec {
         section.set("pitch", location.getPitch());
     }
 
+    public static void write(ConfigurationSection section, StoredLocation location) {
+        section.set("world", location.worldName());
+        section.set("x", location.x());
+        section.set("y", location.y());
+        section.set("z", location.z());
+        section.set("yaw", location.yaw());
+        section.set("pitch", location.pitch());
+    }
+
+    public static StoredLocation readStored(ConfigurationSection section) {
+        if (section == null) return null;
+        String worldName = section.getString("world");
+        if (worldName == null) return null;
+        try {
+            return new StoredLocation(worldName, section.getDouble("x"), section.getDouble("y"),
+                    section.getDouble("z"), (float) section.getDouble("yaw"),
+                    (float) section.getDouble("pitch"));
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
     public static Location read(ConfigurationSection section) {
         if (section == null) {
             return null;
@@ -27,17 +51,9 @@ public final class LocationCodec {
         if (worldName == null) {
             return null;
         }
+        StoredLocation stored = readStored(section);
+        if (stored == null) return null;
         World world = Bukkit.getWorld(worldName);
-        if (world == null) {
-            return null;
-        }
-        return new Location(
-                world,
-                section.getDouble("x"),
-                section.getDouble("y"),
-                section.getDouble("z"),
-                (float) section.getDouble("yaw"),
-                (float) section.getDouble("pitch")
-        );
+        return world == null ? null : stored.toLocation();
     }
 }

@@ -103,7 +103,15 @@ public final class NativeNpcNavigationService {
     }
 
     public void destroy(NpcInstance instance) {
-        Husk navigator = findNavigator(instance);
+        destroy(instance, false);
+    }
+
+    public void destroyPermanently(NpcInstance instance) {
+        destroy(instance, true);
+    }
+
+    private void destroy(NpcInstance instance, boolean loadChunk) {
+        Husk navigator = findNavigator(instance, loadChunk);
         if (navigator != null) {
             navigator.remove();
             configuredNavigators.remove(navigator.getUniqueId());
@@ -133,7 +141,7 @@ public final class NativeNpcNavigationService {
     }
 
     private Husk findOrSpawn(NpcInstance instance) {
-        Husk existing = findNavigator(instance);
+        Husk existing = findNavigator(instance, true);
         if (existing != null) {
             if (configuredNavigators.add(existing.getUniqueId())) {
                 configure(existing);
@@ -163,6 +171,10 @@ public final class NativeNpcNavigationService {
     }
 
     private Husk findNavigator(NpcInstance instance) {
+        return findNavigator(instance, false);
+    }
+
+    private Husk findNavigator(NpcInstance instance, boolean loadChunk) {
         Location location = instance.getLocation();
         if (location.getWorld() == null) {
             return null;
@@ -175,7 +187,10 @@ public final class NativeNpcNavigationService {
         navigatorIdsByInstance.remove(instance.getId());
         configuredNavigators.remove(navigatorId);
 
-        location.getChunk().load();
+        if (!location.getChunk().isLoaded()) {
+            if (!loadChunk) return null;
+            location.getChunk().load();
+        }
         Husk found = null;
         String expectedId = instance.getId().toString();
         for (Husk navigator : location.getWorld().getEntitiesByClass(Husk.class)) {

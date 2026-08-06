@@ -46,6 +46,7 @@ import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.LocationRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
+import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.UiText;
 import net.kyori.adventure.text.Component;
@@ -71,6 +72,7 @@ public final class RouteGuiService implements Listener {
     private final Map<UUID, LocationEditSession> locationEditSessions = new HashMap<>();
     private WaypointActionOpener waypointActionOpener;
     private BukkitTask markerTask;
+    private NpcBehaviourService behaviourService;
 
     public RouteGuiService(
             JavaPlugin plugin,
@@ -96,6 +98,10 @@ public final class RouteGuiService implements Listener {
 
     public void setWaypointActionOpener(WaypointActionOpener waypointActionOpener) {
         this.waypointActionOpener = waypointActionOpener;
+    }
+
+    public void setBehaviourService(NpcBehaviourService behaviourService) {
+        this.behaviourService = behaviourService;
     }
 
     public void openRoutes(Player player) {
@@ -714,8 +720,17 @@ public final class RouteGuiService implements Listener {
             openRoutes(player, holder.folder(), holder.page());
             return;
         }
+        int affected = 0;
+        for (NpcDefinition definition : definitionRepository.findAll()) {
+            if (definition.removeRouteReferences(route.getKey())) {
+                definitionRepository.save(definition);
+                affected++;
+            }
+        }
+        if (behaviourService != null) behaviourService.removeRoute(route.getKey());
         routeRepository.delete(route);
-        player.sendMessage(UiText.success("Deleted route '" + route.getDisplayName() + "'."));
+        player.sendMessage(UiText.success("Deleted route '" + route.getDisplayName()
+                + "' and unassigned " + affected + " preset(s)."));
         openRoutes(player, holder.folder(), holder.page());
     }
 

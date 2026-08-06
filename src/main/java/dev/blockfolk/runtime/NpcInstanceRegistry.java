@@ -20,6 +20,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityRemoveEvent;
+import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
@@ -110,29 +111,46 @@ public final class NpcInstanceRegistry implements Listener {
         instances.clear();
         instancesByEntityId.clear();
         for (NpcInstance instance : instanceRepository.loadAll()) {
-            if (definitionRepository.find(instance.getDefinitionKey()).isPresent()) {
-                instances.put(instance.getId(), instance);
+            instances.put(instance.getId(), instance);
+            if (definitionRepository.find(instance.getDefinitionKey()).isEmpty()) {
+                plugin.getLogger().warning("Keeping NPC instance " + instance.getId()
+                        + " unresolved because preset '" + instance.getDefinitionKey() + "' is missing.");
             }
         }
     }
 
     public NpcInstance spawnPersistent(NpcDefinition definition, Location location) {
         NpcInstance instance = new NpcInstance(UUID.randomUUID(), definition.getKey(), location);
+        if (!renderer.spawn(instance, definition)) {
+            return null;
+        }
         instances.put(instance.getId(), instance);
+        indexEntity(instance);
         instanceRepository.saveAll(instances.values());
-        spawnInstance(instance, definition);
+        spawnListener.accept(instance, definition);
         return instance;
     }
 
     public void spawnAll() {
         for (NpcInstance instance : instances.values()) {
+            if (!instance.isAwaitingRespawn()) {
+                definitionRepository.find(instance.getDefinitionKey()).ifPresent(definition -> spawnInstance(instance, definition));
+            }
+        }
+    }
+
+    @EventHandler
+    public void onWorldLoad(WorldLoadEvent event) {
+        for (NpcInstance instance : instances.values()) {
+            if (instance.isAwaitingRespawn() || instance.getEntityId() != 0
+                    || !instance.getStoredLocation().worldName().equals(event.getWorld().getName())) continue;
             definitionRepository.find(instance.getDefinitionKey()).ifPresent(definition -> spawnInstance(instance, definition));
         }
     }
 
     public void refreshDefinition(NpcDefinition definition) {
         for (NpcInstance instance : instances.values()) {
-            if (instance.getDefinitionKey().equals(definition.getKey())) {
+            if (instance.getDefinitionKey().equals(definition.getKey()) && !instance.isAwaitingRespawn()) {
                 renderer.refresh(instance, definition);
                 indexEntity(instance);
             }
@@ -147,9 +165,9 @@ public final class NpcInstanceRegistry implements Listener {
             if (!instance.getDefinitionKey().equals(definition.getKey())) {
                 continue;
             }
-            renderer.destroy(instance);
+            renderer.destroyPermanently(instance);
             instancesByEntityId.values().remove(instance.getId());
-            navigationService.destroy(instance);
+            navigationService.destroyPermanently(instance);
             dialogService.detach(instance.getId());
             iterator.remove();
             removalListener.accept(instance);
@@ -171,8 +189,39 @@ public final class NpcInstanceRegistry implements Listener {
         instancesByEntityId.clear();
     }
 
+    public void markAwaitingRespawn(NpcInstance instance, long respawnAtEpochMillis) {
+        if (!instances.containsKey(instance.getId())) return;
+        renderer.destroy(instance);
+        instancesByEntityId.values().remove(instance.getId());
+        navigationService.destroy(instance);
+        dialogService.detach(instance.getId());
+        instance.setTemporaryInventoryContents(new org.bukkit.inventory.ItemStack[0]);
+        instance.setRespawnAtEpochMillis(respawnAtEpochMillis);
+        instanceRepository.saveAll(instances.values());
+    }
+
+    public boolean respawn(NpcInstance instance, NpcDefinition definition) {
+        if (!instances.containsKey(instance.getId())) return false;
+        instance.returnToSpawn();
+        instance.setRespawnAtEpochMillis(0L);
+        if (!renderer.spawn(instance, definition)) {
+            instance.setRespawnAtEpochMillis(System.currentTimeMillis() + 5_000L);
+            instanceRepository.saveAll(instances.values());
+            return false;
+        }
+        indexEntity(instance);
+        instanceRepository.saveAll(instances.values());
+        spawnListener.accept(instance, definition);
+        return true;
+    }
+
     public Collection<NpcInstance> findAll() {
         return instances.values();
+    }
+
+    public Collection<NpcInstance> findActive() {
+        return instances.values().stream().filter(instance -> !instance.isAwaitingRespawn())
+                .filter(instance -> renderer.findLivingEntity(instance).isPresent()).toList();
     }
 
     public boolean isNavigationEntity(Entity entity) {
@@ -249,7 +298,7 @@ public final class NpcInstanceRegistry implements Listener {
             return instance.getLocation();
         }
         Location location = renderer.currentLocation(instance).orElseGet(instance::getLocation);
-        instance.setLocation(location);
+        if (location.getWorld() != null) instance.setLocation(location);
         return location.clone();
     }
 
@@ -285,8 +334,8 @@ public final class NpcInstanceRegistry implements Listener {
             return false;
         }
         instancesByEntityId.remove(instance.getEntityId());
-        renderer.destroy(instance);
-        navigationService.destroy(instance);
+        renderer.destroyPermanently(instance);
+        navigationService.destroyPermanently(instance);
         dialogService.detach(instance.getId());
         removalListener.accept(instance);
         instanceRepository.saveAll(instances.values());
@@ -297,9 +346,10 @@ public final class NpcInstanceRegistry implements Listener {
         // Clear any tagged dialog display left by an earlier server run,
         // including displays from the removed chatter system.
         dialogService.detach(instance.getId());
-        renderer.spawn(instance, definition);
-        indexEntity(instance);
-        spawnListener.accept(instance, definition);
+        if (renderer.spawn(instance, definition)) {
+            indexEntity(instance);
+            spawnListener.accept(instance, definition);
+        }
     }
 
     private void indexEntity(NpcInstance instance) {

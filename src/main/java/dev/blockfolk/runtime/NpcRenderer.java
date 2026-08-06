@@ -15,9 +15,11 @@ public interface NpcRenderer {
 
     void stop();
 
-    void spawn(NpcInstance instance, NpcDefinition definition);
+    boolean spawn(NpcInstance instance, NpcDefinition definition);
 
     void destroy(NpcInstance instance);
+
+    default void destroyPermanently(NpcInstance instance) { destroy(instance); }
 
     void refresh(NpcInstance instance, NpcDefinition definition);
 

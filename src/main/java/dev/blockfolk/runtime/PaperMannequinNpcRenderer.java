@@ -69,17 +69,17 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     }
 
     @Override
-    public void spawn(NpcInstance instance, NpcDefinition definition) {
-        Mannequin existing = findEntity(instance);
+    public boolean spawn(NpcInstance instance, NpcDefinition definition) {
+        Mannequin existing = findEntity(instance, true);
         if (existing != null) {
             applyDefinition(existing, instance, definition, false);
-            return;
+            return true;
         }
 
         Location location = instance.getLocation();
         if (location.getWorld() == null) {
             plugin.getLogger().warning("Cannot render NPC " + definition.getKey() + ": its world is not loaded.");
-            return;
+            return false;
         }
 
         try {
@@ -99,14 +99,25 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
             });
             entityIdsByInstance.put(instance.getId(), mannequin.getUniqueId());
             instance.setEntityId(mannequin.getEntityId());
+            return true;
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Could not render NPC " + definition.getKey(), exception);
+            return false;
         }
     }
 
     @Override
     public void destroy(NpcInstance instance) {
-        Mannequin mannequin = findEntity(instance);
+        destroy(instance, false);
+    }
+
+    @Override
+    public void destroyPermanently(NpcInstance instance) {
+        destroy(instance, true);
+    }
+
+    private void destroy(NpcInstance instance, boolean loadChunk) {
+        Mannequin mannequin = findEntity(instance, loadChunk);
         if (mannequin != null) {
             mannequin.remove();
         }
@@ -242,6 +253,10 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     }
 
     private Mannequin findEntity(NpcInstance instance) {
+        return findEntity(instance, false);
+    }
+
+    private Mannequin findEntity(NpcInstance instance, boolean loadChunk) {
         UUID entityUuid = entityIdsByInstance.get(instance.getId());
         Location location = instance.getLocation();
         if (location.getWorld() == null) {
@@ -253,9 +268,12 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         }
         entityIdsByInstance.remove(instance.getId());
 
-        // Loading the saved chunk also loads any tagged mannequin left behind
-        // by an unclean shutdown, allowing it to be adopted instead of cloned.
-        location.getChunk().load();
+        if (!location.getChunk().isLoaded()) {
+            if (!loadChunk) return null;
+            // Spawn and permanent deletion are infrequent lifecycle operations;
+            // routine lookups must never synchronously reload an idle NPC chunk.
+            location.getChunk().load();
+        }
         Mannequin found = null;
         for (Mannequin mannequin : location.getWorld().getEntitiesByClass(Mannequin.class)) {
             String taggedId = mannequin.getPersistentDataContainer().get(instanceKey, PersistentDataType.STRING);

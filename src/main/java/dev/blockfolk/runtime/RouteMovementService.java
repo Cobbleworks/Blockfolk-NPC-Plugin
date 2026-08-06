@@ -66,7 +66,7 @@ public final class RouteMovementService {
 
     private void tick() {
         Set<UUID> activeInstances = new HashSet<>();
-        for (NpcInstance instance : instanceRegistry.findAll()) {
+        for (NpcInstance instance : instanceRegistry.findActive()) {
             activeInstances.add(instance.getId());
             move(instance);
         }

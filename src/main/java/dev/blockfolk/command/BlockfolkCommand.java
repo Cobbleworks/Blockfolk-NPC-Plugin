@@ -97,7 +97,9 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             }
             definition.setSpawnpoint(player.getLocation());
             definitionRepository.save(definition);
-            instanceRegistry.spawnPersistent(definition, definition.getSpawnpoint());
+            if (instanceRegistry.spawnPersistent(definition, definition.getSpawnpoint()) == null) {
+                player.sendMessage(UiText.warning("Preset created, but its NPC could not be rendered."));
+            }
             guiService.openEditor(player, definition);
             return true;
         }
@@ -123,11 +125,18 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
                     player.sendMessage(UiText.warning("Set a spawnpoint for this NPC first."));
                     return true;
                 }
+                if (spawnLocation.getWorld() == null) {
+                    player.sendMessage(UiText.warning("The NPC spawnpoint world is not loaded."));
+                    return true;
+                }
             } else {
                 spawnLocation = player.getLocation();
             }
-            instanceRegistry.spawnPersistent(definition, spawnLocation);
-            player.sendMessage(UiText.success("Spawned NPC copy of " + definition.getDisplayName() + "."));
+            if (instanceRegistry.spawnPersistent(definition, spawnLocation) == null) {
+                player.sendMessage(UiText.error("Could not render the NPC copy."));
+            } else {
+                player.sendMessage(UiText.success("Spawned NPC copy of " + definition.getDisplayName() + "."));
+            }
             return true;
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("npc") && args[2].equalsIgnoreCase("duplicate")) {
@@ -208,24 +217,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
     }
 
     private NpcDefinition duplicate(NpcDefinition source) {
-        NpcDefinition copy = NpcDefinition.create(source.getDisplayName() + " (copy)");
-        copy.setResolvedSkin(source.getSkinUrl(), source.getSkinTextureValue(), source.getSkinTextureSignature());
-        copy.setSpawnpoint(source.getSpawnpoint());
-        copy.setInventoryContents(source.getInventoryContents());
-        copy.setArmorContents(source.getArmorContents());
-        copy.setMainHand(source.getMainHand());
-        copy.setOffHand(source.getOffHand());
-        copy.setCombatProfile(source.getCombatProfile());
-        copy.setMovementProfile(source.getMovementProfile());
-        copy.setAiControlSettings(source.getAiControlSettings());
-        copy.setAiMemories(source.getAiMemories());
-        for (dev.blockfolk.model.BehaviourEvent event : dev.blockfolk.model.BehaviourEvent.values()) {
-            copy.setBehaviourActions(event, source.getBehaviourActions(event));
-        }
-        for (String eventName : source.getCustomEventNames()) {
-            copy.setCustomEventActions(eventName, source.getCustomEventActions(eventName));
-        }
-        return copy;
+        return source.copyAs(source.getDisplayName() + " (copy)");
     }
 
     private List<String> filter(List<String> values, String prefix) {

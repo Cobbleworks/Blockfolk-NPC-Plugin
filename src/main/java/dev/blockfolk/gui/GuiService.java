@@ -335,13 +335,12 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             NpcDefinition definition = definitions.get(index);
             int instances = instanceRegistry.findByDefinition(definition).size();
-            inventory.setItem(index - from, definitionIcon(definition, List.of(
+            List<String> lore = new ArrayList<>(List.of(
                     LegacyText.DARK_GRAY + "Key: " + definition.getKey(),
                     LegacyText.GRAY + "Instances: " + LegacyText.WHITE + instances,
-                    statusLine(definition),
-                    LegacyText.YELLOW + "Click to manage",
-                    LegacyText.RED + "Shift + right-click to delete"
-            )));
+                    statusLine(definition), LegacyText.YELLOW + "Click to manage"));
+            lore.add(LegacyText.RED + "Shift + right-click to delete");
+            inventory.setItem(index - from, definitionIcon(definition, lore));
         }
         inventory.setItem(45, item(Material.MAP, "Manage Routes", List.of(
                 LegacyText.GRAY + "Create and edit NPC walking routes",
@@ -356,7 +355,7 @@ public final class GuiService implements Listener {
         }
         inventory.setItem(49, item(Material.NETHER_STAR, "Blockfolk Overview", List.of(
                 LegacyText.GRAY + "Presets: " + LegacyText.WHITE + definitions.size(),
-                LegacyText.GRAY + "Spawned instances: " + LegacyText.WHITE + instanceRegistry.findAll().size(),
+                LegacyText.GRAY + "Active instances: " + LegacyText.WHITE + instanceRegistry.findActive().size(),
                 LegacyText.GRAY + "Page " + (page + 1) + " of " + pages,
                 LegacyText.YELLOW + "Click to reorder NPC presets"
         )));
@@ -438,7 +437,7 @@ public final class GuiService implements Listener {
                 LegacyText.DARK_GRAY + "Key: " + definition.getKey(),
                 LegacyText.GRAY + "Instances: " + LegacyText.WHITE + instances,
                 LegacyText.GRAY + "Skin: " + LegacyText.WHITE + (definition.getSkinUrl() == null ? "Default" : "Custom"),
-                LegacyText.GRAY + "Spawn: " + LegacyText.WHITE + formatLocation(definition.getSpawnpoint()),
+                LegacyText.GRAY + "Spawn: " + LegacyText.WHITE + formatLocation(definition.getStoredSpawnpoint()),
                 LegacyText.YELLOW + "Click to configure NPC properties",
                 LegacyText.RED + "Shift + right-click to delete"
         )));
@@ -452,7 +451,7 @@ public final class GuiService implements Listener {
                 LegacyText.DARK_GRAY + "Enter 'default' to clear it"
         )));
         inventory.setItem(12, item(Material.RED_BED, "Preset Spawnpoint", List.of(
-                LegacyText.GRAY + formatLocation(definition.getSpawnpoint()),
+                LegacyText.GRAY + formatLocation(definition.getStoredSpawnpoint()),
                 LegacyText.YELLOW + "Click to use your current location"
         )));
         inventory.setItem(14, item(Material.CHEST, "Equipment", List.of(
@@ -466,10 +465,14 @@ public final class GuiService implements Listener {
                     LegacyText.YELLOW + "Click to spawn"
             )));
         } else {
-            inventory.setItem(16, item(Material.ENDER_EYE, "Manage Instances", List.of(
+            List<String> instanceLore = new ArrayList<>(List.of(
                     LegacyText.GRAY + "" + instances + " spawned instance(s)",
-                    LegacyText.YELLOW + "Teleport, move, remove, or spawn copies"
-            )));
+                    LegacyText.YELLOW + "Click to manage spawned copies"));
+            if (instances == 1) {
+                instanceLore.add(LegacyText.YELLOW + "Shift + left-click: teleport to NPC");
+                instanceLore.add(LegacyText.AQUA + "Shift + middle-click: move NPC to you");
+            }
+            inventory.setItem(16, item(Material.ENDER_EYE, "Manage Instances", instanceLore));
         }
         int behaviourCount = MANUAL_BEHAVIOUR_EVENTS.stream()
                 .mapToInt(event -> definition.getBehaviourActions(event).size()).sum();
@@ -538,7 +541,7 @@ public final class GuiService implements Listener {
     }
 
     public void openInventoryEditor(Player player, NpcDefinition definition) {
-        Inventory inventory = Bukkit.createInventory(new EquipmentHolder(definition.getKey()), 54,
+        Inventory inventory = Bukkit.createInventory(new EquipmentHolder(definition.getKey(), equipmentFingerprint(definition)), 54,
                 UiText.title("Equipment", definition.getDisplayName()));
         ItemStack[] contents = definition.getInventoryContents();
         for (int index = 0; index < contents.length; index++) {
@@ -893,7 +896,7 @@ public final class GuiService implements Listener {
             NpcInstance instance = instances.get(index);
             inventory.setItem(index - from, item(Material.ARMOR_STAND, "NPC Instance", List.of(
                     LegacyText.DARK_GRAY + instance.getId().toString(),
-                    LegacyText.GRAY + formatLocation(instance.getLocation()),
+                    LegacyText.GRAY + formatLocation(instance.getStoredLocation()),
                     LegacyText.YELLOW + "Left-click: teleport to instance",
                     LegacyText.AQUA + "Middle-click: move instance to you",
                     LegacyText.RED + "Right-click: remove instance"
@@ -1051,6 +1054,11 @@ public final class GuiService implements Listener {
             return;
         }
         definitionRepository.find(holder.key()).ifPresent(definition -> {
+            if (holder.fingerprint() != equipmentFingerprint(definition)) {
+                event.getPlayer().sendMessage(UiText.warning(
+                        "Equipment changed while you were editing; your stale copy was not saved."));
+                return;
+            }
             readEquipmentEditor(event.getInventory(), definition);
             saveRefresh(definition);
         });
@@ -1135,6 +1143,11 @@ public final class GuiService implements Listener {
 
     private void beginCreate(Player player, int returnPage) {
         chatInputService.request(player, "Enter a new NPC name:", value -> {
+            if (value.isBlank()) {
+                player.sendMessage(UiText.error("NPC names cannot be blank."));
+                openMain(player, returnPage);
+                return;
+            }
             NpcDefinition definition = NpcDefinition.create(value);
             if (definitionRepository.find(definition.getKey()).isPresent()) {
                 player.sendMessage(UiText.error("An NPC with that key already exists."));
@@ -1143,7 +1156,9 @@ public final class GuiService implements Listener {
             }
             definition.setSpawnpoint(player.getLocation());
             definitionRepository.save(definition);
-            instanceRegistry.spawnPersistent(definition, definition.getSpawnpoint());
+            if (instanceRegistry.spawnPersistent(definition, definition.getSpawnpoint()) == null) {
+                player.sendMessage(UiText.warning("Preset created, but its NPC could not be rendered."));
+            }
             openEditor(player, definition);
         });
     }
@@ -1168,6 +1183,11 @@ public final class GuiService implements Listener {
             }
             case 10 ->
                 chatInputService.request(player, "Enter NPC display name:", value -> {
+                    if (value.isBlank()) {
+                        player.sendMessage(UiText.error("NPC display names cannot be blank."));
+                        openEditor(player, definition);
+                        return;
+                    }
                     definition.setDisplayName(value.trim());
                     saveRefresh(definition);
                     openEditor(player, definition);
@@ -1185,14 +1205,37 @@ public final class GuiService implements Listener {
             case 14 ->
                 openInventoryEditor(player, definition);
             case 16 -> {
-                if (instanceRegistry.findByDefinition(definition).isEmpty()) {
+                List<NpcInstance> instances = new ArrayList<>(instanceRegistry.findByDefinition(definition));
+                if (instances.isEmpty()) {
                     if (definition.getSpawnpoint() == null) {
                         player.sendMessage(UiText.warning("Set a spawnpoint first."));
                     } else {
-                        instanceRegistry.spawnPersistent(definition, definition.getSpawnpoint());
-                        player.sendMessage(UiText.success("Spawned a visible NPC instance."));
+                        Location spawnpoint = definition.getSpawnpoint();
+                        if (spawnpoint.getWorld() == null) {
+                            player.sendMessage(UiText.warning("The spawnpoint world is not loaded."));
+                        } else if (instanceRegistry.spawnPersistent(definition, spawnpoint) == null) {
+                            player.sendMessage(UiText.error("Could not render the NPC instance."));
+                        } else {
+                            player.sendMessage(UiText.success("Spawned a visible NPC instance."));
+                        }
                     }
                     openEditor(player, definition);
+                } else if (instances.size() == 1 && event.getClick() == ClickType.SHIFT_LEFT) {
+                    NpcInstance instance = instances.getFirst();
+                    Location destination = instanceRegistry.currentLocation(instance);
+                    player.closeInventory();
+                    if (destination.getWorld() != null && player.teleport(destination)) {
+                        player.sendMessage(UiText.success("Teleported to " + definition.getDisplayName() + "."));
+                    } else {
+                        player.sendMessage(UiText.error("Could not teleport to the NPC instance."));
+                    }
+                } else if (instances.size() == 1 && event.getClick() == ClickType.MIDDLE) {
+                    NpcInstance instance = instances.getFirst();
+                    if (instanceRegistry.relocate(instance, player.getLocation())) {
+                        player.sendMessage(UiText.success("Moved " + definition.getDisplayName() + " to you."));
+                    } else {
+                        player.sendMessage(UiText.error("Could not move the NPC instance."));
+                    }
                 } else {
                     openInstances(player, definition, 0);
                 }
@@ -1417,6 +1460,14 @@ public final class GuiService implements Listener {
         if (slot == 53) {
             event.setCancelled(true);
             definitionRepository.find(key).ifPresent(definition -> {
+                EquipmentHolder holder = (EquipmentHolder) event.getView().getTopInventory().getHolder();
+                if (holder.fingerprint() != equipmentFingerprint(definition)) {
+                    player.sendMessage(UiText.warning(
+                            "Equipment changed while you were editing; review the current version and try again."));
+                    explicitInventorySaves.add(player.getUniqueId());
+                    openInventoryEditor(player, definition);
+                    return;
+                }
                 readEquipmentEditor(event.getView().getTopInventory(), definition);
                 saveRefresh(definition);
                 explicitInventorySaves.add(player.getUniqueId());
@@ -1447,8 +1498,11 @@ public final class GuiService implements Listener {
             case 49 ->
                 openEditor(player, definition);
             case 50 -> {
-                instanceRegistry.spawnPersistent(definition, player.getLocation());
-                player.sendMessage(UiText.success("Spawned another NPC instance at your location."));
+                if (instanceRegistry.spawnPersistent(definition, player.getLocation()) == null) {
+                    player.sendMessage(UiText.error("Could not render another NPC instance."));
+                } else {
+                    player.sendMessage(UiText.success("Spawned another NPC instance at your location."));
+                }
                 openInstances(player, definition, holder.page());
             }
             case 51 -> {
@@ -1474,9 +1528,7 @@ public final class GuiService implements Listener {
                     }
                     openInstances(player, definition, holder.page());
                 } else if (event.isRightClick()) {
-                    instanceRegistry.deleteInstance(instance.getId());
-                    player.sendMessage(UiText.success("Removed NPC instance."));
-                    openInstances(player, definition, holder.page());
+                    openInstanceDeleteConfirmation(player, definition, instance, holder.page());
                 } else {
                     player.closeInventory();
                     player.teleport(instance.getLocation());
@@ -2808,6 +2860,13 @@ public final class GuiService implements Listener {
         if (event.getRawSlot() != 11) {
             return;
         }
+        if (holder.action() == ConfirmationAction.DELETE_INSTANCE) {
+            boolean removed = holder.instanceId() != null && instanceRegistry.deleteInstance(holder.instanceId());
+            player.sendMessage(removed ? UiText.success("Removed NPC instance.")
+                    : UiText.warning("That NPC instance no longer exists."));
+            openInstances(player, definition, holder.returnPage());
+            return;
+        }
         int removed = instanceRegistry.deleteInstances(definition);
         if (holder.action() == ConfirmationAction.DELETE_DEFINITION) {
             definitionRepository.delete(definition);
@@ -2826,13 +2885,26 @@ public final class GuiService implements Listener {
     private void openConfirmation(Player player, NpcDefinition definition, ConfirmationAction action, int returnPage,
             boolean returnToEditor) {
         Inventory inventory = Bukkit.createInventory(
-                new ConfirmationHolder(definition.getKey(), action, returnPage, returnToEditor), 27,
+                new ConfirmationHolder(definition.getKey(), action, returnPage, returnToEditor, null), 27,
                 UiText.title("Confirm Deletion"));
         String target = action == ConfirmationAction.DELETE_DEFINITION ? "preset and all instances" : "all instances";
         inventory.setItem(11, item(Material.LIME_CONCRETE, "Confirm", List.of(
                 LegacyText.RED + "Permanently delete " + target
         )));
         inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel", List.of(LegacyText.GRAY + "Nothing will be changed")));
+        openInventory(player, inventory);
+    }
+
+    private void openInstanceDeleteConfirmation(Player player, NpcDefinition definition, NpcInstance instance,
+            int returnPage) {
+        Inventory inventory = Bukkit.createInventory(new ConfirmationHolder(definition.getKey(),
+                ConfirmationAction.DELETE_INSTANCE, returnPage, false, instance.getId()), 27,
+                UiText.title("Confirm Instance Removal"));
+        inventory.setItem(11, item(Material.LIME_CONCRETE, "Confirm", List.of(
+                LegacyText.RED + "Permanently remove this NPC instance",
+                LegacyText.DARK_GRAY + instance.getId().toString())));
+        inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel",
+                List.of(LegacyText.GRAY + "Nothing will be changed")));
         openInventory(player, inventory);
     }
 
@@ -2852,6 +2924,13 @@ public final class GuiService implements Listener {
         });
         definition.setMainHand(inventory.getItem(50));
         definition.setOffHand(inventory.getItem(51));
+    }
+
+    private int equipmentFingerprint(NpcDefinition definition) {
+        int result = java.util.Arrays.hashCode(definition.getInventoryContents());
+        result = 31 * result + java.util.Arrays.hashCode(definition.getArmorContents());
+        result = 31 * result + java.util.Objects.hashCode(definition.getMainHand());
+        return 31 * result + java.util.Objects.hashCode(definition.getOffHand());
     }
 
     private void saveRefresh(NpcDefinition definition) {
@@ -3022,7 +3101,7 @@ public final class GuiService implements Listener {
         if (definition.getSpawnpoint() == null) {
             return LegacyText.RED + "Spawnpoint not set";
         }
-        return LegacyText.GRAY + "Spawn: " + LegacyText.WHITE + formatLocation(definition.getSpawnpoint());
+        return LegacyText.GRAY + "Spawn: " + LegacyText.WHITE + formatLocation(definition.getStoredSpawnpoint());
     }
 
     private String abbreviatedSkin(String value) {
@@ -3252,6 +3331,13 @@ public final class GuiService implements Listener {
                 + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ();
     }
 
+    private String formatLocation(dev.blockfolk.model.StoredLocation location) {
+        if (location == null) return "Not set";
+        return location.worldName() + " " + (int) Math.floor(location.x()) + ", "
+                + (int) Math.floor(location.y()) + ", " + (int) Math.floor(location.z())
+                + (Bukkit.getWorld(location.worldName()) == null ? " (world unloaded)" : "");
+    }
+
     private record MainHolder(int page) implements GuiHolder { }
 
     private static final class ReorderHolder extends ReorderSupport.ReorderState {
@@ -3297,7 +3383,7 @@ public final class GuiService implements Listener {
 
     }
 
-    private record EquipmentHolder(String key) implements GuiHolder { }
+    private record EquipmentHolder(String key, int fingerprint) implements GuiHolder { }
 
     private record InstancesHolder(String key, int page) implements GuiHolder { }
 
@@ -3433,11 +3519,13 @@ public final class GuiService implements Listener {
         }
     }
 
-    private record ConfirmationHolder(String key, ConfirmationAction action, int returnPage, boolean returnToEditor)
+    private record ConfirmationHolder(String key, ConfirmationAction action, int returnPage, boolean returnToEditor,
+            UUID instanceId)
             implements GuiHolder { }
 
     private enum ConfirmationAction {
         DELETE_DEFINITION,
-        DELETE_INSTANCES
+        DELETE_INSTANCES,
+        DELETE_INSTANCE
     }
 }

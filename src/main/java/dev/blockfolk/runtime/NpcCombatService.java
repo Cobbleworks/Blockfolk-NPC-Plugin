@@ -83,6 +83,9 @@ public final class NpcCombatService implements Listener {
     public void start() {
         stop();
         task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
+        for (NpcInstance instance : instanceRegistry.findAll()) {
+            if (instance.isAwaitingRespawn()) scheduleRespawn(instance);
+        }
     }
 
     public void stop() {
@@ -227,30 +230,42 @@ public final class NpcCombatService implements Listener {
         }
         event.setDroppedExp(definition == null ? 0 : definition.getCombatProfile().droppedExperience());
         clearState(instance);
-        Location respawnLocation = instance.getSpawnLocation();
         Bukkit.getScheduler().runTask(plugin, () -> {
-            if (!instanceRegistry.deleteInstance(instance.getId()) || definition == null
-                    || definition.getCombatProfile().respawnSeconds() == 0) {
+            if (definition == null || definition.getCombatProfile().respawnSeconds() == 0) {
+                instanceRegistry.deleteInstance(instance.getId());
                 return;
             }
-            long delayTicks = definition.getCombatProfile().respawnSeconds() * 20L;
-            BukkitTask respawnTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                pendingRespawns.remove(instance.getId());
-                definitionRepository.find(instance.getDefinitionKey()).ifPresent(currentDefinition -> {
-                    if (currentDefinition.getCombatProfile().respawnSeconds() > 0) {
-                        instanceRegistry.spawnPersistent(currentDefinition, respawnLocation);
-                    }
-                });
-            }, delayTicks);
-            pendingRespawns.put(instance.getId(), respawnTask);
+            long respawnAt = System.currentTimeMillis() + definition.getCombatProfile().respawnSeconds() * 1_000L;
+            instanceRegistry.markAwaitingRespawn(instance, respawnAt);
+            scheduleRespawn(instance);
         });
+    }
+
+    private void scheduleRespawn(NpcInstance instance) {
+        BukkitTask previous = pendingRespawns.remove(instance.getId());
+        if (previous != null) previous.cancel();
+        long remainingMillis = Math.max(0L, instance.getRespawnAtEpochMillis() - System.currentTimeMillis());
+        long delayTicks = Math.max(1L, (remainingMillis + 49L) / 50L);
+        pendingRespawns.put(instance.getId(), Bukkit.getScheduler().runTaskLater(plugin,
+                () -> attemptRespawn(instance), delayTicks));
+    }
+
+    private void attemptRespawn(NpcInstance instance) {
+        pendingRespawns.remove(instance.getId());
+        if (instanceRegistry.findById(instance.getId()).isEmpty()) return;
+        NpcDefinition current = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
+        if (current == null || current.getCombatProfile().respawnSeconds() == 0) {
+            instanceRegistry.deleteInstance(instance.getId());
+            return;
+        }
+        if (!instanceRegistry.respawn(instance, current)) scheduleRespawn(instance);
     }
 
     private void tick() {
         currentTick++;
         Set<UUID> activeBossBars = new HashSet<>();
         Set<UUID> activeInstances = new HashSet<>();
-        for (NpcInstance instance : instanceRegistry.findAll()) {
+        for (NpcInstance instance : instanceRegistry.findActive()) {
             activeInstances.add(instance.getId());
             NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
             LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);

@@ -21,13 +21,26 @@ public final class OpenRouterClient {
     private final String model;
     private final Duration timeout;
     private final int maxTokens;
+    private final String endpointIssue;
 
     public OpenRouterClient(String endpoint, String apiKey, String model, int timeoutSeconds) {
         this(endpoint, apiKey, model, timeoutSeconds, 1600);
     }
 
     public OpenRouterClient(String endpoint, String apiKey, String model, int timeoutSeconds, int maxTokens) {
-        this.endpoint = URI.create(endpoint);
+        URI parsedEndpoint = null;
+        String parsedIssue = "";
+        try {
+            parsedEndpoint = URI.create(endpoint == null ? "" : endpoint.trim());
+            if (!"https".equalsIgnoreCase(parsedEndpoint.getScheme()) || parsedEndpoint.getHost() == null) {
+                parsedIssue = "endpoint must be a valid HTTPS URL";
+                parsedEndpoint = null;
+            }
+        } catch (IllegalArgumentException exception) {
+            parsedIssue = "endpoint is not a valid URL";
+        }
+        this.endpoint = parsedEndpoint;
+        this.endpointIssue = parsedIssue;
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.model = model == null ? "" : model.trim();
         this.timeout = Duration.ofSeconds(Math.max(2, timeoutSeconds));
@@ -36,10 +49,11 @@ public final class OpenRouterClient {
     }
 
     public boolean configured() {
-        return !apiKey.isBlank() && !model.isBlank();
+        return endpoint != null && !apiKey.isBlank() && !model.isBlank();
     }
 
     public String configurationIssue() {
+        if (!endpointIssue.isBlank()) return endpointIssue;
         if (apiKey.isBlank() && model.isBlank()) return "API key and model are missing";
         if (apiKey.isBlank()) return "API key is missing";
         if (model.isBlank()) return "Model is missing";

@@ -23,7 +23,7 @@ public final class NpcDefinition {
     private String skinUrl;
     private String skinTextureValue;
     private String skinTextureSignature;
-    private Location spawnpoint;
+    private StoredLocation spawnpoint;
     private ItemStack[] inventoryContents;
     private ItemStack[] armorContents;
     private ItemStack mainHand;
@@ -63,6 +63,28 @@ public final class NpcDefinition {
         return definition;
     }
 
+    public NpcDefinition copyAs(String displayName) {
+        NpcDefinition copy = create(displayName);
+        copy.setResolvedSkin(skinUrl, skinTextureValue, skinTextureSignature);
+        copy.setStoredSpawnpoint(spawnpoint);
+        copy.setInventoryContents(inventoryContents);
+        copy.setArmorContents(armorContents);
+        copy.setMainHand(mainHand);
+        copy.setOffHand(offHand);
+        copy.setCombatProfile(combatProfile);
+        copy.setMovementProfile(movementProfile);
+        copy.setShowName(showName);
+        copy.setLookAtPlayer(lookAtPlayer);
+        copy.setItemPickup(itemPickup);
+        copy.setPushable(pushable);
+        copy.setColor(color);
+        copy.setAiControlSettings(aiControlSettings);
+        copy.setAiMemories(aiMemories);
+        behaviours.forEach(copy::setBehaviourActions);
+        customEventBehaviours.forEach(copy::setCustomEventActions);
+        return copy;
+    }
+
     public static String toKey(String value) {
         String sanitized = value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]+", "-");
         sanitized = sanitized.replaceAll("^-+|-+$", "");
@@ -78,7 +100,8 @@ public final class NpcDefinition {
     }
 
     public void setDisplayName(String displayName) {
-        this.displayName = Objects.requireNonNullElse(displayName, key);
+        this.displayName = Objects.requireNonNullElse(displayName, key).trim();
+        if (this.displayName.isBlank()) this.displayName = key;
     }
 
     public String getSkinUrl() {
@@ -108,12 +131,16 @@ public final class NpcDefinition {
     }
 
     public Location getSpawnpoint() {
-        return spawnpoint == null ? null : spawnpoint.clone();
+        return spawnpoint == null ? null : spawnpoint.toLocation();
     }
 
     public void setSpawnpoint(Location spawnpoint) {
-        this.spawnpoint = spawnpoint == null ? null : spawnpoint.clone();
+        this.spawnpoint = spawnpoint == null ? null : StoredLocation.from(spawnpoint);
     }
+
+    public StoredLocation getStoredSpawnpoint() { return spawnpoint; }
+
+    public void setStoredSpawnpoint(StoredLocation spawnpoint) { this.spawnpoint = spawnpoint; }
 
     public ItemStack[] getInventoryContents() {
         return cloneArray(inventoryContents, 36);
@@ -258,6 +285,44 @@ public final class NpcDefinition {
             collectRouteKeys(getCustomEventActions(eventName), routeKeys);
         }
         return Set.copyOf(routeKeys);
+    }
+
+    /** Removes every direct or question-branch reference to a deleted route. */
+    public boolean removeRouteReferences(String routeKey) {
+        String normalized = NpcRoute.normalizeKey(routeKey);
+        boolean referenced = getReferencedRouteKeys().contains(normalized);
+        for (BehaviourEvent event : BehaviourEvent.values()) {
+            setBehaviourActions(event, withoutRoute(getBehaviourActions(event), normalized));
+        }
+        for (String eventName : getCustomEventNames()) {
+            setCustomEventActions(eventName, withoutRoute(getCustomEventActions(eventName), normalized));
+        }
+        if (movementProfile.routeKey() != null && movementProfile.routeKey().equals(normalized)) {
+            movementProfile = MovementProfile.disabled().withWalkingSpeed(movementProfile.walkingSpeed());
+            referenced = true;
+        }
+        return referenced;
+    }
+
+    private static List<BehaviourAction> withoutRoute(List<BehaviourAction> actions, String routeKey) {
+        List<BehaviourAction> result = new ArrayList<>();
+        for (BehaviourAction action : actions) {
+            if (action.type() == BehaviourActionType.SET_ROUTE) {
+                try {
+                    if (action.value() != null && NpcRoute.normalizeKey(action.value()).equals(routeKey)) continue;
+                } catch (IllegalArgumentException ignored) { }
+            }
+            if (action.type() == BehaviourActionType.ASK_QUESTION && action.question() != null) {
+                NpcQuestion question = action.question();
+                List<QuestionOption> options = question.options().stream()
+                        .map(option -> option.withActions(withoutRoute(option.actions(), routeKey))).toList();
+                result.add(BehaviourAction.ask(new NpcQuestion(question.id(), question.prompt(), options,
+                        withoutRoute(question.cancelActions(), routeKey))));
+            } else {
+                result.add(action);
+            }
+        }
+        return result;
     }
 
     private static void collectRouteKeys(List<BehaviourAction> actions, Set<String> routeKeys) {

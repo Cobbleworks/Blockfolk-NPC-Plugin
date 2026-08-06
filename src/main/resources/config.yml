@@ -9,9 +9,11 @@ mineskin-api-key: ""
 # Optional AI behaviour. Configure this per NPC preset in its dedicated
 # AI Behaviour menu. No requests are made for paused presets.
 openrouter:
+  # HTTPS is required so the API key is never sent over plaintext HTTP.
   endpoint: "https://openrouter.ai/api/v1/chat/completions"
   api-key: ""
   model: "deepseek/deepseek-v4-flash-0731"
+  # Increase this further for slower providers or reasoning-heavy models.
   timeout-seconds: 12
   # Output allowance for the final JSON decision. Reasoning is disabled for lower latency.
   max-tokens: 1600

@@ -28,6 +28,15 @@ All commands require the `blockfolk.admin` permission (granted to operators by d
 - `/bf npc <name> spawn` — spawn a persistent copy of the selected NPC preset.
 - `/bf npc <name> duplicate` — duplicate a preset with ` (copy)` appended to its display name.
 
+When a preset has exactly one instance, its `Manage Instances` entry provides shortcuts:
+shift-left-click teleports you to the NPC, and shift-middle-click moves the NPC and its
+respawn location to you. Removing an individual instance requires confirmation.
+
+Combat respawns retain the persistent instance UUID and their pending deadline across
+server restarts, so integrations such as BeautyQuests continue referring to the same NPC.
+NPC mining, harvesting, and container transfers emit cancellable Bukkit events so region,
+claim, and logging plugins can reject or observe those changes.
+
 Dialog line duration is calculated automatically from the text length at 12 characters
 per second, with a minimum duration of 3 seconds.
 

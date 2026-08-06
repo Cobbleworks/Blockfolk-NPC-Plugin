@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -78,13 +79,31 @@ final class DebouncedYamlWriter {
         updates.forEach((path, content) -> {
             try {
                 if (content == null) {
-                    Files.deleteIfExists(path);
+                    if (Files.exists(path)) {
+                        Files.move(path, path.resolveSibling(path.getFileName() + ".bak"),
+                                StandardCopyOption.REPLACE_EXISTING);
+                    }
                     return;
                 }
                 Path parent = path.getParent();
                 if (parent != null) Files.createDirectories(parent);
-                Files.writeString(path, content, StandardCharsets.UTF_8,
-                        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                Path temporary = Files.createTempFile(parent, path.getFileName().toString(), ".tmp");
+                try {
+                    Files.writeString(temporary, content, StandardCharsets.UTF_8,
+                            StandardOpenOption.TRUNCATE_EXISTING);
+                    if (Files.exists(path)) {
+                        Files.copy(path, path.resolveSibling(path.getFileName() + ".bak"),
+                                StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    try {
+                        Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE,
+                                StandardCopyOption.REPLACE_EXISTING);
+                    } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
+                        Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                } finally {
+                    Files.deleteIfExists(temporary);
+                }
             } catch (IOException exception) {
                 plugin.getLogger().log(Level.SEVERE, "Could not persist " + path.getFileName() + ".", exception);
             }
