@@ -13,6 +13,8 @@ Blockfolk NPC is available in BeautyQuests' NPC selector. Create or edit a quest
 choose an NPC-based starter or stage, then click the Blockfolk NPC in the world.
 Quest dialogs, interaction stages, markers, and navigation pausing use the same
 persistent NPC instance UUID, so assignments survive server restarts.
+BeautyQuests editor entries assigned to Blockfolk NPCs use the NPC's skinned
+player head as their icon.
 
 ## Commands
 

@@ -1,19 +1,29 @@
 package dev.blockfolk.integration.beautyquests;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import dev.blockfolk.gui.NpcHeadUtil;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.repository.NpcDefinitionRepository;
@@ -28,6 +38,8 @@ import fr.skytasul.quests.api.npcs.NpcClickType;
 public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
 
     private static final String FACTORY_KEY = "blockfolk";
+    private static final Pattern NPC_ID_PATTERN = Pattern.compile(
+            "blockfolk#([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})");
 
     private final JavaPlugin plugin;
     private final NpcDefinitionRepository definitions;
@@ -108,6 +120,57 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
                     npcClicked(event, instance.getId().toString(), player,
                             player.isSneaking() ? NpcClickType.SHIFT_LEFT : NpcClickType.LEFT));
         }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        public void onInventoryOpen(InventoryOpenEvent event) {
+            applyNpcIcons(event.getInventory());
+        }
+    }
+
+    private void applyNpcIcons(Inventory inventory) {
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            ItemStack current = inventory.getItem(slot);
+            UUID instanceId = referencedInstanceId(current);
+            if (instanceId == null || current.getType() == Material.PLAYER_HEAD) {
+                continue;
+            }
+            NpcInstance instance = instances.findById(instanceId).orElse(null);
+            NpcDefinition definition = instance == null ? null
+                    : definitions.find(instance.getDefinitionKey()).orElse(null);
+            if (definition != null) {
+                inventory.setItem(slot, createNpcIcon(current, definition));
+            }
+        }
+    }
+
+    private UUID referencedInstanceId(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) {
+            return null;
+        }
+        ItemMeta meta = item.getItemMeta();
+        List<String> lore = meta.getLore();
+        if (lore == null) {
+            return null;
+        }
+        for (String line : lore) {
+            Matcher matcher = NPC_ID_PATTERN.matcher(line);
+            if (matcher.find()) {
+                return UUID.fromString(matcher.group(1));
+            }
+        }
+        return null;
+    }
+
+    private ItemStack createNpcIcon(ItemStack source, NpcDefinition definition) {
+        ItemMeta sourceMeta = source.getItemMeta();
+        ItemStack head = new ItemStack(Material.PLAYER_HEAD, source.getAmount());
+        if (head.getItemMeta() instanceof SkullMeta headMeta) {
+            headMeta.displayName(sourceMeta.displayName());
+            headMeta.lore(sourceMeta.lore());
+            headMeta.addItemFlags(sourceMeta.getItemFlags().toArray(org.bukkit.inventory.ItemFlag[]::new));
+            head.setItemMeta(headMeta);
+        }
+        return NpcHeadUtil.applySkin(head, definition);
     }
 
     private final class BlockfolkNpc implements BqInternalNpc {
