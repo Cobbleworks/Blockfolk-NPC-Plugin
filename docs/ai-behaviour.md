@@ -12,8 +12,8 @@ Nearby player chat can also trigger requests directly within eight blocks of the
 One player chat message creates one group request for all eligible NPCs within range,
 ordered by distance from the player. The closest NPC is the default speaker. The model
 may involve additional nearby NPCs when that is natural, but is explicitly told not to
-make every NPC respond merely because it is present. Non-AI On Player Chat actions still
-run independently for every nearby NPC.
+make every NPC respond merely because it is present. Nearby chat is an AI-only trigger and
+does not require a manual Event Behaviour sequence.
 
 An NPC that enters chat range while already handling another AI event does not hold up the
 existing group. Available NPCs answer immediately, and the busy newcomer becomes eligible
@@ -82,6 +82,8 @@ Perception uses a 12-block radius for players and other Blockfolk NPCs. It inclu
   rounded distance, and whether it is the triggering entity;
 - up to five nearby levers within 12 blocks, including rounded distance and whether
   each lever is powered;
+- when Temporary Inventory and Interact are enabled, up to five nearby containers,
+  including their type, distance, and a bounded summary of their contents;
 - up to five nearest globally saved locations in the same world and within 64 blocks.
 - counts of reachable ores, logs, and pickaxe-mineable materials, with material aliases
   accepted by `MINE_BLOCKS`.
@@ -144,11 +146,15 @@ enforces the same list before anything runs. Current capabilities are:
 - follow a player;
 - stop following the current player;
 - walk to and toggle the nearest available button or lever within 12 blocks;
+- when Temporary Inventory access is enabled, walk to the nearest suitable container and
+  either retrieve its first fitting stack or store as much of the carried inventory as fits,
+  using the `take_from_container` or `store_in_container` INTERACT target;
 - move to a perceived saved location, player, Blockfolk NPC, or other entity;
 - return home;
 - start or pause the configured route;
 - when Temporary Inventory access is enabled and the instance carries items, drop one
-  selected inventory stack using its `inventory_slot_N` alias;
+  selected inventory stack using its `inventory_slot_N` alias. The dropping NPC pauses
+  automatic item pickup for three seconds so it does not immediately reclaim the stack;
 - when Temporary Inventory and Mine Blocks are enabled, mine up to 64 matching reachable
   blocks within eight blocks using `ores`, `trees`, `mineable_blocks`, or a listed material
   as the target. Drops are inserted directly into the temporary inventory; a block is not

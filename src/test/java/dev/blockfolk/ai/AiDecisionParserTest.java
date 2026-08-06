@@ -99,6 +99,21 @@ class AiDecisionParserTest {
     }
 
     @Test
+    void containerInteractionsRequireTemporaryInventoryAccess() {
+        AiControlSettings interact = settings("Storekeeper", "", "Manage supplies",
+                EnumSet.of(AiActionType.INTERACT));
+        String take = "{\"actions\":[{\"type\":\"INTERACT\",\"target\":\"take_from_container\"}]}";
+        String store = "{\"actions\":[{\"type\":\"INTERACT\",\"target\":\"store_in_container\"}]}";
+
+        assertEquals(AiActionType.DO_NOTHING,
+                AiDecisionParser.parse(take, interact).actions().getFirst().type());
+        assertEquals("take_from_container", AiDecisionParser.parse(take,
+                interact.withInventoryEnabled(true)).actions().getFirst().target());
+        assertEquals("store_in_container", AiDecisionParser.parse(store,
+                interact.withInventoryEnabled(true)).actions().getFirst().target());
+    }
+
+    @Test
     void followRequiresAndAcceptsPerceivedPlayerTargets() {
         AiControlSettings settings = settings("Companion", "", "Stay with visitors",
                 EnumSet.of(AiActionType.FOLLOW));

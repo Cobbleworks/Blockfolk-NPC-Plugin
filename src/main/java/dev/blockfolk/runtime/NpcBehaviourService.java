@@ -92,6 +92,7 @@ public final class NpcBehaviourService implements Listener {
     private static final int FOLLOW_REPATH_TICKS = 10;
     private static final int PLAYER_LOOK_INTERVAL_TICKS = 5;
     private static final int ITEM_PICKUP_INTERVAL_TICKS = 5;
+    private static final long OWN_DROP_PICKUP_LOCK_TICKS = 3L * 20L;
     private static final double ITEM_PICKUP_HORIZONTAL_RANGE = 1.5;
     private static final double ITEM_PICKUP_VERTICAL_RANGE = 1.0;
     private static final long CONTAINER_CLOSE_DELAY_TICKS = 20L;
@@ -111,7 +112,8 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, Location> moveTargets = new HashMap<>();
     private final Map<UUID, FollowState> following = new HashMap<>();
     private final Map<UUID, Object> waypointActionSequences = new HashMap<>();
-    private final Map<UUID, SwitchInteraction> switchInteractions = new HashMap<>();
+    private final Map<UUID, AiInteraction> aiInteractions = new HashMap<>();
+    private final Map<UUID, Long> itemPickupLockedUntilTick = new HashMap<>();
     private final Map<UUID, Object> idleCycles = new HashMap<>();
     private final Set<ProximityKey> nearbyPlayers = new HashSet<>();
     private final Map<ProximityKey, Long> proximityCooldownUntilTick = new HashMap<>();
@@ -176,7 +178,8 @@ public final class NpcBehaviourService implements Listener {
         moveTargets.clear();
         following.clear();
         waypointActionSequences.clear();
-        switchInteractions.clear();
+        aiInteractions.clear();
+        itemPickupLockedUntilTick.clear();
         idleCycles.clear();
         nearbyPlayers.clear();
         proximityCooldownUntilTick.clear();
@@ -271,7 +274,8 @@ public final class NpcBehaviourService implements Listener {
         moveTargets.remove(instance.getId());
         following.remove(instance.getId());
         waypointActionSequences.remove(instance.getId());
-        switchInteractions.remove(instance.getId());
+        aiInteractions.remove(instance.getId());
+        itemPickupLockedUntilTick.remove(instance.getId());
         idleCycles.remove(instance.getId());
         nearbyPlayers.removeIf(key -> key.instanceId().equals(instance.getId()));
         proximityCooldownUntilTick.keySet().removeIf(key -> key.instanceId().equals(instance.getId()));
@@ -295,7 +299,7 @@ public final class NpcBehaviourService implements Listener {
     }
 
     public boolean isMovingTo(NpcInstance instance) {
-        return moveTargets.containsKey(instance.getId()) || switchInteractions.containsKey(instance.getId());
+        return moveTargets.containsKey(instance.getId()) || aiInteractions.containsKey(instance.getId());
     }
 
     /**
@@ -508,9 +512,6 @@ public final class NpcBehaviourService implements Listener {
                 aiControlService.rememberPlayerMessage(instance, player, message);
                 aiGroup.add(instance);
             }
-            if (!definition.getBehaviourActions(BehaviourEvent.PLAYER_CHAT).isEmpty()) {
-                trigger(BehaviourEvent.PLAYER_CHAT, instance, player, detail);
-            }
         }
         if (aiControlService != null && !aiGroup.isEmpty()) {
             aiControlService.invokeChatGroup(detail, aiGroup, player, (instance, result) ->
@@ -687,7 +688,7 @@ public final class NpcBehaviourService implements Listener {
                     if (target instanceof Player player) startFollowing(instance, player);
                 }
                 case UNFOLLOW -> stopFollowing(instance);
-                case INTERACT -> startAiInteraction(instance);
+                case INTERACT -> startAiInteraction(instance, action.target());
                 case MOVE_TO -> resolveAiMoveTarget(action.target(), result.targets()).ifPresent(targetLocation -> {
                     stopFollowing(instance);
                     moveTargets.put(instance.getId(), targetLocation);
@@ -762,7 +763,7 @@ public final class NpcBehaviourService implements Listener {
         Location center = instance.getLocation();
         if (item == null || item.getType().isAir() || center.getWorld() == null) return;
         contents[slot] = null;
-        center.getWorld().dropItemNaturally(center, item);
+        dropItemForNpc(instance, item);
         updateTemporaryInventory(instance, contents, null);
     }
 
@@ -833,7 +834,9 @@ public final class NpcBehaviourService implements Listener {
             moveTargets.keySet().retainAll(active);
             following.keySet().retainAll(active);
             waypointActionSequences.keySet().retainAll(active);
-            switchInteractions.keySet().retainAll(active);
+            aiInteractions.keySet().retainAll(active);
+            itemPickupLockedUntilTick.entrySet().removeIf(entry -> !active.contains(entry.getKey())
+                    || entry.getValue() <= currentTick);
             idleCycles.keySet().retainAll(active);
             observedEntities.keySet().retainAll(active);
             entityNearbyCooldownUntilTick.keySet().retainAll(active);
@@ -1034,23 +1037,30 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private void startAiInteraction(NpcInstance instance) {
-        Block target = findNearestSwitch(instance.getLocation());
+    private void startAiInteraction(NpcInstance instance, String requestedTarget) {
+        AiInteractionKind kind = switch (requestedTarget == null ? "nearest_switch" : requestedTarget) {
+            case "take_from_container" -> AiInteractionKind.TAKE_FROM_CONTAINER;
+            case "store_in_container" -> AiInteractionKind.STORE_IN_CONTAINER;
+            default -> AiInteractionKind.SWITCH;
+        };
+        Block target = kind == AiInteractionKind.SWITCH
+                ? findNearestSwitch(instance.getLocation())
+                : findNearestContainer(instance.getLocation(), instance, kind);
         if (target == null) return;
         stopFollowing(instance);
         moveTargets.remove(instance.getId());
         instances.stand(instance);
         instances.stopNavigating(instance);
-        switchInteractions.put(instance.getId(), new SwitchInteraction(
-                target.getLocation(), interactionDestination(target, instance.getLocation())));
+        aiInteractions.put(instance.getId(), new AiInteraction(
+                kind, target.getLocation(), interactionDestination(target, instance.getLocation())));
     }
 
     private boolean tickAiInteraction(NpcInstance instance) {
-        SwitchInteraction interaction = switchInteractions.get(instance.getId());
+        AiInteraction interaction = aiInteractions.get(instance.getId());
         if (interaction == null) return false;
         if (combatService != null && combatService.isEngaged(instance)) return true;
         Block target = interaction.blockLocation().getBlock();
-        if (!isUsableSwitch(target)) {
+        if (!isUsableInteractionTarget(target, interaction.kind())) {
             finishAiInteraction(instance);
             return false;
         }
@@ -1061,7 +1071,7 @@ public final class NpcBehaviourService implements Listener {
         }
         Location switchCenter = target.getLocation().add(0.5, 0.5, 0.5);
         if (current.distanceSquared(switchCenter) <= SWITCH_USE_RANGE_SQUARED) {
-            toggleSwitch(target);
+            performAiInteraction(instance, target, interaction.kind());
             finishAiInteraction(instance);
             return false;
         }
@@ -1075,7 +1085,7 @@ public final class NpcBehaviourService implements Listener {
         NativeNpcNavigationService.NavigationStatus status = instances.navigate(instance,
                 interaction.navigationTarget(), speed);
         if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED) {
-            toggleSwitch(target);
+            performAiInteraction(instance, target, interaction.kind());
             finishAiInteraction(instance);
             return false;
         }
@@ -1087,8 +1097,26 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void finishAiInteraction(NpcInstance instance) {
-        switchInteractions.remove(instance.getId());
+        aiInteractions.remove(instance.getId());
         instances.stopNavigating(instance);
+    }
+
+    private boolean isUsableInteractionTarget(Block block, AiInteractionKind kind) {
+        return kind == AiInteractionKind.SWITCH ? isUsableSwitch(block)
+                : block.getState() instanceof Container;
+    }
+
+    private void performAiInteraction(NpcInstance instance, Block block, AiInteractionKind kind) {
+        if (kind == AiInteractionKind.SWITCH) {
+            toggleSwitch(block);
+            return;
+        }
+        if (!(block.getState() instanceof Container container)) return;
+        if (kind == AiInteractionKind.TAKE_FROM_CONTAINER) {
+            takeFromContainer(instance, container);
+        } else {
+            storeInContainer(instance, container);
+        }
     }
 
     private Block findNearestSwitch(Location center) {
@@ -1111,6 +1139,47 @@ public final class NpcBehaviourService implements Listener {
             }
         }
         return nearest;
+    }
+
+    private Block findNearestContainer(Location center, NpcInstance instance, AiInteractionKind kind) {
+        if (center.getWorld() == null) return null;
+        Block nearest = null;
+        double nearestDistance = Double.MAX_VALUE;
+        for (int x = -AI_INTERACT_RANGE; x <= AI_INTERACT_RANGE; x++) {
+            for (int y = -AI_INTERACT_RANGE; y <= AI_INTERACT_RANGE; y++) {
+                int blockY = center.getBlockY() + y;
+                if (blockY < center.getWorld().getMinHeight() || blockY >= center.getWorld().getMaxHeight()) continue;
+                for (int z = -AI_INTERACT_RANGE; z <= AI_INTERACT_RANGE; z++) {
+                    double distance = x * x + y * y + z * z;
+                    if (distance > AI_INTERACT_RANGE * AI_INTERACT_RANGE || distance >= nearestDistance) continue;
+                    Block block = center.getWorld().getBlockAt(center.getBlockX() + x, blockY,
+                            center.getBlockZ() + z);
+                    if (!(block.getState() instanceof Container container)
+                            || !isUsableContainer(container.getInventory(), instance, kind)) continue;
+                    nearest = block;
+                    nearestDistance = distance;
+                }
+            }
+        }
+        return nearest;
+    }
+
+    private boolean isUsableContainer(Inventory inventory, NpcInstance instance, AiInteractionKind kind) {
+        if (kind == AiInteractionKind.TAKE_FROM_CONTAINER) {
+            for (ItemStack item : inventory.getContents()) {
+                if (item != null && !item.getType().isAir()) return true;
+            }
+            return false;
+        }
+        for (ItemStack carried : instance.getTemporaryInventoryContents()) {
+            if (carried == null || carried.getType().isAir()) continue;
+            if (inventory.firstEmpty() >= 0) return true;
+            for (ItemStack stored : inventory.getContents()) {
+                if (stored != null && stored.isSimilar(carried)
+                        && stored.getAmount() < stored.getMaxStackSize()) return true;
+            }
+        }
+        return false;
     }
 
     private boolean isUsableSwitch(Block block) {
@@ -1251,22 +1320,50 @@ public final class NpcBehaviourService implements Listener {
         InventorySource source = nearbySourceInventory(instance, actor);
         if (source == null) return;
 
+        takeFromInventory(instance, source.inventory(), source.containerLocation(), actor);
+    }
+
+    private void takeFromContainer(NpcInstance instance, Container container) {
+        takeFromInventory(instance, container.getInventory(), container.getLocation(), null);
+    }
+
+    private void takeFromInventory(NpcInstance instance, Inventory source, Location containerLocation, Entity actor) {
+
         Inventory carried = Bukkit.createInventory(null, 27);
         carried.setContents(instance.getTemporaryInventoryContents());
-        animateContainerInteraction(source.containerLocation());
-        for (int slot = 0; slot < source.inventory().getSize(); slot++) {
-            ItemStack item = source.inventory().getItem(slot);
+        animateContainerInteraction(containerLocation);
+        for (int slot = 0; slot < source.getSize(); slot++) {
+            ItemStack item = source.getItem(slot);
             if (item == null || item.getType().isAir()) continue;
             ItemStack offered = item.clone();
             Map<Integer, ItemStack> leftovers = carried.addItem(offered);
             int remaining = leftovers.values().stream().mapToInt(ItemStack::getAmount).sum();
             int moved = item.getAmount() - remaining;
             if (moved <= 0) return;
-            if (moved == item.getAmount()) source.inventory().setItem(slot, null);
+            if (moved == item.getAmount()) source.setItem(slot, null);
             else item.setAmount(item.getAmount() - moved);
             updateTemporaryInventory(instance, carried.getContents(), actor);
             return;
         }
+    }
+
+    private void storeInContainer(NpcInstance instance, Container container) {
+        Inventory carried = Bukkit.createInventory(null, 27);
+        carried.setContents(instance.getTemporaryInventoryContents());
+        Inventory destination = container.getInventory();
+        boolean moved = false;
+        for (int slot = 0; slot < carried.getSize(); slot++) {
+            ItemStack item = carried.getItem(slot);
+            if (item == null || item.getType().isAir()) continue;
+            int before = item.getAmount();
+            Map<Integer, ItemStack> leftovers = destination.addItem(item.clone());
+            ItemStack leftover = leftovers.isEmpty() ? null : leftovers.values().iterator().next();
+            carried.setItem(slot, leftover);
+            moved |= leftover == null || leftover.getAmount() < before;
+        }
+        if (!moved) return;
+        animateContainerInteraction(container.getLocation());
+        updateTemporaryInventory(instance, carried.getContents(), null);
     }
 
     private InventorySource nearbySourceInventory(NpcInstance instance, Entity actor) {
@@ -1346,9 +1443,16 @@ public final class NpcBehaviourService implements Listener {
             if (inspected) animateContainerInteraction(container.getLocation());
         }
         for (ItemStack item : carried.getContents()) {
-            if (item != null && !item.getType().isAir()) center.getWorld().dropItemNaturally(center, item);
+            if (item != null && !item.getType().isAir()) dropItemForNpc(instance, item);
         }
         updateTemporaryInventory(instance, new ItemStack[27], null);
+    }
+
+    private void dropItemForNpc(NpcInstance instance, ItemStack item) {
+        Location center = instance.getLocation();
+        if (center.getWorld() == null) return;
+        center.getWorld().dropItemNaturally(center, item);
+        itemPickupLockedUntilTick.put(instance.getId(), currentTick + OWN_DROP_PICKUP_LOCK_TICKS);
     }
 
     private void harvestNearbyCrops(NpcInstance instance) {
@@ -1509,6 +1613,7 @@ public final class NpcBehaviourService implements Listener {
         for (NpcInstance instance : instances.findAll()) {
             NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
             if (definition == null || !definition.isItemPickup()) continue;
+            if (currentTick < itemPickupLockedUntilTick.getOrDefault(instance.getId(), 0L)) continue;
             LivingEntity npc = instances.findEntity(instance).orElse(null);
             Location location = instance.getLocation();
             if (npc == null || location.getWorld() == null) continue;
@@ -1670,5 +1775,8 @@ public final class NpcBehaviourService implements Listener {
         private boolean moving;
     }
 
-    private record SwitchInteraction(Location blockLocation, Location navigationTarget) { }
+    private enum AiInteractionKind { SWITCH, TAKE_FROM_CONTAINER, STORE_IN_CONTAINER }
+
+    private record AiInteraction(
+            AiInteractionKind kind, Location blockLocation, Location navigationTarget) { }
 }

@@ -54,6 +54,10 @@ public final class AiDecisionParser {
         if (type == AiActionType.MINE_BLOCKS && !settings.inventoryEnabled()) {
             return java.util.Optional.empty();
         }
+        if (type == AiActionType.INTERACT && isContainerInteraction(object)
+                && !settings.inventoryEnabled()) {
+            return java.util.Optional.empty();
+        }
         if (type != AiActionType.DO_NOTHING && type != AiActionType.REMEMBER_FACT
                 && type != AiActionType.DROP_ITEM
                 && !settings.allowedActions().contains(type)) {
@@ -82,6 +86,10 @@ public final class AiDecisionParser {
     private static boolean validTarget(AiActionType type, String target) {
         if (type == AiActionType.DROP_ITEM) return target.matches("inventory_slot_[1-9][0-9]*");
         if (type == AiActionType.MINE_BLOCKS) return target.matches("[a-z0-9_]{1,64}");
+        if (type == AiActionType.INTERACT) {
+            return target.equals("nearest_switch") || target.equals("take_from_container")
+                    || target.equals("store_in_container");
+        }
         if (type == AiActionType.START_COMBAT) {
             return TARGETS.contains(target)
                     || target.matches("nearby_(player|npc|entity)_[1-9][0-9]*");
@@ -94,6 +102,11 @@ public final class AiDecisionParser {
         }
         if (TARGETS.contains(target)) return true;
         return type == AiActionType.MOVE_TO && target.matches("nearby_(location|player|npc|entity)_[1-9][0-9]*");
+    }
+
+    private static boolean isContainerInteraction(JsonObject object) {
+        String target = string(object, "target", true);
+        return "take_from_container".equals(target) || "store_in_container".equals(target);
     }
 
     private static String string(JsonObject object, String name, boolean normalize) {

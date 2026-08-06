@@ -79,6 +79,8 @@ import net.kyori.adventure.text.format.TextDecoration;
 public final class GuiService implements Listener {
 
     private static final int PAGE_SIZE = 45;
+    private static final List<BehaviourEvent> MANUAL_BEHAVIOUR_EVENTS = java.util.Arrays.stream(BehaviourEvent.values())
+            .filter(event -> event != BehaviourEvent.PLAYER_CHAT).toList();
     private static final List<BehaviourActionType> ANIMATION_ACTIONS = List.of(
             BehaviourActionType.SLEEP,
             BehaviourActionType.SWIM,
@@ -469,7 +471,7 @@ public final class GuiService implements Listener {
                     LegacyText.YELLOW + "Teleport, move, remove, or spawn copies"
             )));
         }
-        int behaviourCount = java.util.Arrays.stream(BehaviourEvent.values())
+        int behaviourCount = MANUAL_BEHAVIOUR_EVENTS.stream()
                 .mapToInt(event -> definition.getBehaviourActions(event).size()).sum();
         inventory.setItem(13, item(Material.COMMAND_BLOCK, "Event Behaviour", List.of(
                 LegacyText.GRAY + "" + behaviourCount + " configured action(s)",
@@ -678,17 +680,17 @@ public final class GuiService implements Listener {
     }
 
     public void openBehaviours(Player player, NpcDefinition definition, int requestedPage) {
-        BehaviourEvent[] events = BehaviourEvent.values();
-        int pages = Math.max(1, (events.length + 4) / 5);
+        List<BehaviourEvent> events = MANUAL_BEHAVIOUR_EVENTS;
+        int pages = Math.max(1, (events.size() + 4) / 5);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new BehaviourHolder(definition.getKey(), page), 54,
                 UiText.title("Behaviour", definition.getDisplayName()));
         for (int row = 0; row < 5; row++) {
             int eventIndex = page * 5 + row;
-            if (eventIndex >= events.length) {
+            if (eventIndex >= events.size()) {
                 break;
             }
-            BehaviourEvent behaviourEvent = events[eventIndex];
+            BehaviourEvent behaviourEvent = events.get(eventIndex);
             List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
             inventory.setItem(row * 9, item(eventMaterial(behaviourEvent), behaviourEvent.displayName(),
                     actionSummaryLore(List.of(
@@ -1510,10 +1512,10 @@ public final class GuiService implements Listener {
         int row = slot / 9;
         int column = slot % 9 - 2;
         int eventIndex = holder.page() * 5 + row;
-        if (row >= 5 || eventIndex >= BehaviourEvent.values().length) {
+        if (row >= 5 || eventIndex >= MANUAL_BEHAVIOUR_EVENTS.size()) {
             return;
         }
-        BehaviourEvent behaviourEvent = BehaviourEvent.values()[eventIndex];
+        BehaviourEvent behaviourEvent = MANUAL_BEHAVIOUR_EVENTS.get(eventIndex);
         List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
         if (slot % 9 == 0 && handleBehaviourClipboardClick(event, player, actions, pasted -> {
             definition.setBehaviourActions(behaviourEvent, pasted);

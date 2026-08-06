@@ -20,6 +20,7 @@ import org.bukkit.Material;
 import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.Container;
 import org.bukkit.block.Sign;
 import org.bukkit.block.data.Powerable;
 import org.bukkit.block.sign.Side;
@@ -58,7 +59,10 @@ public final class AiControlService {
             target to attack the nearest safe attackable living entity.
             FOLLOW requires a target: use triggering_player, nearest_player, a listed nearby_player_N alias,
             or the listed player's Minecraft name.
-            UNFOLLOW stops following the current player. INTERACT walks to and toggles the nearest button or lever.
+            UNFOLLOW stops following the current player. INTERACT without a target (or with nearest_switch) walks to
+            and toggles the nearest button or lever. When temporary inventory access is enabled, INTERACT may use
+            target take_from_container to retrieve a stack from the nearest non-empty container or
+            store_in_container to put carried items into the nearest container with room.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
             DROP_ITEM uses an inventory_slot_N target and drops that stack from the temporary inventory.
             MINE_BLOCKS uses target ores, trees, mineable_blocks, or a nearby material name. It mines every
@@ -84,7 +88,9 @@ public final class AiControlService {
             target to attack the nearest safe attackable living entity.
             FOLLOW requires a target: use triggering_player, nearest_player, a listed nearby_player_N alias,
             or the listed player's Minecraft name.
-            UNFOLLOW stops that NPC following its current player. INTERACT walks to and toggles its nearest button or lever.
+            UNFOLLOW stops that NPC following its current player. INTERACT without a target (or with nearest_switch)
+            walks to and toggles its nearest button or lever. When temporary inventory access is enabled, INTERACT
+            may target take_from_container or store_in_container to use its nearest suitable container.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
             DROP_ITEM uses an inventory_slot_N target and drops that stack from the temporary inventory.
             MINE_BLOCKS uses target ores, trees, mineable_blocks, or a nearby material name. It mines every
@@ -682,6 +688,9 @@ public final class AiControlService {
         }
 
         appendNearbyLevers(out, center);
+        if (settings.inventoryEnabled() && settings.allowedActions().contains(AiActionType.INTERACT)) {
+            appendNearbyContainers(out, center);
+        }
         if (settings.inventoryEnabled() && settings.allowedActions().contains(AiActionType.MINE_BLOCKS)) {
             appendNearbyMineableResources(out, center);
         }
@@ -743,6 +752,52 @@ public final class AiControlService {
         levers.stream().sorted(Comparator.comparingDouble(NearbyLever::distance)).limit(5)
                 .forEach(lever -> out.append("- ").append(Math.round(lever.distance()))
                         .append(" blocks, ").append(lever.powered() ? "powered" : "unpowered").append('\n'));
+    }
+
+    private void appendNearbyContainers(StringBuilder out, Location center) {
+        World world = center.getWorld();
+        if (world == null) return;
+        int radius = (int) PERCEPTION_RADIUS;
+        List<NearbyContainer> containers = new ArrayList<>();
+        Set<org.bukkit.inventory.Inventory> visited = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        for (int x = -radius; x <= radius; x++) {
+            for (int y = -radius; y <= radius; y++) {
+                int blockY = center.getBlockY() + y;
+                if (blockY < world.getMinHeight() || blockY >= world.getMaxHeight()) continue;
+                for (int z = -radius; z <= radius; z++) {
+                    if (x * x + y * y + z * z > radius * radius) continue;
+                    Block block = world.getBlockAt(center.getBlockX() + x, blockY,
+                            center.getBlockZ() + z);
+                    if (!(block.getState() instanceof Container container)
+                            || !visited.add(container.getInventory())) continue;
+                    Map<Material, Integer> contents = new java.util.EnumMap<>(Material.class);
+                    for (ItemStack item : container.getInventory().getContents()) {
+                        if (item != null && !item.getType().isAir()) {
+                            contents.merge(item.getType(), item.getAmount(), Integer::sum);
+                        }
+                    }
+                    containers.add(new NearbyContainer(block.getType(), block.getLocation().distance(center), contents));
+                }
+            }
+        }
+        if (containers.isEmpty()) return;
+        out.append("Nearby containers usable with INTERACT targets take_from_container or store_in_container:\n");
+        containers.stream().sorted(Comparator.comparingDouble(NearbyContainer::distance)).limit(5)
+                .forEach(container -> {
+                    out.append("- ").append(readable(container.material().name())).append(", ")
+                            .append(Math.round(container.distance())).append(" blocks, contents: ");
+                    if (container.contents().isEmpty()) {
+                        out.append("empty");
+                    } else {
+                        container.contents().entrySet().stream()
+                                .sorted(Map.Entry.<Material, Integer>comparingByValue().reversed())
+                                .limit(8).forEach(entry -> out.append(entry.getValue()).append(' ')
+                                        .append(readable(entry.getKey().name())).append(", "));
+                        out.setLength(out.length() - 2);
+                    }
+                    out.append('\n');
+                });
     }
 
     private void appendInventory(StringBuilder out, NpcInstance instance, AiControlSettings settings) {
@@ -864,6 +919,8 @@ public final class AiControlService {
     private record NearbySign(double distance, String text) { }
 
     private record NearbyLever(double distance, boolean powered) { }
+
+    private record NearbyContainer(Material material, double distance, Map<Material, Integer> contents) { }
 
     private record PendingInvocation(
             BehaviourEvent event,
