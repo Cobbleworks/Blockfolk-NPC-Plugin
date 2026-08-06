@@ -28,6 +28,16 @@ class AiDecisionParserTest {
     }
 
     @Test
+    void skipsMalformedArrayEntriesWithoutDiscardingLaterActions() {
+        AiDecision decision = AiDecisionParser.parse("""
+                {"actions":["invalid",{"type":"SAY","text":"Still valid."}]}
+                """, AiControlSettings.defaults());
+
+        assertEquals(1, decision.actions().size());
+        assertEquals("Still valid.", decision.actions().getFirst().text());
+    }
+
+    @Test
     void disabledCapabilityOverridesModelResponse() {
         AiControlSettings settings = settings("Be Mira", "", "", EnumSet.of(AiActionType.SAY));
         AiDecision decision = AiDecisionParser.parse("""
@@ -111,6 +121,34 @@ class AiDecisionParserTest {
                 interact.withInventoryEnabled(true)).actions().getFirst().target());
         assertEquals("store_in_container", AiDecisionParser.parse(store,
                 interact.withInventoryEnabled(true)).actions().getFirst().target());
+    }
+
+    @Test
+    void acceptsExplicitSwitchAndContainerAliases() {
+        AiControlSettings interact = settings("Caretaker", "", "Operate nearby mechanisms",
+                EnumSet.of(AiActionType.INTERACT)).withInventoryEnabled(true);
+
+        AiDecision decision = AiDecisionParser.parse("""
+                {"actions":[
+                  {"type":"INTERACT","target":"nearby_lever_1"},
+                  {"type":"INTERACT","target":"nearby_button_2"},
+                  {"type":"INTERACT","target":"store_in_container_3"}
+                ]}
+                """, interact);
+
+        assertEquals(List.of("nearby_lever_1", "nearby_button_2", "store_in_container_3"),
+                decision.actions().stream().map(AiDecision.Action::target).toList());
+    }
+
+    @Test
+    void rejectsUnrecognizedInteractionAliases() {
+        AiControlSettings interact = settings("Caretaker", "", "Operate nearby mechanisms",
+                EnumSet.of(AiActionType.INTERACT));
+
+        AiDecision decision = AiDecisionParser.parse(
+                "{\"actions\":[{\"type\":\"INTERACT\",\"target\":\"lever_by_door\"}]}", interact);
+
+        assertEquals(AiActionType.DO_NOTHING, decision.actions().getFirst().type());
     }
 
     @Test

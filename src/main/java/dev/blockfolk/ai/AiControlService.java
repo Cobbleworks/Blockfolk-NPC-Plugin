@@ -49,6 +49,7 @@ public final class AiControlService {
 
     private static final double PERCEPTION_RADIUS = 12.0;
     private static final double LOCATION_PERCEPTION_RADIUS = 64.0;
+    private static final int MAX_CHAT_GROUP_SIZE = 5;
     private static final String RESULT_RULES = """
             Return only one JSON object with an actions array containing 0 to 3 actions.
             Never return Minecraft commands, code, or extra prose. Use only the available actions and target aliases.
@@ -58,14 +59,18 @@ public final class AiControlService {
             Targeted actions use only target references present in the request.
             START_COMBAT may target triggering_entity, a nearby_player_N, nearby_npc_N, or nearby_entity_N,
             regardless of the NPC's normal player, NPC, mob, or animal targeting preferences. It may omit
-            target to attack the nearest safe attackable living entity.
+            target to attack the nearest safe attackable living entity. STOP_COMBAT ends the current fight.
+            FLEE_FROM requires a listed entity target and moves away from it.
             FOLLOW requires a target: use triggering_player, nearest_player, a listed nearby_player_N alias,
             or the listed player's Minecraft name.
-            UNFOLLOW stops following the current player. INTERACT without a target (or with nearest_switch) walks to
-            and toggles the nearest button or lever. When temporary inventory access is enabled, INTERACT may use
-            target take_from_container to retrieve a stack from the nearest non-empty container or
-            store_in_container to put carried items into the nearest container with room.
+            UNFOLLOW stops following the current player. INTERACT uses a listed nearby_lever_N or nearby_button_N
+            target to operate that exact switch; nearest_switch is allowed only when the particular switch does not
+            matter. For multi-switch instructions, return one INTERACT action per switch in the requested order.
+            When temporary inventory access is enabled, INTERACT uses a listed take_from_container_N or
+            store_in_container_N target. The unnumbered forms select the nearest suitable container.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
+            RETURN_HOME walks to this instance's respawn location. START_ROUTE resumes its configured route;
+            PAUSE_ROUTE pauses that route.
             DROP_ITEM uses an inventory_slot_N target and drops that stack from the temporary inventory.
             MINE_BLOCKS uses target ores, trees, mineable_blocks, or a nearby material name. It mines every
             matching block in reach and places its drops in the temporary inventory.
@@ -87,13 +92,18 @@ public final class AiControlService {
             Targeted actions use only target references present in that NPC's request context.
             START_COMBAT may target triggering_entity, a nearby_player_N, nearby_npc_N, or nearby_entity_N,
             regardless of that NPC's normal player, NPC, mob, or animal targeting preferences. It may omit
-            target to attack the nearest safe attackable living entity.
+            target to attack the nearest safe attackable living entity. STOP_COMBAT ends its current fight.
+            FLEE_FROM requires a listed entity target and moves away from it.
             FOLLOW requires a target: use triggering_player, nearest_player, a listed nearby_player_N alias,
             or the listed player's Minecraft name.
-            UNFOLLOW stops that NPC following its current player. INTERACT without a target (or with nearest_switch)
-            walks to and toggles its nearest button or lever. When temporary inventory access is enabled, INTERACT
-            may target take_from_container or store_in_container to use its nearest suitable container.
+            UNFOLLOW stops that NPC following its current player. INTERACT uses a listed nearby_lever_N or
+            nearby_button_N target to operate that exact switch; nearest_switch is allowed only when identity does
+            not matter. For multi-switch instructions, return one INTERACT action per switch in the requested order.
+            With temporary inventory access, use a listed take_from_container_N or store_in_container_N target;
+            the unnumbered forms select the nearest suitable container.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
+            RETURN_HOME walks to that NPC instance's respawn location. START_ROUTE resumes its configured route;
+            PAUSE_ROUTE pauses that route.
             DROP_ITEM uses an inventory_slot_N target and drops that stack from the temporary inventory.
             MINE_BLOCKS uses target ores, trees, mineable_blocks, or a nearby material name. It mines every
             matching block in reach and places its drops in the temporary inventory.
@@ -185,16 +195,16 @@ public final class AiControlService {
         lastInvocation.put(instance.getId(), now);
         String detail = eventDetail == null || eventDetail.isBlank() ? describeEvent(event, actor) : eventDetail;
         long generation = generations.getOrDefault(instance.getId(), 0L);
-        memory.rememberEvent(instance.getId(), detail);
         RequestContext context;
         try {
-            context = buildContext(event, detail, instance, definition, actor, settings);
+            context = buildContext(event, detail, instance, definition, actor, settings, true);
         } catch (RuntimeException error) {
             inFlight.remove(instance.getId());
             plugin.getLogger().log(Level.WARNING,
                     "Could not build AI Behaviour context for " + definition.getKey(), error);
             return;
         }
+        memory.rememberEvent(instance.getId(), detail);
         try {
             processingStarted.accept(instance);
         } catch (RuntimeException error) {
@@ -253,6 +263,7 @@ public final class AiControlService {
                 .flatMap(java.util.Optional::stream)
                 .filter(participant -> participant.settings().enabled()
                         && participant.settings().hasContext() && participant.settings().respondToChat())
+                .limit(MAX_CHAT_GROUP_SIZE)
                 .toList();
         if (eligibleParticipants.isEmpty()) return;
         if (!client.configured()) {
@@ -327,12 +338,12 @@ public final class AiControlService {
                 aliases.put(alias, participant);
                 requestGenerations.put(participant.instance().getId(),
                         generations.getOrDefault(participant.instance().getId(), 0L));
-                memory.rememberEvent(participant.instance().getId(), eventDetail);
                 system.append("\n\n").append(alias).append(" (NPC ")
                         .append(participant.definition().getDisplayName()).append("):\n")
                         .append(participant.settings().systemContext());
                 RequestContext participantContext = buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail,
-                        participant.instance(), participant.definition(), player, participant.settings());
+                        participant.instance(), participant.definition(), player, participant.settings(), false);
+                memory.rememberEvent(participant.instance().getId(), eventDetail);
                 targetsByInstance.put(participant.instance().getId(), participantContext.targets());
                 context.append("\n=== ").append(alias).append(": ")
                         .append(participant.definition().getDisplayName())
@@ -589,7 +600,8 @@ public final class AiControlService {
             NpcInstance instance,
             NpcDefinition definition,
             Entity actor,
-            AiControlSettings settings
+            AiControlSettings settings,
+            boolean includeEvent
     ) {
         AiTargetSnapshot.Builder targets = AiTargetSnapshot.builder();
         if (actor != null) {
@@ -604,8 +616,8 @@ public final class AiControlService {
         World world = location.getWorld();
         LivingEntity npc = instances.findEntity(instance).orElse(null);
         StringBuilder out = new StringBuilder(1200);
-        out.append("Event:\n").append(detail).append("\n\nNPC state:\n")
-                .append("Name: ").append(definition.getDisplayName()).append('\n')
+        if (includeEvent) out.append("Event:\n").append(detail).append("\n\n");
+        out.append("NPC state:\n").append("Name: ").append(definition.getDisplayName()).append('\n')
                 .append("World: ").append(world == null ? "unknown" : world.getName()).append('\n');
         if (npc != null) out.append("Health: ").append(format(npc.getHealth())).append(" / ")
                 .append(format(EntityHealth.maximum(npc))).append('\n');
@@ -712,9 +724,9 @@ public final class AiControlService {
             }
         }
 
-        appendNearbySwitches(out, center);
-        if (settings.inventoryEnabled() && settings.allowedActions().contains(AiActionType.INTERACT)) {
-            appendNearbyContainers(out, center);
+        if (settings.allowedActions().contains(AiActionType.INTERACT)) {
+            appendNearbySwitches(out, center, targets);
+            if (settings.inventoryEnabled()) appendNearbyContainers(out, center, targets);
         }
         if (settings.inventoryEnabled() && settings.allowedActions().contains(AiActionType.MINE_BLOCKS)) {
             appendNearbyMineableResources(out, center);
@@ -753,7 +765,7 @@ public final class AiControlService {
                         .append(": ").append(entry.getValue()).append(" blocks\n"));
     }
 
-    private void appendNearbySwitches(StringBuilder out, Location center) {
+    private void appendNearbySwitches(StringBuilder out, Location center, AiTargetSnapshot.Builder targets) {
         World world = center.getWorld();
         if (world == null) return;
         int radius = (int) PERCEPTION_RADIUS;
@@ -766,22 +778,31 @@ public final class AiControlService {
                     if (x * x + y * y + z * z > radius * radius) continue;
                     Block block = world.getBlockAt(center.getBlockX() + x, blockY,
                             center.getBlockZ() + z);
-                    if (block.getType() != Material.LEVER && !Tag.BUTTONS.isTagged(block.getType())
+                    if ((block.getType() != Material.LEVER && !Tag.BUTTONS.isTagged(block.getType()))
                             || !(block.getBlockData() instanceof Powerable powerable)) continue;
-                    switches.add(new NearbySwitch(block.getType(), block.getLocation().distance(center),
+                    switches.add(new NearbySwitch(block.getType(), block.getLocation(),
+                            block.getLocation().distance(center),
                             powerable.isPowered()));
                 }
             }
         }
         if (switches.isEmpty()) return;
         out.append("Nearby buttons and levers usable with INTERACT:\n");
-        switches.stream().sorted(Comparator.comparingDouble(NearbySwitch::distance)).limit(5)
-                .forEach(item -> out.append("- ").append(readable(item.material().name())).append(", ")
-                        .append(Math.round(item.distance())).append(" blocks, ")
-                        .append(item.powered() ? "powered" : "unpowered").append('\n'));
+        int leverIndex = 0;
+        int buttonIndex = 0;
+        for (NearbySwitch item : switches.stream().sorted(Comparator.comparingDouble(NearbySwitch::distance))
+                .limit(8).toList()) {
+            boolean button = Tag.BUTTONS.isTagged(item.material());
+            String alias = button ? "nearby_button_" + ++buttonIndex : "nearby_lever_" + ++leverIndex;
+            targets.bindLocation(alias, item.location());
+            out.append("- ").append(alias).append(": ").append(readable(item.material().name())).append(", ")
+                    .append(Math.round(item.distance())).append(" blocks, ")
+                    .append(relativeOffset(item.location(), center)).append(", ")
+                    .append(item.powered() ? "powered" : "unpowered").append('\n');
+        }
     }
 
-    private void appendNearbyContainers(StringBuilder out, Location center) {
+    private void appendNearbyContainers(StringBuilder out, Location center, AiTargetSnapshot.Builder targets) {
         World world = center.getWorld();
         if (world == null) return;
         int radius = (int) PERCEPTION_RADIUS;
@@ -804,16 +825,30 @@ public final class AiControlService {
                             contents.merge(item.getType(), item.getAmount(), Integer::sum);
                         }
                     }
-                    containers.add(new NearbyContainer(block.getType(), block.getLocation().distance(center), contents));
+                    int freeSlots = 0;
+                    for (ItemStack item : container.getInventory().getContents()) {
+                        if (item == null || item.getType().isAir()) freeSlots++;
+                    }
+                    containers.add(new NearbyContainer(block.getType(), block.getLocation(),
+                            block.getLocation().distance(center), freeSlots, contents));
                 }
             }
         }
         if (containers.isEmpty()) return;
-        out.append("Nearby containers usable with INTERACT targets take_from_container or store_in_container:\n");
-        containers.stream().sorted(Comparator.comparingDouble(NearbyContainer::distance)).limit(5)
-                .forEach(container -> {
-                    out.append("- ").append(readable(container.material().name())).append(", ")
-                            .append(Math.round(container.distance())).append(" blocks, contents: ");
+        out.append("Nearby containers usable with INTERACT:\n");
+        int index = 0;
+        for (NearbyContainer container : containers.stream()
+                .sorted(Comparator.comparingDouble(NearbyContainer::distance)).limit(5).toList()) {
+                    index++;
+                    String takeAlias = "take_from_container_" + index;
+                    String storeAlias = "store_in_container_" + index;
+                    targets.bindLocation(takeAlias, container.location());
+                    targets.bindLocation(storeAlias, container.location());
+                    out.append("- nearby_container_").append(index).append(": ")
+                            .append(readable(container.material().name())).append(", ")
+                            .append(Math.round(container.distance())).append(" blocks, ")
+                            .append(relativeOffset(container.location(), center)).append(", ")
+                            .append(container.freeSlots()).append(" free slots, contents: ");
                     if (container.contents().isEmpty()) {
                         out.append("empty");
                     } else {
@@ -823,8 +858,8 @@ public final class AiControlService {
                                         .append(readable(entry.getKey().name())).append(", "));
                         out.setLength(out.length() - 2);
                     }
-                    out.append('\n');
-                });
+                    out.append("; targets: ").append(takeAlias).append(", ").append(storeAlias).append('\n');
+        }
     }
 
     private void appendInventory(StringBuilder out, NpcInstance instance, AiControlSettings settings) {
@@ -942,12 +977,21 @@ public final class AiControlService {
     private static String format(double value) { return String.format(Locale.ROOT, "%.1f", value); }
     private static long distance(Location one, Location two) { return Math.round(Math.sqrt(one.distanceSquared(two))); }
     private static String readable(String value) { return value.toLowerCase(Locale.ROOT).replace('_', ' '); }
+    private static String relativeOffset(Location target, Location origin) {
+        int x = target.getBlockX() - origin.getBlockX();
+        int y = target.getBlockY() - origin.getBlockY();
+        int z = target.getBlockZ() - origin.getBlockZ();
+        return "offset " + (x >= 0 ? "+" : "") + x + "," + (y >= 0 ? "+" : "") + y
+                + "," + (z >= 0 ? "+" : "") + z + " from NPC";
+    }
 
     private record NearbySign(double distance, String text) { }
 
-    private record NearbySwitch(Material material, double distance, boolean powered) { }
+    private record NearbySwitch(Material material, Location location, double distance, boolean powered) { }
 
-    private record NearbyContainer(Material material, double distance, Map<Material, Integer> contents) { }
+    private record NearbyContainer(
+            Material material, Location location, double distance, int freeSlots,
+            Map<Material, Integer> contents) { }
 
     private record PendingInvocation(
             BehaviourEvent event,

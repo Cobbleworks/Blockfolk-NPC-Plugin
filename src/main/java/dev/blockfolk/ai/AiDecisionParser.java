@@ -27,7 +27,8 @@ public final class AiDecisionParser {
             JsonArray actions = root.has("actions") && root.get("actions").isJsonArray()
                     ? root.getAsJsonArray("actions") : new JsonArray();
             for (JsonElement element : actions) {
-                if (accepted.size() >= MAX_ACTIONS || !element.isJsonObject()) break;
+                if (accepted.size() >= MAX_ACTIONS) break;
+                if (!element.isJsonObject()) continue;
                 parseAction(element.getAsJsonObject(), settings).ifPresent(accepted::add);
             }
         } catch (RuntimeException ignored) {
@@ -87,8 +88,9 @@ public final class AiDecisionParser {
         if (type == AiActionType.DROP_ITEM) return target.matches("inventory_slot_[1-9][0-9]*");
         if (type == AiActionType.MINE_BLOCKS) return target.matches("[a-z0-9_]{1,64}");
         if (type == AiActionType.INTERACT) {
-            return target.equals("nearest_switch") || target.equals("take_from_container")
-                    || target.equals("store_in_container");
+            return target.equals("nearest_switch")
+                    || target.matches("nearby_(lever|button)_[1-9][0-9]*")
+                    || target.matches("(take_from|store_in)_container(?:_[1-9][0-9]*)?");
         }
         if (type == AiActionType.START_COMBAT) {
             return TARGETS.contains(target)
@@ -106,7 +108,8 @@ public final class AiDecisionParser {
 
     private static boolean isContainerInteraction(JsonObject object) {
         String target = string(object, "target", true);
-        return "take_from_container".equals(target) || "store_in_container".equals(target);
+        return target != null && (target.startsWith("take_from_container")
+                || target.startsWith("store_in_container"));
     }
 
     private static String string(JsonObject object, String name, boolean normalize) {
