@@ -94,7 +94,7 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
 
     private final class ClickListener implements Listener {
 
-        @EventHandler(priority = EventPriority.MONITOR)
+        @EventHandler(priority = EventPriority.HIGHEST)
         public void onRightClick(PlayerInteractEntityEvent event) {
             if (event.getHand() != EquipmentSlot.HAND) {
                 return;
@@ -107,11 +107,11 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
             if (event.getPlayer().isSneaking() && event.getPlayer().hasPermission("blockfolk.admin")) {
                 return;
             }
-            npcClicked(null, instance.getId().toString(), event.getPlayer(),
+            npcClicked(event, instance.getId().toString(), event.getPlayer(),
                     event.getPlayer().isSneaking() ? NpcClickType.SHIFT_RIGHT : NpcClickType.RIGHT);
         }
 
-        @EventHandler(priority = EventPriority.LOWEST)
+        @EventHandler(priority = EventPriority.HIGHEST)
         public void onLeftClick(EntityDamageByEntityEvent event) {
             if (!(event.getDamager() instanceof Player player)) {
                 return;
@@ -121,9 +121,18 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
                             player.isSneaking() ? NpcClickType.SHIFT_LEFT : NpcClickType.LEFT));
         }
 
-        @EventHandler(priority = EventPriority.MONITOR)
+        @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         public void onInventoryOpen(InventoryOpenEvent event) {
-            applyNpcIcons(event.getInventory());
+            if (!(event.getPlayer() instanceof Player player)) {
+                return;
+            }
+            Inventory openedInventory = event.getInventory();
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                var openedGui = QuestsAPI.getAPI().getPlugin().getGuiManager().getOpenedGui(player);
+                if (openedGui != null && openedGui.getInventory() == openedInventory) {
+                    applyNpcIcons(openedInventory);
+                }
+            });
         }
     }
 
@@ -131,7 +140,7 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
         for (int slot = 0; slot < inventory.getSize(); slot++) {
             ItemStack current = inventory.getItem(slot);
             UUID instanceId = referencedInstanceId(current);
-            if (instanceId == null || current.getType() == Material.PLAYER_HEAD) {
+            if (instanceId == null) {
                 continue;
             }
             NpcInstance instance = instances.findById(instanceId).orElse(null);
@@ -148,7 +157,10 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
             return null;
         }
         ItemMeta meta = item.getItemMeta();
-        List<String> lore = meta.getLore();
+        return referencedInstanceId(meta.getLore());
+    }
+
+    static UUID referencedInstanceId(List<String> lore) {
         if (lore == null) {
             return null;
         }
@@ -205,7 +217,7 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
 
         @Override
         public Location getLocation() {
-            return instance.getLocation();
+            return instances.currentLocation(instance);
         }
 
         @Override

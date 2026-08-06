@@ -158,10 +158,19 @@ public final class BlockfolkPlugin extends JavaPlugin {
         instanceRegistry.loadPersistedInstances();
 
         if (getServer().getPluginManager().isPluginEnabled("BeautyQuests")) {
-            beautyQuestsIntegration = new BeautyQuestsIntegration(
-                    this, definitionRepository, instanceRegistry, behaviourService);
-            beautyQuestsIntegration.register();
-            instanceRegistry.setRemovalListener(beautyQuestsIntegration::npcRemoved);
+            try {
+                beautyQuestsIntegration = new BeautyQuestsIntegration(
+                        this, definitionRepository, instanceRegistry, behaviourService);
+                beautyQuestsIntegration.register();
+                instanceRegistry.setRemovalListener(instance -> {
+                    behaviourService.forget(instance);
+                    beautyQuestsIntegration.npcRemoved(instance);
+                });
+            } catch (LinkageError | RuntimeException exception) {
+                beautyQuestsIntegration = null;
+                getLogger().log(Level.WARNING,
+                        "BeautyQuests was detected, but its integration could not be enabled.", exception);
+            }
         }
 
         PluginCommand command = getCommand("blockfolk");
