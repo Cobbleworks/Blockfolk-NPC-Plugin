@@ -151,6 +151,7 @@ public final class NpcInstanceRegistry implements Listener {
             instancesByEntityId.values().remove(instance.getId());
             navigationService.destroy(instance);
             dialogService.detach(instance.getId());
+            removalListener.accept(instance);
             iterator.remove();
             removalListener.accept(instance);
             removed++;

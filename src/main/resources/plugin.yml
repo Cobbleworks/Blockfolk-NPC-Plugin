@@ -3,6 +3,7 @@ version: ${project.version}
 main: dev.blockfolk.BlockfolkPlugin
 api-version: '1.21.11'
 author: Blockfolk
+softdepend: [BeautyQuests]
 commands:
   blockfolk:
     aliases: [bf]

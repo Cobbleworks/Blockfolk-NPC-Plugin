@@ -6,6 +6,14 @@
 
 Blockfolk is a GUI-driven fake-player NPC system for Paper servers. It supports reusable NPC presets, persistent instances, skins, equipment, dialog, combat behaviour, and walking routes.
 
+## BeautyQuests integration
+
+BeautyQuests is an optional soft dependency. When it is installed, every spawned
+Blockfolk NPC is available in BeautyQuests' NPC selector. Create or edit a quest,
+choose an NPC-based starter or stage, then click the Blockfolk NPC in the world.
+Quest dialogs, interaction stages, markers, and navigation pausing use the same
+persistent NPC instance UUID, so assignments survive server restarts.
+
 ## Commands
 
 All commands require the `blockfolk.admin` permission (granted to operators by default).

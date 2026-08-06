@@ -13,6 +13,7 @@ import dev.blockfolk.gui.CustomEventGuiService;
 import dev.blockfolk.gui.GuiService;
 import dev.blockfolk.gui.RouteGuiService;
 import dev.blockfolk.input.ChatInputService;
+import dev.blockfolk.integration.beautyquests.BeautyQuestsIntegration;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.repository.CustomEventRepository;
@@ -55,6 +56,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private NpcQuestionService questionService;
     private SkinResolver skinResolver;
     private AiControlService aiControlService;
+    private BeautyQuestsIntegration beautyQuestsIntegration;
 
     @Override
     public void onEnable() {
@@ -154,6 +156,13 @@ public final class BlockfolkPlugin extends JavaPlugin {
         customEventRepository.loadAll();
         definitionRepository.loadAll();
         instanceRegistry.loadPersistedInstances();
+
+        if (getServer().getPluginManager().isPluginEnabled("BeautyQuests")) {
+            beautyQuestsIntegration = new BeautyQuestsIntegration(
+                    this, definitionRepository, instanceRegistry, behaviourService);
+            beautyQuestsIntegration.register();
+            instanceRegistry.setRemovalListener(beautyQuestsIntegration::npcRemoved);
+        }
 
         PluginCommand command = getCommand("blockfolk");
         if (command == null) {
