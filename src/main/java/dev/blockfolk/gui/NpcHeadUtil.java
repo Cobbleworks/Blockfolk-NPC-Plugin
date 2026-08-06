@@ -13,11 +13,11 @@ import com.destroystokyo.paper.profile.ProfileProperty;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.util.SkinTextureUtil;
 
-final class NpcHeadUtil {
+public final class NpcHeadUtil {
 
     private NpcHeadUtil() { }
 
-    static ItemStack applySkin(ItemStack head, NpcDefinition definition) {
+    public static ItemStack applySkin(ItemStack head, NpcDefinition definition) {
         if (!(head.getItemMeta() instanceof SkullMeta meta)) {
             return head;
         }

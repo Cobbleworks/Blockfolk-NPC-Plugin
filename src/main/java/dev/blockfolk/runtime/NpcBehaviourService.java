@@ -107,6 +107,7 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, String> routeOverrides = new HashMap<>();
     private final Map<UUID, WalkingSpeed> speedOverrides = new HashMap<>();
     private final Set<UUID> routePaused = new HashSet<>();
+    private final Set<UUID> externallyPaused = new HashSet<>();
     private final Map<UUID, Location> moveTargets = new HashMap<>();
     private final Map<UUID, FollowState> following = new HashMap<>();
     private final Map<UUID, Object> waypointActionSequences = new HashMap<>();
@@ -171,6 +172,7 @@ public final class NpcBehaviourService implements Listener {
         }
         behaviourTask = null;
         routePaused.clear();
+        externallyPaused.clear();
         moveTargets.clear();
         following.clear();
         waypointActionSequences.clear();
@@ -265,6 +267,7 @@ public final class NpcBehaviourService implements Listener {
         routeOverrides.remove(instance.getId());
         speedOverrides.remove(instance.getId());
         routePaused.remove(instance.getId());
+        externallyPaused.remove(instance.getId());
         moveTargets.remove(instance.getId());
         following.remove(instance.getId());
         waypointActionSequences.remove(instance.getId());
@@ -300,7 +303,19 @@ public final class NpcBehaviourService implements Listener {
      * action. A pause must not discard the route worker's next waypoint.
      */
     public boolean isNavigationPaused(NpcInstance instance) {
-        return routePaused.contains(instance.getId());
+        return routePaused.contains(instance.getId()) || externallyPaused.contains(instance.getId());
+    }
+
+    /** Temporarily pauses movement owned by an external dialog or quest system. */
+    public boolean setExternalNavigationPaused(NpcInstance instance, boolean paused) {
+        boolean previouslyPaused = externallyPaused.contains(instance.getId());
+        if (paused) {
+            externallyPaused.add(instance.getId());
+            instances.stopNavigating(instance);
+        } else {
+            externallyPaused.remove(instance.getId());
+        }
+        return previouslyPaused;
     }
 
     /**
@@ -896,7 +911,8 @@ public final class NpcBehaviourService implements Listener {
 
     private void tickMoveTo(NpcInstance instance) {
         Location target = moveTargets.get(instance.getId());
-        if (target == null || combatService != null && combatService.isEngaged(instance)) {
+        if (target == null || isNavigationPaused(instance)
+                || combatService != null && combatService.isEngaged(instance)) {
             return;
         }
         Location current = instance.getLocation();
@@ -965,7 +981,8 @@ public final class NpcBehaviourService implements Listener {
 
     private void tickFollow(NpcInstance instance) {
         FollowState state = following.get(instance.getId());
-        if (state == null || combatService != null && combatService.isEngaged(instance)) {
+        if (state == null || isNavigationPaused(instance)
+                || combatService != null && combatService.isEngaged(instance)) {
             return;
         }
         Player player = state.playerId == null ? null : Bukkit.getPlayer(state.playerId);

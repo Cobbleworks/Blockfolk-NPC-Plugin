@@ -25,6 +25,10 @@
             <id>papermc</id>
             <url>https://repo.papermc.io/repository/maven-public/</url>
         </repository>
+        <repository>
+            <id>codemc</id>
+            <url>https://repo.codemc.io/repository/maven-public/</url>
+        </repository>
     </repositories>
 
     <dependencies>
@@ -33,6 +37,13 @@
             <artifactId>paper-api</artifactId>
             <version>${paper.version}</version>
             <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>fr.skytasul</groupId>
+            <artifactId>beautyquests-api</artifactId>
+            <version>1.0.4</version>
+            <scope>provided</scope>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
