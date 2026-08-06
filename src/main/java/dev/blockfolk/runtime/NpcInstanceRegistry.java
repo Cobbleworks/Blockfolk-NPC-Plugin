@@ -45,6 +45,8 @@ public final class NpcInstanceRegistry implements Listener {
     };
     private Consumer<NpcInstance> relocationListener = instance -> {
     };
+    private Consumer<NpcInstance> removalListener = instance -> {
+    };
 
     public void setSpawnListener(BiConsumer<NpcInstance, NpcDefinition> spawnListener) {
         this.spawnListener = spawnListener == null ? (instance, definition) -> {
@@ -54,6 +56,11 @@ public final class NpcInstanceRegistry implements Listener {
     public void setRelocationListener(Consumer<NpcInstance> relocationListener) {
         this.relocationListener = relocationListener == null ? instance -> {
         } : relocationListener;
+    }
+
+    public void setRemovalListener(Consumer<NpcInstance> removalListener) {
+        this.removalListener = removalListener == null ? instance -> {
+        } : removalListener;
     }
 
     public NpcInstanceRegistry(
@@ -145,6 +152,7 @@ public final class NpcInstanceRegistry implements Listener {
             navigationService.destroy(instance);
             dialogService.detach(instance.getId());
             iterator.remove();
+            removalListener.accept(instance);
             removed++;
         }
         if (removed > 0) {
@@ -280,6 +288,7 @@ public final class NpcInstanceRegistry implements Listener {
         renderer.destroy(instance);
         navigationService.destroy(instance);
         dialogService.detach(instance.getId());
+        removalListener.accept(instance);
         instanceRepository.saveAll(instances.values());
         return true;
     }

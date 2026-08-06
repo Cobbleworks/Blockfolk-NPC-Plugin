@@ -57,6 +57,8 @@ import org.bukkit.util.Vector;
 
 import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.AiDecision;
+import dev.blockfolk.ai.AiDecisionResult;
+import dev.blockfolk.ai.AiTargetSnapshot;
 import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.util.UiText;
 import dev.blockfolk.util.EntityHealth;
@@ -496,9 +498,9 @@ public final class NpcBehaviourService implements Listener {
             }
         }
         if (aiControlService != null && !aiGroup.isEmpty()) {
-            aiControlService.invokeChatGroup(detail, aiGroup, player, (instance, decision) ->
+            aiControlService.invokeChatGroup(detail, aiGroup, player, (instance, result) ->
                     definitions.find(instance.getDefinitionKey()).ifPresent(definition ->
-                            applyAiDecision(BehaviourEvent.PLAYER_CHAT, decision, instance, definition, player,
+                            applyAiDecision(BehaviourEvent.PLAYER_CHAT, result, instance, definition, player,
                                     false)));
         }
     }
@@ -638,24 +640,14 @@ public final class NpcBehaviourService implements Listener {
 
     private void applyAiDecision(
             BehaviourEvent event,
-            AiDecision decision,
-            NpcInstance instance,
-            NpcDefinition definition,
-            Entity actor
-    ) {
-        applyAiDecision(event, decision, instance, definition, actor, true);
-    }
-
-    private void applyAiDecision(
-            BehaviourEvent event,
-            AiDecision decision,
+            AiDecisionResult result,
             NpcInstance instance,
             NpcDefinition definition,
             Entity actor,
             boolean rememberOwnSpeech
     ) {
-        for (AiDecision.Action action : decision.actions()) {
-            Entity target = resolveAiTarget(action.target(), instance, actor);
+        for (AiDecision.Action action : result.decision().actions()) {
+            Entity target = resolveAiTarget(action.target(), result.targets());
             switch (action.type()) {
                 case SAY -> {
                     sendDialog(event, instance, definition, action.text(), actor);
@@ -668,7 +660,7 @@ public final class NpcBehaviourService implements Listener {
                 case START_COMBAT -> {
                     if (combatService != null) {
                         Entity selected = action.target() == null
-                                ? combatService.findNearestAttackableTarget(instance) : target;
+                                ? resolveAiTarget("nearest_attackable", result.targets()) : target;
                         combatService.startDirectedCombat(instance, selected);
                     }
                 }
@@ -681,7 +673,7 @@ public final class NpcBehaviourService implements Listener {
                 }
                 case UNFOLLOW -> stopFollowing(instance);
                 case INTERACT -> startAiInteraction(instance);
-                case MOVE_TO -> resolveAiMoveTarget(action.target(), instance, actor).ifPresent(targetLocation -> {
+                case MOVE_TO -> resolveAiMoveTarget(action.target(), result.targets()).ifPresent(targetLocation -> {
                     stopFollowing(instance);
                     moveTargets.put(instance.getId(), targetLocation);
                     instances.stand(instance);
@@ -714,72 +706,25 @@ public final class NpcBehaviourService implements Listener {
     private void invokeAi(BehaviourEvent event, String eventDetail, NpcInstance instance,
             NpcDefinition definition, Entity actor) {
         if (aiControlService != null) aiControlService.invoke(event, eventDetail, instance, definition, actor,
-                decision -> applyAiDecision(event, decision, instance, definition, actor));
+                result -> applyAiDecision(event, result, instance, definition, actor, true));
     }
 
-    private Entity resolveAiTarget(String alias, NpcInstance instance, Entity actor) {
-        if (alias == null) return null;
-        if ((alias.equals("triggering_player") || alias.equals("triggering_entity")) && actor != null) return actor;
-        if (alias.equals("nearest_player")) return nearestPlayer(instance).orElse(null);
-        if (alias.equals("nearest_attackable") && combatService != null) {
-            return combatService.findNearestAttackableTarget(instance);
-        }
-        if (alias.equals("current_target") && combatService != null) return combatService.currentTarget(instance);
-        if (aiControlService != null) {
-            List<Player> perceivedPlayers = aiControlService.nearbyPlayers(instance.getLocation());
-            if (alias.startsWith("nearby_player_")) {
-                int index = targetIndex(alias);
-                return index >= 0 && index < perceivedPlayers.size() ? perceivedPlayers.get(index) : null;
-            }
-            if (alias.startsWith("nearby_npc_")) {
-                int index = targetIndex(alias);
-                List<NpcInstance> perceivedNpcs = aiControlService.nearbyNpcs(instance);
-                return index >= 0 && index < perceivedNpcs.size()
-                        ? instances.findEntity(perceivedNpcs.get(index)).orElse(null) : null;
-            }
-            if (alias.startsWith("nearby_entity_")) {
-                int index = targetIndex(alias);
-                List<Entity> perceivedEntities = aiControlService.nearbyEntities(instance.getLocation());
-                return index >= 0 && index < perceivedEntities.size() ? perceivedEntities.get(index) : null;
-            }
-            return perceivedPlayers.stream()
-                    .filter(player -> player.getName().equalsIgnoreCase(alias))
-                    .findFirst().orElse(null);
-        }
-        return null;
+    private Entity resolveAiTarget(String alias, AiTargetSnapshot targets) {
+        if (alias == null || targets == null) return null;
+        Entity entity = targets.entityId(alias).map(Bukkit::getEntity).orElse(null);
+        if (entity != null && entity.isValid()) return entity;
+        return targets.npcInstanceId(alias).flatMap(instances::findById)
+                .flatMap(instances::findEntity).filter(Entity::isValid).orElse(null);
     }
 
     private java.util.Optional<Location> resolveAiMoveTarget(
-            String alias, NpcInstance instance, Entity actor) {
-        if (alias == null || aiControlService == null) return java.util.Optional.empty();
-        Entity standardTarget = resolveAiTarget(alias, instance, actor);
+            String alias, AiTargetSnapshot targets) {
+        if (alias == null || targets == null) return java.util.Optional.empty();
+        Entity standardTarget = resolveAiTarget(alias, targets);
         if (standardTarget != null && standardTarget.isValid()) {
             return java.util.Optional.of(standardTarget.getLocation());
         }
-        int index = targetIndex(alias);
-        if (index < 0) return java.util.Optional.empty();
-        if (alias.startsWith("nearby_player_")) {
-            return listLocation(aiControlService.nearbyPlayers(instance.getLocation()), index);
-        }
-        if (alias.startsWith("nearby_npc_")) {
-            List<NpcInstance> nearby = aiControlService.nearbyNpcs(instance);
-            return index < nearby.size() ? java.util.Optional.of(nearby.get(index).getLocation())
-                    : java.util.Optional.empty();
-        }
-        if (alias.startsWith("nearby_entity_")) {
-            return listLocation(aiControlService.nearbyEntities(instance.getLocation()), index);
-        }
-        if (alias.startsWith("nearby_location_")) {
-            List<dev.blockfolk.model.NamedLocation> nearby = aiControlService.nearbyLocations(instance.getLocation());
-            if (index >= nearby.size()) return java.util.Optional.empty();
-            return java.util.Optional.ofNullable(nearby.get(index).location().toLocation());
-        }
-        return java.util.Optional.empty();
-    }
-
-    private static java.util.Optional<Location> listLocation(List<? extends Entity> entities, int index) {
-        return index < entities.size() && entities.get(index).isValid()
-                ? java.util.Optional.of(entities.get(index).getLocation()) : java.util.Optional.empty();
+        return targets.location(alias);
     }
 
     private static int targetIndex(String alias) {

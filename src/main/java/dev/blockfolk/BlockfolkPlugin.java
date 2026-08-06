@@ -138,6 +138,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
             behaviourService.forget(instance);
             behaviourService.trigger(BehaviourEvent.SPAWN, instance, null);
         });
+        instanceRegistry.setRemovalListener(behaviourService::forget);
         routeMovementService = new RouteMovementService(
                 this,
                 definitionRepository,

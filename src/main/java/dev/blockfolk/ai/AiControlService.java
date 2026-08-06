@@ -147,7 +147,7 @@ public final class AiControlService {
             NpcInstance instance,
             NpcDefinition definition,
             Entity actor,
-            Consumer<AiDecision> resultHandler
+            Consumer<AiDecisionResult> resultHandler
     ) {
         AiControlSettings settings = definition.getAiControlSettings();
         if (!settings.enabled() || !settings.hasContext()) return;
@@ -170,7 +170,7 @@ public final class AiControlService {
         String detail = eventDetail == null || eventDetail.isBlank() ? describeEvent(event, actor) : eventDetail;
         long generation = generations.getOrDefault(instance.getId(), 0L);
         memory.rememberEvent(instance.getId(), detail);
-        String context;
+        RequestContext context;
         try {
             context = buildContext(event, detail, instance, definition, actor, settings);
         } catch (RuntimeException error) {
@@ -188,7 +188,7 @@ public final class AiControlService {
             return;
         }
         try {
-            client.complete(settings.systemContext() + "\n\n" + RESULT_RULES, context)
+            client.complete(settings.systemContext() + "\n\n" + RESULT_RULES, context.prompt())
                     .whenComplete((content, error) -> {
                         if (generations.getOrDefault(instance.getId(), 0L) == generation) {
                             inFlight.remove(instance.getId());
@@ -203,7 +203,7 @@ public final class AiControlService {
                             if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
                                 if (instances.findById(instance.getId()).isPresent()
                                         && generations.getOrDefault(instance.getId(), 0L) == generation) {
-                                    resultHandler.accept(decision);
+                                    resultHandler.accept(new AiDecisionResult(decision, context.targets()));
                                 }
                             });
                         }
@@ -230,7 +230,7 @@ public final class AiControlService {
             String eventDetail,
             List<NpcInstance> candidates,
             Player player,
-            BiConsumer<NpcInstance, AiDecision> resultHandler
+            BiConsumer<NpcInstance, AiDecisionResult> resultHandler
     ) {
         List<GroupParticipant> eligibleParticipants = candidates.stream()
                 .map(instance -> definitions.find(instance.getDefinitionKey())
@@ -301,6 +301,7 @@ public final class AiControlService {
 
         Map<String, GroupParticipant> aliases = new java.util.LinkedHashMap<>();
         Map<UUID, Long> requestGenerations = new HashMap<>();
+        Map<UUID, AiTargetSnapshot> targetsByInstance = new HashMap<>();
         StringBuilder system = new StringBuilder(GROUP_RESULT_RULES);
         StringBuilder context = new StringBuilder("Event:\n").append(eventDetail)
                 .append("\n\nNearby NPC group (closest first):\n");
@@ -315,12 +316,14 @@ public final class AiControlService {
                 system.append("\n\n").append(alias).append(" (NPC ")
                         .append(participant.definition().getDisplayName()).append("):\n")
                         .append(participant.settings().systemContext());
+                RequestContext participantContext = buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail,
+                        participant.instance(), participant.definition(), player, participant.settings());
+                targetsByInstance.put(participant.instance().getId(), participantContext.targets());
                 context.append("\n=== ").append(alias).append(": ")
                         .append(participant.definition().getDisplayName())
                         .append(index == 0 ? " (closest; default speaker)" : "")
                         .append(" ===\n")
-                        .append(buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail,
-                                participant.instance(), participant.definition(), player, participant.settings()));
+                        .append(participantContext.prompt());
             }
         } catch (RuntimeException error) {
             releaseGroup(groupKey, groupSequence);
@@ -359,7 +362,7 @@ public final class AiControlService {
                     Map<String, AiDecision> decisions = AiGroupDecisionParser.parse(content, settingsByAlias);
                     if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin,
                             () -> applyGroupDecisions(
-                                    aliases, decisions, requestGenerations, player, resultHandler));
+                                    aliases, decisions, requestGenerations, targetsByInstance, player, resultHandler));
                 }
                 if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
                     // Group chat is the user-facing interaction, so queue it before
@@ -385,8 +388,9 @@ public final class AiControlService {
             Map<String, GroupParticipant> aliases,
             Map<String, AiDecision> decisions,
             Map<UUID, Long> requestGenerations,
+            Map<UUID, AiTargetSnapshot> targetsByInstance,
             Player player,
-            BiConsumer<NpcInstance, AiDecision> resultHandler
+            BiConsumer<NpcInstance, AiDecisionResult> resultHandler
     ) {
         Map<String, GroupParticipant> validParticipants = new java.util.LinkedHashMap<>();
         aliases.forEach((alias, participant) -> {
@@ -415,7 +419,8 @@ public final class AiControlService {
             AiDecision decision = decisions.get(alias);
             if (decision == null) return;
             try {
-                resultHandler.accept(participant.instance(), decision);
+                resultHandler.accept(participant.instance(), new AiDecisionResult(decision,
+                        targetsByInstance.get(participant.instance().getId())));
             } catch (RuntimeException error) {
                 plugin.getLogger().log(Level.WARNING, "Could not apply AI group actions for "
                         + participant.definition().getKey() + "; continuing with the other NPCs.", error);
@@ -549,7 +554,7 @@ public final class AiControlService {
         }, ticks);
     }
 
-    private String buildContext(
+    private RequestContext buildContext(
             BehaviourEvent event,
             String detail,
             NpcInstance instance,
@@ -557,6 +562,15 @@ public final class AiControlService {
             Entity actor,
             AiControlSettings settings
     ) {
+        AiTargetSnapshot.Builder targets = AiTargetSnapshot.builder();
+        if (actor != null) {
+            targets.bindEntity("triggering_entity", actor);
+            if (actor instanceof Player) targets.bindEntity("triggering_player", actor);
+        }
+        if (combat != null) {
+            targets.bindEntity("current_target", combat.currentTarget(instance));
+            targets.bindEntity("nearest_attackable", combat.findNearestAttackableTarget(instance));
+        }
         Location location = instances.currentLocation(instance);
         World world = location.getWorld();
         LivingEntity npc = instances.findEntity(instance).orElse(null);
@@ -572,7 +586,7 @@ public final class AiControlService {
                 .append(npc.getEquipment() == null ? "unknown" : readable(npc.getEquipment().getItemInMainHand().getType().name()))
                 .append('\n');
         appendInventory(out, instance, settings);
-        appendNearby(out, instance, actor, settings);
+        appendNearby(out, instance, actor, settings, targets);
         if (world != null) {
             out.append("\nEnvironment:\nTime: ").append(timeName(world.getTime()))
                     .append("\nWeather: ").append(world.hasStorm() ? "raining" : "clear")
@@ -608,16 +622,20 @@ public final class AiControlService {
         if (settings.memoryEnabled()) out.append("REMEMBER_FACT\n");
         if (settings.inventoryEnabled() && hasInventoryItems(instance)) out.append("DROP_ITEM\n");
         if (!settings.allowedActions().contains(AiActionType.DO_NOTHING)) out.append("DO_NOTHING\n");
-        return out.toString();
+        return new RequestContext(out.toString(), targets.build());
     }
 
-    private void appendNearby(StringBuilder out, NpcInstance instance, Entity actor, AiControlSettings settings) {
+    private void appendNearby(StringBuilder out, NpcInstance instance, Entity actor, AiControlSettings settings,
+            AiTargetSnapshot.Builder targets) {
         Location center = instances.currentLocation(instance);
         if (center.getWorld() == null) return;
         out.append("\nNearby players:\n");
         List<Player> nearbyPlayers = nearbyPlayers(center);
         for (int index = 0; index < nearbyPlayers.size(); index++) {
             Player player = nearbyPlayers.get(index);
+            targets.bindEntity("nearby_player_" + (index + 1), player);
+            targets.bindEntity(player.getName().toLowerCase(Locale.ROOT), player);
+            if (index == 0) targets.bindEntity("nearest_player", player);
             out.append("- nearby_player_").append(index + 1).append(": ").append(player.getName()).append(", ")
                         .append(distance(player.getLocation(), center)).append(" blocks")
                         .append(player.equals(actor) ? ", triggering player" : "")
@@ -628,6 +646,7 @@ public final class AiControlService {
         for (int index = 0; index < nearbyNpcs.size(); index++) {
             NpcInstance other = nearbyNpcs.get(index);
             int targetIndex = index + 1;
+            targets.bindNpc("nearby_npc_" + targetIndex, other);
             definitions.find(other.getDefinitionKey()).ifPresent(definition -> out
                         .append("- nearby_npc_").append(targetIndex).append(": ")
                         .append(definition.getDisplayName()).append(", ")
@@ -640,6 +659,7 @@ public final class AiControlService {
             out.append("Nearby entities:\n");
             for (int index = 0; index < nearbyEntities.size(); index++) {
                 Entity entity = nearbyEntities.get(index);
+                targets.bindEntity("nearby_entity_" + (index + 1), entity);
                 out.append("- nearby_entity_").append(index + 1).append(": ")
                         .append(readable(entity.getType().name())).append(", ")
                         .append(distance(entity.getLocation(), center)).append(" blocks")
@@ -654,6 +674,7 @@ public final class AiControlService {
             for (int index = 0; index < nearbyLocations.size(); index++) {
                 NamedLocation named = nearbyLocations.get(index);
                 Location target = named.location().toLocation();
+                targets.bindLocation("nearby_location_" + (index + 1), target);
                 out.append("- nearby_location_").append(index + 1).append(": ")
                         .append(named.displayName()).append(", ")
                         .append(distance(target, center)).append(" blocks\n");
@@ -850,7 +871,7 @@ public final class AiControlService {
             NpcInstance instance,
             NpcDefinition definition,
             Entity actor,
-            Consumer<AiDecision> resultHandler
+            Consumer<AiDecisionResult> resultHandler
     ) { }
 
     private record GroupParticipant(
@@ -860,6 +881,8 @@ public final class AiControlService {
 
     private record PendingGroupInvocation(
             String eventDetail, List<NpcInstance> candidates, Player player,
-            BiConsumer<NpcInstance, AiDecision> resultHandler) { }
+            BiConsumer<NpcInstance, AiDecisionResult> resultHandler) { }
+
+    private record RequestContext(String prompt, AiTargetSnapshot targets) { }
 
 }
