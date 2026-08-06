@@ -265,6 +265,10 @@ public final class NpcInstanceRegistry implements Listener {
         if (!instances.containsKey(instance.getId())) {
             return NativeNpcNavigationService.NavigationStatus.STALLED;
         }
+        // The mannequin may have been pushed while its navigator was idle (including
+        // while an asynchronous AI request was in flight). Capture that rendered
+        // position before starting or continuing pathfinding.
+        currentLocation(instance);
         NativeNpcNavigationService.NavigationUpdate update = navigationService.navigate(instance, target, walkingSpeed);
         if (renderer.move(instance, update.location())) {
             dialogService.move(instance);

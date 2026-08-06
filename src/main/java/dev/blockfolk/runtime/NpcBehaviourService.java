@@ -1291,7 +1291,7 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void mineNearbyBlocks(NpcInstance instance, String requestedTarget, boolean autonomousRange) {
-        Location feet = instance.getLocation();
+        Location feet = instances.currentLocation(instance);
         if (feet.getWorld() == null) return;
         LivingEntity entity = instances.findEntity(instance).orElse(null);
         ItemStack tool = entity == null || entity.getEquipment() == null

@@ -712,7 +712,7 @@ public final class AiControlService {
             }
         }
 
-        appendNearbyLevers(out, center);
+        appendNearbySwitches(out, center);
         if (settings.inventoryEnabled() && settings.allowedActions().contains(AiActionType.INTERACT)) {
             appendNearbyContainers(out, center);
         }
@@ -753,11 +753,11 @@ public final class AiControlService {
                         .append(": ").append(entry.getValue()).append(" blocks\n"));
     }
 
-    private void appendNearbyLevers(StringBuilder out, Location center) {
+    private void appendNearbySwitches(StringBuilder out, Location center) {
         World world = center.getWorld();
         if (world == null) return;
         int radius = (int) PERCEPTION_RADIUS;
-        List<NearbyLever> levers = new ArrayList<>();
+        List<NearbySwitch> switches = new ArrayList<>();
         for (int x = -radius; x <= radius; x++) {
             for (int y = -radius; y <= radius; y++) {
                 int blockY = center.getBlockY() + y;
@@ -766,17 +766,19 @@ public final class AiControlService {
                     if (x * x + y * y + z * z > radius * radius) continue;
                     Block block = world.getBlockAt(center.getBlockX() + x, blockY,
                             center.getBlockZ() + z);
-                    if (block.getType() != Material.LEVER
+                    if (block.getType() != Material.LEVER && !Tag.BUTTONS.isTagged(block.getType())
                             || !(block.getBlockData() instanceof Powerable powerable)) continue;
-                    levers.add(new NearbyLever(block.getLocation().distance(center), powerable.isPowered()));
+                    switches.add(new NearbySwitch(block.getType(), block.getLocation().distance(center),
+                            powerable.isPowered()));
                 }
             }
         }
-        if (levers.isEmpty()) return;
-        out.append("Nearby levers usable with INTERACT:\n");
-        levers.stream().sorted(Comparator.comparingDouble(NearbyLever::distance)).limit(5)
-                .forEach(lever -> out.append("- ").append(Math.round(lever.distance()))
-                        .append(" blocks, ").append(lever.powered() ? "powered" : "unpowered").append('\n'));
+        if (switches.isEmpty()) return;
+        out.append("Nearby buttons and levers usable with INTERACT:\n");
+        switches.stream().sorted(Comparator.comparingDouble(NearbySwitch::distance)).limit(5)
+                .forEach(item -> out.append("- ").append(readable(item.material().name())).append(", ")
+                        .append(Math.round(item.distance())).append(" blocks, ")
+                        .append(item.powered() ? "powered" : "unpowered").append('\n'));
     }
 
     private void appendNearbyContainers(StringBuilder out, Location center) {
@@ -943,7 +945,7 @@ public final class AiControlService {
 
     private record NearbySign(double distance, String text) { }
 
-    private record NearbyLever(double distance, boolean powered) { }
+    private record NearbySwitch(Material material, double distance, boolean powered) { }
 
     private record NearbyContainer(Material material, double distance, Map<Material, Integer> contents) { }
 

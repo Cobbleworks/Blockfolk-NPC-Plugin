@@ -52,6 +52,16 @@ public final class NativeNpcNavigationService {
         if (navigator == null) {
             return new NavigationUpdate(NavigationStatus.STALLED, instance.getLocation());
         }
+        // A stopped navigator is intentionally kept for reuse. The visible mannequin
+        // can still be displaced by collisions while idle, so a new navigation run
+        // must begin at the mannequin rather than snapping it back to the old husk.
+        if (!states.containsKey(instance.getId())) {
+            Location renderedLocation = instance.getLocation();
+            if (renderedLocation.getWorld() == navigator.getWorld()
+                    && navigator.getLocation().distanceSquared(renderedLocation) > 0.0025) {
+                navigator.teleport(renderedLocation);
+            }
+        }
         Location current = navigator.getLocation();
         if (target.getWorld() == null || current.getWorld() != target.getWorld()) {
             stop(instance);
