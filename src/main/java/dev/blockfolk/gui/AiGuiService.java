@@ -107,7 +107,7 @@ final class AiGuiService {
                             displayName + ": " + (enabled ? "Enabled" : "Disabled"),
                             List.of(chatToggle
                                     ? LegacyText.GRAY + "Reads and answers player chat within 8 blocks"
-                                    : LegacyText.GRAY + "Available when this capability is enabled",
+                                    : LegacyText.GRAY + capabilityDescription(type),
                                     intrinsic
                                             ? LegacyText.DARK_GRAY + "Always available"
                                             : LegacyText.YELLOW + "Click to toggle")));
@@ -329,6 +329,27 @@ final class AiGuiService {
                                 ? LegacyText.DARK_GRAY + "Not configured"
                                 : LegacyText.WHITE + TextUtil.abbreviateSingleLine(value, 48),
                         LegacyText.YELLOW + "Click to edit; enter 'clear' to remove"));
+    }
+
+    private String capabilityDescription(AiActionType type) {
+        return switch (type) {
+            case SAY -> "Speaks a short response in the NPC's character";
+            case PLAY_ANIMATION -> "Performs a wave, jump, sneak, or stand animation";
+            case START_COMBAT -> "Attacks a nearby target or the nearest safe target";
+            case STOP_COMBAT -> "Ends the NPC's current combat encounter";
+            case FLEE_FROM -> "Moves away from a selected nearby entity";
+            case FOLLOW -> "Follows a selected nearby player";
+            case UNFOLLOW -> "Stops following the player it is currently following";
+            case INTERACT -> "Uses nearby buttons, levers, or containers";
+            case MOVE_TO -> "Walks to a known location, player, NPC, or entity";
+            case MINE_BLOCKS -> "Mines nearby resources; requires Temporary Inventory";
+            case RETURN_HOME -> "Walks back to this instance's respawn location";
+            case START_ROUTE -> "Resumes this instance's configured route";
+            case PAUSE_ROUTE -> "Pauses this instance's configured route";
+            case REMEMBER_FACT -> "Saves a durable fact for future conversations";
+            case DROP_ITEM -> "Drops a carried item from Temporary Inventory";
+            case DO_NOTHING -> "Takes no action when a response is not needed";
+        };
     }
 
     private ItemStack toggleItem(Material material, String name, boolean enabled, String description) {
