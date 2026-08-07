@@ -12,6 +12,8 @@ All Blockfolk commands require `blockfolk.admin`, granted to server operators by
 | `/bf npc <name> spawn` | Spawn a persistent instance of the preset. |
 | `/bf npc <name> duplicate` | Copy the preset and append ` (copy)` to its display name. |
 | `/bf routes` | Open the route and global-location manager. |
+| `/bf events` | Open the custom-event manager. |
+| `/bf events trigger <name>` | Emit an existing custom event globally; also works from the console. |
 
 ## Permission
 

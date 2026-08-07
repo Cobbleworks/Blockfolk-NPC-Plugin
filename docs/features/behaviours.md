@@ -45,6 +45,8 @@ Custom events decouple one routine from another. Define global custom events in 
 
 Names may contain `/` to create groups in the event browser. Custom-event actions can also emit another event, which makes it possible to coordinate several NPC presets.
 
+See [Custom events](/features/custom-events) for creation, manual triggering, ordering, event chains, and deletion behavior.
+
 ## Waypoint actions
 
 Route points may have their own action row. Shift-right-click a point while using the route editor to configure actions that run when that waypoint is reached.

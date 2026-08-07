@@ -4,7 +4,9 @@ NPC administration starts in the preset browser opened by `/bf`.
 
 ## Create and organize presets
 
-Create a preset with `/bf create <name>` or from the browser. Its stable key is derived from the initial name; the visible display name can be changed later. The browser supports paging, drag-and-drop reordering, and duplicating presets.
+Create a preset with `/bf create <name>` or from the browser. Its stable key is derived from the initial name; the visible display name can be changed later. The browser supports paging and duplicating presets.
+
+To customize the preset order, click **Blockfolk Overview** at the bottom of the preset browser. In **Reorder NPC Presets**, pick up and drop preset icons into their desired positions, then choose **Save Order**. The saved order controls the main NPC browser and the NPC folders shown in the route manager.
 
 Opening a preset gives access to:
 

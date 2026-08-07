@@ -21,11 +21,8 @@ From the locations browser:
 
 ## How locations are used
 
-**Move To** and **Teleport To** behaviour actions can target a saved location. AI perception includes up to five nearby locations in the same world within 64 blocks, using safe request-local aliases rather than exposing arbitrary coordinates.
+**Move To** and **Teleport To** behaviour actions can target a saved location. AI perception includes up to 15 nearby locations in the same world within 64 blocks, ordered nearest first and exposed through safe request-local aliases rather than arbitrary coordinates.
 
 Locations differ from routes: a location is one destination, while a route is a closed sequence of walking points.
 
-<div class="screenshot-placeholder">
-  <strong>Screenshot coming later</strong><br>
-  Suggested asset: <code>docs/screenshots/blockfolk-locations.png</code>
-</div>
+![Blockfolk global locations browser](../screenshots/bf-locations.jpeg)

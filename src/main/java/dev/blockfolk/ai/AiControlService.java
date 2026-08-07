@@ -52,6 +52,7 @@ public final class AiControlService {
 
     private static final double PERCEPTION_RADIUS = 16.0;
     private static final double LOCATION_PERCEPTION_RADIUS = 64.0;
+    private static final int MAX_NEARBY_LOCATIONS = 15;
     private static final int MAX_CHAT_GROUP_SIZE = 5;
     private static final String RESULT_RULES = """
             Return only one JSON object with an actions array containing 0 to 3 actions.
@@ -1007,7 +1008,7 @@ public final class AiControlService {
                 .filter(named -> named.location().toLocation().distanceSquared(center) <= LOCATION_PERCEPTION_RADIUS
                         * LOCATION_PERCEPTION_RADIUS)
                 .sorted(Comparator.comparingDouble(named -> named.location().toLocation().distanceSquared(center)))
-                .limit(5).toList();
+                .limit(MAX_NEARBY_LOCATIONS).toList();
     }
 
     private void appendNearbySigns(StringBuilder out, Location center) {

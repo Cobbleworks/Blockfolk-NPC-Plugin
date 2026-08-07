@@ -12,6 +12,8 @@ One preset can have multiple instances. Integrations refer to the persistent ins
 
 A behaviour routine starts with an **event** such as a player approaching, the NPC taking damage, or a route point being reached. The attached **actions** run from left to right. Actions can speak, move, fight, interact with the world, emit another event, or invoke AI.
 
+[Custom events](/features/custom-events) are administrator-defined global signals. Emitting one runs the matching response on every active NPC configured to react, which is useful for coordinating several presets.
+
 ## Routes and locations
 
 A **route** is a group of blocks in one world forming a repeating walking loop. A **global location** is a named position that movement actions and AI can target. Routes describe a path; locations describe destinations.
