@@ -52,6 +52,7 @@ public final class AiControlService {
 
     private static final double PERCEPTION_RADIUS = 16.0;
     private static final double LOCATION_PERCEPTION_RADIUS = 64.0;
+    private static final int MAX_NEARBY_LOCATIONS = 15;
     private static final int MAX_CHAT_GROUP_SIZE = 5;
     private static final String RESULT_RULES = """
             Return only one JSON object with an actions array containing 0 to 3 actions.
@@ -125,7 +126,7 @@ public final class AiControlService {
     private final NpcCombatService combat;
     private final LocationRepository locations;
     private final OpenRouterClient client;
-    private final AiMemoryStore memory = new AiMemoryStore();
+    private final AiMemoryStore memory;
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Long> lastInvocation = new ConcurrentHashMap<>();
     private final Map<UUID, PendingInvocation> pending = new HashMap<>();
@@ -146,7 +147,8 @@ public final class AiControlService {
             .getMovementProfile().enabled();
 
     public AiControlService(Plugin plugin, NpcDefinitionRepository definitions, NpcInstanceRegistry instances,
-            NpcCombatService combat, LocationRepository locations, OpenRouterClient client, int cooldownSeconds) {
+            NpcCombatService combat, LocationRepository locations, OpenRouterClient client, int cooldownSeconds,
+            int conversationHistoryLimit) {
         this.plugin = plugin;
         this.definitions = definitions;
         this.instances = instances;
@@ -154,6 +156,7 @@ public final class AiControlService {
         this.locations = locations;
         this.client = client;
         this.cooldownMillis = Math.max(0, cooldownSeconds) * 1000L;
+        this.memory = new AiMemoryStore(conversationHistoryLimit);
     }
 
     public void setProcessingHandlers(Consumer<NpcInstance> started, Consumer<NpcInstance> finished) {
@@ -1005,7 +1008,7 @@ public final class AiControlService {
                 .filter(named -> named.location().toLocation().distanceSquared(center) <= LOCATION_PERCEPTION_RADIUS
                         * LOCATION_PERCEPTION_RADIUS)
                 .sorted(Comparator.comparingDouble(named -> named.location().toLocation().distanceSquared(center)))
-                .limit(5).toList();
+                .limit(MAX_NEARBY_LOCATIONS).toList();
     }
 
     private void appendNearbySigns(StringBuilder out, Location center) {

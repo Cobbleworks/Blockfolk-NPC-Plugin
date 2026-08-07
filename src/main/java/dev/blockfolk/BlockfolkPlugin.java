@@ -32,6 +32,7 @@ import dev.blockfolk.util.ResolvedSkin;
 import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
 import dev.blockfolk.ai.AiControlService;
+import dev.blockfolk.ai.AiMemoryStore;
 import dev.blockfolk.ai.OpenRouterClient;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 
@@ -98,7 +99,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 getConfig().getInt("openrouter.timeout-seconds", 12),
                 getConfig().getInt("openrouter.max-tokens", 1600));
         aiControlService = new AiControlService(this, definitionRepository, instanceRegistry, combatService,
-                locationRepository, openRouterClient, getConfig().getInt("ai-control.invocation-cooldown-seconds", 2));
+                locationRepository, openRouterClient, getConfig().getInt("ai-control.invocation-cooldown-seconds", 2),
+                getConfig().getInt("ai-control.conversation-history-limit", AiMemoryStore.DEFAULT_MAX_MESSAGES));
         behaviourService.setAiControlService(aiControlService);
         aiControlService.setRouteState(behaviourService::hasRoute);
         guiService.setAiControlService(aiControlService);
