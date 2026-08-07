@@ -27,6 +27,8 @@ Install BeautyQuests before starting the server if you want Blockfolk NPCs to ap
 
 The preset is the reusable configuration. The visible NPC is an instance of that preset. Editing the preset refreshes its spawned copies where appropriate.
 
+![A Blockfolk NPC preset management menu](../screenshots/bf-npc-menu.jpeg)
+
 ## Give it something to do
 
 For a simple greeting:

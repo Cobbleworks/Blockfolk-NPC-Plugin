@@ -15,7 +15,10 @@ Opening a preset gives access to:
 - AI behaviour and combat;
 - spawning and managing persistent instances.
 
-![NPC preset editor](../screenshots/blockfolk-gui-npcs-details.png)
+<div class="screenshot-grid">
+  <img src="../screenshots/bf-npc-overview-menu.jpeg" alt="Blockfolk NPC preset browser">
+  <img src="../screenshots/blockfolk-gui-npcs-details.jpeg" alt="Blockfolk NPC preset editor">
+</div>
 
 ## Preset spawnpoint
 
@@ -31,6 +34,10 @@ When a preset has exactly one instance:
 - shift-middle-click it to move the NPC and its respawn location to you.
 
 Deleting an individual instance requires confirmation. Combat respawns preserve the instance UUID and pending deadline across restarts.
+
+## Direct editing
+
+An administrator with `blockfolk.admin` can hold Shift and right-click a spawned Blockfolk NPC to open its preset editor directly. This admin shortcut takes priority over the NPC's normal **On Right-Click** behaviour and BeautyQuests interaction.
 
 ## Edit and delete
 

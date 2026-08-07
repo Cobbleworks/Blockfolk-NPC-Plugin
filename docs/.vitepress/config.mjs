@@ -38,7 +38,7 @@ export default defineConfig({
           { text: 'Routes', link: '/features/routes' },
           { text: 'Locations', link: '/features/locations' },
           { text: 'AI behaviour', link: '/features/ai-behaviour' },
-          { text: 'AI request context', link: '/ai-behaviour' }
+          { text: 'AI request context', link: '/reference/ai-request-context' }
         ]
       },
       {

@@ -18,6 +18,8 @@ Under **NPC Properties**, you can configure:
 
 The equipment editor stores helmet, chestplate, leggings, boots, main-hand item, and off-hand item. Select **Save Equipment** to persist the contents and refresh every spawned instance.
 
+![Blockfolk equipment and loot editor](../screenshots/bf-equip-screen.jpeg)
+
 ## Loot
 
 The upper part of the equipment editor is a loot table. Every filled slot rolls independently when the NPC dies. Rows use these chances:

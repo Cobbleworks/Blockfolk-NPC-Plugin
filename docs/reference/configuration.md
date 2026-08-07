@@ -28,6 +28,7 @@ The plugin requests JSON output with temperature `0.4` and disables model reason
 | Key | Default | Description |
 | --- | ---: | --- |
 | `ai-control.invocation-cooldown-seconds` | `2` | Per-NPC protection in addition to event-specific trigger throttling. |
+| `ai-control.conversation-history-limit` | `20` | Recent conversation lines retained per NPC conversation. `0` disables history. |
 
 NPC-specific context, memory, inventory access, chat response, and allowed actions are configured through each preset's [AI Behaviour menu](/features/ai-behaviour), not in this file.
 
@@ -48,4 +49,5 @@ openrouter:
 
 ai-control:
   invocation-cooldown-seconds: 2
+  conversation-history-limit: 20
 ```

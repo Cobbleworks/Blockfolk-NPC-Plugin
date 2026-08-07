@@ -125,7 +125,7 @@ public final class AiControlService {
     private final NpcCombatService combat;
     private final LocationRepository locations;
     private final OpenRouterClient client;
-    private final AiMemoryStore memory = new AiMemoryStore();
+    private final AiMemoryStore memory;
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Long> lastInvocation = new ConcurrentHashMap<>();
     private final Map<UUID, PendingInvocation> pending = new HashMap<>();
@@ -146,7 +146,8 @@ public final class AiControlService {
             .getMovementProfile().enabled();
 
     public AiControlService(Plugin plugin, NpcDefinitionRepository definitions, NpcInstanceRegistry instances,
-            NpcCombatService combat, LocationRepository locations, OpenRouterClient client, int cooldownSeconds) {
+            NpcCombatService combat, LocationRepository locations, OpenRouterClient client, int cooldownSeconds,
+            int conversationHistoryLimit) {
         this.plugin = plugin;
         this.definitions = definitions;
         this.instances = instances;
@@ -154,6 +155,7 @@ public final class AiControlService {
         this.locations = locations;
         this.client = client;
         this.cooldownMillis = Math.max(0, cooldownSeconds) * 1000L;
+        this.memory = new AiMemoryStore(conversationHistoryLimit);
     }
 
     public void setProcessingHandlers(Consumer<NpcInstance> started, Consumer<NpcInstance> finished) {

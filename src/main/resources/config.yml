@@ -20,3 +20,5 @@ openrouter:
 ai-control:
   # Per-NPC protection in addition to trigger-specific event throttling.
   invocation-cooldown-seconds: 2
+  # Recent conversation lines supplied to the model per NPC conversation. Set to 0 to disable history.
+  conversation-history-limit: 20

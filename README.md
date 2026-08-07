@@ -22,7 +22,8 @@ npm run docs:dev
 
 BeautyQuests is an optional soft dependency. When it is installed, every spawned
 Blockfolk NPC is available in BeautyQuests' NPC selector. Create or edit a quest,
-choose an NPC-based starter or stage, then click the Blockfolk NPC in the world.
+choose an NPC-based starter or stage, then left-click the Blockfolk NPC directly in
+the world. No Citizens-style selection stick is required.
 Quest dialogs, interaction stages, markers, and navigation pausing use the same
 persistent NPC instance UUID, so assignments survive server restarts.
 BeautyQuests editor entries assigned to Blockfolk NPCs use the NPC's skinned
@@ -43,6 +44,7 @@ All commands require the `blockfolk.admin` permission (granted to operators by d
 When a preset has exactly one instance, its `Manage Instances` entry provides shortcuts:
 shift-left-click teleports you to the NPC, and shift-middle-click moves the NPC and its
 respawn location to you. Removing an individual instance requires confirmation.
+Administrators can also shift-right-click a spawned NPC to open its preset editor directly.
 
 Combat respawns retain the persistent instance UUID and their pending deadline across
 server restarts, so integrations such as BeautyQuests continue referring to the same NPC.
@@ -89,7 +91,7 @@ AI requests explicitly disable model reasoning to reduce response latency. While
 request is in flight, a hologram above each participating NPC cycles through `Thinking.`,
 `Thinking..`, and `Thinking...`; it disappears when the request finishes or fails.
 
-See [AI Behaviour request context](docs/ai-behaviour.md) for the exact state, nearby
+See [AI request context](docs/reference/ai-request-context.md) for the exact state, nearby
 perception, memory, and capability information sent to OpenRouter.
 
 ## Building
@@ -106,10 +108,10 @@ The plugin jar is written to `target/Blockfolk.jar`.
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/blockfolk-gui-npcs.png" alt="Blockfolk NPC overview"></td>
-    <td><img src="docs/screenshots/blockfolk-gui-npcs-details.png" alt="Blockfolk NPC details"></td>
+    <td><img src="docs/screenshots/bf-npc-overview-menu.jpeg" alt="Blockfolk NPC overview"></td>
+    <td><img src="docs/screenshots/blockfolk-gui-npcs-details.jpeg" alt="Blockfolk NPC details"></td>
   </tr>
   <tr>
-    <td colspan="2"><img src="docs/screenshots/blockfolk-gui-npc-behaviour.png" alt="Blockfolk NPC behaviour editor"></td>
+    <td colspan="2"><img src="docs/screenshots/bf-npc-behaviour.jpeg" alt="Blockfolk NPC behaviour editor"></td>
   </tr>
 </table>

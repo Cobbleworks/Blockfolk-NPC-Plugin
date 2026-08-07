@@ -7,9 +7,12 @@ BeautyQuests is an optional soft dependency. When installed, every spawned Block
 1. Install compatible versions of Blockfolk and BeautyQuests.
 2. Restart the server.
 3. Create or edit a BeautyQuests quest.
-4. Choose an NPC-based starter or stage, then select the Blockfolk NPC in the world.
+4. Choose an NPC-based starter or stage.
+5. When BeautyQuests asks for an NPC, left-click the spawned Blockfolk NPC directly.
 
 No additional option in `config.yml` is required.
+
+Unlike the Citizens selection flow, Blockfolk selection does not require a stick or another tool. Shift-right-click remains reserved for Blockfolk administrators opening the NPC editor.
 
 ## Persistence
 

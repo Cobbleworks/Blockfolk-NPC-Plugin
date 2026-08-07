@@ -19,6 +19,11 @@ Point order is derived from position rather than placement order. An NPC starts 
 
 Shift-right-click a route point with the editor shard to attach an action sequence. These actions run when an NPC reaches that point and can pause, speak, interact, change movement, or invoke AI.
 
+<div class="screenshot-grid">
+  <img src="../screenshots/bf-route-editing.jpeg" alt="Editing a highlighted Blockfolk route in the world">
+  <img src="../screenshots/bf-waypoint-actions.jpeg" alt="Actions configured on a route waypoint">
+</div>
+
 ## Assign and control routes
 
 Use these behaviour actions:
@@ -33,8 +38,3 @@ AI can also start or pause the configured route when those capabilities are enab
 ## Route browser tools
 
 Middle-click a route to use your main-hand item as its browser icon. The overview can be reordered. Deleting a route removes direct and question-branch references and unassigns affected presets.
-
-<div class="screenshot-placeholder">
-  <strong>Screenshot coming later</strong><br>
-  Suggested asset: <code>docs/screenshots/blockfolk-route-editor.png</code>
-</div>

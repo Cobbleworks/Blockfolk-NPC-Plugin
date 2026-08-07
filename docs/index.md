@@ -46,9 +46,9 @@ The deterministic behaviour system works on its own. AI behaviour is an optional
 ## A quick look
 
 <div class="screenshot-grid">
-  <img src="./screenshots/blockfolk-gui-npcs.png" alt="Blockfolk NPC preset overview">
-  <img src="./screenshots/blockfolk-gui-npcs-details.png" alt="Blockfolk NPC preset editor">
-  <img src="./screenshots/blockfolk-gui-npc-behaviour.png" alt="Blockfolk behaviour editor">
+  <img src="./screenshots/bf-npc-overview-menu.jpeg" alt="Blockfolk NPC preset overview">
+  <img src="./screenshots/blockfolk-gui-npcs-details.jpeg" alt="Blockfolk NPC preset editor">
+  <img src="./screenshots/bf-ai-response.jpeg" alt="A Blockfolk NPC responding to nearby chat">
 </div>
 
 Start with [installation and your first NPC](/guide/getting-started), or use the sidebar to jump directly to a feature.
