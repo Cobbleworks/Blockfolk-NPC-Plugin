@@ -12,8 +12,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.function.BiPredicate;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
@@ -44,10 +44,13 @@ import dev.blockfolk.util.EntityHealth;
 import dev.blockfolk.util.TextUtil;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
-/** Event-driven OpenRouter bridge. All Bukkit state is captured before the asynchronous request. */
+/**
+ * Event-driven OpenRouter bridge. All Bukkit state is captured before the
+ * asynchronous request.
+ */
 public final class AiControlService {
 
-    private static final double PERCEPTION_RADIUS = 12.0;
+    private static final double PERCEPTION_RADIUS = 16.0;
     private static final double LOCATION_PERCEPTION_RADIUS = 64.0;
     private static final int MAX_CHAT_GROUP_SIZE = 5;
     private static final String RESULT_RULES = """
@@ -132,11 +135,13 @@ public final class AiControlService {
     private final Map<UUID, PendingGroupInvocation> pendingGroups = new HashMap<>();
     private final Set<UUID> pendingGroupScheduled = new HashSet<>();
     private final long cooldownMillis;
-    private Consumer<NpcInstance> processingStarted = ignored -> { };
-    private Consumer<NpcInstance> processingFinished = ignored -> { };
+    private Consumer<NpcInstance> processingStarted = ignored -> {
+    };
+    private Consumer<NpcInstance> processingFinished = ignored -> {
+    };
     private volatile boolean warnedNotConfigured;
-    private BiPredicate<NpcInstance, NpcDefinition> routeState = (instance, definition) ->
-            definition.getMovementProfile().enabled();
+    private BiPredicate<NpcInstance, NpcDefinition> routeState = (instance, definition)
+            -> definition.getMovementProfile().enabled();
 
     public AiControlService(
             Plugin plugin,
@@ -157,8 +162,10 @@ public final class AiControlService {
     }
 
     public void setProcessingHandlers(Consumer<NpcInstance> started, Consumer<NpcInstance> finished) {
-        processingStarted = started == null ? ignored -> { } : started;
-        processingFinished = finished == null ? ignored -> { } : finished;
+        processingStarted = started == null ? ignored -> {
+        } : started;
+        processingFinished = finished == null ? ignored -> {
+        } : finished;
     }
 
     public void setRouteState(BiPredicate<NpcInstance, NpcDefinition> routeState) {
@@ -175,7 +182,9 @@ public final class AiControlService {
             Consumer<AiDecisionResult> resultHandler
     ) {
         AiControlSettings settings = definition.getAiControlSettings();
-        if (!settings.enabled() || !settings.hasContext()) return;
+        if (!settings.enabled() || !settings.hasContext()) {
+            return;
+        }
         if (!client.configured()) {
             if (!warnedNotConfigured) {
                 warnedNotConfigured = true;
@@ -224,18 +233,22 @@ public final class AiControlService {
                             logRequestFailure("AI Behaviour request for " + definition.getKey(), error);
                         } else {
                             AiDecision decision = AiDecisionParser.parse(content, settings);
-                            if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
-                                if (instances.findById(instance.getId()).isPresent()
-                                        && generations.getOrDefault(instance.getId(), 0L) == generation) {
-                                    resultHandler.accept(new AiDecisionResult(decision, context.targets()));
+                            if (plugin.isEnabled()) {
+                                Bukkit.getScheduler().runTask(plugin, () -> {
+                                    if (instances.findById(instance.getId()).isPresent()
+                                            && generations.getOrDefault(instance.getId(), 0L) == generation) {
+                                        resultHandler.accept(new AiDecisionResult(decision, context.targets()));
+                                    }
+                                });
+                            }
+                        }
+                        if (plugin.isEnabled()) {
+                            Bukkit.getScheduler().runTask(plugin, () -> {
+                                if (pending.containsKey(instance.getId())) {
+                                    schedulePending(instance.getId(), cooldownMillis);
                                 }
                             });
                         }
-                        if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
-                            if (pending.containsKey(instance.getId())) {
-                                schedulePending(instance.getId(), cooldownMillis);
-                            }
-                        });
                     });
         } catch (RuntimeException error) {
             inFlight.remove(instance.getId());
@@ -249,7 +262,10 @@ public final class AiControlService {
         return client.configured();
     }
 
-    /** Sends one request for all chat-enabled NPCs near a player, ordered closest first. */
+    /**
+     * Sends one request for all chat-enabled NPCs near a player, ordered
+     * closest first.
+     */
     public void invokeChatGroup(
             String eventDetail,
             List<NpcInstance> candidates,
@@ -258,14 +274,16 @@ public final class AiControlService {
     ) {
         List<GroupParticipant> eligibleParticipants = candidates.stream()
                 .map(instance -> definitions.find(instance.getDefinitionKey())
-                        .map(definition -> new GroupParticipant(instance, definition,
-                                definition.getAiControlSettings())))
+                .map(definition -> new GroupParticipant(instance, definition,
+                definition.getAiControlSettings())))
                 .flatMap(java.util.Optional::stream)
                 .filter(participant -> participant.settings().enabled()
-                        && participant.settings().hasContext() && participant.settings().respondToChat())
+                && participant.settings().hasContext() && participant.settings().respondToChat())
                 .limit(MAX_CHAT_GROUP_SIZE)
                 .toList();
-        if (eligibleParticipants.isEmpty()) return;
+        if (eligibleParticipants.isEmpty()) {
+            return;
+        }
         if (!client.configured()) {
             if (!warnedNotConfigured) {
                 warnedNotConfigured = true;
@@ -298,8 +316,8 @@ public final class AiControlService {
         }
 
         long now = System.currentTimeMillis();
-        long previous = participants.stream().mapToLong(participant ->
-                lastInvocation.getOrDefault(participant.instance().getId(), 0L)).max().orElse(0L);
+        long previous = participants.stream().mapToLong(participant
+                -> lastInvocation.getOrDefault(participant.instance().getId(), 0L)).max().orElse(0L);
         if (now - previous < cooldownMillis) {
             releaseGroup(groupKey, groupSequence);
             pendingGroups.put(groupKey, new PendingGroupInvocation(
@@ -385,21 +403,27 @@ public final class AiControlService {
                     logRequestFailure("AI Behaviour group chat request", error);
                 } else {
                     Map<String, AiDecision> decisions = AiGroupDecisionParser.parse(content, settingsByAlias);
-                    if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin,
-                            () -> applyGroupDecisions(
-                                    aliases, decisions, requestGenerations, targetsByInstance, player, resultHandler));
-                }
-                if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
-                    // Group chat is the user-facing interaction, so queue it before
-                    // lower-priority ambient/individual follow-up work.
-                    if (pendingGroups.containsKey(groupKey)) {
-                        schedulePendingGroup(groupKey, cooldownMillis);
+                    if (plugin.isEnabled()) {
+                        Bukkit.getScheduler().runTask(plugin,
+                                () -> applyGroupDecisions(
+                                        aliases, decisions, requestGenerations, targetsByInstance, player, resultHandler));
                     }
-                    requestParticipants.forEach(participant -> {
-                        UUID instanceId = participant.instance().getId();
-                        if (pending.containsKey(instanceId)) schedulePending(instanceId, cooldownMillis);
+                }
+                if (plugin.isEnabled()) {
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        // Group chat is the user-facing interaction, so queue it before
+                        // lower-priority ambient/individual follow-up work.
+                        if (pendingGroups.containsKey(groupKey)) {
+                            schedulePendingGroup(groupKey, cooldownMillis);
+                        }
+                        requestParticipants.forEach(participant -> {
+                            UUID instanceId = participant.instance().getId();
+                            if (pending.containsKey(instanceId)) {
+                                schedulePending(instanceId, cooldownMillis);
+                            }
+                        });
                     });
-                });
+                }
             });
         } catch (RuntimeException error) {
             releaseGroup(groupKey, groupSequence);
@@ -445,9 +469,13 @@ public final class AiControlService {
         // This is the actual cross-NPC awareness grouping is intended to provide.
         for (Map.Entry<String, AiDecision> response : decisions.entrySet()) {
             GroupParticipant speaker = validParticipants.get(response.getKey());
-            if (speaker == null) continue;
+            if (speaker == null) {
+                continue;
+            }
             for (AiDecision.Action action : response.getValue().actions()) {
-                if (action.type() != AiActionType.SAY || action.text() == null || action.text().isBlank()) continue;
+                if (action.type() != AiActionType.SAY || action.text() == null || action.text().isBlank()) {
+                    continue;
+                }
                 String line = speaker.definition().getDisplayName() + ": " + action.text();
                 validParticipants.values().forEach(listener -> memory.rememberMessage(
                         listener.instance().getId(), player.getUniqueId(),
@@ -457,7 +485,9 @@ public final class AiControlService {
 
         validParticipants.forEach((alias, participant) -> {
             AiDecision decision = decisions.get(alias);
-            if (decision == null) return;
+            if (decision == null) {
+                return;
+            }
             try {
                 resultHandler.accept(participant.instance(), new AiDecisionResult(decision,
                         targetsByInstance.get(participant.instance().getId())));
@@ -478,13 +508,15 @@ public final class AiControlService {
     }
 
     private void scheduleFinishProcessing(NpcInstance instance) {
-        if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> safeFinishProcessing(instance));
+        if (plugin.isEnabled()) {
+            Bukkit.getScheduler().runTask(plugin, () -> safeFinishProcessing(instance));
+        }
     }
 
     private void releaseGroup(UUID groupKey, long groupSequence) {
         if (groupInFlight.remove(groupKey, groupSequence)) {
-            activeGroups.computeIfPresent(groupKey, (ignored, activeGroup) ->
-                    activeGroup.sequence() == groupSequence ? null : activeGroup);
+            activeGroups.computeIfPresent(groupKey, (ignored, activeGroup)
+                    -> activeGroup.sequence() == groupSequence ? null : activeGroup);
         }
     }
 
@@ -510,7 +542,9 @@ public final class AiControlService {
     }
 
     public void rememberFact(NpcDefinition definition, String fact) {
-        if (!definition.getAiControlSettings().memoryEnabled() || fact == null || fact.isBlank()) return;
+        if (!definition.getAiControlSettings().memoryEnabled() || fact == null || fact.isBlank()) {
+            return;
+        }
         definition.addAiMemory(fact);
         definitions.save(definition);
     }
@@ -529,7 +563,10 @@ public final class AiControlService {
                 .anyMatch(candidate -> candidate.getId().equals(instanceId)));
     }
 
-    /** Clears runtime conversation/event memory and invalidates pending responses for every spawned copy. */
+    /**
+     * Clears runtime conversation/event memory and invalidates pending
+     * responses for every spawned copy.
+     */
     public void resetDefinition(NpcDefinition definition) {
         Set<UUID> resetInstanceIds = new HashSet<>();
         for (NpcInstance instance : instances.findByDefinition(definition)) {
@@ -548,9 +585,13 @@ public final class AiControlService {
     }
 
     private void releaseGroupsContaining(Set<UUID> instanceIds) {
-        if (instanceIds.isEmpty()) return;
+        if (instanceIds.isEmpty()) {
+            return;
+        }
         activeGroups.forEach((groupKey, activeGroup) -> {
-            if (activeGroup.participantIds().stream().noneMatch(instanceIds::contains)) return;
+            if (activeGroup.participantIds().stream().noneMatch(instanceIds::contains)) {
+                return;
+            }
             Long groupSequence = groupInFlight.get(groupKey);
             if (groupSequence != null && groupSequence == activeGroup.sequence()) {
                 releaseGroup(groupKey, groupSequence);
@@ -559,7 +600,9 @@ public final class AiControlService {
     }
 
     private void schedulePending(UUID instanceId, long delayMillis) {
-        if (!pendingScheduled.add(instanceId)) return;
+        if (!pendingScheduled.add(instanceId)) {
+            return;
+        }
         long ticks = Math.max(1L, (Math.max(0L, delayMillis) + 49L) / 50L);
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             pendingScheduled.remove(instanceId);
@@ -568,14 +611,18 @@ public final class AiControlService {
                 return;
             }
             PendingInvocation invocation = pending.remove(instanceId);
-            if (invocation == null || instances.findById(instanceId).isEmpty()) return;
+            if (invocation == null || instances.findById(instanceId).isEmpty()) {
+                return;
+            }
             invoke(invocation.event(), invocation.eventDetail(), invocation.instance(), invocation.definition(),
                     invocation.actor(), invocation.resultHandler());
         }, ticks);
     }
 
     private void schedulePendingGroup(UUID groupKey, long delayMillis) {
-        if (!pendingGroupScheduled.add(groupKey)) return;
+        if (!pendingGroupScheduled.add(groupKey)) {
+            return;
+        }
         long ticks = Math.max(1L, (Math.max(0L, delayMillis) + 49L) / 50L);
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             pendingGroupScheduled.remove(groupKey);
@@ -584,11 +631,15 @@ public final class AiControlService {
                 return;
             }
             PendingGroupInvocation invocation = pendingGroups.remove(groupKey);
-            if (invocation == null || !invocation.player().isOnline()) return;
+            if (invocation == null || !invocation.player().isOnline()) {
+                return;
+            }
             List<NpcInstance> nearbyCandidates = invocation.candidates().stream()
                     .filter(candidate -> instances.findById(candidate.getId()).isPresent())
                     .toList();
-            if (nearbyCandidates.isEmpty()) return;
+            if (nearbyCandidates.isEmpty()) {
+                return;
+            }
             invokeChatGroup(invocation.eventDetail(), nearbyCandidates, invocation.player(),
                     invocation.resultHandler());
         }, ticks);
@@ -606,7 +657,9 @@ public final class AiControlService {
         AiTargetSnapshot.Builder targets = AiTargetSnapshot.builder();
         if (actor != null) {
             targets.bindEntity("triggering_entity", actor);
-            if (actor instanceof Player) targets.bindEntity("triggering_player", actor);
+            if (actor instanceof Player) {
+                targets.bindEntity("triggering_player", actor);
+            }
         }
         if (combat != null) {
             targets.bindEntity("current_target", combat.currentTarget(instance));
@@ -616,16 +669,22 @@ public final class AiControlService {
         World world = location.getWorld();
         LivingEntity npc = instances.findEntity(instance).orElse(null);
         StringBuilder out = new StringBuilder(1200);
-        if (includeEvent) out.append("Event:\n").append(detail).append("\n\n");
+        if (includeEvent) {
+            out.append("Event:\n").append(detail).append("\n\n");
+        }
         out.append("NPC state:\n").append("Name: ").append(definition.getDisplayName()).append('\n')
                 .append("World: ").append(world == null ? "unknown" : world.getName()).append('\n');
-        if (npc != null) out.append("Health: ").append(format(npc.getHealth())).append(" / ")
-                .append(format(EntityHealth.maximum(npc))).append('\n');
+        if (npc != null) {
+            out.append("Health: ").append(format(npc.getHealth())).append(" / ")
+                    .append(format(EntityHealth.maximum(npc))).append('\n');
+        }
         out.append("Combat: ").append(combat != null && combat.isEngaged(instance) ? "active" : "not active").append('\n')
                 .append("Route: ").append(routeState.test(instance, definition) ? "configured" : "not configured").append('\n');
-        if (npc != null) out.append("Equipment: main hand ")
-                .append(npc.getEquipment() == null ? "unknown" : readable(npc.getEquipment().getItemInMainHand().getType().name()))
-                .append('\n');
+        if (npc != null) {
+            out.append("Equipment: main hand ")
+                    .append(npc.getEquipment() == null ? "unknown" : readable(npc.getEquipment().getItemInMainHand().getType().name()))
+                    .append('\n');
+        }
         appendInventory(out, instance, settings);
         appendNearby(out, instance, actor, settings, targets);
         if (world != null) {
@@ -660,29 +719,39 @@ public final class AiControlService {
                 .filter(action -> action != AiActionType.DROP_ITEM)
                 .filter(action -> action != AiActionType.MINE_BLOCKS || settings.inventoryEnabled())
                 .filter(action -> action != AiActionType.START_ROUTE && action != AiActionType.PAUSE_ROUTE
-                        || routeState.test(instance, definition))
+                || routeState.test(instance, definition))
                 .sorted().forEach(action -> out.append(action.name()).append('\n'));
-        if (settings.memoryEnabled()) out.append("REMEMBER_FACT\n");
-        if (settings.inventoryEnabled() && hasInventoryItems(instance)) out.append("DROP_ITEM\n");
-        if (!settings.allowedActions().contains(AiActionType.DO_NOTHING)) out.append("DO_NOTHING\n");
+        if (settings.memoryEnabled()) {
+            out.append("REMEMBER_FACT\n");
+        }
+        if (settings.inventoryEnabled() && hasInventoryItems(instance)) {
+            out.append("DROP_ITEM\n");
+        }
+        if (!settings.allowedActions().contains(AiActionType.DO_NOTHING)) {
+            out.append("DO_NOTHING\n");
+        }
         return new RequestContext(out.toString(), targets.build());
     }
 
     private void appendNearby(StringBuilder out, NpcInstance instance, Entity actor, AiControlSettings settings,
             AiTargetSnapshot.Builder targets) {
         Location center = instances.currentLocation(instance);
-        if (center.getWorld() == null) return;
+        if (center.getWorld() == null) {
+            return;
+        }
         out.append("\nNearby players:\n");
         List<Player> nearbyPlayers = nearbyPlayers(center);
         for (int index = 0; index < nearbyPlayers.size(); index++) {
             Player player = nearbyPlayers.get(index);
             targets.bindEntity("nearby_player_" + (index + 1), player);
             targets.bindEntity(player.getName().toLowerCase(Locale.ROOT), player);
-            if (index == 0) targets.bindEntity("nearest_player", player);
+            if (index == 0) {
+                targets.bindEntity("nearest_player", player);
+            }
             out.append("- nearby_player_").append(index + 1).append(": ").append(player.getName()).append(", ")
-                        .append(distance(player.getLocation(), center)).append(" blocks")
-                        .append(player.equals(actor) ? ", triggering player" : "")
-                        .append(", holding ").append(readable(player.getInventory().getItemInMainHand().getType().name())).append('\n');
+                    .append(distance(player.getLocation(), center)).append(" blocks")
+                    .append(player.equals(actor) ? ", triggering player" : "")
+                    .append(", holding ").append(readable(player.getInventory().getItemInMainHand().getType().name())).append('\n');
         }
         out.append("Nearby Blockfolk NPCs:\n");
         List<NpcInstance> nearbyNpcs = nearbyNpcs(instance);
@@ -691,10 +760,10 @@ public final class AiControlService {
             int targetIndex = index + 1;
             targets.bindNpc("nearby_npc_" + targetIndex, other);
             definitions.find(other.getDefinitionKey()).ifPresent(definition -> out
-                        .append("- nearby_npc_").append(targetIndex).append(": ")
-                        .append(definition.getDisplayName()).append(", ")
-                        .append(distance(other.getLocation(), center)).append(" blocks, ")
-                        .append(combat != null && combat.isEngaged(other) ? "in combat" : "not in combat").append('\n'));
+                    .append("- nearby_npc_").append(targetIndex).append(": ")
+                    .append(definition.getDisplayName()).append(", ")
+                    .append(distance(other.getLocation(), center)).append(" blocks, ")
+                    .append(combat != null && combat.isEngaged(other) ? "in combat" : "not in combat").append('\n'));
         }
 
         List<Entity> nearbyEntities = nearbyEntities(center);
@@ -726,7 +795,9 @@ public final class AiControlService {
 
         if (settings.allowedActions().contains(AiActionType.INTERACT)) {
             appendNearbySwitches(out, center, targets);
-            if (settings.inventoryEnabled()) appendNearbyContainers(out, center, targets);
+            if (settings.inventoryEnabled()) {
+                appendNearbyContainers(out, center, targets);
+            }
         }
         if (settings.inventoryEnabled() && settings.allowedActions().contains(AiActionType.MINE_BLOCKS)) {
             appendNearbyMineableResources(out, center);
@@ -735,58 +806,86 @@ public final class AiControlService {
 
     private void appendNearbyMineableResources(StringBuilder out, Location center) {
         World world = center.getWorld();
-        if (world == null) return;
+        if (world == null) {
+            return;
+        }
         Map<Material, Integer> resources = new java.util.EnumMap<>(Material.class);
         int ores = 0;
         int logs = 0;
         for (int y = -4; y <= 8; y++) {
             int blockY = center.getBlockY() + y;
-            if (blockY < world.getMinHeight() || blockY >= world.getMaxHeight()) continue;
+            if (blockY < world.getMinHeight() || blockY >= world.getMaxHeight()) {
+                continue;
+            }
             for (int x = -5; x <= 5; x++) {
                 for (int z = -5; z <= 5; z++) {
-                    if (x * x + y * y + z * z > 64) continue;
+                    if (x * x + y * y + z * z > 64) {
+                        continue;
+                    }
                     Material material = world.getBlockAt(center.getBlockX() + x, blockY,
                             center.getBlockZ() + z).getType();
                     boolean ore = material.name().endsWith("_ORE") || material == Material.ANCIENT_DEBRIS;
                     boolean log = Tag.LOGS.isTagged(material);
-                    if (!ore && !log && !Tag.MINEABLE_PICKAXE.isTagged(material)) continue;
+                    if (!ore && !log && !Tag.MINEABLE_PICKAXE.isTagged(material)) {
+                        continue;
+                    }
                     resources.merge(material, 1, Integer::sum);
-                    if (ore) ores++;
-                    if (log) logs++;
+                    if (ore) {
+                        ores++;
+                    }
+                    if (log) {
+                        logs++;
+                    }
                 }
             }
         }
-        if (resources.isEmpty()) return;
+        if (resources.isEmpty()) {
+            return;
+        }
         out.append("Nearby resources usable with MINE_BLOCKS:\n");
-        if (ores > 0) out.append("- ores: ").append(ores).append(" blocks\n");
-        if (logs > 0) out.append("- trees: ").append(logs).append(" logs\n");
+        if (ores > 0) {
+            out.append("- ores: ").append(ores).append(" blocks\n");
+        }
+        if (logs > 0) {
+            out.append("- trees: ").append(logs).append(" logs\n");
+        }
         resources.entrySet().stream().sorted(Map.Entry.<Material, Integer>comparingByValue().reversed())
                 .limit(12).forEach(entry -> out.append("- ").append(entry.getKey().name().toLowerCase(Locale.ROOT))
-                        .append(": ").append(entry.getValue()).append(" blocks\n"));
+                .append(": ").append(entry.getValue()).append(" blocks\n"));
     }
 
     private void appendNearbySwitches(StringBuilder out, Location center, AiTargetSnapshot.Builder targets) {
         World world = center.getWorld();
-        if (world == null) return;
+        if (world == null) {
+            return;
+        }
         int radius = (int) PERCEPTION_RADIUS;
         List<NearbySwitch> switches = new ArrayList<>();
         for (int x = -radius; x <= radius; x++) {
             for (int y = -radius; y <= radius; y++) {
                 int blockY = center.getBlockY() + y;
-                if (blockY < world.getMinHeight() || blockY >= world.getMaxHeight()) continue;
+                if (blockY < world.getMinHeight() || blockY >= world.getMaxHeight()) {
+                    continue;
+                }
                 for (int z = -radius; z <= radius; z++) {
-                    if (x * x + y * y + z * z > radius * radius) continue;
+                    if (x * x + y * y + z * z > radius * radius) {
+                        continue;
+                    }
                     Block block = world.getBlockAt(center.getBlockX() + x, blockY,
                             center.getBlockZ() + z);
                     if ((block.getType() != Material.LEVER && !Tag.BUTTONS.isTagged(block.getType()))
-                            || !(block.getBlockData() instanceof Powerable powerable)) continue;
+                            || !(block.getBlockData() instanceof Powerable powerable)) {
+                        continue;
+                    }
                     switches.add(new NearbySwitch(block.getType(), block.getLocation(),
                             block.getLocation().distance(center),
                             powerable.isPowered()));
                 }
             }
         }
-        if (switches.isEmpty()) return;
+        if (switches.isEmpty()) {
+            return;
+        }
         out.append("Nearby buttons and levers usable with INTERACT:\n");
         int leverIndex = 0;
         int buttonIndex = 0;
@@ -804,7 +903,9 @@ public final class AiControlService {
 
     private void appendNearbyContainers(StringBuilder out, Location center, AiTargetSnapshot.Builder targets) {
         World world = center.getWorld();
-        if (world == null) return;
+        if (world == null) {
+            return;
+        }
         int radius = (int) PERCEPTION_RADIUS;
         List<NearbyContainer> containers = new ArrayList<>();
         Set<org.bukkit.inventory.Inventory> visited = java.util.Collections.newSetFromMap(
@@ -812,13 +913,19 @@ public final class AiControlService {
         for (int x = -radius; x <= radius; x++) {
             for (int y = -radius; y <= radius; y++) {
                 int blockY = center.getBlockY() + y;
-                if (blockY < world.getMinHeight() || blockY >= world.getMaxHeight()) continue;
+                if (blockY < world.getMinHeight() || blockY >= world.getMaxHeight()) {
+                    continue;
+                }
                 for (int z = -radius; z <= radius; z++) {
-                    if (x * x + y * y + z * z > radius * radius) continue;
+                    if (x * x + y * y + z * z > radius * radius) {
+                        continue;
+                    }
                     Block block = world.getBlockAt(center.getBlockX() + x, blockY,
                             center.getBlockZ() + z);
                     if (!(block.getState() instanceof Container container)
-                            || !visited.add(container.getInventory())) continue;
+                            || !visited.add(container.getInventory())) {
+                        continue;
+                    }
                     Map<Material, Integer> contents = new java.util.EnumMap<>(Material.class);
                     for (ItemStack item : container.getInventory().getContents()) {
                         if (item != null && !item.getType().isAir()) {
@@ -827,48 +934,56 @@ public final class AiControlService {
                     }
                     int freeSlots = 0;
                     for (ItemStack item : container.getInventory().getContents()) {
-                        if (item == null || item.getType().isAir()) freeSlots++;
+                        if (item == null || item.getType().isAir()) {
+                            freeSlots++;
+                        }
                     }
                     containers.add(new NearbyContainer(block.getType(), block.getLocation(),
                             block.getLocation().distance(center), freeSlots, contents));
                 }
             }
         }
-        if (containers.isEmpty()) return;
+        if (containers.isEmpty()) {
+            return;
+        }
         out.append("Nearby containers usable with INTERACT:\n");
         int index = 0;
         for (NearbyContainer container : containers.stream()
                 .sorted(Comparator.comparingDouble(NearbyContainer::distance)).limit(5).toList()) {
-                    index++;
-                    String takeAlias = "take_from_container_" + index;
-                    String storeAlias = "store_in_container_" + index;
-                    targets.bindLocation(takeAlias, container.location());
-                    targets.bindLocation(storeAlias, container.location());
-                    out.append("- nearby_container_").append(index).append(": ")
-                            .append(readable(container.material().name())).append(", ")
-                            .append(Math.round(container.distance())).append(" blocks, ")
-                            .append(relativeOffset(container.location(), center)).append(", ")
-                            .append(container.freeSlots()).append(" free slots, contents: ");
-                    if (container.contents().isEmpty()) {
-                        out.append("empty");
-                    } else {
-                        container.contents().entrySet().stream()
-                                .sorted(Map.Entry.<Material, Integer>comparingByValue().reversed())
-                                .limit(8).forEach(entry -> out.append(entry.getValue()).append(' ')
-                                        .append(readable(entry.getKey().name())).append(", "));
-                        out.setLength(out.length() - 2);
-                    }
-                    out.append("; targets: ").append(takeAlias).append(", ").append(storeAlias).append('\n');
+            index++;
+            String takeAlias = "take_from_container_" + index;
+            String storeAlias = "store_in_container_" + index;
+            targets.bindLocation(takeAlias, container.location());
+            targets.bindLocation(storeAlias, container.location());
+            out.append("- nearby_container_").append(index).append(": ")
+                    .append(readable(container.material().name())).append(", ")
+                    .append(Math.round(container.distance())).append(" blocks, ")
+                    .append(relativeOffset(container.location(), center)).append(", ")
+                    .append(container.freeSlots()).append(" free slots, contents: ");
+            if (container.contents().isEmpty()) {
+                out.append("empty");
+            } else {
+                container.contents().entrySet().stream()
+                        .sorted(Map.Entry.<Material, Integer>comparingByValue().reversed())
+                        .limit(8).forEach(entry -> out.append(entry.getValue()).append(' ')
+                        .append(readable(entry.getKey().name())).append(", "));
+                out.setLength(out.length() - 2);
+            }
+            out.append("; targets: ").append(takeAlias).append(", ").append(storeAlias).append('\n');
         }
     }
 
     private void appendInventory(StringBuilder out, NpcInstance instance, AiControlSettings settings) {
-        if (!settings.inventoryEnabled()) return;
+        if (!settings.inventoryEnabled()) {
+            return;
+        }
         ItemStack[] contents = instance.getTemporaryInventoryContents();
         boolean heading = false;
         for (int slot = 0; slot < contents.length; slot++) {
             ItemStack item = contents[slot];
-            if (item == null || item.getType().isAir() || item.getAmount() <= 0) continue;
+            if (item == null || item.getType().isAir() || item.getAmount() <= 0) {
+                continue;
+            }
             if (!heading) {
                 out.append("Temporary inventory:\n");
                 heading = true;
@@ -880,13 +995,17 @@ public final class AiControlService {
 
     private static boolean hasInventoryItems(NpcInstance instance) {
         for (ItemStack item : instance.getTemporaryInventoryContents()) {
-            if (item != null && !item.getType().isAir() && item.getAmount() > 0) return true;
+            if (item != null && !item.getType().isAir() && item.getAmount() > 0) {
+                return true;
+            }
         }
         return false;
     }
 
     public List<Player> nearbyPlayers(Location center) {
-        if (center.getWorld() == null) return List.of();
+        if (center.getWorld() == null) {
+            return List.of();
+        }
         return center.getWorld().getPlayers().stream()
                 .filter(player -> player.getLocation().distanceSquared(center) <= PERCEPTION_RADIUS * PERCEPTION_RADIUS)
                 .sorted(Comparator.comparingDouble(player -> player.getLocation().distanceSquared(center)))
@@ -903,9 +1022,13 @@ public final class AiControlService {
     }
 
     public List<Entity> nearbyEntities(Location center) {
-        if (center.getWorld() == null) return List.of();
+        if (center.getWorld() == null) {
+            return List.of();
+        }
         Set<Integer> npcEntityIds = new HashSet<>();
-        for (NpcInstance known : instances.findActive()) npcEntityIds.add(known.getEntityId());
+        for (NpcInstance known : instances.findActive()) {
+            npcEntityIds.add(known.getEntityId());
+        }
         return center.getWorld().getNearbyEntities(center, PERCEPTION_RADIUS, PERCEPTION_RADIUS, PERCEPTION_RADIUS)
                 .stream().filter(entity -> !(entity instanceof Player))
                 .filter(entity -> !npcEntityIds.contains(entity.getEntityId()) && !instances.isNavigationEntity(entity))
@@ -914,44 +1037,58 @@ public final class AiControlService {
     }
 
     public List<NamedLocation> nearbyLocations(Location center) {
-        if (locations == null || center.getWorld() == null) return List.of();
+        if (locations == null || center.getWorld() == null) {
+            return List.of();
+        }
         return locations.findAll().stream()
                 .filter(named -> named.location().toLocation() != null)
                 .filter(named -> named.location().toLocation().getWorld() == center.getWorld())
                 .filter(named -> named.location().toLocation().distanceSquared(center)
-                        <= LOCATION_PERCEPTION_RADIUS * LOCATION_PERCEPTION_RADIUS)
+                <= LOCATION_PERCEPTION_RADIUS * LOCATION_PERCEPTION_RADIUS)
                 .sorted(Comparator.comparingDouble(named -> named.location().toLocation().distanceSquared(center)))
                 .limit(5).toList();
     }
 
     private void appendNearbySigns(StringBuilder out, Location center) {
         World world = center.getWorld();
-        if (world == null) return;
+        if (world == null) {
+            return;
+        }
         int radius = (int) PERCEPTION_RADIUS;
         List<NearbySign> signs = new ArrayList<>();
         for (int x = -radius; x <= radius; x++) {
             for (int y = -radius; y <= radius; y++) {
                 int blockY = center.getBlockY() + y;
-                if (blockY < world.getMinHeight() || blockY >= world.getMaxHeight()) continue;
+                if (blockY < world.getMinHeight() || blockY >= world.getMaxHeight()) {
+                    continue;
+                }
                 for (int z = -radius; z <= radius; z++) {
-                    if (x * x + y * y + z * z > radius * radius) continue;
+                    if (x * x + y * y + z * z > radius * radius) {
+                        continue;
+                    }
                     Block block = world.getBlockAt(center.getBlockX() + x, blockY,
                             center.getBlockZ() + z);
-                    if (!Tag.ALL_SIGNS.isTagged(block.getType()) || !(block.getState() instanceof Sign sign)) continue;
+                    if (!Tag.ALL_SIGNS.isTagged(block.getType()) || !(block.getState() instanceof Sign sign)) {
+                        continue;
+                    }
                     String front = signText(sign, Side.FRONT);
                     String back = signText(sign, Side.BACK);
-                    if (front.isBlank() && back.isBlank()) continue;
+                    if (front.isBlank() && back.isBlank()) {
+                        continue;
+                    }
                     String text = front.equals(back) || back.isBlank() ? front
                             : front.isBlank() ? back : "front: " + front + "; back: " + back;
                     signs.add(new NearbySign(block.getLocation().distance(center), TextUtil.abbreviate(text, 200)));
                 }
             }
         }
-        if (signs.isEmpty()) return;
+        if (signs.isEmpty()) {
+            return;
+        }
         out.append("Nearby signs:\n");
         signs.stream().sorted(Comparator.comparingDouble(NearbySign::distance)).limit(5)
                 .forEach(sign -> out.append("- ").append(sign.text()).append(", approximately ")
-                        .append(Math.round(sign.distance())).append(" blocks away\n"));
+                .append(Math.round(sign.distance())).append(" blocks away\n"));
     }
 
     private static String signText(Sign sign, Side side) {
@@ -967,16 +1104,34 @@ public final class AiControlService {
     }
 
     private static String timeName(long time) {
-        if (time < 1000 || time >= 23000) return "dawn";
-        if (time < 12000) return "day";
-        if (time < 13000) return "sunset";
+        if (time < 1000 || time >= 23000) {
+            return "dawn";
+        }
+        if (time < 12000) {
+            return "day";
+        }
+        if (time < 13000) {
+            return "sunset";
+        }
         return "night";
     }
 
-    private static String lightName(int light) { return light < 5 ? "dark" : light < 11 ? "dim" : "bright"; }
-    private static String format(double value) { return String.format(Locale.ROOT, "%.1f", value); }
-    private static long distance(Location one, Location two) { return Math.round(Math.sqrt(one.distanceSquared(two))); }
-    private static String readable(String value) { return value.toLowerCase(Locale.ROOT).replace('_', ' '); }
+    private static String lightName(int light) {
+        return light < 5 ? "dark" : light < 11 ? "dim" : "bright";
+    }
+
+    private static String format(double value) {
+        return String.format(Locale.ROOT, "%.1f", value);
+    }
+
+    private static long distance(Location one, Location two) {
+        return Math.round(Math.sqrt(one.distanceSquared(two)));
+    }
+
+    private static String readable(String value) {
+        return value.toLowerCase(Locale.ROOT).replace('_', ' ');
+    }
+
     private static String relativeOffset(Location target, Location origin) {
         int x = target.getBlockX() - origin.getBlockX();
         int y = target.getBlockY() - origin.getBlockY();
@@ -985,13 +1140,19 @@ public final class AiControlService {
                 + "," + (z >= 0 ? "+" : "") + z + " from NPC";
     }
 
-    private record NearbySign(double distance, String text) { }
+    private record NearbySign(double distance, String text) {
 
-    private record NearbySwitch(Material material, Location location, double distance, boolean powered) { }
+    }
+
+    private record NearbySwitch(Material material, Location location, double distance, boolean powered) {
+
+    }
 
     private record NearbyContainer(
             Material material, Location location, double distance, int freeSlots,
-            Map<Material, Integer> contents) { }
+            Map<Material, Integer> contents) {
+
+    }
 
     private record PendingInvocation(
             BehaviourEvent event,
@@ -1000,17 +1161,27 @@ public final class AiControlService {
             NpcDefinition definition,
             Entity actor,
             Consumer<AiDecisionResult> resultHandler
-    ) { }
+            ) {
+
+    }
 
     private record GroupParticipant(
-            NpcInstance instance, NpcDefinition definition, AiControlSettings settings) { }
+            NpcInstance instance, NpcDefinition definition, AiControlSettings settings) {
 
-    private record ActiveGroup(long sequence, Set<UUID> participantIds) { }
+    }
+
+    private record ActiveGroup(long sequence, Set<UUID> participantIds) {
+
+    }
 
     private record PendingGroupInvocation(
             String eventDetail, List<NpcInstance> candidates, Player player,
-            BiConsumer<NpcInstance, AiDecisionResult> resultHandler) { }
+            BiConsumer<NpcInstance, AiDecisionResult> resultHandler) {
 
-    private record RequestContext(String prompt, AiTargetSnapshot targets) { }
+    }
+
+    private record RequestContext(String prompt, AiTargetSnapshot targets) {
+
+    }
 
 }
