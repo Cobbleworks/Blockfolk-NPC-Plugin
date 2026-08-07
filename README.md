@@ -57,10 +57,11 @@ which resets AI state globally for its spawned copies. The
 model can only select validated capabilities enabled for that preset; it cannot return
 commands or executable code.
 
-With Temporary Inventory and Mine Blocks enabled, the AI perceives nearby ores, logs,
-and pickaxe-mineable materials. It can mine a resource group such as all ores or trees;
-drops go directly into that spawned instance's temporary inventory, and blocks are left
-untouched when their drops do not fit.
+With Mine Blocks enabled, the AI perceives nearby ores, logs, and pickaxe-mineable
+materials. It can mine a resource group such as all ores or trees. With Temporary
+Inventory enabled, drops go directly into that spawned instance's inventory and blocks
+are left untouched when their drops do not fit. Without it, drops fall naturally into
+the world.
 
 Long-term memory is optional per preset. When enabled, the model can save durable facts
 with a validated `REMEMBER_FACT` action. Up to 45 facts survive restarts and are shared by

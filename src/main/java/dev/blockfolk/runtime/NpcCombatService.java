@@ -52,6 +52,10 @@ public final class NpcCombatService implements Listener {
 
     private static final double SIGHT_RANGE = 16.0;
     private static final double MAX_CHASE_RANGE_SQUARED = 32.0 * 32.0;
+    private static final int LOST_SIGHT_TIMEOUT_TICKS = 5 * 20;
+    private static final int STALLED_CHASE_TIMEOUT_TICKS = 4 * 20;
+    private static final int UNREACHABLE_TARGET_COOLDOWN_TICKS = 3 * 20;
+    private static final double CHASE_PROGRESS_DISTANCE_SQUARED = 0.5 * 0.5;
     private static final int FLEE_TICKS = 8 * 20;
     private static final double BOSS_BAR_RANGE_SQUARED = 16.0 * 16.0;
 
@@ -64,6 +68,7 @@ public final class NpcCombatService implements Listener {
     private final Map<UUID, BukkitTask> pendingRespawns = new HashMap<>();
     private final Map<UUID, BossBar> bossBars = new HashMap<>();
     private final Map<UUID, FightOptions> fightOptionsOverrides = new HashMap<>();
+    private final Map<TargetKey, Long> unreachableUntil = new HashMap<>();
     private NpcBehaviourService behaviourService;
     private BukkitTask task;
     private long currentTick;
@@ -101,6 +106,7 @@ public final class NpcCombatService implements Listener {
         bossBars.values().forEach(BossBar::removeAll);
         bossBars.clear();
         fightOptionsOverrides.clear();
+        unreachableUntil.clear();
     }
 
     public boolean isEngaged(NpcInstance instance) {
@@ -269,6 +275,7 @@ public final class NpcCombatService implements Listener {
 
     private void tick() {
         currentTick++;
+        unreachableUntil.entrySet().removeIf(entry -> entry.getValue() <= currentTick);
         Set<UUID> activeBossBars = new HashSet<>();
         Set<UUID> activeInstances = new HashSet<>();
         for (NpcInstance instance : instanceRegistry.findActive()) {
@@ -377,9 +384,24 @@ public final class NpcCombatService implements Listener {
         }
         makeMobFightBack(target, npc);
         state.lastKnownLocation = target.getLocation();
+        if (npc.hasLineOfSight(target)) {
+            state.lastSeenAt = currentTick;
+        } else if (currentTick - state.lastSeenAt >= LOST_SIGHT_TIMEOUT_TICKS) {
+            abandonUnreachable(instance, state);
+            return;
+        }
         NpcAttack attack = attackSelector.select(npc.getEquipment().getItemInMainHand());
         double distanceSquared = npc.getLocation().distanceSquared(target.getLocation());
         if (distanceSquared > attack.rangeSquared()) {
+            Location currentLocation = npc.getLocation();
+            if (state.lastProgressLocation == null
+                    || currentLocation.distanceSquared(state.lastProgressLocation) >= CHASE_PROGRESS_DISTANCE_SQUARED) {
+                state.lastProgressLocation = currentLocation;
+                state.lastProgressAt = currentTick;
+            } else if (currentTick - state.lastProgressAt >= STALLED_CHASE_TIMEOUT_TICKS) {
+                abandonUnreachable(instance, state);
+                return;
+            }
             if (state.navigationTarget == null || state.retreating || currentTick >= state.nextRepathAt) {
                 state.navigationTarget = target.getLocation();
                 state.nextRepathAt = currentTick + 10;
@@ -398,6 +420,8 @@ public final class NpcCombatService implements Listener {
             return;
         }
 
+        state.lastProgressLocation = npc.getLocation();
+        state.lastProgressAt = currentTick;
         instanceRegistry.stopNavigating(instance);
         state.navigationTarget = null;
         state.retreating = false;
@@ -448,6 +472,7 @@ public final class NpcCombatService implements Listener {
         return npc.getNearbyEntities(SIGHT_RANGE, SIGHT_RANGE, SIGHT_RANGE).stream()
                 .filter(LivingEntity.class::isInstance).map(LivingEntity.class::cast)
                 .filter(target -> isAttackable(instance, target)).filter(target -> isSelectedTarget(target, options))
+                .filter(target -> !isTemporarilyUnreachable(instance, target))
                 .filter(npc::hasLineOfSight)
                 .min(Comparator.comparingDouble(target -> target.getLocation().distanceSquared(npc.getLocation())))
                 .orElse(null);
@@ -550,6 +575,16 @@ public final class NpcCombatService implements Listener {
         }
     }
 
+    private void abandonUnreachable(NpcInstance instance, CombatState state) {
+        unreachableUntil.put(new TargetKey(instance.getId(), state.entityId),
+                currentTick + UNREACHABLE_TARGET_COOLDOWN_TICKS);
+        clearState(instance);
+    }
+
+    private boolean isTemporarilyUnreachable(NpcInstance instance, LivingEntity target) {
+        return unreachableUntil.getOrDefault(new TargetKey(instance.getId(), target.getUniqueId()), 0L) > currentTick;
+    }
+
     private void makeMobFightBack(LivingEntity target, LivingEntity npc) {
         if (target instanceof Mob mob
                 && (mob.getTarget() == null || !mob.getTarget().getUniqueId().equals(npc.getUniqueId()))) {
@@ -570,6 +605,9 @@ public final class NpcCombatService implements Listener {
         FLEE, FIGHT
     }
 
+    private record TargetKey(UUID instanceId, UUID targetId) {
+    }
+
     private static final class CombatState {
 
         private final CombatMode mode;
@@ -580,6 +618,9 @@ public final class NpcCombatService implements Listener {
         private Location navigationTarget;
         private long nextRepathAt;
         private boolean retreating;
+        private long lastSeenAt;
+        private long lastProgressAt;
+        private Location lastProgressLocation;
 
         private CombatState(CombatMode mode, UUID entityId, Location lastKnownLocation, long expiresAt,
                 long nextAttackAt) {
@@ -588,6 +629,9 @@ public final class NpcCombatService implements Listener {
             this.lastKnownLocation = lastKnownLocation.clone();
             this.expiresAt = expiresAt;
             this.nextAttackAt = nextAttackAt;
+            this.lastSeenAt = nextAttackAt;
+            this.lastProgressAt = nextAttackAt;
+            this.lastProgressLocation = null;
         }
     }
 }

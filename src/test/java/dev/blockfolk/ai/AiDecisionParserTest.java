@@ -216,7 +216,7 @@ class AiDecisionParserTest {
     }
 
     @Test
-    void miningRequiresCapabilityInventoryAndAResourceTarget() {
+    void miningRequiresCapabilityAndAResourceTargetButNotInventory() {
         AiControlSettings enabled = AiControlSettings.defaults().withInventoryEnabled(true)
                 .toggle(AiActionType.MINE_BLOCKS);
 
@@ -228,7 +228,7 @@ class AiDecisionParserTest {
 
         assertEquals(AiActionType.MINE_BLOCKS, accepted.actions().getFirst().type());
         assertEquals("all_ores", accepted.actions().getFirst().target());
-        assertEquals(AiActionType.DO_NOTHING, noInventory.actions().getFirst().type());
+        assertEquals(AiActionType.MINE_BLOCKS, noInventory.actions().getFirst().type());
         assertEquals(AiActionType.DO_NOTHING, noTarget.actions().getFirst().type());
     }
 

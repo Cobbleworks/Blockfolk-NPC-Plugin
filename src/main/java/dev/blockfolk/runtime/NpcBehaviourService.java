@@ -83,7 +83,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 public final class NpcBehaviourService implements Listener {
 
-    private static final double DIALOG_RANGE_SQUARED = 12.0 * 12.0;
+    private static final double DIALOG_RANGE_SQUARED = 16.0 * 16.0;
     private static final double CHAT_RANGE_SQUARED = 8.0 * 8.0;
     private static final double APPROACH_RANGE_SQUARED = 8.0 * 8.0;
     private static final double LEAVE_RANGE_SQUARED = 10.0 * 10.0;
@@ -721,7 +721,8 @@ public final class NpcBehaviourService implements Listener {
                     instances.stand(instance);
                     instances.stopNavigating(instance);
                 });
-                case MINE_BLOCKS -> mineNearbyBlocks(instance, action.target(), true);
+                case MINE_BLOCKS -> mineNearbyBlocks(instance, action.target(), true,
+                        definition.getAiControlSettings().inventoryEnabled());
                 case RETURN_HOME -> {
                     stopFollowing(instance);
                     moveTargets.put(instance.getId(), instance.getSpawnLocation());
@@ -1355,10 +1356,11 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void mineNearbyBlocks(NpcInstance instance) {
-        mineNearbyBlocks(instance, "mineable_blocks", false);
+        mineNearbyBlocks(instance, "mineable_blocks", false, true);
     }
 
-    private void mineNearbyBlocks(NpcInstance instance, String requestedTarget, boolean autonomousRange) {
+    private void mineNearbyBlocks(NpcInstance instance, String requestedTarget, boolean autonomousRange,
+            boolean collectDrops) {
         Location feet = instances.currentLocation(instance);
         if (feet.getWorld() == null)
             return;
@@ -1386,31 +1388,39 @@ public final class NpcBehaviourService implements Listener {
                     if (!matchesMiningTarget(block.getType(), target) || block.getState() instanceof TileState)
                         continue;
                     ItemStack effectiveTool = tool == null ? new ItemStack(Material.AIR) : tool;
-                    List<ItemStack> drops = new ArrayList<>(block.getDrops(effectiveTool, entity));
-                    if (drops.isEmpty())
-                        continue;
-                    Inventory updated = Bukkit.createInventory(null, 27);
-                    updated.setContents(carried.getContents());
-                    boolean fits = true;
-                    for (ItemStack drop : drops) {
-                        if (!updated.addItem(drop.clone()).isEmpty()) {
-                            fits = false;
-                            break;
+                    Inventory updated = carried;
+                    if (collectDrops) {
+                        List<ItemStack> drops = new ArrayList<>(block.getDrops(effectiveTool, entity));
+                        if (drops.isEmpty())
+                            continue;
+                        updated = Bukkit.createInventory(null, 27);
+                        updated.setContents(carried.getContents());
+                        boolean fits = true;
+                        for (ItemStack drop : drops) {
+                            if (!updated.addItem(drop.clone()).isEmpty()) {
+                                fits = false;
+                                break;
+                            }
                         }
+                        if (!fits)
+                            continue;
                     }
-                    if (!fits)
-                        continue;
                     if (!authorizeBlockChange(instance, block, Material.AIR.createBlockData()))
                         continue;
-                    carried = updated;
-                    block.setType(Material.AIR, true);
+                    if (collectDrops) {
+                        carried = updated;
+                        block.setType(Material.AIR, true);
+                    } else {
+                        block.breakNaturally(effectiveTool, true);
+                    }
                     mined = true;
                     minedBlocks++;
                 }
             }
         }
         if (mined) {
-            updateTemporaryInventory(instance, carried.getContents(), entity);
+            if (collectDrops)
+                updateTemporaryInventory(instance, carried.getContents(), entity);
             if (entity != null)
                 entity.swingMainHand();
         }

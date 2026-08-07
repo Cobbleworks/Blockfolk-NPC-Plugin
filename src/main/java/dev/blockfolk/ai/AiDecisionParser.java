@@ -56,9 +56,6 @@ public final class AiDecisionParser {
         if (type == AiActionType.DROP_ITEM && !settings.inventoryEnabled()) {
             return java.util.Optional.empty();
         }
-        if (type == AiActionType.MINE_BLOCKS && !settings.inventoryEnabled()) {
-            return java.util.Optional.empty();
-        }
         if (type == AiActionType.INTERACT && isContainerInteraction(object) && !settings.inventoryEnabled()) {
             return java.util.Optional.empty();
         }

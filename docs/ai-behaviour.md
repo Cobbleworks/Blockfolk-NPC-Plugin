@@ -155,10 +155,10 @@ enforces the same list before anything runs. Current capabilities are:
 - when Temporary Inventory access is enabled and the instance carries items, drop one
   selected inventory stack using its `inventory_slot_N` alias. The dropping NPC pauses
   automatic item pickup for three seconds so it does not immediately reclaim the stack;
-- when Temporary Inventory and Mine Blocks are enabled, mine up to 64 matching reachable
-  blocks within eight blocks using `ores`, `trees`, `mineable_blocks`, or a listed material
-  as the target. Drops are inserted directly into the temporary inventory; a block is not
-  broken if all of its drops will not fit;
+- when Mine Blocks is enabled, mine up to 64 matching reachable blocks within eight blocks
+  using `ores`, `trees`, `mineable_blocks`, or a listed material as the target. With
+  Temporary Inventory enabled, drops are inserted directly and a block is not broken if
+  they will not fit. Otherwise, the block drops its items naturally into the world;
 - do nothing, which is always available.
 
 Targeted capabilities may refer only to the triggering player, triggering entity,

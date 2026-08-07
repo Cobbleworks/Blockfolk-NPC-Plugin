@@ -342,7 +342,7 @@ final class AiGuiService {
             case UNFOLLOW -> "Stops following the player it is currently following";
             case INTERACT -> "Uses nearby buttons, levers, or containers";
             case MOVE_TO -> "Walks to a known location, player, NPC, or entity";
-            case MINE_BLOCKS -> "Mines nearby resources; requires Temporary Inventory";
+            case MINE_BLOCKS -> "Mines nearby resources; inventory controls where drops go";
             case RETURN_HOME -> "Walks back to this instance's respawn location";
             case START_ROUTE -> "Resumes this instance's configured route";
             case PAUSE_ROUTE -> "Pauses this instance's configured route";
