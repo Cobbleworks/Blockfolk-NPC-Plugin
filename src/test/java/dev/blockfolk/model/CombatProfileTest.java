@@ -19,9 +19,7 @@ class CombatProfileTest {
 
     @Test
     void clampsHealthAndNormalizesAlliance() {
-        CombatProfile profile = new CombatProfile(
-                -5, -10, null, false, false, false, false, "  guards  ", false, -15
-        );
+        CombatProfile profile = new CombatProfile(-5, -10, null, false, false, false, false, "  guards  ", false, -15);
 
         assertEquals(0, profile.maxHealth());
         assertEquals(0, profile.respawnSeconds());

@@ -14,15 +14,14 @@ class BeautyQuestsIntegrationTest {
 
     @Test
     void findsNpcIdInQuestStarterLore() {
-        assertEquals(INSTANCE_ID, BeautyQuestsIntegration.referencedInstanceId(List.of(
-                "§7Choose the NPC that starts this quest.",
-                "§7Guard §8(blockfolk#" + INSTANCE_ID + ")")));
+        assertEquals(INSTANCE_ID, BeautyQuestsIntegration.referencedInstanceId(
+                List.of("§7Choose the NPC that starts this quest.", "§7Guard §8(blockfolk#" + INSTANCE_ID + ")")));
     }
 
     @Test
     void findsNpcIdInStageLore() {
-        assertEquals(INSTANCE_ID, BeautyQuestsIntegration.referencedInstanceId(List.of(
-                "§8ID: §lblockfolk#" + INSTANCE_ID)));
+        assertEquals(INSTANCE_ID,
+                BeautyQuestsIntegration.referencedInstanceId(List.of("§8ID: §lblockfolk#" + INSTANCE_ID)));
     }
 
     @Test

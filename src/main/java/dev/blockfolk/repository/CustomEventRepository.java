@@ -38,29 +38,33 @@ public final class CustomEventRepository {
         }
         for (String storageKey : root.getKeys(false)) {
             ConfigurationSection section = root.getConfigurationSection(storageKey);
-            if (section == null) continue;
+            if (section == null)
+                continue;
             try {
                 CustomEvent event = new CustomEvent(section.getString("name", storageKey));
                 event.setDescription(section.getString("description", ""));
                 event.setIcon(section.getItemStack("icon"));
                 events.put(event.getName(), event);
-            } catch (IllegalArgumentException ignored) { }
+            } catch (IllegalArgumentException ignored) {
+            }
         }
         loadOrder(configuration);
     }
 
-    public Optional<CustomEvent> find(String name) { return Optional.ofNullable(events.get(name)); }
+    public Optional<CustomEvent> find(String name) {
+        return Optional.ofNullable(events.get(name));
+    }
     public Collection<CustomEvent> findAll() {
         return eventOrder.stream().map(events::get).filter(java.util.Objects::nonNull).toList();
     }
     public CustomEvent save(CustomEvent event) {
-        if (events.put(event.getName(), event) == null) eventOrder.add(event.getName());
+        if (events.put(event.getName(), event) == null)
+            eventOrder.add(event.getName());
         saveAll();
         return event;
     }
     public void reorder(List<String> orderedNames) {
-        if (orderedNames.size() != events.size()
-                || new HashSet<>(orderedNames).size() != orderedNames.size()
+        if (orderedNames.size() != events.size() || new HashSet<>(orderedNames).size() != orderedNames.size()
                 || !events.keySet().containsAll(orderedNames)) {
             throw new IllegalArgumentException("The event order must contain every event exactly once.");
         }
@@ -69,7 +73,8 @@ public final class CustomEventRepository {
         saveAll();
     }
     public boolean delete(CustomEvent event) {
-        if (events.remove(event.getName()) == null) return false;
+        if (events.remove(event.getName()) == null)
+            return false;
         eventOrder.remove(event.getName());
         saveAll();
         return true;
@@ -78,12 +83,10 @@ public final class CustomEventRepository {
     private void loadOrder(YamlConfiguration configuration) {
         Set<String> seen = new HashSet<>();
         for (String name : configuration.getStringList("order")) {
-            if (events.containsKey(name) && seen.add(name)) eventOrder.add(name);
+            if (events.containsKey(name) && seen.add(name))
+                eventOrder.add(name);
         }
-        events.keySet().stream()
-                .filter(seen::add)
-                .sorted(Comparator.naturalOrder())
-                .forEach(eventOrder::add);
+        events.keySet().stream().filter(seen::add).sorted(Comparator.naturalOrder()).forEach(eventOrder::add);
     }
 
     private void saveAll() {

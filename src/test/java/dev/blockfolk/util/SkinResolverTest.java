@@ -10,17 +10,17 @@ class SkinResolverTest {
     @Test
     void readsSignedTextureFromCompletedResponse() {
         String response = """
-            {
-              "job": {"id": "job-id", "status": "completed"},
-              "skin": {
-                "texture": {
-                  "data": {"value": "encoded-value", "signature": "signed-value"},
-                  "hash": {"skin": "texture-hash"},
-                  "url": {"skin": "https://textures.minecraft.net/texture/texture-hash"}
+                {
+                  "job": {"id": "job-id", "status": "completed"},
+                  "skin": {
+                    "texture": {
+                      "data": {"value": "encoded-value", "signature": "signed-value"},
+                      "hash": {"skin": "texture-hash"},
+                      "url": {"skin": "https://textures.minecraft.net/texture/texture-hash"}
+                    }
+                  }
                 }
-              }
-            }
-            """;
+                """;
 
         ResolvedSkin skin = SkinResolver.parseCompletedSkin(JsonParser.parseString(response).getAsJsonObject());
 

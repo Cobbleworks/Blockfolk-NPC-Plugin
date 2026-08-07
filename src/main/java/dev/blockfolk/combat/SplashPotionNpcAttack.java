@@ -29,12 +29,10 @@ final class SplashPotionNpcAttack implements NpcAttack {
     public void execute(LivingEntity attacker, LivingEntity target) {
         ItemStack potionItem = attacker.getEquipment().getItemInMainHand().asOne();
         Vector destination = target.getLocation().add(0.0, 0.6, 0.0).toVector();
-        ThrownPotion potion = attacker.launchProjectile(
-                ThrownPotion.class,
+        ThrownPotion potion = attacker.launchProjectile(ThrownPotion.class,
                 // Potions need a flatter path than arrows. A slow, high lob hits
                 // low ceilings directly above the thrower before moving forward.
-                ArrowNpcAttack.aimedVelocity(attacker.getEyeLocation().toVector(), destination, 1.2, 0.05)
-        );
+                ArrowNpcAttack.aimedVelocity(attacker.getEyeLocation().toVector(), destination, 1.2, 0.05));
         potion.setItem(potionItem);
         attacker.swingMainHand();
     }

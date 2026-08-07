@@ -33,15 +33,9 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
     private final CustomEventRepository customEventRepository;
     private final NpcBehaviourService behaviourService;
 
-    public BlockfolkCommand(
-            NpcDefinitionRepository definitionRepository,
-            NpcInstanceRegistry instanceRegistry,
-            GuiService guiService,
-            RouteGuiService routeGuiService,
-            CustomEventGuiService customEventGuiService,
-            CustomEventRepository customEventRepository,
-            NpcBehaviourService behaviourService
-    ) {
+    public BlockfolkCommand(NpcDefinitionRepository definitionRepository, NpcInstanceRegistry instanceRegistry,
+            GuiService guiService, RouteGuiService routeGuiService, CustomEventGuiService customEventGuiService,
+            CustomEventRepository customEventRepository, NpcBehaviourService behaviourService) {
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.guiService = guiService;
@@ -57,8 +51,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(UiText.error("You do not have permission to use Blockfolk."));
             return true;
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("events")
-                && args[1].equalsIgnoreCase("trigger")) {
+        if (args.length == 3 && args[0].equalsIgnoreCase("events") && args[1].equalsIgnoreCase("trigger")) {
             CustomEvent customEvent = customEventRepository.find(args[2]).orElse(null);
             if (customEvent == null) {
                 sender.sendMessage(UiText.error("Unknown custom event: " + args[2]));
@@ -151,7 +144,8 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
             definitionRepository.save(copy);
-            player.sendMessage(UiText.success("Duplicated " + source.getDisplayName() + " as " + copy.getDisplayName() + "."));
+            player.sendMessage(
+                    UiText.success("Duplicated " + source.getDisplayName() + " as " + copy.getDisplayName() + "."));
             return true;
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("npc")
@@ -179,7 +173,8 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             }
             return true;
         }
-        player.sendMessage(UiText.info("Usage: /bf [create [name]|routes|events [trigger <event>]|npc <name> [spawn|duplicate|tphere|warpto]]"));
+        player.sendMessage(UiText.info(
+                "Usage: /bf [create [name]|routes|events [trigger <event>]|npc <name> [spawn|duplicate|tphere|warpto]]"));
         return true;
     }
 
@@ -197,18 +192,13 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
             return filter(suggestions, args[0]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("npc")) {
-            return filter(definitionRepository.findAll().stream()
-                    .map(NpcDefinition::getKey)
-                    .toList(), args[1]);
+            return filter(definitionRepository.findAll().stream().map(NpcDefinition::getKey).toList(), args[1]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("events")) {
             return filter(List.of("trigger"), args[1]);
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("events")
-                && args[1].equalsIgnoreCase("trigger")) {
-            return filter(customEventRepository.findAll().stream()
-                    .map(CustomEvent::getName)
-                    .toList(), args[2]);
+        if (args.length == 3 && args[0].equalsIgnoreCase("events") && args[1].equalsIgnoreCase("trigger")) {
+            return filter(customEventRepository.findAll().stream().map(CustomEvent::getName).toList(), args[2]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("npc")) {
             return filter(List.of("spawn", "duplicate", "tphere", "warpto"), args[2]);
@@ -222,8 +212,6 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
 
     private List<String> filter(List<String> values, String prefix) {
         String normalized = prefix.toLowerCase(Locale.ROOT);
-        return values.stream()
-                .filter(value -> value.toLowerCase(Locale.ROOT).startsWith(normalized))
-                .toList();
+        return values.stream().filter(value -> value.toLowerCase(Locale.ROOT).startsWith(normalized)).toList();
     }
 }

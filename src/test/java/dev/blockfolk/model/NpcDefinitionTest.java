@@ -58,18 +58,17 @@ class NpcDefinitionTest {
     void findsRoutesReferencedByMovementEventsCustomEventsAndQuestions() {
         NpcDefinition definition = NpcDefinition.create("Guard");
         definition.setMovementProfile(MovementProfile.routing("Day Patrol", WalkingSpeed.NORMAL));
-        definition.setBehaviourActions(BehaviourEvent.SPAWN, List.of(
-                new BehaviourAction(BehaviourActionType.SET_ROUTE, "Village/Night Patrol")));
-        definition.setCustomEventActions("alarm", List.of(
-                new BehaviourAction(BehaviourActionType.SET_ROUTE, "Emergency")));
-        definition.setBehaviourActions(BehaviourEvent.RIGHT_CLICK, List.of(BehaviourAction.ask(
-                new NpcQuestion(UUID.randomUUID(), "Choose", List.of(
-                        new QuestionOption("Market", List.of(
-                                new BehaviourAction(BehaviourActionType.SET_ROUTE, "Market Loop")))),
+        definition.setBehaviourActions(BehaviourEvent.SPAWN,
+                List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "Village/Night Patrol")));
+        definition.setCustomEventActions("alarm",
+                List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "Emergency")));
+        definition.setBehaviourActions(BehaviourEvent.RIGHT_CLICK,
+                List.of(BehaviourAction.ask(new NpcQuestion(UUID.randomUUID(), "Choose",
+                        List.of(new QuestionOption("Market",
+                                List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "Market Loop")))),
                         List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "Return Home"))))));
 
-        assertEquals(java.util.Set.of(
-                "day-patrol", "village/night-patrol", "emergency", "market-loop", "return-home"),
+        assertEquals(java.util.Set.of("day-patrol", "village/night-patrol", "emergency", "market-loop", "return-home"),
                 definition.getReferencedRouteKeys());
     }
 
@@ -89,13 +88,13 @@ class NpcDefinitionTest {
     void removesDeletedRouteReferencesIncludingQuestionBranches() {
         NpcDefinition definition = NpcDefinition.create("Guard");
         definition.setMovementProfile(MovementProfile.routing("patrol", WalkingSpeed.FAST));
-        definition.setBehaviourActions(BehaviourEvent.SPAWN, List.of(
-                new BehaviourAction(BehaviourActionType.SET_ROUTE, "patrol"),
-                new BehaviourAction(BehaviourActionType.WAVE, null),
-                BehaviourAction.ask(new NpcQuestion(UUID.randomUUID(), "Choose", List.of(
-                        new QuestionOption("Go", List.of(
-                                new BehaviourAction(BehaviourActionType.SET_ROUTE, "patrol")))),
-                        List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "other"))))));
+        definition.setBehaviourActions(BehaviourEvent.SPAWN,
+                List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "patrol"),
+                        new BehaviourAction(BehaviourActionType.WAVE, null),
+                        BehaviourAction.ask(new NpcQuestion(UUID.randomUUID(), "Choose",
+                                List.of(new QuestionOption("Go",
+                                        List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "patrol")))),
+                                List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "other"))))));
 
         assertTrue(definition.removeRouteReferences("patrol"));
 

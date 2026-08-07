@@ -19,14 +19,10 @@ public final class NpcAttackSelector {
 
     NpcAttack select(Material material) {
         return switch (material) {
-            case BOW ->
-                BOW;
-            case CROSSBOW ->
-                CROSSBOW;
-            case SPLASH_POTION ->
-                SPLASH_POTION;
-            default ->
-                MELEE;
+            case BOW -> BOW;
+            case CROSSBOW -> CROSSBOW;
+            case SPLASH_POTION -> SPLASH_POTION;
+            default -> MELEE;
         };
     }
 }

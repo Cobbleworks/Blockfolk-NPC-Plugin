@@ -55,8 +55,7 @@ class AiDecisionParserTest {
 
     @Test
     void startCombatMaySelectNearestAttackableImplicitly() {
-        AiControlSettings settings = settings("Guard", "", "Defend this place",
-                EnumSet.of(AiActionType.START_COMBAT));
+        AiControlSettings settings = settings("Guard", "", "Defend this place", EnumSet.of(AiActionType.START_COMBAT));
 
         AiDecision decision = AiDecisionParser.parse("""
                 {"actions":[{"type":"START_COMBAT"}]}
@@ -67,15 +66,14 @@ class AiDecisionParserTest {
 
     @Test
     void startCombatAcceptsPerceivedEntitiesRegardlessOfNormalTargetCategories() {
-        AiControlSettings settings = settings("Guard", "", "Defend this place",
-                EnumSet.of(AiActionType.START_COMBAT));
+        AiControlSettings settings = settings("Guard", "", "Defend this place", EnumSet.of(AiActionType.START_COMBAT));
 
-        AiDecision entity = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"nearby_entity_2\"}]}", settings);
-        AiDecision npc = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"nearby_npc_1\"}]}", settings);
-        AiDecision arbitrary = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"some_cow\"}]}", settings);
+        AiDecision entity = AiDecisionParser
+                .parse("{\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"nearby_entity_2\"}]}", settings);
+        AiDecision npc = AiDecisionParser
+                .parse("{\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"nearby_npc_1\"}]}", settings);
+        AiDecision arbitrary = AiDecisionParser
+                .parse("{\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"some_cow\"}]}", settings);
 
         assertEquals("nearby_entity_2", entity.actions().getFirst().target());
         assertEquals("nearby_npc_1", npc.actions().getFirst().target());
@@ -110,17 +108,15 @@ class AiDecisionParserTest {
 
     @Test
     void containerInteractionsRequireTemporaryInventoryAccess() {
-        AiControlSettings interact = settings("Storekeeper", "", "Manage supplies",
-                EnumSet.of(AiActionType.INTERACT));
+        AiControlSettings interact = settings("Storekeeper", "", "Manage supplies", EnumSet.of(AiActionType.INTERACT));
         String take = "{\"actions\":[{\"type\":\"INTERACT\",\"target\":\"take_from_container\"}]}";
         String store = "{\"actions\":[{\"type\":\"INTERACT\",\"target\":\"store_in_container\"}]}";
 
-        assertEquals(AiActionType.DO_NOTHING,
-                AiDecisionParser.parse(take, interact).actions().getFirst().type());
-        assertEquals("take_from_container", AiDecisionParser.parse(take,
-                interact.withInventoryEnabled(true)).actions().getFirst().target());
-        assertEquals("store_in_container", AiDecisionParser.parse(store,
-                interact.withInventoryEnabled(true)).actions().getFirst().target());
+        assertEquals(AiActionType.DO_NOTHING, AiDecisionParser.parse(take, interact).actions().getFirst().type());
+        assertEquals("take_from_container",
+                AiDecisionParser.parse(take, interact.withInventoryEnabled(true)).actions().getFirst().target());
+        assertEquals("store_in_container",
+                AiDecisionParser.parse(store, interact.withInventoryEnabled(true)).actions().getFirst().target());
     }
 
     @Test
@@ -145,23 +141,21 @@ class AiDecisionParserTest {
         AiControlSettings interact = settings("Caretaker", "", "Operate nearby mechanisms",
                 EnumSet.of(AiActionType.INTERACT));
 
-        AiDecision decision = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"INTERACT\",\"target\":\"lever_by_door\"}]}", interact);
+        AiDecision decision = AiDecisionParser
+                .parse("{\"actions\":[{\"type\":\"INTERACT\",\"target\":\"lever_by_door\"}]}", interact);
 
         assertEquals(AiActionType.DO_NOTHING, decision.actions().getFirst().type());
     }
 
     @Test
     void followRequiresAndAcceptsPerceivedPlayerTargets() {
-        AiControlSettings settings = settings("Companion", "", "Stay with visitors",
-                EnumSet.of(AiActionType.FOLLOW));
+        AiControlSettings settings = settings("Companion", "", "Stay with visitors", EnumSet.of(AiActionType.FOLLOW));
 
-        AiDecision missing = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"FOLLOW\"}]}", settings);
-        AiDecision alias = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"FOLLOW\",\"target\":\"nearby_player_1\"}]}", settings);
-        AiDecision playerName = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"FOLLOW\",\"target\":\"VoidValkon\"}]}", settings);
+        AiDecision missing = AiDecisionParser.parse("{\"actions\":[{\"type\":\"FOLLOW\"}]}", settings);
+        AiDecision alias = AiDecisionParser
+                .parse("{\"actions\":[{\"type\":\"FOLLOW\",\"target\":\"nearby_player_1\"}]}", settings);
+        AiDecision playerName = AiDecisionParser
+                .parse("{\"actions\":[{\"type\":\"FOLLOW\",\"target\":\"VoidValkon\"}]}", settings);
 
         assertEquals(AiActionType.DO_NOTHING, missing.actions().getFirst().type());
         assertEquals(AiActionType.FOLLOW, alias.actions().getFirst().type());
@@ -174,8 +168,7 @@ class AiDecisionParserTest {
     void preservesLongSpeechForChatChunking() {
         String speech = "x".repeat(500);
 
-        AiDecision decision = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"SAY\",\"text\":\"" + speech + "\"}]}",
+        AiDecision decision = AiDecisionParser.parse("{\"actions\":[{\"type\":\"SAY\",\"text\":\"" + speech + "\"}]}",
                 AiControlSettings.defaults());
 
         assertEquals(speech, decision.actions().getFirst().text());
@@ -186,8 +179,7 @@ class AiDecisionParserTest {
         String response = "{\"actions\":[{\"type\":\"REMEMBER_FACT\",\"text\":\"Alex likes apples\"}]}";
 
         AiDecision disabled = AiDecisionParser.parse(response, AiControlSettings.defaults());
-        AiDecision enabled = AiDecisionParser.parse(response,
-                AiControlSettings.defaults().withMemoryEnabled(true));
+        AiDecision enabled = AiDecisionParser.parse(response, AiControlSettings.defaults().withMemoryEnabled(true));
 
         assertEquals(AiActionType.DO_NOTHING, disabled.actions().getFirst().type());
         assertEquals(AiActionType.REMEMBER_FACT, enabled.actions().getFirst().type());
@@ -196,13 +188,12 @@ class AiDecisionParserTest {
 
     @Test
     void moveToAcceptsOnlyPerceivedTargetAliasesWhenEnabled() {
-        AiControlSettings settings = settings("Guide", "", "Show visitors around",
-                EnumSet.of(AiActionType.MOVE_TO));
+        AiControlSettings settings = settings("Guide", "", "Show visitors around", EnumSet.of(AiActionType.MOVE_TO));
 
-        AiDecision accepted = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"MOVE_TO\",\"target\":\"nearby_location_2\"}]}", settings);
-        AiDecision arbitrary = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"MOVE_TO\",\"target\":\"world_spawn\"}]}", settings);
+        AiDecision accepted = AiDecisionParser
+                .parse("{\"actions\":[{\"type\":\"MOVE_TO\",\"target\":\"nearby_location_2\"}]}", settings);
+        AiDecision arbitrary = AiDecisionParser
+                .parse("{\"actions\":[{\"type\":\"MOVE_TO\",\"target\":\"world_spawn\"}]}", settings);
 
         assertEquals(AiActionType.MOVE_TO, accepted.actions().getFirst().type());
         assertEquals("nearby_location_2", accepted.actions().getFirst().target());
@@ -214,8 +205,7 @@ class AiDecisionParserTest {
         String response = "{\"actions\":[{\"type\":\"DROP_ITEM\",\"target\":\"inventory_slot_4\"}]}";
 
         AiDecision disabled = AiDecisionParser.parse(response, AiControlSettings.defaults());
-        AiDecision enabled = AiDecisionParser.parse(response,
-                AiControlSettings.defaults().withInventoryEnabled(true));
+        AiDecision enabled = AiDecisionParser.parse(response, AiControlSettings.defaults().withInventoryEnabled(true));
         AiDecision invalidTarget = AiDecisionParser.parse(
                 "{\"actions\":[{\"type\":\"DROP_ITEM\",\"target\":\"diamond\"}]}",
                 AiControlSettings.defaults().withInventoryEnabled(true));
@@ -230,13 +220,11 @@ class AiDecisionParserTest {
         AiControlSettings enabled = AiControlSettings.defaults().withInventoryEnabled(true)
                 .toggle(AiActionType.MINE_BLOCKS);
 
-        AiDecision accepted = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"MINE_BLOCKS\",\"target\":\"all_ores\"}]}", enabled);
+        AiDecision accepted = AiDecisionParser
+                .parse("{\"actions\":[{\"type\":\"MINE_BLOCKS\",\"target\":\"all_ores\"}]}", enabled);
         AiDecision noInventory = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"MINE_BLOCKS\",\"target\":\"trees\"}]}",
-                enabled.withInventoryEnabled(false));
-        AiDecision noTarget = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"MINE_BLOCKS\"}]}", enabled);
+                "{\"actions\":[{\"type\":\"MINE_BLOCKS\",\"target\":\"trees\"}]}", enabled.withInventoryEnabled(false));
+        AiDecision noTarget = AiDecisionParser.parse("{\"actions\":[{\"type\":\"MINE_BLOCKS\"}]}", enabled);
 
         assertEquals(AiActionType.MINE_BLOCKS, accepted.actions().getFirst().type());
         assertEquals("all_ores", accepted.actions().getFirst().target());
@@ -246,7 +234,6 @@ class AiDecisionParserTest {
 
     private static AiControlSettings settings(String identity, String behaviour, String goal,
             EnumSet<AiActionType> actions) {
-        return new AiControlSettings(identity, behaviour, "", goal, "", actions,
-                true, true, false, false, false);
+        return new AiControlSettings(identity, behaviour, "", goal, "", actions, true, true, false, false, false);
     }
 }

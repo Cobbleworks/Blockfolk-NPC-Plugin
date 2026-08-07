@@ -14,11 +14,9 @@ class BehaviourTest {
         assertEquals(BehaviourEvent.IDLE, BehaviourEvent.values()[1]);
     }
 
-
     @Test
     void parsesNewBehaviourTypesFromStoredNames() {
-        assertEquals(BehaviourActionType.SHOW_HOLO_DIALOG,
-            BehaviourActionType.fromStored("show_holo_dialog"));
+        assertEquals(BehaviourActionType.SHOW_HOLO_DIALOG, BehaviourActionType.fromStored("show_holo_dialog"));
         assertEquals(BehaviourActionType.ASK_QUESTION, BehaviourActionType.fromStored("ask_question"));
         assertEquals(BehaviourActionType.FALL_FLY, BehaviourActionType.fromStored("fall_fly"));
         assertEquals(BehaviourActionType.UNFOLLOW, BehaviourActionType.fromStored("unfollow"));
@@ -31,8 +29,7 @@ class BehaviourTest {
         assertEquals(BehaviourActionType.SHOW_INVENTORY, BehaviourActionType.fromStored("show_inventory"));
         assertEquals(BehaviourActionType.DROP_INVENTORY, BehaviourActionType.fromStored("drop_inventory"));
         assertEquals(BehaviourActionType.HARVEST, BehaviourActionType.fromStored("harvest"));
-        assertEquals(BehaviourActionType.CHANGE_FIGHT_OPTIONS,
-                BehaviourActionType.fromStored("change_fight_options"));
+        assertEquals(BehaviourActionType.CHANGE_FIGHT_OPTIONS, BehaviourActionType.fromStored("change_fight_options"));
         assertEquals("At Sunrise", BehaviourEvent.SUNRISE.displayName());
         assertEquals("At Noon", BehaviourEvent.NOON.displayName());
         assertEquals("At Sunset", BehaviourEvent.SUNSET.displayName());
@@ -41,9 +38,9 @@ class BehaviourTest {
     @Test
     void actionsRemainOrderedAndAreDefensivelyCopied() {
         NpcDefinition definition = new NpcDefinition("guard");
-        definition.setBehaviourActions(BehaviourEvent.SPAWN, List.of(
-            new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Ready."),
-            new BehaviourAction(BehaviourActionType.RUN_CONSOLE_COMMAND, "time set night")));
+        definition.setBehaviourActions(BehaviourEvent.SPAWN,
+                List.of(new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Ready."),
+                        new BehaviourAction(BehaviourActionType.RUN_CONSOLE_COMMAND, "time set night")));
 
         List<BehaviourAction> actions = definition.getBehaviourActions(BehaviourEvent.SPAWN);
         assertEquals(BehaviourActionType.SEND_DIALOG, actions.get(0).type());
@@ -56,7 +53,7 @@ class BehaviourTest {
     void removingLastActionRemovesSequence() {
         NpcDefinition definition = new NpcDefinition("guard");
         definition.setBehaviourActions(BehaviourEvent.DEATH,
-            List.of(new BehaviourAction(BehaviourActionType.STOP_NAVIGATION, null)));
+                List.of(new BehaviourAction(BehaviourActionType.STOP_NAVIGATION, null)));
         definition.removeBehaviourAction(BehaviourEvent.DEATH, 0);
         assertTrue(definition.getBehaviourActions(BehaviourEvent.DEATH).isEmpty());
     }

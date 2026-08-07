@@ -62,13 +62,8 @@ public final class RouteRepository {
                     }
                     try {
                         List<BehaviourAction> actions = loadActions(point);
-                        route.addPoint(new RoutePoint(
-                                point.getString("world"),
-                                point.getInt("x"),
-                                point.getInt("y"),
-                                point.getInt("z"),
-                                actions
-                        ));
+                        route.addPoint(new RoutePoint(point.getString("world"), point.getInt("x"), point.getInt("y"),
+                                point.getInt("z"), actions));
                     } catch (IllegalArgumentException ignored) {
                         // Ignore malformed cross-world or duplicate points.
                     }
@@ -101,8 +96,7 @@ public final class RouteRepository {
 
     public void reorder(List<String> orderedKeys) {
         List<String> normalized = orderedKeys.stream().map(NpcRoute::normalizeKey).toList();
-        if (normalized.size() != routes.size()
-                || new HashSet<>(normalized).size() != normalized.size()
+        if (normalized.size() != routes.size() || new HashSet<>(normalized).size() != normalized.size()
                 || !routes.keySet().containsAll(normalized)) {
             throw new IllegalArgumentException("The route order must contain every route exactly once.");
         }
@@ -128,12 +122,10 @@ public final class RouteRepository {
                 if (routes.containsKey(key) && seen.add(key)) {
                     routeOrder.add(key);
                 }
-            } catch (IllegalArgumentException ignored) { }
+            } catch (IllegalArgumentException ignored) {
+            }
         }
-        routes.keySet().stream()
-                .filter(seen::add)
-                .sorted(Comparator.naturalOrder())
-                .forEach(routeOrder::add);
+        routes.keySet().stream().filter(seen::add).sorted(Comparator.naturalOrder()).forEach(routeOrder::add);
     }
 
     private void saveAll() {
@@ -171,8 +163,10 @@ public final class RouteRepository {
     private List<BehaviourAction> loadActions(ConfigurationSection point) {
         List<BehaviourAction> actions = new java.util.ArrayList<>();
         for (Map<?, ?> stored : point.getMapList("actions")) {
-            try { actions.add(BehaviourActionCodec.decode(stored)); }
-            catch (IllegalArgumentException ignored) { /* Ignore malformed waypoint actions. */ }
+            try {
+                actions.add(BehaviourActionCodec.decode(stored));
+            } catch (IllegalArgumentException ignored) {
+                /* Ignore malformed waypoint actions. */ }
         }
         return actions;
     }

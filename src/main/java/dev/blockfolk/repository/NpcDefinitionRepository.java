@@ -75,10 +75,7 @@ public final class NpcDefinitionRepository {
     }
 
     public Collection<NpcDefinition> findAll() {
-        return definitionOrder.stream()
-                .map(definitions::get)
-                .filter(java.util.Objects::nonNull)
-                .toList();
+        return definitionOrder.stream().map(definitions::get).filter(java.util.Objects::nonNull).toList();
     }
 
     public NpcDefinition save(NpcDefinition definition) {
@@ -117,7 +114,8 @@ public final class NpcDefinitionRepository {
         configuration.set("combat.alliance", definition.getCombatProfile().alliance());
         configuration.set("combat.show-boss-bar", definition.getCombatProfile().showBossBar());
         configuration.set("combat.dropped-experience", definition.getCombatProfile().droppedExperience());
-        configuration.set("movement.speed", definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
+        configuration.set("movement.speed",
+                definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
         configuration.set("movement.enabled", definition.getMovementProfile().enabled());
         configuration.set("movement.route", definition.getMovementProfile().routeKey());
         configuration.set("properties.show-name", definition.isShowName());
@@ -137,16 +135,18 @@ public final class NpcDefinitionRepository {
         configuration.set("ai-control.inventory.enabled", ai.inventoryEnabled());
         configuration.set("ai-control.conversation.shared", ai.sharedConversation());
         configuration.set("ai-control.memory.facts", definition.getAiMemories());
-        configuration.set("ai-control.allowed-actions", ai.allowedActions().stream()
-                .filter(action -> action != AiActionType.REMEMBER_FACT && action != AiActionType.DROP_ITEM)
-                .map(action -> action.name().toLowerCase(Locale.ROOT)).sorted().toList());
+        configuration.set("ai-control.allowed-actions",
+                ai.allowedActions().stream()
+                        .filter(action -> action != AiActionType.REMEMBER_FACT && action != AiActionType.DROP_ITEM)
+                        .map(action -> action.name().toLowerCase(Locale.ROOT)).sorted().toList());
         for (BehaviourEvent event : BehaviourEvent.values()) {
             List<Map<String, Object>> actions = BehaviourActionCodec.encodeList(definition.getBehaviourActions(event));
-            configuration.set("behaviours." + event.name().toLowerCase(Locale.ROOT), actions.isEmpty() ? null : actions);
+            configuration.set("behaviours." + event.name().toLowerCase(Locale.ROOT),
+                    actions.isEmpty() ? null : actions);
         }
         for (String eventName : definition.getCustomEventNames()) {
-            List<Map<String, Object>> actions = BehaviourActionCodec.encodeList(
-                    definition.getCustomEventActions(eventName));
+            List<Map<String, Object>> actions = BehaviourActionCodec
+                    .encodeList(definition.getCustomEventActions(eventName));
             configuration.set("custom-event-behaviours." + encodeEventName(eventName), actions);
         }
         return configuration;
@@ -154,8 +154,7 @@ public final class NpcDefinitionRepository {
 
     public void reorder(List<String> orderedKeys) {
         List<String> normalized = orderedKeys.stream().map(NpcDefinition::toKey).toList();
-        if (normalized.size() != definitions.size()
-                || new HashSet<>(normalized).size() != normalized.size()
+        if (normalized.size() != definitions.size() || new HashSet<>(normalized).size() != normalized.size()
                 || !definitions.keySet().containsAll(normalized)) {
             throw new IllegalArgumentException("The NPC order must contain every definition exactly once.");
         }
@@ -185,10 +184,7 @@ public final class NpcDefinitionRepository {
                 definitionOrder.add(normalized);
             }
         }
-        definitions.keySet().stream()
-                .filter(seen::add)
-                .sorted(Comparator.naturalOrder())
-                .forEach(definitionOrder::add);
+        definitions.keySet().stream().filter(seen::add).sorted(Comparator.naturalOrder()).forEach(definitionOrder::add);
     }
 
     private void saveOrder() {
@@ -210,28 +206,22 @@ public final class NpcDefinitionRepository {
         String key = configuration.getString("key", file.getName().replaceFirst("\\.yml$", ""));
         NpcDefinition definition = new NpcDefinition(NpcDefinition.toKey(key));
         definition.setDisplayName(configuration.getString("display-name", definition.getKey()));
-        definition.setResolvedSkin(
-                configuration.getString("skin-url"),
-                configuration.getString("skin-texture-value"),
-                configuration.getString("skin-texture-signature")
-        );
+        definition.setResolvedSkin(configuration.getString("skin-url"), configuration.getString("skin-texture-value"),
+                configuration.getString("skin-texture-signature"));
         definition.setStoredSpawnpoint(LocationCodec.readStored(configuration.getConfigurationSection("spawnpoint")));
         definition.setInventoryContents(readItemArray(configuration, "inventory.contents", 36));
         definition.setArmorContents(readItemArray(configuration, "inventory.armor", 4));
         definition.setMainHand(configuration.getItemStack("inventory.main-hand"));
         definition.setOffHand(configuration.getItemStack("inventory.off-hand"));
-        definition.setCombatProfile(new CombatProfile(
-                configuration.getInt("combat.max-health", 0),
+        definition.setCombatProfile(new CombatProfile(configuration.getInt("combat.max-health", 0),
                 configuration.getInt("combat.respawn-seconds", 0),
                 AttackReaction.fromStored(configuration.getString("combat.aggression-level")),
                 configuration.getBoolean("combat.targets.mobs", false),
                 configuration.getBoolean("combat.targets.animals", false),
                 configuration.getBoolean("combat.targets.players", false),
-                configuration.getBoolean("combat.targets.npcs", false),
-                configuration.getString("combat.alliance"),
+                configuration.getBoolean("combat.targets.npcs", false), configuration.getString("combat.alliance"),
                 configuration.getBoolean("combat.show-boss-bar", false),
-                configuration.getInt("combat.dropped-experience", 0)
-        ));
+                configuration.getInt("combat.dropped-experience", 0)));
         WalkingSpeed storedSpeed = WalkingSpeed.fromStored(configuration.getString("movement.speed"));
         String storedRoute = configuration.getString("movement.route");
         try {
@@ -255,20 +245,15 @@ public final class NpcDefinitionRepository {
                 plugin.getLogger().warning("Ignoring unknown AI action '" + stored + "' in " + file.getName());
             }
         }
-        if (allowedAiActions.isEmpty()) allowedAiActions.addAll(AiActionType.safeDefaults());
+        if (allowedAiActions.isEmpty())
+            allowedAiActions.addAll(AiActionType.safeDefaults());
         String identity = configuration.getString("ai-control.identity", "");
         String behaviour = configuration.getString("ai-control.behaviour", "");
         String likesDislikes = configuration.getString("ai-control.likes-dislikes", "");
         String goal = configuration.getString("ai-control.goal", "");
         String information = configuration.getString("ai-control.information", "");
-        definition.setAiControlSettings(new AiControlSettings(
-                identity,
-                behaviour,
-                likesDislikes,
-                goal,
-                information,
-                allowedAiActions,
-                configuration.getBoolean("ai-control.enabled", false),
+        definition.setAiControlSettings(new AiControlSettings(identity, behaviour, likesDislikes, goal, information,
+                allowedAiActions, configuration.getBoolean("ai-control.enabled", false),
                 configuration.getBoolean("ai-control.respond-to-chat", true),
                 configuration.getBoolean("ai-control.memory.enabled", false),
                 configuration.getBoolean("ai-control.inventory.enabled", false),
@@ -299,12 +284,13 @@ public final class NpcDefinitionRepository {
         List<BehaviourAction> actions = new ArrayList<>();
         for (Map<?, ?> entry : storedActions) {
             Object type = entry.get("type");
-            if (type == null) continue;
+            if (type == null)
+                continue;
             try {
                 actions.add(BehaviourActionCodec.decode(entry));
             } catch (IllegalArgumentException ignored) {
-                plugin.getLogger().warning(() ->
-                        "Ignoring unknown " + kind + " action '" + type + "' in " + file.getName());
+                plugin.getLogger()
+                        .warning(() -> "Ignoring unknown " + kind + " action '" + type + "' in " + file.getName());
             }
         }
         return actions;

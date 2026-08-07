@@ -80,7 +80,8 @@ public final class NpcInstanceRepository {
             section.set("definition", instance.getDefinitionKey());
             LocationCodec.write(section.createSection("location"), instance.getStoredLocation());
             LocationCodec.write(section.createSection("spawn-location"), instance.getStoredSpawnLocation());
-            if (instance.isAwaitingRespawn()) section.set("respawn-at", instance.getRespawnAtEpochMillis());
+            if (instance.isAwaitingRespawn())
+                section.set("respawn-at", instance.getRespawnAtEpochMillis());
         }
         return configuration;
     }

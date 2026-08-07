@@ -7,5 +7,6 @@ public record AiDecision(List<Action> actions) {
         actions = actions == null ? List.of() : List.copyOf(actions);
     }
 
-    public record Action(AiActionType type, String text, String target, String animation) { }
+    public record Action(AiActionType type, String text, String target, String animation) {
+    }
 }

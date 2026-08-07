@@ -14,8 +14,7 @@ class AiTargetSnapshotTest {
     @Test
     void locationsAreDefensivelyCopied() {
         Location original = new Location(null, 1, 64, 2);
-        AiTargetSnapshot snapshot = new AiTargetSnapshot(Map.of(), Map.of(),
-                Map.of("nearby_location_1", original));
+        AiTargetSnapshot snapshot = new AiTargetSnapshot(Map.of(), Map.of(), Map.of("nearby_location_1", original));
         original.setX(100);
 
         Location resolved = snapshot.location("nearby_location_1").orElseThrow();
@@ -30,8 +29,7 @@ class AiTargetSnapshotTest {
     void stableIdentityBindingsAreAvailableByAlias() {
         UUID entityId = UUID.randomUUID();
         UUID npcId = UUID.randomUUID();
-        AiTargetSnapshot snapshot = new AiTargetSnapshot(
-                Map.of("nearby_player_1", entityId),
+        AiTargetSnapshot snapshot = new AiTargetSnapshot(Map.of("nearby_player_1", entityId),
                 Map.of("nearby_npc_1", npcId), Map.of());
 
         assertEquals(entityId, snapshot.entityId("nearby_player_1").orElseThrow());

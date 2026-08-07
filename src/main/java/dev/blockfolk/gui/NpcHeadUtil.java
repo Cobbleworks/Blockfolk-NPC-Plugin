@@ -15,7 +15,8 @@ import dev.blockfolk.util.SkinTextureUtil;
 
 public final class NpcHeadUtil {
 
-    private NpcHeadUtil() { }
+    private NpcHeadUtil() {
+    }
 
     public static ItemStack applySkin(ItemStack head, NpcDefinition definition) {
         if (!(head.getItemMeta() instanceof SkullMeta meta)) {

@@ -15,13 +15,10 @@ final class RouteBrowserModel {
 
     private static final String NPC_PREFIX = "npc:";
 
-    private RouteBrowserModel() { }
+    private RouteBrowserModel() {
+    }
 
-    static List<Entry> entries(
-            Collection<NpcRoute> routes,
-            Collection<NpcDefinition> definitions,
-            String folder
-    ) {
+    static List<Entry> entries(Collection<NpcRoute> routes, Collection<NpcDefinition> definitions, String folder) {
         List<NpcRoute> orderedRoutes = List.copyOf(routes);
         List<NpcDefinition> orderedDefinitions = List.copyOf(definitions);
         Map<String, NpcRoute> routesByKey = new LinkedHashMap<>();
@@ -43,8 +40,8 @@ final class RouteBrowserModel {
             for (NpcDefinition definition : orderedDefinitions) {
                 Set<String> keys = routeKeysByNpc.get(definition.getKey());
                 if (keys != null) {
-                    result.add(Entry.npcFolder(npcFolder(definition.getKey()),
-                            definition.getDisplayName(), keys.size()));
+                    result.add(
+                            Entry.npcFolder(npcFolder(definition.getKey()), definition.getDisplayName(), keys.size()));
                 }
             }
             result.addAll(routeEntries(orderedRoutes, usedRouteKeys, true));
@@ -75,11 +72,8 @@ final class RouteBrowserModel {
         return NPC_PREFIX + npcKey;
     }
 
-    private static List<Entry> routeEntries(
-            List<NpcRoute> routes,
-            Set<String> selectedRouteKeys,
-            boolean invertSelection
-    ) {
+    private static List<Entry> routeEntries(List<NpcRoute> routes, Set<String> selectedRouteKeys,
+            boolean invertSelection) {
         List<Entry> result = new ArrayList<>();
         for (NpcRoute route : routes) {
             boolean selected = selectedRouteKeys.contains(route.getKey());

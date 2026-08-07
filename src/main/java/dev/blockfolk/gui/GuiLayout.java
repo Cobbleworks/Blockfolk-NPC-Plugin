@@ -9,7 +9,8 @@ import dev.blockfolk.util.LegacyText;
 
 final class GuiLayout {
 
-    private GuiLayout() { }
+    private GuiLayout() {
+    }
 
     static void fillMainBar(Inventory inventory) {
         int firstSlot = inventory.getSize() - 9;

@@ -6,9 +6,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/** Aggression and target categories temporarily applied by a behaviour action. */
-public record FightOptions(AttackReaction attackReaction,
-        boolean mobs, boolean animals, boolean players, boolean npcs) {
+/**
+ * Aggression and target categories temporarily applied by a behaviour action.
+ */
+public record FightOptions(AttackReaction attackReaction, boolean mobs, boolean animals, boolean players,
+        boolean npcs) {
 
     public FightOptions {
         attackReaction = Objects.requireNonNullElse(attackReaction, AttackReaction.IGNORE);
@@ -26,14 +28,13 @@ public record FightOptions(AttackReaction attackReaction,
                 ? AttackReaction.fromStored(sections[0].substring("aggression=".length()))
                 : AttackReaction.IGNORE;
         String targetValue = sections.length == 2 && sections[1].startsWith("targets=")
-                ? sections[1].substring("targets=".length()) : "";
+                ? sections[1].substring("targets=".length())
+                : "";
         Set<String> targets = Arrays.stream(targetValue.split(","))
-                .map(target -> target.trim().toLowerCase(Locale.ROOT))
-                .filter(target -> !target.isEmpty())
+                .map(target -> target.trim().toLowerCase(Locale.ROOT)).filter(target -> !target.isEmpty())
                 .collect(Collectors.toSet());
-        return new FightOptions(reaction, targets.contains("mobs"),
-                targets.contains("animals"), targets.contains("players"),
-                targets.contains("npcs"));
+        return new FightOptions(reaction, targets.contains("mobs"), targets.contains("animals"),
+                targets.contains("players"), targets.contains("npcs"));
     }
 
     public String storedValue() {
@@ -76,8 +77,10 @@ public record FightOptions(AttackReaction attackReaction,
     }
 
     private static void append(StringBuilder value, boolean enabled, String target) {
-        if (!enabled) return;
-        if (!value.isEmpty()) value.append(',');
+        if (!enabled)
+            return;
+        if (!value.isEmpty())
+            value.append(',');
         value.append(target);
     }
 }

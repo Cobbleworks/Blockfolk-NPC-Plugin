@@ -50,8 +50,7 @@ class NpcQuestionTest {
                 List.of(new QuestionOption("Yes", List.of()), new QuestionOption("YES", List.of())), List.of()));
         BehaviourAction nested = BehaviourAction.ask(NpcQuestion.create("Nested?"));
         assertThrows(IllegalArgumentException.class, () -> new QuestionOption("Continue", List.of(nested)));
-        assertThrows(IllegalArgumentException.class, () -> new QuestionOption("Too many",
-                java.util.stream.IntStream.range(0, 8)
-                        .mapToObj(index -> new BehaviourAction(BehaviourActionType.WAVE, null)).toList()));
+        assertThrows(IllegalArgumentException.class, () -> new QuestionOption("Too many", java.util.stream.IntStream
+                .range(0, 8).mapToObj(index -> new BehaviourAction(BehaviourActionType.WAVE, null)).toList()));
     }
 }

@@ -85,7 +85,8 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         try {
             Mannequin mannequin = location.getWorld().spawn(location, Mannequin.class, spawned -> {
                 spawned.setPersistent(true);
-                spawned.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
+                spawned.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING,
+                        instance.getId().toString());
                 // Collision stays enabled so the mannequin remains a hittable entity.
                 // The definition controls native player-bump movement separately.
                 spawned.setImmovable(false);
@@ -269,7 +270,8 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         entityIdsByInstance.remove(instance.getId());
 
         if (!location.getChunk().isLoaded()) {
-            if (!loadChunk) return null;
+            if (!loadChunk)
+                return null;
             // Spawn and permanent deletion are infrequent lifecycle operations;
             // routine lookups must never synchronously reload an idle NPC chunk.
             location.getChunk().load();
@@ -293,12 +295,8 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         return found;
     }
 
-    private void applyDefinition(
-            Mannequin mannequin,
-            NpcInstance instance,
-            NpcDefinition definition,
-            boolean healToFull
-    ) {
+    private void applyDefinition(Mannequin mannequin, NpcInstance instance, NpcDefinition definition,
+            boolean healToFull) {
         mannequin.teleport(instance.getLocation());
         mannequin.setPersistent(true);
         mannequin.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
@@ -357,8 +355,10 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
 
     private float wrapDegrees(float angle) {
         float wrapped = angle % 360.0f;
-        if (wrapped >= 180.0f) wrapped -= 360.0f;
-        if (wrapped < -180.0f) wrapped += 360.0f;
+        if (wrapped >= 180.0f)
+            wrapped -= 360.0f;
+        if (wrapped < -180.0f)
+            wrapped += 360.0f;
         return wrapped;
     }
 

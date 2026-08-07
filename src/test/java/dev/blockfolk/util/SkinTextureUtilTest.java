@@ -55,8 +55,8 @@ class SkinTextureUtilTest {
 
     @Test
     void identifiesMinecraftTextureUrls() {
-        assertTrue(SkinTextureUtil.isMinecraftTextureUrl(
-            "https://textures.minecraft.net/texture/0123456789abcdef0123456789abcdef"));
+        assertTrue(SkinTextureUtil
+                .isMinecraftTextureUrl("https://textures.minecraft.net/texture/0123456789abcdef0123456789abcdef"));
     }
 
     @Test
@@ -66,7 +66,7 @@ class SkinTextureUtilTest {
 
     @Test
     void rejectsInsecureSkinImageUrls() {
-        assertThrows(IllegalArgumentException.class, () ->
-            SkinTextureUtil.normalizeTextureUrl("http://example.test/skin.png"));
+        assertThrows(IllegalArgumentException.class,
+                () -> SkinTextureUtil.normalizeTextureUrl("http://example.test/skin.png"));
     }
 }

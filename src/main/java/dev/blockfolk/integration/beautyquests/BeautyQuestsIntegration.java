@@ -38,20 +38,16 @@ import fr.skytasul.quests.api.npcs.NpcClickType;
 public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
 
     private static final String FACTORY_KEY = "blockfolk";
-    private static final Pattern NPC_ID_PATTERN = Pattern.compile(
-            "blockfolk#([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})");
+    private static final Pattern NPC_ID_PATTERN = Pattern
+            .compile("blockfolk#([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})");
 
     private final JavaPlugin plugin;
     private final NpcDefinitionRepository definitions;
     private final NpcInstanceRegistry instances;
     private final NpcBehaviourService behaviours;
 
-    public BeautyQuestsIntegration(
-            JavaPlugin plugin,
-            NpcDefinitionRepository definitions,
-            NpcInstanceRegistry instances,
-            NpcBehaviourService behaviours
-    ) {
+    public BeautyQuestsIntegration(JavaPlugin plugin, NpcDefinitionRepository definitions,
+            NpcInstanceRegistry instances, NpcBehaviourService behaviours) {
         this.plugin = plugin;
         this.definitions = definitions;
         this.instances = instances;
@@ -116,8 +112,8 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
             if (!(event.getDamager() instanceof Player player)) {
                 return;
             }
-            instances.findByEntityId(event.getEntity().getEntityId()).ifPresent(instance ->
-                    npcClicked(event, instance.getId().toString(), player,
+            instances.findByEntityId(event.getEntity().getEntityId())
+                    .ifPresent(instance -> npcClicked(event, instance.getId().toString(), player,
                             player.isSneaking() ? NpcClickType.SHIFT_LEFT : NpcClickType.LEFT));
         }
 
@@ -144,7 +140,8 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
                 continue;
             }
             NpcInstance instance = instances.findById(instanceId).orElse(null);
-            NpcDefinition definition = instance == null ? null
+            NpcDefinition definition = instance == null
+                    ? null
                     : definitions.find(instance.getDefinitionKey()).orElse(null);
             if (definition != null) {
                 inventory.setItem(slot, createNpcIcon(current, definition));
@@ -200,8 +197,7 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
 
         @Override
         public String getName() {
-            return definitions.find(instance.getDefinitionKey())
-                    .map(NpcDefinition::getDisplayName)
+            return definitions.find(instance.getDefinitionKey()).map(NpcDefinition::getDisplayName)
                     .orElse(instance.getDefinitionKey());
         }
 

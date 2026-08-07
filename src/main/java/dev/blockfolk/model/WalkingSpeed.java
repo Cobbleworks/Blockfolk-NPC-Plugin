@@ -3,11 +3,7 @@ package dev.blockfolk.model;
 import java.util.Locale;
 
 public enum WalkingSpeed {
-    SLOUCH("Slouch", 1.0),
-    SLOW("Slow", 2.0),
-    NORMAL("Normal", 4.317),
-    FAST("Fast", 6.0),
-    VERY_FAST("Very Fast", 8.0);
+    SLOUCH("Slouch", 1.0), SLOW("Slow", 2.0), NORMAL("Normal", 4.317), FAST("Fast", 6.0), VERY_FAST("Very Fast", 8.0);
 
     private final String displayName;
     private final double blocksPerSecond;

@@ -30,14 +30,9 @@ public final class RouteMovementService {
     private final Map<UUID, Progress> progressByInstance = new HashMap<>();
     private BukkitTask task;
 
-    public RouteMovementService(
-            JavaPlugin plugin,
-            NpcDefinitionRepository definitionRepository,
-            RouteRepository routeRepository,
-            NpcInstanceRegistry instanceRegistry,
-            NpcCombatService combatService,
-            NpcBehaviourService behaviourService
-    ) {
+    public RouteMovementService(JavaPlugin plugin, NpcDefinitionRepository definitionRepository,
+            RouteRepository routeRepository, NpcInstanceRegistry instanceRegistry, NpcCombatService combatService,
+            NpcBehaviourService behaviourService) {
         this.plugin = plugin;
         this.definitionRepository = definitionRepository;
         this.routeRepository = routeRepository;
@@ -75,8 +70,7 @@ public final class RouteMovementService {
 
     private void move(NpcInstance instance) {
         if (combatService.isEngaged(instance) || behaviourService.isFollowing(instance)
-                || behaviourService.isMovingTo(instance)
-                || behaviourService.isRunningWaypointActions(instance)) {
+                || behaviourService.isMovingTo(instance) || behaviourService.isRunningWaypointActions(instance)) {
             // Another runtime activity temporarily owns navigation. Keep the
             // route target so the NPC resumes toward the same next waypoint.
             return;
@@ -135,18 +129,15 @@ public final class RouteMovementService {
             return;
         }
 
-        NativeNpcNavigationService.NavigationStatus status = instanceRegistry.navigate(
-                instance,
-                target,
-                movement.walkingSpeed()
-        );
+        NativeNpcNavigationService.NavigationStatus status = instanceRegistry.navigate(instance, target,
+                movement.walkingSpeed());
         if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED) {
             instanceRegistry.stopNavigating(instance);
             int nextIndex = (progress.targetIndex() + 1) % progress.orderedPoints().size();
             progressByInstance.put(instance.getId(), progress.withTargetIndex(nextIndex));
             behaviourService.triggerWaypointActions(targetPoint.actions(), instance);
-            behaviourService.trigger(dev.blockfolk.model.BehaviourEvent.ROUTE_POINT_REACHED,
-                    instance, null, "The NPC reached a route waypoint.");
+            behaviourService.trigger(dev.blockfolk.model.BehaviourEvent.ROUTE_POINT_REACHED, instance, null,
+                    "The NPC reached a route waypoint.");
         } else if (status == NativeNpcNavigationService.NavigationStatus.STALLED) {
             int nextIndex = (progress.targetIndex() + 1) % progress.orderedPoints().size();
             progressByInstance.put(instance.getId(), progress.withTargetIndex(nextIndex));
@@ -159,13 +150,8 @@ public final class RouteMovementService {
         }
     }
 
-    private record Progress(
-            String routeKey,
-            List<RoutePoint> sourcePoints,
-            List<RoutePoint> orderedPoints,
-            int targetIndex,
-            boolean targetHandled
-            ) {
+    private record Progress(String routeKey, List<RoutePoint> sourcePoints, List<RoutePoint> orderedPoints,
+            int targetIndex, boolean targetHandled) {
 
         private Progress {
             sourcePoints = List.copyOf(sourcePoints);

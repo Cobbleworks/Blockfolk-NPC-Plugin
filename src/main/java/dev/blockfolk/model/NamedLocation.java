@@ -15,7 +15,8 @@ public record NamedLocation(String key, String displayName, ActionLocation locat
         }
         Objects.requireNonNull(location, "location");
         icon = icon == null || icon.getType().isAir() ? null : icon.clone();
-        if (icon != null) icon.setAmount(1);
+        if (icon != null)
+            icon.setAmount(1);
     }
 
     public NamedLocation(String key, String displayName, ActionLocation location) {

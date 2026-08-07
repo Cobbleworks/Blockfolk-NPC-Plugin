@@ -31,13 +31,14 @@ public final class LocationCodec {
     }
 
     public static StoredLocation readStored(ConfigurationSection section) {
-        if (section == null) return null;
+        if (section == null)
+            return null;
         String worldName = section.getString("world");
-        if (worldName == null) return null;
+        if (worldName == null)
+            return null;
         try {
-            return new StoredLocation(worldName, section.getDouble("x"), section.getDouble("y"),
-                    section.getDouble("z"), (float) section.getDouble("yaw"),
-                    (float) section.getDouble("pitch"));
+            return new StoredLocation(worldName, section.getDouble("x"), section.getDouble("y"), section.getDouble("z"),
+                    (float) section.getDouble("yaw"), (float) section.getDouble("pitch"));
         } catch (IllegalArgumentException exception) {
             return null;
         }
@@ -52,7 +53,8 @@ public final class LocationCodec {
             return null;
         }
         StoredLocation stored = readStored(section);
-        if (stored == null) return null;
+        if (stored == null)
+            return null;
         World world = Bukkit.getWorld(worldName);
         return world == null ? null : stored.toLocation();
     }

@@ -60,8 +60,7 @@ class NpcInstanceTest {
     @Test
     void retainsIdentityAndSpawnWhileAwaitingRespawn() {
         UUID id = UUID.randomUUID();
-        NpcInstance instance = new NpcInstance(id, "guard",
-                new StoredLocation("custom_world", 10, 20, 30, 0, 0),
+        NpcInstance instance = new NpcInstance(id, "guard", new StoredLocation("custom_world", 10, 20, 30, 0, 0),
                 new StoredLocation("custom_world", 1, 2, 3, 0, 0), 12345L);
 
         assertEquals(id, instance.getId());

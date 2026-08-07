@@ -3,19 +3,9 @@ package dev.blockfolk.ai;
 import java.util.EnumSet;
 import java.util.Set;
 
-public record AiControlSettings(
-        String identity,
-        String behaviour,
-        String likesDislikes,
-        String goal,
-        String information,
-        Set<AiActionType> allowedActions,
-        boolean enabled,
-        boolean respondToChat,
-        boolean memoryEnabled,
-        boolean inventoryEnabled,
-        boolean sharedConversation
-) {
+public record AiControlSettings(String identity, String behaviour, String likesDislikes, String goal,
+        String information, Set<AiActionType> allowedActions, boolean enabled, boolean respondToChat,
+        boolean memoryEnabled, boolean inventoryEnabled, boolean sharedConversation) {
 
     public AiControlSettings {
         identity = normalize(identity);
@@ -24,7 +14,8 @@ public record AiControlSettings(
         goal = normalize(goal);
         information = normalize(information);
         allowedActions = allowedActions == null || allowedActions.isEmpty()
-                ? AiActionType.safeDefaults() : EnumSet.copyOf(allowedActions);
+                ? AiActionType.safeDefaults()
+                : EnumSet.copyOf(allowedActions);
         EnumSet<AiActionType> normalized = EnumSet.copyOf(allowedActions);
         normalized.remove(AiActionType.REMEMBER_FACT);
         normalized.remove(AiActionType.DROP_ITEM);
@@ -34,19 +25,17 @@ public record AiControlSettings(
     }
 
     public static AiControlSettings defaults() {
-        return new AiControlSettings("", "", "", "", "", AiActionType.safeDefaults(), false, true,
-                false, false, false);
+        return new AiControlSettings("", "", "", "", "", AiActionType.safeDefaults(), false, true, false, false, false);
     }
 
     public boolean hasContext() {
-        return !identity.isBlank() || !behaviour.isBlank() || !likesDislikes.isBlank()
-                || !goal.isBlank() || !information.isBlank();
+        return !identity.isBlank() || !behaviour.isBlank() || !likesDislikes.isBlank() || !goal.isBlank()
+                || !information.isBlank();
     }
 
     public int configuredSectionCount() {
-        return (identity.isBlank() ? 0 : 1) + (behaviour.isBlank() ? 0 : 1)
-                + (likesDislikes.isBlank() ? 0 : 1) + (goal.isBlank() ? 0 : 1)
-                + (information.isBlank() ? 0 : 1);
+        return (identity.isBlank() ? 0 : 1) + (behaviour.isBlank() ? 0 : 1) + (likesDislikes.isBlank() ? 0 : 1)
+                + (goal.isBlank() ? 0 : 1) + (information.isBlank() ? 0 : 1);
     }
 
     public String systemContext() {
@@ -79,60 +68,56 @@ public record AiControlSettings(
         return withContext(identity, behaviour, likesDislikes, goal, information);
     }
 
-    private AiControlSettings withContext(String identity, String behaviour, String likesDislikes,
-            String goal, String information) {
+    private AiControlSettings withContext(String identity, String behaviour, String likesDislikes, String goal,
+            String information) {
         boolean hadContext = hasContext();
         boolean hasUpdatedContext = !normalize(identity).isBlank() || !normalize(behaviour).isBlank()
                 || !normalize(likesDislikes).isBlank() || !normalize(goal).isBlank()
                 || !normalize(information).isBlank();
         boolean updatedEnabled = !hasUpdatedContext ? false : !hadContext || enabled;
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                updatedEnabled, respondToChat, memoryEnabled,
-                inventoryEnabled, sharedConversation);
+                updatedEnabled, respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
     }
 
     public AiControlSettings toggle(AiActionType action) {
         EnumSet<AiActionType> updated = EnumSet.copyOf(allowedActions);
-        if (!updated.remove(action)) updated.add(action);
+        if (!updated.remove(action))
+            updated.add(action);
         updated.add(AiActionType.DO_NOTHING);
-        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, updated,
-                enabled, respondToChat, memoryEnabled,
-                inventoryEnabled, sharedConversation);
+        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, updated, enabled,
+                respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withEnabled(boolean enabled) {
-        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, respondToChat, memoryEnabled,
-                inventoryEnabled, sharedConversation);
+        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions, enabled,
+                respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withRespondToChat(boolean respondToChat) {
-        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, respondToChat, memoryEnabled,
-                inventoryEnabled, sharedConversation);
+        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions, enabled,
+                respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withMemoryEnabled(boolean memoryEnabled) {
-        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, respondToChat, memoryEnabled,
-                inventoryEnabled, sharedConversation);
+        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions, enabled,
+                respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withInventoryEnabled(boolean inventoryEnabled) {
-        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, respondToChat, memoryEnabled,
-                inventoryEnabled, sharedConversation);
+        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions, enabled,
+                respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withSharedConversation(boolean sharedConversation) {
-        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                enabled, respondToChat, memoryEnabled,
-                inventoryEnabled, sharedConversation);
+        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions, enabled,
+                respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
     }
 
     private static void append(StringBuilder target, String heading, String value) {
-        if (value.isBlank()) return;
-        if (!target.isEmpty()) target.append("\n\n");
+        if (value.isBlank())
+            return;
+        if (!target.isEmpty())
+            target.append("\n\n");
         target.append(heading).append(":\n").append(value);
     }
 

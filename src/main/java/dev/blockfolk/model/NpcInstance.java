@@ -56,14 +56,26 @@ public final class NpcInstance {
         this.spawnLocation = StoredLocation.from(spawnLocation);
     }
 
-    public StoredLocation getStoredLocation() { return location; }
-    public StoredLocation getStoredSpawnLocation() { return spawnLocation; }
+    public StoredLocation getStoredLocation() {
+        return location;
+    }
+    public StoredLocation getStoredSpawnLocation() {
+        return spawnLocation;
+    }
 
-    public boolean isAwaitingRespawn() { return respawnAtEpochMillis > 0L; }
-    public long getRespawnAtEpochMillis() { return respawnAtEpochMillis; }
-    public void setRespawnAtEpochMillis(long value) { respawnAtEpochMillis = Math.max(0L, value); }
+    public boolean isAwaitingRespawn() {
+        return respawnAtEpochMillis > 0L;
+    }
+    public long getRespawnAtEpochMillis() {
+        return respawnAtEpochMillis;
+    }
+    public void setRespawnAtEpochMillis(long value) {
+        respawnAtEpochMillis = Math.max(0L, value);
+    }
 
-    public void returnToSpawn() { location = spawnLocation; }
+    public void returnToSpawn() {
+        location = spawnLocation;
+    }
 
     public int getEntityId() {
         return entityId;
@@ -83,7 +95,8 @@ public final class NpcInstance {
 
     public void setTemporaryInventoryContents(ItemStack[] contents) {
         java.util.Arrays.fill(temporaryInventory, null);
-        if (contents == null) return;
+        if (contents == null)
+            return;
         for (int slot = 0; slot < Math.min(contents.length, temporaryInventory.length); slot++) {
             temporaryInventory[slot] = contents[slot] == null ? null : contents[slot].clone();
         }

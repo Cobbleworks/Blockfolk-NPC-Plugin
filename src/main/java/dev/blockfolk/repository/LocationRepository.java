@@ -27,21 +27,18 @@ public final class LocationRepository {
 
     public void loadAll() {
         locations.clear();
-        ConfigurationSection root = YamlConfiguration.loadConfiguration(file)
-                .getConfigurationSection("locations");
-        if (root == null) return;
+        ConfigurationSection root = YamlConfiguration.loadConfiguration(file).getConfigurationSection("locations");
+        if (root == null)
+            return;
         for (String storedKey : root.getKeys(false)) {
             ConfigurationSection section = root.getConfigurationSection(storedKey);
-            if (section == null) continue;
+            if (section == null)
+                continue;
             try {
-                ActionLocation location = new ActionLocation(
-                        section.getString("world"),
-                        section.getDouble("x"),
-                        section.getDouble("y"),
-                        section.getDouble("z"));
-                NamedLocation named = new NamedLocation(storedKey,
-                        section.getString("display-name", storedKey), location,
-                        section.getItemStack("icon"));
+                ActionLocation location = new ActionLocation(section.getString("world"), section.getDouble("x"),
+                        section.getDouble("y"), section.getDouble("z"));
+                NamedLocation named = new NamedLocation(storedKey, section.getString("display-name", storedKey),
+                        location, section.getItemStack("icon"));
                 locations.put(named.key(), named);
             } catch (IllegalArgumentException ignored) {
                 // Ignore malformed saved locations without preventing plugin startup.
@@ -68,7 +65,8 @@ public final class LocationRepository {
     }
 
     public boolean delete(NamedLocation location) {
-        if (locations.remove(location.key()) == null) return false;
+        if (locations.remove(location.key()) == null)
+            return false;
         saveAll();
         return true;
     }

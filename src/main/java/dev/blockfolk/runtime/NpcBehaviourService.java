@@ -139,14 +139,8 @@ public final class NpcBehaviourService implements Listener {
     private int customEmissionsThisTick;
     private boolean redstonePhysicsWarningLogged;
 
-    public NpcBehaviourService(
-            Plugin plugin,
-            NpcDefinitionRepository definitions,
-            NpcInstanceRegistry instances,
-            DialogService dialogService,
-            NpcQuestionService questionService,
-            int proximityCooldownSeconds
-    ) {
+    public NpcBehaviourService(Plugin plugin, NpcDefinitionRepository definitions, NpcInstanceRegistry instances,
+            DialogService dialogService, NpcQuestionService questionService, int proximityCooldownSeconds) {
         this.plugin = plugin;
         this.definitions = definitions;
         this.instances = instances;
@@ -168,8 +162,8 @@ public final class NpcBehaviourService implements Listener {
 
     public void start() {
         stop();
-        Bukkit.getOnlinePlayers().forEach(player ->
-                playerLocationSnapshots.put(player.getUniqueId(), player.getLocation().clone()));
+        Bukkit.getOnlinePlayers()
+                .forEach(player -> playerLocationSnapshots.put(player.getUniqueId(), player.getLocation().clone()));
         behaviourTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickBehaviour, 1L, 1L);
     }
 
@@ -203,37 +197,49 @@ public final class NpcBehaviourService implements Listener {
         if (definition == null) {
             return;
         }
-        Runnable completion = event == BehaviourEvent.SPAWN ? () -> startIdle(instance) : () -> { };
-        executeSequence(event, definition.getBehaviourActions(event), 0, instance, definition, actor, eventDetail, completion);
+        Runnable completion = event == BehaviourEvent.SPAWN ? () -> startIdle(instance) : () -> {
+        };
+        executeSequence(event, definition.getBehaviourActions(event), 0, instance, definition, actor, eventDetail,
+                completion);
     }
 
-    /** Updates an instance inventory and emits events for items entering or leaving it. */
+    /**
+     * Updates an instance inventory and emits events for items entering or leaving
+     * it.
+     */
     public void updateTemporaryInventory(NpcInstance instance, ItemStack[] contents, Entity actor) {
         ItemStack[] before = instance.getTemporaryInventoryContents();
         ItemStack[] after = contents == null ? new ItemStack[0] : contents;
         boolean dropped = hasUnmatchedItems(before, after);
         boolean received = hasUnmatchedItems(after, before);
         instance.setTemporaryInventoryContents(after);
-        if (dropped) trigger(BehaviourEvent.DROP_ITEM, instance, actor);
-        if (received) trigger(BehaviourEvent.RECEIVE_ITEM, instance, actor);
+        if (dropped)
+            trigger(BehaviourEvent.DROP_ITEM, instance, actor);
+        if (received)
+            trigger(BehaviourEvent.RECEIVE_ITEM, instance, actor);
     }
 
     private boolean hasUnmatchedItems(ItemStack[] source, ItemStack[] destination) {
         java.util.List<ItemStack> remaining = new java.util.ArrayList<>();
         for (ItemStack item : destination) {
-            if (item != null && !item.getType().isAir()) remaining.add(item.clone());
+            if (item != null && !item.getType().isAir())
+                remaining.add(item.clone());
         }
         for (ItemStack item : source) {
-            if (item == null || item.getType().isAir()) continue;
+            if (item == null || item.getType().isAir())
+                continue;
             int amount = item.getAmount();
             for (ItemStack candidate : remaining) {
-                if (amount == 0) break;
-                if (!item.isSimilar(candidate) || candidate.getAmount() == 0) continue;
+                if (amount == 0)
+                    break;
+                if (!item.isSimilar(candidate) || candidate.getAmount() == 0)
+                    continue;
                 int matched = Math.min(amount, candidate.getAmount());
                 amount -= matched;
                 candidate.setAmount(candidate.getAmount() - matched);
             }
-            if (amount > 0) return true;
+            if (amount > 0)
+                return true;
         }
         return false;
     }
@@ -245,13 +251,13 @@ public final class NpcBehaviourService implements Listener {
         }
         Object token = new Object();
         waypointActionSequences.put(instance.getId(), token);
-        executeSequence(null, List.copyOf(actions), 0, instance, definition, null,
-                "The NPC reached a route waypoint.",
+        executeSequence(null, List.copyOf(actions), 0, instance, definition, null, "The NPC reached a route waypoint.",
                 () -> waypointActionSequences.remove(instance.getId(), token));
     }
 
     public void emitCustomEvent(String eventName, Entity actor) {
-        if (eventName == null || eventName.isBlank()) return;
+        if (eventName == null || eventName.isBlank())
+            return;
         if (customEmissionTick != currentTick) {
             customEmissionTick = currentTick;
             customEmissionsThisTick = 0;
@@ -262,10 +268,13 @@ public final class NpcBehaviourService implements Listener {
         }
         for (NpcInstance target : List.copyOf(instances.findActive())) {
             NpcDefinition definition = definitions.find(target.getDefinitionKey()).orElse(null);
-            if (definition == null) continue;
+            if (definition == null)
+                continue;
             List<BehaviourAction> actions = definition.getCustomEventActions(eventName);
-            if (!actions.isEmpty()) executeSequence(null, actions, 0, target, definition, actor,
-                    "Custom event '" + eventName + "' was emitted.", () -> { });
+            if (!actions.isEmpty())
+                executeSequence(null, actions, 0, target, definition, actor,
+                        "Custom event '" + eventName + "' was emitted.", () -> {
+                        });
         }
     }
 
@@ -286,16 +295,19 @@ public final class NpcBehaviourService implements Listener {
         proximityCooldownUntilTick.keySet().removeIf(key -> key.instanceId().equals(instance.getId()));
         observedEntities.remove(instance.getId());
         entityNearbyCooldownUntilTick.remove(instance.getId());
-        if (aiControlService != null) aiControlService.forget(instance);
+        if (aiControlService != null)
+            aiControlService.forget(instance);
     }
 
     public MovementProfile movementFor(NpcInstance instance, NpcDefinition definition) {
         String route = routeOverrides.get(instance.getId());
-        WalkingSpeed speed = speedOverrides.getOrDefault(instance.getId(), definition.getMovementProfile().walkingSpeed());
+        WalkingSpeed speed = speedOverrides.getOrDefault(instance.getId(),
+                definition.getMovementProfile().walkingSpeed());
         if (routePaused.contains(instance.getId())) {
             return MovementProfile.disabled().withWalkingSpeed(speed);
         }
-        return route == null ? definition.getMovementProfile().withWalkingSpeed(speed)
+        return route == null
+                ? definition.getMovementProfile().withWalkingSpeed(speed)
                 : MovementProfile.routing(route, speed);
     }
 
@@ -307,7 +319,8 @@ public final class NpcBehaviourService implements Listener {
         String normalized = dev.blockfolk.model.NpcRoute.normalizeKey(routeKey);
         routeOverrides.entrySet().removeIf(entry -> {
             try {
-                if (!dev.blockfolk.model.NpcRoute.normalizeKey(entry.getValue()).equals(normalized)) return false;
+                if (!dev.blockfolk.model.NpcRoute.normalizeKey(entry.getValue()).equals(normalized))
+                    return false;
             } catch (IllegalArgumentException exception) {
                 return false;
             }
@@ -352,16 +365,8 @@ public final class NpcBehaviourService implements Listener {
         return waypointActionSequences.containsKey(instance.getId());
     }
 
-    private void executeSequence(
-            BehaviourEvent event,
-            java.util.List<BehaviourAction> actions,
-            int index,
-            NpcInstance instance,
-            NpcDefinition definition,
-            Entity actor,
-            String eventDetail,
-            Runnable completion
-    ) {
+    private void executeSequence(BehaviourEvent event, java.util.List<BehaviourAction> actions, int index,
+            NpcInstance instance, NpcDefinition definition, Entity actor, String eventDetail, Runnable completion) {
         if (instances.findById(instance.getId()).isEmpty()) {
             completion.run();
             return;
@@ -380,31 +385,33 @@ public final class NpcBehaviourService implements Listener {
         if (delayTicks <= 0L) {
             executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail, completion);
         } else {
-            Bukkit.getScheduler().runTaskLater(plugin,
-                    () -> executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail, completion), delayTicks);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> executeSequence(event, actions, index + 1, instance,
+                    definition, actor, eventDetail, completion), delayTicks);
         }
     }
 
-    private void askQuestion(BehaviourEvent event, List<BehaviourAction> parent, int index,
-            BehaviourAction action, NpcInstance instance, NpcDefinition definition, Entity actor,
-            String eventDetail, Runnable completion) {
+    private void askQuestion(BehaviourEvent event, List<BehaviourAction> parent, int index, BehaviourAction action,
+            NpcInstance instance, NpcDefinition definition, Entity actor, String eventDetail, Runnable completion) {
         Player player = questionPlayer(instance, actor);
         if (player == null) {
             executeSequence(event, action.question().cancelActions(), 0, instance, definition, actor, eventDetail,
-                    () -> executeSequence(event, parent, index + 1, instance, definition, actor, eventDetail, completion));
+                    () -> executeSequence(event, parent, index + 1, instance, definition, actor, eventDetail,
+                            completion));
             return;
         }
         questionService.enqueue(player, instance, definition.getDisplayName(), definition.getColor().textColor(),
                 action.question(),
                 (branch, done) -> executeSequence(event, branch, 0, instance, definition, player, eventDetail,
-                        () -> executeSequence(event, parent, index + 1, instance, definition, player, eventDetail, done)));
+                        () -> executeSequence(event, parent, index + 1, instance, definition, player, eventDetail,
+                                done)));
         // A duplicate intentionally stops only this repeated trigger. Its parent
         // continuation is not run, preventing idle loops from producing side effects.
     }
 
     private Player questionPlayer(NpcInstance instance, Entity actor) {
         Location location = instance.getLocation();
-        if (location.getWorld() == null) return null;
+        if (location.getWorld() == null)
+            return null;
         if (actor instanceof Player direct && direct.isOnline() && direct.getWorld() == location.getWorld()
                 && direct.getLocation().distanceSquared(location) <= FOLLOW_ACQUIRE_RANGE_SQUARED) {
             return direct;
@@ -427,8 +434,8 @@ public final class NpcBehaviourService implements Listener {
             idleCycles.remove(instance.getId(), token);
             return;
         }
-        executeSequence(BehaviourEvent.IDLE, definition.getBehaviourActions(BehaviourEvent.IDLE), 0,
-                instance, definition, null, "The NPC has been idle.", () -> Bukkit.getScheduler().runTaskLater(plugin,
+        executeSequence(BehaviourEvent.IDLE, definition.getBehaviourActions(BehaviourEvent.IDLE), 0, instance,
+                definition, null, "The NPC has been idle.", () -> Bukkit.getScheduler().runTaskLater(plugin,
                         () -> runIdleCycle(instance, token), IDLE_REPEAT_TICKS));
     }
 
@@ -436,8 +443,7 @@ public final class NpcBehaviourService implements Listener {
         if (action.type() == BehaviourActionType.WAIT) {
             return secondsToTicks(action.value());
         }
-        if (action.type() == BehaviourActionType.SEND_DIALOG
-                || action.type() == BehaviourActionType.SHOW_HOLO_DIALOG) {
+        if (action.type() == BehaviourActionType.SEND_DIALOG || action.type() == BehaviourActionType.SHOW_HOLO_DIALOG) {
             return DialogService.lineDurationSeconds(action.value()) * 20L;
         }
         return 0L;
@@ -475,13 +481,15 @@ public final class NpcBehaviourService implements Listener {
         LivingEntity npc = instances.findEntity(instance).orElse(null);
         String detail = "The NPC took " + String.format(java.util.Locale.ROOT, "%.1f", event.getFinalDamage())
                 + " damage" + (actor == null ? "." : " from " + actor.getName() + ".")
-                + (npc == null ? "" : " Current health: "
-                        + String.format(java.util.Locale.ROOT, "%.1f / %.1f",
-                                Math.max(0, npc.getHealth() - event.getFinalDamage()), EntityHealth.maximum(npc)) + ".");
+                + (npc == null
+                        ? ""
+                        : " Current health: " + String.format(java.util.Locale.ROOT, "%.1f / %.1f",
+                                Math.max(0, npc.getHealth() - event.getFinalDamage()), EntityHealth.maximum(npc))
+                                + ".");
         // An attack is more specific and higher-priority than generic damage,
         // so it gets the first opportunity to invoke a throttled AI action.
-        if (actor != null) trigger(BehaviourEvent.NPC_ATTACKED, instance, actor,
-                actor.getName() + " attacked the NPC. " + detail);
+        if (actor != null)
+            trigger(BehaviourEvent.NPC_ATTACKED, instance, actor, actor.getName() + " attacked the NPC. " + detail);
         trigger(BehaviourEvent.DAMAGE_TAKEN, instance, actor, detail);
         Bukkit.getScheduler().runTask(plugin, () -> checkLowHealth(instance, actor));
     }
@@ -489,7 +497,8 @@ public final class NpcBehaviourService implements Listener {
     private Entity damageActor(Entity damager) {
         if (damager instanceof Projectile projectile) {
             ProjectileSource shooter = projectile.getShooter();
-            if (shooter instanceof Entity entity) return entity;
+            if (shooter instanceof Entity entity)
+                return entity;
         }
         return damager;
     }
@@ -517,9 +526,8 @@ public final class NpcBehaviourService implements Listener {
         Player player = event.getPlayer();
         String message = PlainTextComponentSerializer.plainText().serialize(event.message());
         Location chatLocation = playerLocationSnapshots.get(player.getUniqueId());
-        Bukkit.getScheduler().runTask(plugin, () ->
-                handlePlayerChat(player, message,
-                        chatLocation == null ? player.getLocation().clone() : chatLocation));
+        Bukkit.getScheduler().runTask(plugin, () -> handlePlayerChat(player, message,
+                chatLocation == null ? player.getLocation().clone() : chatLocation));
     }
 
     private void handlePlayerChat(Player player, String message, Location chatLocation) {
@@ -528,7 +536,8 @@ public final class NpcBehaviourService implements Listener {
         String detail = "Player " + player.getName() + " said: \"" + message + "\"";
         for (NpcInstance instance : nearby) {
             NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-            if (definition == null) continue;
+            if (definition == null)
+                continue;
             if (aiControlService != null && definition.getAiControlSettings().enabled()
                     && definition.getAiControlSettings().respondToChat()) {
                 aiControlService.rememberPlayerMessage(instance, player, message);
@@ -536,10 +545,10 @@ public final class NpcBehaviourService implements Listener {
             }
         }
         if (aiControlService != null && !aiGroup.isEmpty()) {
-            aiControlService.invokeChatGroup(detail, aiGroup, player, (instance, result) ->
-                    definitions.find(instance.getDefinitionKey()).ifPresent(definition ->
-                            applyAiDecision(BehaviourEvent.PLAYER_CHAT, result, instance, definition, player,
-                                    false)));
+            aiControlService.invokeChatGroup(detail, aiGroup, player,
+                    (instance, result) -> definitions.find(instance.getDefinitionKey())
+                            .ifPresent(definition -> applyAiDecision(BehaviourEvent.PLAYER_CHAT, result, instance,
+                                    definition, player, false)));
         }
     }
 
@@ -547,8 +556,8 @@ public final class NpcBehaviourService implements Listener {
         return candidates.stream()
                 .filter(instance -> instance.getLocation().getWorld() == chatLocation.getWorld()
                         && coordinateDistanceSquared(instance.getLocation(), chatLocation) <= CHAT_RANGE_SQUARED)
-                .sorted(java.util.Comparator.comparingDouble(
-                        instance -> coordinateDistanceSquared(instance.getLocation(), chatLocation)))
+                .sorted(java.util.Comparator
+                        .comparingDouble(instance -> coordinateDistanceSquared(instance.getLocation(), chatLocation)))
                 .toList();
     }
 
@@ -582,26 +591,19 @@ public final class NpcBehaviourService implements Listener {
         }
         boolean low = entity.getHealth() <= definition.getCombatProfile().maxHealth() * 0.25;
         if (low && lowHealthTriggered.add(instance.getId())) {
-            trigger(BehaviourEvent.LOW_HEALTH, instance, actor); 
-        }else if (!low) {
+            trigger(BehaviourEvent.LOW_HEALTH, instance, actor);
+        } else if (!low) {
             lowHealthTriggered.remove(instance.getId());
         }
     }
 
-    private void execute(
-            BehaviourEvent event,
-            BehaviourAction action,
-            NpcInstance instance,
-            NpcDefinition definition,
-            Entity actor,
-            String eventDetail
-    ) {
+    private void execute(BehaviourEvent event, BehaviourAction action, NpcInstance instance, NpcDefinition definition,
+            Entity actor, String eventDetail) {
         switch (action.type()) {
-            case SEND_DIALOG ->
-                sendDialog(event, instance, definition, action.value(), actor);
-            case SHOW_HOLO_DIALOG ->
-                dialogService.showHologram(instance, definition, action.value());
-            case ASK_QUESTION -> { /* Asynchronous and handled by executeSequence. */ }
+            case SEND_DIALOG -> sendDialog(event, instance, definition, action.value(), actor);
+            case SHOW_HOLO_DIALOG -> dialogService.showHologram(instance, definition, action.value());
+            case ASK_QUESTION -> {
+                /* Asynchronous and handled by executeSequence. */ }
             case SET_ROUTE -> {
                 if (action.value() != null) {
                     try {
@@ -615,7 +617,8 @@ public final class NpcBehaviourService implements Listener {
             }
             case RUN_CONSOLE_COMMAND -> {
                 if (action.value() != null) {
-                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(), placeholders(action.value(), instance, definition, actor));
+                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(),
+                            placeholders(action.value(), instance, definition, actor));
                 }
             }
             case START_COMBAT -> {
@@ -638,8 +641,7 @@ public final class NpcBehaviourService implements Listener {
                 routePaused.add(instance.getId());
                 instances.stopNavigating(instance);
             }
-            case SET_WALK_SPEED ->
-                speedOverrides.put(instance.getId(), WalkingSpeed.fromStored(action.value()));
+            case SET_WALK_SPEED -> speedOverrides.put(instance.getId(), WalkingSpeed.fromStored(action.value()));
             case MOVE_TO -> ActionLocation.parse(action.value()).map(ActionLocation::toLocation)
                     .filter(java.util.Objects::nonNull).ifPresent(target -> {
                         stopFollowing(instance);
@@ -655,7 +657,8 @@ public final class NpcBehaviourService implements Listener {
                         instances.move(instance, target);
                     });
             // WAIT is handled by executeSequence: it only delays the next action.
-            case WAIT -> { }
+            case WAIT -> {
+            }
             case AI_TRIGGER -> invokeAi(event, eventDetail, instance, definition, actor);
             case INTERACT -> interactWithNearbySwitches(instance);
             case MINE_BLOCKS -> mineNearbyBlocks(instance);
@@ -663,8 +666,8 @@ public final class NpcBehaviourService implements Listener {
             case SHOW_INVENTORY -> showInventory(instance, actor);
             case DROP_INVENTORY -> dropInventory(instance);
             case HARVEST -> harvestNearbyCrops(instance);
-            case EMIT_EVENT -> emitCustomEvent(action.value(), actor != null
-                    ? actor : instances.findEntity(instance).orElse(null));
+            case EMIT_EVENT ->
+                emitCustomEvent(action.value(), actor != null ? actor : instances.findEntity(instance).orElse(null));
             case SLEEP -> instances.pose(instance, Pose.SLEEPING);
             case SWIM -> instances.pose(instance, Pose.SWIMMING);
             case FALL_FLY -> instances.pose(instance, Pose.FALL_FLYING);
@@ -680,14 +683,8 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private void applyAiDecision(
-            BehaviourEvent event,
-            AiDecisionResult result,
-            NpcInstance instance,
-            NpcDefinition definition,
-            Entity actor,
-            boolean rememberOwnSpeech
-    ) {
+    private void applyAiDecision(BehaviourEvent event, AiDecisionResult result, NpcInstance instance,
+            NpcDefinition definition, Entity actor, boolean rememberOwnSpeech) {
         for (AiDecision.Action action : result.decision().actions()) {
             Entity target = resolveAiTarget(action.target(), result.targets());
             switch (action.type()) {
@@ -702,16 +699,19 @@ public final class NpcBehaviourService implements Listener {
                 case START_COMBAT -> {
                     if (combatService != null) {
                         Entity selected = action.target() == null
-                                ? resolveAiTarget("nearest_attackable", result.targets()) : target;
+                                ? resolveAiTarget("nearest_attackable", result.targets())
+                                : target;
                         combatService.startDirectedCombat(instance, selected);
                     }
                 }
                 case STOP_COMBAT -> {
-                    if (combatService != null) combatService.exitCombat(instance);
+                    if (combatService != null)
+                        combatService.exitCombat(instance);
                 }
                 case FLEE_FROM -> fleeFrom(instance, target);
                 case FOLLOW -> {
-                    if (target instanceof Player player) startFollowing(instance, player);
+                    if (target instanceof Player player)
+                        startFollowing(instance, player);
                 }
                 case UNFOLLOW -> stopFollowing(instance);
                 case INTERACT -> startAiInteraction(instance, action.target(), result.targets());
@@ -740,28 +740,32 @@ public final class NpcBehaviourService implements Listener {
                     announceMemory(instance, definition);
                 }
                 case DROP_ITEM -> dropAiInventoryItem(instance, definition, action.target());
-                case DO_NOTHING -> { }
+                case DO_NOTHING -> {
+                }
             }
         }
     }
 
-    private void invokeAi(BehaviourEvent event, String eventDetail, NpcInstance instance,
-            NpcDefinition definition, Entity actor) {
-        if (aiControlService != null) aiControlService.invoke(event, eventDetail, instance, definition, actor,
-                result -> applyAiDecision(event, result, instance, definition, actor, true));
+    private void invokeAi(BehaviourEvent event, String eventDetail, NpcInstance instance, NpcDefinition definition,
+            Entity actor) {
+        if (aiControlService != null)
+            aiControlService.invoke(event, eventDetail, instance, definition, actor,
+                    result -> applyAiDecision(event, result, instance, definition, actor, true));
     }
 
     private Entity resolveAiTarget(String alias, AiTargetSnapshot targets) {
-        if (alias == null || targets == null) return null;
+        if (alias == null || targets == null)
+            return null;
         Entity entity = targets.entityId(alias).map(Bukkit::getEntity).orElse(null);
-        if (entity != null && entity.isValid()) return entity;
-        return targets.npcInstanceId(alias).flatMap(instances::findById)
-                .flatMap(instances::findEntity).filter(Entity::isValid).orElse(null);
+        if (entity != null && entity.isValid())
+            return entity;
+        return targets.npcInstanceId(alias).flatMap(instances::findById).flatMap(instances::findEntity)
+                .filter(Entity::isValid).orElse(null);
     }
 
-    private java.util.Optional<Location> resolveAiMoveTarget(
-            String alias, AiTargetSnapshot targets) {
-        if (alias == null || targets == null) return java.util.Optional.empty();
+    private java.util.Optional<Location> resolveAiMoveTarget(String alias, AiTargetSnapshot targets) {
+        if (alias == null || targets == null)
+            return java.util.Optional.empty();
         Entity standardTarget = resolveAiTarget(alias, targets);
         if (standardTarget != null && standardTarget.isValid()) {
             return java.util.Optional.of(standardTarget.getLocation());
@@ -771,7 +775,8 @@ public final class NpcBehaviourService implements Listener {
 
     private static int targetIndex(String alias) {
         int separator = alias.lastIndexOf('_');
-        if (separator < 0) return -1;
+        if (separator < 0)
+            return -1;
         try {
             return Integer.parseInt(alias.substring(separator + 1)) - 1;
         } catch (NumberFormatException ignored) {
@@ -781,32 +786,37 @@ public final class NpcBehaviourService implements Listener {
 
     private void dropAiInventoryItem(NpcInstance instance, NpcDefinition definition, String target) {
         if (!definition.getAiControlSettings().inventoryEnabled() || target == null
-                || !target.startsWith("inventory_slot_")) return;
+                || !target.startsWith("inventory_slot_"))
+            return;
         int slot = targetIndex(target);
         ItemStack[] contents = instance.getTemporaryInventoryContents();
-        if (slot < 0 || slot >= contents.length) return;
+        if (slot < 0 || slot >= contents.length)
+            return;
         ItemStack item = contents[slot];
         Location center = instance.getLocation();
-        if (item == null || item.getType().isAir() || center.getWorld() == null) return;
+        if (item == null || item.getType().isAir() || center.getWorld() == null)
+            return;
         contents[slot] = null;
         dropItemForNpc(instance, item);
         updateTemporaryInventory(instance, contents, null);
     }
 
     private void playAiAnimation(NpcInstance instance, String animation) {
-        if (animation == null) return;
+        if (animation == null)
+            return;
         switch (animation) {
             case "wave" -> instances.wave(instance);
             case "jump" -> instances.jump(instance);
             case "sneak" -> instances.pose(instance, Pose.SNEAKING);
             case "stand" -> instances.stand(instance);
-            default -> { }
+            default -> {
+            }
         }
     }
 
     private void announceMemory(NpcInstance instance, NpcDefinition definition) {
-        Component message = Component.text(definition.getDisplayName() + " remembered this...",
-                NamedTextColor.GRAY).decorate(TextDecoration.ITALIC);
+        Component message = Component.text(definition.getDisplayName() + " remembered this...", NamedTextColor.GRAY)
+                .decorate(TextDecoration.ITALIC);
         Location location = instance.getLocation();
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getWorld() == location.getWorld()
@@ -817,10 +827,12 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void fleeFrom(NpcInstance instance, Entity target) {
-        if (target == null || target.getWorld() != instance.getLocation().getWorld()) return;
+        if (target == null || target.getWorld() != instance.getLocation().getWorld())
+            return;
         Location origin = instance.getLocation();
         Vector away = origin.toVector().subtract(target.getLocation().toVector()).setY(0);
-        if (away.lengthSquared() < 0.01) away = new Vector(1, 0, 0);
+        if (away.lengthSquared() < 0.01)
+            away = new Vector(1, 0, 0);
         Location destination = origin.clone().add(away.normalize().multiply(10));
         stopFollowing(instance);
         moveTargets.put(instance.getId(), destination);
@@ -849,7 +861,8 @@ public final class NpcBehaviourService implements Listener {
         boolean cleanRuntimeState = currentTick % 20L == 0L;
         Set<UUID> active = cleanRuntimeState ? new HashSet<>() : null;
         for (NpcInstance instance : instances.findActive()) {
-            if (cleanRuntimeState) active.add(instance.getId());
+            if (cleanRuntimeState)
+                active.add(instance.getId());
             if (!tickAiInteraction(instance)) {
                 tickMoveTo(instance);
                 tickFollow(instance);
@@ -862,8 +875,8 @@ public final class NpcBehaviourService implements Listener {
             waypointActionSequences.keySet().retainAll(active);
             aiInteractions.keySet().retainAll(active);
             aiInteractionQueues.keySet().retainAll(active);
-            itemPickupLockedUntilTick.entrySet().removeIf(entry -> !active.contains(entry.getKey())
-                    || entry.getValue() <= currentTick);
+            itemPickupLockedUntilTick.entrySet()
+                    .removeIf(entry -> !active.contains(entry.getKey()) || entry.getValue() <= currentTick);
             idleCycles.keySet().retainAll(active);
             observedEntities.keySet().retainAll(active);
             entityNearbyCooldownUntilTick.keySet().retainAll(active);
@@ -875,18 +888,23 @@ public final class NpcBehaviourService implements Listener {
                 .collect(java.util.stream.Collectors.toSet());
         for (NpcInstance instance : instances.findActive()) {
             NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-            if (definition == null || definition.getBehaviourActions(BehaviourEvent.ENTITY_NEARBY).isEmpty()) continue;
+            if (definition == null || definition.getBehaviourActions(BehaviourEvent.ENTITY_NEARBY).isEmpty())
+                continue;
             Location center = instance.getLocation();
-            if (center.getWorld() == null) continue;
+            if (center.getWorld() == null)
+                continue;
             List<Entity> nearby = center.getWorld().getNearbyEntities(center, 8, 8, 8).stream()
                     .filter(entity -> entity instanceof LivingEntity && !(entity instanceof Player))
                     .filter(entity -> !npcEntityIds.contains(entity.getEntityId()))
                     .filter(entity -> !instances.isNavigationEntity(entity))
-                    .sorted(Comparator.comparingDouble(entity -> entity.getLocation().distanceSquared(center))).toList();
+                    .sorted(Comparator.comparingDouble(entity -> entity.getLocation().distanceSquared(center)))
+                    .toList();
             Set<UUID> current = nearby.stream().map(Entity::getUniqueId).collect(java.util.stream.Collectors.toSet());
             Set<UUID> previous = observedEntities.put(instance.getId(), current);
-            if (previous == null) previous = Set.of();
-            if (currentTick < entityNearbyCooldownUntilTick.getOrDefault(instance.getId(), 0L)) continue;
+            if (previous == null)
+                previous = Set.of();
+            if (currentTick < entityNearbyCooldownUntilTick.getOrDefault(instance.getId(), 0L))
+                continue;
             Set<UUID> old = previous;
             nearby.stream().filter(entity -> !old.contains(entity.getUniqueId())).findFirst().ifPresent(entity -> {
                 entityNearbyCooldownUntilTick.put(instance.getId(), currentTick + 20L * 20L);
@@ -990,7 +1008,8 @@ public final class NpcBehaviourService implements Listener {
 
     private void updateFollowTarget(NpcInstance instance, FollowState state, Player player) {
         UUID playerId = player == null ? null : player.getUniqueId();
-        if (java.util.Objects.equals(state.playerId, playerId)) return;
+        if (java.util.Objects.equals(state.playerId, playerId))
+            return;
         notifyFollowChange(instance, onlinePlayer(state.playerId), false);
         state.playerId = playerId;
         notifyFollowChange(instance, player, true);
@@ -1001,12 +1020,12 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void notifyFollowChange(NpcInstance instance, Player player, boolean started) {
-        if (player == null) return;
-        definitions.find(instance.getDefinitionKey()).ifPresent(definition -> player.sendMessage(
-                Component.text(definition.getDisplayName() + (started
-                                ? " is now following you..."
-                                : " is no longer following you.."), NamedTextColor.GRAY)
-                        .decorate(TextDecoration.ITALIC)));
+        if (player == null)
+            return;
+        definitions.find(instance.getDefinitionKey()).ifPresent(definition -> player.sendMessage(Component
+                .text(definition.getDisplayName()
+                        + (started ? " is now following you..." : " is no longer following you.."), NamedTextColor.GRAY)
+                .decorate(TextDecoration.ITALIC)));
     }
 
     private void tickFollow(NpcInstance instance) {
@@ -1046,41 +1065,46 @@ public final class NpcBehaviourService implements Listener {
             state.repathTicks = FOLLOW_REPATH_TICKS;
         }
         WalkingSpeed speed = distanceSquared >= FOLLOW_CATCH_UP_RANGE_SQUARED
-                ? WalkingSpeed.VERY_FAST : WalkingSpeed.NORMAL;
+                ? WalkingSpeed.VERY_FAST
+                : WalkingSpeed.NORMAL;
         instances.navigate(instance, state.navigationTarget, speed);
     }
 
     private void interactWithNearbySwitches(NpcInstance instance) {
         Location center = instance.getLocation();
-        if (center.getWorld() == null) return;
+        if (center.getWorld() == null)
+            return;
         for (int x = -2; x <= 2; x++) {
             for (int y = -2; y <= 2; y++) {
                 for (int z = -2; z <= 2; z++) {
                     Block block = center.getBlock().getRelative(x, y, z);
-                    if (block.getType() != Material.LEVER && !Tag.BUTTONS.isTagged(block.getType())) continue;
+                    if (block.getType() != Material.LEVER && !Tag.BUTTONS.isTagged(block.getType()))
+                        continue;
                     toggleSwitch(block);
                 }
             }
         }
     }
 
-    private void startAiInteraction(
-            NpcInstance instance, String requestedTarget, AiTargetSnapshot targets) {
+    private void startAiInteraction(NpcInstance instance, String requestedTarget, AiTargetSnapshot targets) {
         String normalizedTarget = requestedTarget == null ? "nearest_switch" : requestedTarget;
         AiInteractionKind kind = normalizedTarget.startsWith("take_from_container")
                 ? AiInteractionKind.TAKE_FROM_CONTAINER
                 : normalizedTarget.startsWith("store_in_container")
-                        ? AiInteractionKind.STORE_IN_CONTAINER : AiInteractionKind.SWITCH;
+                        ? AiInteractionKind.STORE_IN_CONTAINER
+                        : AiInteractionKind.SWITCH;
         Location explicitLocation = targets == null ? null : targets.location(normalizedTarget).orElse(null);
         boolean requiresExplicitLocation = normalizedTarget.startsWith("nearby_lever_")
                 || normalizedTarget.startsWith("nearby_button_")
                 || normalizedTarget.matches("(?:take_from|store_in)_container_[1-9][0-9]*");
-        if (requiresExplicitLocation && explicitLocation == null) return;
+        if (requiresExplicitLocation && explicitLocation == null)
+            return;
         AiInteractionRequest request = new AiInteractionRequest(kind, explicitLocation);
         if (aiInteractions.containsKey(instance.getId())) {
-            ArrayDeque<AiInteractionRequest> queue = aiInteractionQueues.computeIfAbsent(
-                    instance.getId(), ignored -> new ArrayDeque<>());
-            if (queue.size() < MAX_QUEUED_AI_INTERACTIONS) queue.addLast(request);
+            ArrayDeque<AiInteractionRequest> queue = aiInteractionQueues.computeIfAbsent(instance.getId(),
+                    ignored -> new ArrayDeque<>());
+            if (queue.size() < MAX_QUEUED_AI_INTERACTIONS)
+                queue.addLast(request);
             return;
         }
         beginAiInteraction(instance, request);
@@ -1093,20 +1117,23 @@ public final class NpcBehaviourService implements Listener {
                         ? findNearestSwitch(current)
                         : findNearestContainer(current, instance, request.kind())
                 : request.blockLocation().getBlock();
-        if (target == null || !isUsableInteractionTarget(target, request.kind())) return false;
+        if (target == null || !isUsableInteractionTarget(target, request.kind()))
+            return false;
         stopFollowing(instance);
         moveTargets.remove(instance.getId());
         instances.stand(instance);
         instances.stopNavigating(instance);
-        aiInteractions.put(instance.getId(), new AiInteraction(
-                request.kind(), target.getLocation(), interactionDestination(target, current)));
+        aiInteractions.put(instance.getId(),
+                new AiInteraction(request.kind(), target.getLocation(), interactionDestination(target, current)));
         return true;
     }
 
     private boolean tickAiInteraction(NpcInstance instance) {
         AiInteraction interaction = aiInteractions.get(instance.getId());
-        if (interaction == null) return false;
-        if (combatService != null && combatService.isEngaged(instance)) return true;
+        if (interaction == null)
+            return false;
+        if (combatService != null && combatService.isEngaged(instance))
+            return true;
         Block target = interaction.blockLocation().getBlock();
         if (!isUsableInteractionTarget(target, interaction.kind())) {
             return finishAiInteraction(instance);
@@ -1144,15 +1171,15 @@ public final class NpcBehaviourService implements Listener {
         instances.stopNavigating(instance);
         ArrayDeque<AiInteractionRequest> queue = aiInteractionQueues.get(instance.getId());
         while (queue != null && !queue.isEmpty()) {
-            if (beginAiInteraction(instance, queue.removeFirst())) return true;
+            if (beginAiInteraction(instance, queue.removeFirst()))
+                return true;
         }
         aiInteractionQueues.remove(instance.getId());
         return false;
     }
 
     private boolean isUsableInteractionTarget(Block block, AiInteractionKind kind) {
-        return kind == AiInteractionKind.SWITCH ? isUsableSwitch(block)
-                : block.getState() instanceof Container;
+        return kind == AiInteractionKind.SWITCH ? isUsableSwitch(block) : block.getState() instanceof Container;
     }
 
     private void performAiInteraction(NpcInstance instance, Block block, AiInteractionKind kind) {
@@ -1160,7 +1187,8 @@ public final class NpcBehaviourService implements Listener {
             toggleSwitch(block);
             return;
         }
-        if (!(block.getState() instanceof Container container)) return;
+        if (!(block.getState() instanceof Container container))
+            return;
         if (kind == AiInteractionKind.TAKE_FROM_CONTAINER) {
             takeFromContainer(instance, container);
         } else {
@@ -1169,19 +1197,22 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private Block findNearestSwitch(Location center) {
-        if (center.getWorld() == null) return null;
+        if (center.getWorld() == null)
+            return null;
         Block nearest = null;
         double nearestDistance = Double.MAX_VALUE;
         for (int x = -AI_INTERACT_RANGE; x <= AI_INTERACT_RANGE; x++) {
             for (int y = -AI_INTERACT_RANGE; y <= AI_INTERACT_RANGE; y++) {
                 int blockY = center.getBlockY() + y;
-                if (blockY < center.getWorld().getMinHeight() || blockY >= center.getWorld().getMaxHeight()) continue;
+                if (blockY < center.getWorld().getMinHeight() || blockY >= center.getWorld().getMaxHeight())
+                    continue;
                 for (int z = -AI_INTERACT_RANGE; z <= AI_INTERACT_RANGE; z++) {
                     double distance = x * x + y * y + z * z;
-                    if (distance > AI_INTERACT_RANGE * AI_INTERACT_RANGE || distance >= nearestDistance) continue;
-                    Block block = center.getWorld().getBlockAt(center.getBlockX() + x, blockY,
-                            center.getBlockZ() + z);
-                    if (!isUsableSwitch(block)) continue;
+                    if (distance > AI_INTERACT_RANGE * AI_INTERACT_RANGE || distance >= nearestDistance)
+                        continue;
+                    Block block = center.getWorld().getBlockAt(center.getBlockX() + x, blockY, center.getBlockZ() + z);
+                    if (!isUsableSwitch(block))
+                        continue;
                     nearest = block;
                     nearestDistance = distance;
                 }
@@ -1191,20 +1222,23 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private Block findNearestContainer(Location center, NpcInstance instance, AiInteractionKind kind) {
-        if (center.getWorld() == null) return null;
+        if (center.getWorld() == null)
+            return null;
         Block nearest = null;
         double nearestDistance = Double.MAX_VALUE;
         for (int x = -AI_INTERACT_RANGE; x <= AI_INTERACT_RANGE; x++) {
             for (int y = -AI_INTERACT_RANGE; y <= AI_INTERACT_RANGE; y++) {
                 int blockY = center.getBlockY() + y;
-                if (blockY < center.getWorld().getMinHeight() || blockY >= center.getWorld().getMaxHeight()) continue;
+                if (blockY < center.getWorld().getMinHeight() || blockY >= center.getWorld().getMaxHeight())
+                    continue;
                 for (int z = -AI_INTERACT_RANGE; z <= AI_INTERACT_RANGE; z++) {
                     double distance = x * x + y * y + z * z;
-                    if (distance > AI_INTERACT_RANGE * AI_INTERACT_RANGE || distance >= nearestDistance) continue;
-                    Block block = center.getWorld().getBlockAt(center.getBlockX() + x, blockY,
-                            center.getBlockZ() + z);
+                    if (distance > AI_INTERACT_RANGE * AI_INTERACT_RANGE || distance >= nearestDistance)
+                        continue;
+                    Block block = center.getWorld().getBlockAt(center.getBlockX() + x, blockY, center.getBlockZ() + z);
                     if (!(block.getState() instanceof Container container)
-                            || !isUsableContainer(container.getInventory(), instance, kind)) continue;
+                            || !isUsableContainer(container.getInventory(), instance, kind))
+                        continue;
                     nearest = block;
                     nearestDistance = distance;
                 }
@@ -1216,23 +1250,27 @@ public final class NpcBehaviourService implements Listener {
     private boolean isUsableContainer(Inventory inventory, NpcInstance instance, AiInteractionKind kind) {
         if (kind == AiInteractionKind.TAKE_FROM_CONTAINER) {
             for (ItemStack item : inventory.getContents()) {
-                if (item != null && !item.getType().isAir()) return true;
+                if (item != null && !item.getType().isAir())
+                    return true;
             }
             return false;
         }
         for (ItemStack carried : instance.getTemporaryInventoryContents()) {
-            if (carried == null || carried.getType().isAir()) continue;
-            if (inventory.firstEmpty() >= 0) return true;
+            if (carried == null || carried.getType().isAir())
+                continue;
+            if (inventory.firstEmpty() >= 0)
+                return true;
             for (ItemStack stored : inventory.getContents()) {
-                if (stored != null && stored.isSimilar(carried)
-                        && stored.getAmount() < stored.getMaxStackSize()) return true;
+                if (stored != null && stored.isSimilar(carried) && stored.getAmount() < stored.getMaxStackSize())
+                    return true;
             }
         }
         return false;
     }
 
     private boolean isUsableSwitch(Block block) {
-        if (block.getType() != Material.LEVER && !Tag.BUTTONS.isTagged(block.getType())) return false;
+        if (block.getType() != Material.LEVER && !Tag.BUTTONS.isTagged(block.getType()))
+            return false;
         return block.getBlockData() instanceof Powerable powerable
                 && (!Tag.BUTTONS.isTagged(block.getType()) || !powerable.isPowered());
     }
@@ -1254,9 +1292,11 @@ public final class NpcBehaviourService implements Listener {
 
     private void toggleSwitch(Block block) {
         BlockData data = block.getBlockData();
-        if (!(data instanceof Powerable powerable) || !(data instanceof Switch switchData)) return;
+        if (!(data instanceof Powerable powerable) || !(data instanceof Switch switchData))
+            return;
         boolean button = Tag.BUTTONS.isTagged(block.getType());
-        if (button && powerable.isPowered()) return;
+        if (button && powerable.isPowered())
+            return;
         int oldCurrent = powerable.isPowered() ? 15 : 0;
         BlockRedstoneEvent event = new BlockRedstoneEvent(block, oldCurrent, oldCurrent == 0 ? 15 : 0);
         Bukkit.getPluginManager().callEvent(event);
@@ -1274,9 +1314,11 @@ public final class NpcBehaviourService implements Listener {
 
     private void releaseButton(Location location) {
         Block block = location.getBlock();
-        if (!Tag.BUTTONS.isTagged(block.getType())) return;
+        if (!Tag.BUTTONS.isTagged(block.getType()))
+            return;
         BlockData data = block.getBlockData();
-        if (!(data instanceof Powerable powerable) || !powerable.isPowered()) return;
+        if (!(data instanceof Powerable powerable) || !powerable.isPowered())
+            return;
         BlockRedstoneEvent event = new BlockRedstoneEvent(block, 15, 0);
         Bukkit.getPluginManager().callEvent(event);
         powerable.setPowered(event.getNewCurrent() > 0);
@@ -1294,15 +1336,15 @@ public final class NpcBehaviourService implements Listener {
         try {
             Object level = block.getWorld().getClass().getMethod("getHandle").invoke(block.getWorld());
             Class<?> blockPosType = Class.forName("net.minecraft.core.BlockPos");
-            Object supportPos = blockPosType.getConstructor(int.class, int.class, int.class)
-                    .newInstance(support.getX(), support.getY(), support.getZ());
-            Object switchPos = blockPosType.getConstructor(int.class, int.class, int.class)
-                    .newInstance(block.getX(), block.getY(), block.getZ());
+            Object supportPos = blockPosType.getConstructor(int.class, int.class, int.class).newInstance(support.getX(),
+                    support.getY(), support.getZ());
+            Object switchPos = blockPosType.getConstructor(int.class, int.class, int.class).newInstance(block.getX(),
+                    block.getY(), block.getZ());
             Object blockState = level.getClass().getMethod("getBlockState", blockPosType).invoke(level, switchPos);
             Object sourceBlock = blockState.getClass().getMethod("getBlock").invoke(blockState);
             Class<?> nativeBlockType = Class.forName("net.minecraft.world.level.block.Block");
-            level.getClass().getMethod("updateNeighborsAt", blockPosType, nativeBlockType)
-                    .invoke(level, supportPos, sourceBlock);
+            level.getClass().getMethod("updateNeighborsAt", blockPosType, nativeBlockType).invoke(level, supportPos,
+                    sourceBlock);
         } catch (ReflectiveOperationException exception) {
             if (!redstonePhysicsWarningLogged) {
                 redstonePhysicsWarningLogged = true;
@@ -1318,13 +1360,16 @@ public final class NpcBehaviourService implements Listener {
 
     private void mineNearbyBlocks(NpcInstance instance, String requestedTarget, boolean autonomousRange) {
         Location feet = instances.currentLocation(instance);
-        if (feet.getWorld() == null) return;
+        if (feet.getWorld() == null)
+            return;
         LivingEntity entity = instances.findEntity(instance).orElse(null);
         ItemStack tool = entity == null || entity.getEquipment() == null
-                ? null : entity.getEquipment().getItemInMainHand();
+                ? null
+                : entity.getEquipment().getItemInMainHand();
         Inventory carried = Bukkit.createInventory(null, 27);
         carried.setContents(instance.getTemporaryInventoryContents());
-        String target = requestedTarget == null ? "mineable_blocks"
+        String target = requestedTarget == null
+                ? "mineable_blocks"
                 : requestedTarget.trim().toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
         boolean mined = false;
         int minedBlocks = 0;
@@ -1335,13 +1380,15 @@ public final class NpcBehaviourService implements Listener {
         for (int y = minY; y <= maxY && minedBlocks < blockLimit; y++) {
             for (int x = -horizontalRange; x <= horizontalRange && minedBlocks < blockLimit; x++) {
                 for (int z = -horizontalRange; z <= horizontalRange && minedBlocks < blockLimit; z++) {
-                    if (autonomousRange && x * x + y * y + z * z > 64) continue;
+                    if (autonomousRange && x * x + y * y + z * z > 64)
+                        continue;
                     Block block = feet.getBlock().getRelative(x, y, z);
-                    if (!matchesMiningTarget(block.getType(), target)
-                            || block.getState() instanceof TileState) continue;
+                    if (!matchesMiningTarget(block.getType(), target) || block.getState() instanceof TileState)
+                        continue;
                     ItemStack effectiveTool = tool == null ? new ItemStack(Material.AIR) : tool;
                     List<ItemStack> drops = new ArrayList<>(block.getDrops(effectiveTool, entity));
-                    if (drops.isEmpty()) continue;
+                    if (drops.isEmpty())
+                        continue;
                     Inventory updated = Bukkit.createInventory(null, 27);
                     updated.setContents(carried.getContents());
                     boolean fits = true;
@@ -1351,8 +1398,10 @@ public final class NpcBehaviourService implements Listener {
                             break;
                         }
                     }
-                    if (!fits) continue;
-                    if (!authorizeBlockChange(instance, block, Material.AIR.createBlockData())) continue;
+                    if (!fits)
+                        continue;
+                    if (!authorizeBlockChange(instance, block, Material.AIR.createBlockData()))
+                        continue;
                     carried = updated;
                     block.setType(Material.AIR, true);
                     mined = true;
@@ -1362,13 +1411,15 @@ public final class NpcBehaviourService implements Listener {
         }
         if (mined) {
             updateTemporaryInventory(instance, carried.getContents(), entity);
-            if (entity != null) entity.swingMainHand();
+            if (entity != null)
+                entity.swingMainHand();
         }
     }
 
     private void takeNearbyItem(NpcInstance instance, Entity actor) {
         InventorySource source = nearbySourceInventory(instance, actor);
-        if (source == null) return;
+        if (source == null)
+            return;
 
         takeFromInventory(instance, source.inventory(), source.containerLocation(), actor);
     }
@@ -1384,19 +1435,24 @@ public final class NpcBehaviourService implements Listener {
         animateContainerInteraction(containerLocation);
         for (int slot = 0; slot < source.getSize(); slot++) {
             ItemStack item = source.getItem(slot);
-            if (item == null || item.getType().isAir()) continue;
+            if (item == null || item.getType().isAir())
+                continue;
             ItemStack offered = item.clone();
             InventoryMoveItemEvent moveEvent = new InventoryMoveItemEvent(source, offered, carried, true);
             Bukkit.getPluginManager().callEvent(moveEvent);
             if (moveEvent.isCancelled() || !moveEvent.getItem().isSimilar(item)
-                    || moveEvent.getItem().getAmount() > item.getAmount()) return;
+                    || moveEvent.getItem().getAmount() > item.getAmount())
+                return;
             offered = moveEvent.getItem().clone();
             Map<Integer, ItemStack> leftovers = carried.addItem(offered);
             int remaining = leftovers.values().stream().mapToInt(ItemStack::getAmount).sum();
             int moved = offered.getAmount() - remaining;
-            if (moved <= 0) return;
-            if (moved == item.getAmount()) source.setItem(slot, null);
-            else item.setAmount(item.getAmount() - moved);
+            if (moved <= 0)
+                return;
+            if (moved == item.getAmount())
+                source.setItem(slot, null);
+            else
+                item.setAmount(item.getAmount() - moved);
             updateTemporaryInventory(instance, carried.getContents(), actor);
             return;
         }
@@ -1409,18 +1465,21 @@ public final class NpcBehaviourService implements Listener {
         boolean moved = false;
         for (int slot = 0; slot < carried.getSize(); slot++) {
             ItemStack item = carried.getItem(slot);
-            if (item == null || item.getType().isAir()) continue;
+            if (item == null || item.getType().isAir())
+                continue;
             InventoryMoveItemEvent moveEvent = new InventoryMoveItemEvent(carried, item.clone(), destination, true);
             Bukkit.getPluginManager().callEvent(moveEvent);
             if (moveEvent.isCancelled() || !moveEvent.getItem().isSimilar(item)
-                    || moveEvent.getItem().getAmount() > item.getAmount()) continue;
+                    || moveEvent.getItem().getAmount() > item.getAmount())
+                continue;
             ItemStack offered = moveEvent.getItem().clone();
             int before = offered.getAmount();
             Map<Integer, ItemStack> leftovers = destination.addItem(offered);
             ItemStack leftover = leftovers.isEmpty() ? null : leftovers.values().iterator().next();
             int transferred = before - (leftover == null ? 0 : leftover.getAmount());
             int remainingCarried = item.getAmount() - transferred;
-            if (remainingCarried <= 0) carried.setItem(slot, null);
+            if (remainingCarried <= 0)
+                carried.setItem(slot, null);
             else {
                 ItemStack remaining = item.clone();
                 remaining.setAmount(remainingCarried);
@@ -1428,14 +1487,16 @@ public final class NpcBehaviourService implements Listener {
             }
             moved |= leftover == null || leftover.getAmount() < before;
         }
-        if (!moved) return;
+        if (!moved)
+            return;
         animateContainerInteraction(container.getLocation());
         updateTemporaryInventory(instance, carried.getContents(), null);
     }
 
     private InventorySource nearbySourceInventory(NpcInstance instance, Entity actor) {
         Location center = instance.getLocation();
-        if (center.getWorld() == null) return null;
+        if (center.getWorld() == null)
+            return null;
         Inventory nearest = null;
         Location nearestContainer = null;
         double nearestDistance = Double.MAX_VALUE;
@@ -1448,7 +1509,8 @@ public final class NpcBehaviourService implements Listener {
             for (int y = -3; y <= 3; y++) {
                 for (int z = -3; z <= 3; z++) {
                     Block block = center.getBlock().getRelative(x, y, z);
-                    if (!(block.getState() instanceof Container container)) continue;
+                    if (!(block.getState() instanceof Container container))
+                        continue;
                     double distance = block.getLocation().add(.5, .5, .5).distanceSquared(center);
                     if (distance < nearestDistance) {
                         nearest = container.getInventory();
@@ -1471,7 +1533,8 @@ public final class NpcBehaviourService implements Listener {
 
     private void showInventory(NpcInstance instance, Entity actor) {
         Player player = actor instanceof Player direct ? direct : nearestPlayer(instance).orElse(null);
-        if (player == null) return;
+        if (player == null)
+            return;
         Inventory inventory = Bukkit.createInventory(new NpcInventoryHolder(instance.getId()), 27,
                 UiText.title("NPC Inventory"));
         inventory.setContents(instance.getTemporaryInventoryContents());
@@ -1480,7 +1543,8 @@ public final class NpcBehaviourService implements Listener {
 
     private void dropInventory(NpcInstance instance) {
         Location center = instance.getLocation();
-        if (center.getWorld() == null) return;
+        if (center.getWorld() == null)
+            return;
 
         Inventory carried = Bukkit.createInventory(null, 27);
         carried.setContents(instance.getTemporaryInventoryContents());
@@ -1489,56 +1553,66 @@ public final class NpcBehaviourService implements Listener {
             for (int y = -3; y <= 3; y++) {
                 for (int z = -3; z <= 3; z++) {
                     Block block = center.getBlock().getRelative(x, y, z);
-                    if (block.getState() instanceof Container container) containers.add(container);
+                    if (block.getState() instanceof Container container)
+                        containers.add(container);
                 }
             }
         }
-        containers.sort(Comparator.comparingDouble(container ->
-                container.getLocation().add(.5, .5, .5).distanceSquared(center)));
+        containers.sort(Comparator
+                .comparingDouble(container -> container.getLocation().add(.5, .5, .5).distanceSquared(center)));
         Set<Inventory> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Container container : containers) {
             Inventory destination = container.getInventory();
-            if (!visited.add(destination)) continue;
+            if (!visited.add(destination))
+                continue;
             boolean inspected = false;
             for (int slot = 0; slot < carried.getSize(); slot++) {
                 ItemStack item = carried.getItem(slot);
-                if (item == null || item.getType().isAir()) continue;
+                if (item == null || item.getType().isAir())
+                    continue;
                 inspected = true;
                 InventoryMoveItemEvent moveEvent = new InventoryMoveItemEvent(carried, item.clone(), destination, true);
                 Bukkit.getPluginManager().callEvent(moveEvent);
                 if (moveEvent.isCancelled() || !moveEvent.getItem().isSimilar(item)
-                        || moveEvent.getItem().getAmount() > item.getAmount()) continue;
+                        || moveEvent.getItem().getAmount() > item.getAmount())
+                    continue;
                 ItemStack offered = moveEvent.getItem().clone();
                 Map<Integer, ItemStack> leftovers = destination.addItem(offered);
                 int leftoverAmount = leftovers.values().stream().mapToInt(ItemStack::getAmount).sum();
                 int transferred = offered.getAmount() - leftoverAmount;
-                if (transferred <= 0) continue;
+                if (transferred <= 0)
+                    continue;
                 int remaining = item.getAmount() - transferred;
-                if (remaining <= 0) carried.setItem(slot, null);
+                if (remaining <= 0)
+                    carried.setItem(slot, null);
                 else {
                     ItemStack remainder = item.clone();
                     remainder.setAmount(remaining);
                     carried.setItem(slot, remainder);
                 }
             }
-            if (inspected) animateContainerInteraction(container.getLocation());
+            if (inspected)
+                animateContainerInteraction(container.getLocation());
         }
         for (ItemStack item : carried.getContents()) {
-            if (item != null && !item.getType().isAir()) dropItemForNpc(instance, item);
+            if (item != null && !item.getType().isAir())
+                dropItemForNpc(instance, item);
         }
         updateTemporaryInventory(instance, new ItemStack[27], null);
     }
 
     private void dropItemForNpc(NpcInstance instance, ItemStack item) {
         Location center = instance.getLocation();
-        if (center.getWorld() == null) return;
+        if (center.getWorld() == null)
+            return;
         center.getWorld().dropItemNaturally(center, item);
         itemPickupLockedUntilTick.put(instance.getId(), currentTick + OWN_DROP_PICKUP_LOCK_TICKS);
     }
 
     private void harvestNearbyCrops(NpcInstance instance) {
         Location center = instance.getLocation();
-        if (center.getWorld() == null) return;
+        if (center.getWorld() == null)
+            return;
         Inventory carried = Bukkit.createInventory(null, 27);
         carried.setContents(instance.getTemporaryInventoryContents());
         LivingEntity entity = instances.findEntity(instance).orElse(null);
@@ -1550,13 +1624,20 @@ public final class NpcBehaviourService implements Listener {
                     Block block = center.getBlock().getRelative(x, y, z);
                     Planting planting = plantingForCrop(block.getType());
                     if (planting == null || !(block.getBlockData() instanceof Ageable age)
-                            || age.getAge() < age.getMaximumAge()) continue;
+                            || age.getAge() < age.getMaximumAge())
+                        continue;
                     boolean replant = carried.contains(planting.item());
-                    BlockData replacement = replant ? planting.crop().createBlockData() : Material.AIR.createBlockData();
-                    if (replacement instanceof Ageable replanted) replanted.setAge(0);
-                    if (!authorizeBlockChange(instance, block, replacement)) continue;
-                    for (ItemStack drop : block.getDrops()) addHarvestDrop(carried, center, drop);
-                    if (replant) consumeOne(carried, planting.item());
+                    BlockData replacement = replant
+                            ? planting.crop().createBlockData()
+                            : Material.AIR.createBlockData();
+                    if (replacement instanceof Ageable replanted)
+                        replanted.setAge(0);
+                    if (!authorizeBlockChange(instance, block, replacement))
+                        continue;
+                    for (ItemStack drop : block.getDrops())
+                        addHarvestDrop(carried, center, drop);
+                    if (replant)
+                        consumeOne(carried, planting.item());
                     block.setBlockData(replacement, true);
                     worked = true;
                 }
@@ -1568,9 +1649,11 @@ public final class NpcBehaviourService implements Listener {
                 for (int z = -3; z <= 3; z++) {
                     Block soil = center.getBlock().getRelative(x, y, z);
                     Block above = soil.getRelative(0, 1, 0);
-                    if (!above.getType().isAir()) continue;
+                    if (!above.getType().isAir())
+                        continue;
                     Planting planting = firstPlantingForSoil(carried, soil.getType());
-                    if (planting == null || !consumeOne(carried, planting.item())) continue;
+                    if (planting == null || !consumeOne(carried, planting.item()))
+                        continue;
                     BlockData planted = planting.crop().createBlockData();
                     if (!authorizeBlockChange(instance, above, planted)) {
                         carried.addItem(new ItemStack(planting.item()));
@@ -1582,7 +1665,8 @@ public final class NpcBehaviourService implements Listener {
             }
         }
         updateTemporaryInventory(instance, carried.getContents(), null);
-        if (worked && entity != null) entity.swingMainHand();
+        if (worked && entity != null)
+            entity.swingMainHand();
     }
 
     private void addHarvestDrop(Inventory carried, Location fallback, ItemStack drop) {
@@ -1593,7 +1677,8 @@ public final class NpcBehaviourService implements Listener {
 
     private boolean authorizeBlockChange(NpcInstance instance, Block block, BlockData replacement) {
         LivingEntity npc = instances.findEntity(instance).orElse(null);
-        if (npc == null) return false;
+        if (npc == null)
+            return false;
         EntityChangeBlockEvent event = new EntityChangeBlockEvent(npc, block, replacement);
         Bukkit.getPluginManager().callEvent(event);
         return !event.isCancelled();
@@ -1602,9 +1687,12 @@ public final class NpcBehaviourService implements Listener {
     private boolean consumeOne(Inventory inventory, Material material) {
         for (int slot = 0; slot < inventory.getSize(); slot++) {
             ItemStack item = inventory.getItem(slot);
-            if (item == null || item.getType() != material) continue;
-            if (item.getAmount() == 1) inventory.setItem(slot, null);
-            else item.setAmount(item.getAmount() - 1);
+            if (item == null || item.getType() != material)
+                continue;
+            if (item.getAmount() == 1)
+                inventory.setItem(slot, null);
+            else
+                item.setAmount(item.getAmount() - 1);
             return true;
         }
         return false;
@@ -1618,9 +1706,11 @@ public final class NpcBehaviourService implements Listener {
                         new Planting(Material.BEETROOT_SEEDS, Material.BEETROOTS),
                         new Planting(Material.TORCHFLOWER_SEEDS, Material.TORCHFLOWER_CROP))
                 : soil == Material.SOUL_SAND
-                        ? List.of(new Planting(Material.NETHER_WART, Material.NETHER_WART)) : List.of();
+                        ? List.of(new Planting(Material.NETHER_WART, Material.NETHER_WART))
+                        : List.of();
         for (Planting option : options) {
-            if (inventory.contains(option.item())) return option;
+            if (inventory.contains(option.item()))
+                return option;
         }
         return null;
     }
@@ -1637,14 +1727,18 @@ public final class NpcBehaviourService implements Listener {
         };
     }
 
-    private record Planting(Material item, Material crop) { }
+    private record Planting(Material item, Material crop) {
+    }
 
-    private record InventorySource(Inventory inventory, Location containerLocation) { }
+    private record InventorySource(Inventory inventory, Location containerLocation) {
+    }
 
     private void animateContainerInteraction(Location location) {
-        if (location == null || location.getWorld() == null) return;
+        if (location == null || location.getWorld() == null)
+            return;
         BlockState state = location.getBlock().getState();
-        if (!(state instanceof Lidded lidded) || lidded.isOpen()) return;
+        if (!(state instanceof Lidded lidded) || lidded.isOpen())
+            return;
         lidded.open();
         Location blockLocation = location.clone();
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -1656,7 +1750,10 @@ public final class NpcBehaviourService implements Listener {
     }
 
     public record NpcInventoryHolder(UUID instanceId) implements InventoryHolder {
-        @Override public Inventory getInventory() { return null; }
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
     }
 
     private static boolean isMineable(Material material) {
@@ -1668,13 +1765,13 @@ public final class NpcBehaviourService implements Listener {
         if (target.equals("ores") || target.equals("all_ores") || target.equals("ore")) {
             return name.endsWith("_ore") || material == Material.ANCIENT_DEBRIS;
         }
-        if (target.equals("trees") || target.equals("all_trees") || target.equals("logs")
-                || target.equals("wood")) {
+        if (target.equals("trees") || target.equals("all_trees") || target.equals("logs") || target.equals("wood")) {
             return Tag.LOGS.isTagged(material);
         }
-        if (target.equals("mineable_blocks") || target.equals("all_mineable_blocks")
-                || target.equals("all_blocks")) return isMineable(material);
-        if (name.equals(target)) return isMineable(material) || Tag.LOGS.isTagged(material);
+        if (target.equals("mineable_blocks") || target.equals("all_mineable_blocks") || target.equals("all_blocks"))
+            return isMineable(material);
+        if (name.equals(target))
+            return isMineable(material) || Tag.LOGS.isTagged(material);
         String resource = target.endsWith("s") ? target.substring(0, target.length() - 1) : target;
         return (name.equals(resource + "_ore") || name.equals("deepslate_" + resource + "_ore"))
                 && (name.endsWith("_ore") || material == Material.ANCIENT_DEBRIS);
@@ -1685,8 +1782,7 @@ public final class NpcBehaviourService implements Listener {
         if (location.getWorld() == null) {
             return java.util.Optional.empty();
         }
-        return Bukkit.getOnlinePlayers().stream()
-                .map(player -> (Player) player)
+        return Bukkit.getOnlinePlayers().stream().map(player -> (Player) player)
                 .filter(player -> player.getWorld() == location.getWorld())
                 .filter(player -> player.getLocation().distanceSquared(location) <= FOLLOW_ACQUIRE_RANGE_SQUARED)
                 .min(Comparator.comparingDouble(player -> player.getLocation().distanceSquared(location)));
@@ -1694,9 +1790,11 @@ public final class NpcBehaviourService implements Listener {
 
     private void tickPlayerLook() {
         for (NpcInstance instance : instances.findActive()) {
-            if (combatService != null && combatService.isEngaged(instance)) continue;
+            if (combatService != null && combatService.isEngaged(instance))
+                continue;
             NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-            if (definition == null || !definition.isLookAtPlayer()) continue;
+            if (definition == null || !definition.isLookAtPlayer())
+                continue;
             nearestPlayer(instance).ifPresent(player -> instances.lookAt(instance, player.getEyeLocation()));
         }
     }
@@ -1704,25 +1802,29 @@ public final class NpcBehaviourService implements Listener {
     private void tickItemPickup() {
         for (NpcInstance instance : instances.findActive()) {
             NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-            if (definition == null || !definition.isItemPickup()) continue;
-            if (currentTick < itemPickupLockedUntilTick.getOrDefault(instance.getId(), 0L)) continue;
+            if (definition == null || !definition.isItemPickup())
+                continue;
+            if (currentTick < itemPickupLockedUntilTick.getOrDefault(instance.getId(), 0L))
+                continue;
             LivingEntity npc = instances.findEntity(instance).orElse(null);
             Location location = instance.getLocation();
-            if (npc == null || location.getWorld() == null) continue;
-            location.getWorld().getNearbyEntities(location, ITEM_PICKUP_HORIZONTAL_RANGE,
-                            ITEM_PICKUP_VERTICAL_RANGE, ITEM_PICKUP_HORIZONTAL_RANGE,
-                            entity -> entity instanceof Item)
-                    .stream()
-                    .map(entity -> (Item) entity)
+            if (npc == null || location.getWorld() == null)
+                continue;
+            location.getWorld()
+                    .getNearbyEntities(location, ITEM_PICKUP_HORIZONTAL_RANGE, ITEM_PICKUP_VERTICAL_RANGE,
+                            ITEM_PICKUP_HORIZONTAL_RANGE, entity -> entity instanceof Item)
+                    .stream().map(entity -> (Item) entity)
                     .sorted(Comparator.comparingDouble(item -> item.getLocation().distanceSquared(location)))
                     .forEach(item -> pickUpItem(instance, npc, item));
         }
     }
 
     private void pickUpItem(NpcInstance instance, LivingEntity npc, Item item) {
-        if (!item.isValid() || item.getPickupDelay() > 0) return;
+        if (!item.isValid() || item.getPickupDelay() > 0)
+            return;
         UUID owner = item.getOwner();
-        if (owner != null && !owner.equals(npc.getUniqueId())) return;
+        if (owner != null && !owner.equals(npc.getUniqueId()))
+            return;
 
         Inventory carried = Bukkit.createInventory(null, 27);
         carried.setContents(instance.getTemporaryInventoryContents());
@@ -1730,11 +1832,13 @@ public final class NpcBehaviourService implements Listener {
         Map<Integer, ItemStack> leftovers = carried.addItem(offered);
         int remaining = leftovers.values().stream().mapToInt(ItemStack::getAmount).sum();
         int pickedUp = item.getItemStack().getAmount() - remaining;
-        if (pickedUp <= 0) return;
+        if (pickedUp <= 0)
+            return;
 
         EntityPickupItemEvent event = new EntityPickupItemEvent(npc, item, remaining);
         Bukkit.getPluginManager().callEvent(event);
-        if (event.isCancelled()) return;
+        if (event.isCancelled())
+            return;
 
         updateTemporaryInventory(instance, carried.getContents(), item);
         if (remaining == 0) {
@@ -1748,8 +1852,7 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private boolean isFollowTarget(NpcInstance instance, Player player) {
-        return player != null && player.isOnline()
-                && player.getWorld() == instance.getLocation().getWorld();
+        return player != null && player.isOnline() && player.getWorld() == instance.getLocation().getWorld();
     }
 
     private void tickProximity() {
@@ -1810,8 +1913,8 @@ public final class NpcBehaviourService implements Listener {
         }
         nearbyPlayers.clear();
         nearbyPlayers.addAll(nowNearby);
-        proximityCooldownUntilTick.entrySet().removeIf(entry -> entry.getValue() <= currentTick
-                && !nearbyPlayers.contains(entry.getKey()));
+        proximityCooldownUntilTick.entrySet()
+                .removeIf(entry -> entry.getValue() <= currentTick && !nearbyPlayers.contains(entry.getKey()));
     }
 
     private boolean isProximityCoolingDown(ProximityKey key) {
@@ -1824,18 +1927,13 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private void sendDialog(
-            BehaviourEvent event,
-            NpcInstance instance,
-            NpcDefinition definition,
-            String line,
-            Entity actor
-    ) {
+    private void sendDialog(BehaviourEvent event, NpcInstance instance, NpcDefinition definition, String line,
+            Entity actor) {
         if (line == null) {
             return;
         }
-        List<Component> messages = UiText.npcDialogMessages(
-                definition.getDisplayName(), line, definition.getColor().textColor());
+        List<Component> messages = UiText.npcDialogMessages(definition.getDisplayName(), line,
+                definition.getColor().textColor());
         if ((event == BehaviourEvent.PLAYER_APPROACH || event == BehaviourEvent.PLAYER_LEAVES)
                 && actor instanceof Player player && player.isOnline()) {
             messages.forEach(player::sendMessage);
@@ -1843,15 +1941,15 @@ public final class NpcBehaviourService implements Listener {
         }
         Location location = instance.getLocation();
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.getWorld() == location.getWorld() && player.getLocation().distanceSquared(location) <= DIALOG_RANGE_SQUARED) {
+            if (player.getWorld() == location.getWorld()
+                    && player.getLocation().distanceSquared(location) <= DIALOG_RANGE_SQUARED) {
                 messages.forEach(player::sendMessage);
             }
         }
     }
 
     private String placeholders(String value, NpcInstance instance, NpcDefinition definition, Entity actor) {
-        return value.replace("%npc%", definition.getDisplayName())
-                .replace("%instance%", instance.getId().toString())
+        return value.replace("%npc%", definition.getDisplayName()).replace("%instance%", instance.getId().toString())
                 .replace("%player%", actor instanceof Player player ? player.getName() : "");
     }
 
@@ -1867,10 +1965,12 @@ public final class NpcBehaviourService implements Listener {
         private boolean moving;
     }
 
-    private enum AiInteractionKind { SWITCH, TAKE_FROM_CONTAINER, STORE_IN_CONTAINER }
+    private enum AiInteractionKind {
+        SWITCH, TAKE_FROM_CONTAINER, STORE_IN_CONTAINER
+    }
 
-    private record AiInteraction(
-            AiInteractionKind kind, Location blockLocation, Location navigationTarget) { }
+    private record AiInteraction(AiInteractionKind kind, Location blockLocation, Location navigationTarget) {
+    }
 
     private record AiInteractionRequest(AiInteractionKind kind, Location blockLocation) {
         private AiInteractionRequest {

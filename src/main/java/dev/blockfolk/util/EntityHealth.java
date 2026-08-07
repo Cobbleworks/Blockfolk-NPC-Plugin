@@ -5,7 +5,8 @@ import org.bukkit.entity.LivingEntity;
 
 public final class EntityHealth {
 
-    private EntityHealth() { }
+    private EntityHealth() {
+    }
 
     public static double maximum(LivingEntity entity) {
         var attribute = entity.getAttribute(Attribute.MAX_HEALTH);

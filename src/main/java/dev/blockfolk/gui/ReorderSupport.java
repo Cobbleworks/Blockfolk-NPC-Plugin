@@ -15,13 +15,15 @@ import org.bukkit.persistence.PersistentDataType;
 
 final class ReorderSupport {
 
-    private ReorderSupport() { }
+    private ReorderSupport() {
+    }
 
-    static void restoreCursor(Player player, ReorderState state,
-            BiFunction<String, Integer, ItemStack> iconFactory) {
-        if (state.selectedKey == null) return;
+    static void restoreCursor(Player player, ReorderState state, BiFunction<String, Integer, ItemStack> iconFactory) {
+        if (state.selectedKey == null)
+            return;
         int index = state.keys.indexOf(state.selectedKey);
-        if (index >= 0) player.setItemOnCursor(iconFactory.apply(state.selectedKey, index));
+        if (index >= 0)
+            player.setItemOnCursor(iconFactory.apply(state.selectedKey, index));
     }
 
     static void clearSelection(Player player, ReorderState state, NamespacedKey markerKey) {
@@ -37,16 +39,17 @@ final class ReorderSupport {
         }
     }
 
-    static void selectOrMove(InventoryClickEvent event, Player player, ReorderState state,
-            int pageSize, NamespacedKey markerKey, BiFunction<String, Integer, ItemStack> iconFactory,
-            Consumer<Inventory> renderer) {
+    static void selectOrMove(InventoryClickEvent event, Player player, ReorderState state, int pageSize,
+            NamespacedKey markerKey, BiFunction<String, Integer, ItemStack> iconFactory, Consumer<Inventory> renderer) {
         int slot = event.getRawSlot();
-        if (slot < 0 || slot >= pageSize || state.keys.isEmpty()) return;
+        if (slot < 0 || slot >= pageSize || state.keys.isEmpty())
+            return;
         int targetIndex = Math.min(state.page * pageSize + slot, state.keys.size() - 1);
         if (state.selectedKey == null) {
             int sourceIndex = state.page * pageSize + slot;
             ItemStack cursor = player.getItemOnCursor();
-            if (sourceIndex >= state.keys.size() || cursor != null && !cursor.getType().isAir()) return;
+            if (sourceIndex >= state.keys.size() || cursor != null && !cursor.getType().isAir())
+                return;
             state.select(sourceIndex);
             event.getView().getTopInventory().setItem(slot, null);
             restoreCursor(player, state, iconFactory);
@@ -67,17 +70,21 @@ final class ReorderSupport {
         }
 
         boolean select(int index) {
-            if (selectedKey != null || index < 0 || index >= keys.size()) return false;
+            if (selectedKey != null || index < 0 || index >= keys.size())
+                return false;
             selectedKey = keys.get(index);
             return true;
         }
 
         void moveSelectedTo(int targetIndex) {
-            if (selectedKey == null || keys.isEmpty()) return;
+            if (selectedKey == null || keys.isEmpty())
+                return;
             int sourceIndex = keys.indexOf(selectedKey);
-            if (sourceIndex < 0) return;
+            if (sourceIndex < 0)
+                return;
             int boundedTarget = Math.max(0, Math.min(targetIndex, keys.size() - 1));
-            if (sourceIndex == boundedTarget) return;
+            if (sourceIndex == boundedTarget)
+                return;
             String moved = keys.remove(sourceIndex);
             keys.add(boundedTarget, moved);
         }

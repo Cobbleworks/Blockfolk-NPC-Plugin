@@ -39,8 +39,8 @@ public final class SkinResolver {
     }
 
     public CompletableFuture<ResolvedSkin> resolve(String imageUrl) {
-        return requests.computeIfAbsent(imageUrl, ignored -> queue(imageUrl)
-                .whenComplete((result, error) -> requests.remove(imageUrl)));
+        return requests.computeIfAbsent(imageUrl,
+                ignored -> queue(imageUrl).whenComplete((result, error) -> requests.remove(imageUrl)));
     }
 
     private CompletableFuture<ResolvedSkin> queue(String imageUrl) {
@@ -48,24 +48,22 @@ public final class SkinResolver {
         body.addProperty("url", imageUrl);
         body.addProperty("visibility", "unlisted");
         body.addProperty("variant", "unknown");
-        HttpRequest request = request(QUEUE_URI)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
-                .build();
+        HttpRequest request = request(QUEUE_URI).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build();
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenCompose(response -> handleResponse(response, 0));
     }
 
     private CompletableFuture<ResolvedSkin> poll(String jobId, int attempt) {
         if (attempt >= MAX_POLL_ATTEMPTS) {
-            return CompletableFuture.failedFuture(new SkinResolutionException("Skin processing timed out. Please try again."));
+            return CompletableFuture
+                    .failedFuture(new SkinResolutionException("Skin processing timed out. Please try again."));
         }
         URI jobUri = QUEUE_URI.resolve("/v2/queue/" + jobId);
         return CompletableFuture.runAsync(() -> {
-        }, CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS)).thenCompose(ignored
-                -> client.sendAsync(request(jobUri).GET().build(), HttpResponse.BodyHandlers.ofString())
-                        .thenCompose(response -> handleResponse(response, attempt + 1))
-        );
+        }, CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS)).thenCompose(
+                ignored -> client.sendAsync(request(jobUri).GET().build(), HttpResponse.BodyHandlers.ofString())
+                        .thenCompose(response -> handleResponse(response, attempt + 1)));
     }
 
     private CompletableFuture<ResolvedSkin> handleResponse(HttpResponse<String> response, int attempt) {
@@ -83,11 +81,13 @@ public final class SkinResolver {
             String jobId = requiredString(job, "id");
             String status = requiredString(job, "status");
             if ("failed".equalsIgnoreCase(status)) {
-                return CompletableFuture.failedFuture(new SkinResolutionException("MineSkin could not process that image."));
+                return CompletableFuture
+                        .failedFuture(new SkinResolutionException("MineSkin could not process that image."));
             }
             return poll(jobId, attempt);
         } catch (RuntimeException exception) {
-            return CompletableFuture.failedFuture(new SkinResolutionException("MineSkin returned an invalid response.", exception));
+            return CompletableFuture
+                    .failedFuture(new SkinResolutionException("MineSkin returned an invalid response.", exception));
         }
     }
 
@@ -116,10 +116,8 @@ public final class SkinResolver {
     }
 
     private HttpRequest.Builder request(URI uri) {
-        HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
-                .timeout(Duration.ofSeconds(15))
-                .header("Accept", "application/json")
-                .header("User-Agent", userAgent);
+        HttpRequest.Builder builder = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(15))
+                .header("Accept", "application/json").header("User-Agent", userAgent);
         if (!apiKey.isEmpty()) {
             builder.header("Authorization", "Bearer " + apiKey);
         }

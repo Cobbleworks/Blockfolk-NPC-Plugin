@@ -32,8 +32,7 @@ class AiControlSettingsTest {
 
     @Test
     void nearbyChatResponsesCanBeDisabledWithoutEnablingGreetings() {
-        AiControlSettings settings = AiControlSettings.defaults().withIdentity("A guard")
-                .withRespondToChat(false);
+        AiControlSettings settings = AiControlSettings.defaults().withIdentity("A guard").withRespondToChat(false);
 
         assertTrue(settings.enabled());
         assertFalse(settings.respondToChat());
@@ -41,10 +40,8 @@ class AiControlSettingsTest {
 
     @Test
     void composesStructuredContextWithHeadings() {
-        AiControlSettings settings = AiControlSettings.defaults()
-                .withIdentity("Mira, the village guard")
-                .withLikesDislikes("Likes cake; dislikes zombies")
-                .withGoal("Protect the gate")
+        AiControlSettings settings = AiControlSettings.defaults().withIdentity("Mira, the village guard")
+                .withLikesDislikes("Likes cake; dislikes zombies").withGoal("Protect the gate")
                 .withInformation("The market closes at sunset");
 
         assertTrue(settings.systemContext().contains("Identity:\nMira"));
@@ -56,16 +53,16 @@ class AiControlSettingsTest {
 
     @Test
     void memorySettingIsOptInAndPreservedByOtherChanges() {
-        AiControlSettings settings = AiControlSettings.defaults().withMemoryEnabled(true)
-                .withIdentity("A guard").withRespondToChat(false);
+        AiControlSettings settings = AiControlSettings.defaults().withMemoryEnabled(true).withIdentity("A guard")
+                .withRespondToChat(false);
 
         assertTrue(settings.memoryEnabled());
     }
 
     @Test
     void inventorySettingIsOptInAndPreservedByOtherChanges() {
-        AiControlSettings settings = AiControlSettings.defaults().withInventoryEnabled(true)
-                .withIdentity("A courier").withRespondToChat(false);
+        AiControlSettings settings = AiControlSettings.defaults().withInventoryEnabled(true).withIdentity("A courier")
+                .withRespondToChat(false);
 
         assertTrue(settings.inventoryEnabled());
         assertFalse(AiControlSettings.defaults().inventoryEnabled());

@@ -31,11 +31,9 @@ class NpcBehaviourServiceTest {
         // A later player position must not alter which NPCs heard the message.
         Location laterPlayerLocation = new Location(null, 100.0, 64.0, 0.0);
         assertEquals(List.of(closest, boundary),
-                NpcBehaviourService.nearbyChatInstances(
-                        List.of(outside, boundary, closest), sentFrom));
+                NpcBehaviourService.nearbyChatInstances(List.of(outside, boundary, closest), sentFrom));
         assertEquals(List.of(),
-                NpcBehaviourService.nearbyChatInstances(
-                        List.of(outside, boundary, closest), laterPlayerLocation));
+                NpcBehaviourService.nearbyChatInstances(List.of(outside, boundary, closest), laterPlayerLocation));
     }
 
     private static NpcInstance instanceAt(String key, double x) {

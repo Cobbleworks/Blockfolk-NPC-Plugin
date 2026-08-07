@@ -27,7 +27,8 @@ public final class ChatInputService implements Listener {
     private final int timeoutSeconds;
     private final Map<UUID, PendingInput> pendingInputs = new HashMap<>();
     private final Set<UUID> requestingInputs = new HashSet<>();
-    private Consumer<Player> beforeRequest = ignored -> { };
+    private Consumer<Player> beforeRequest = ignored -> {
+    };
 
     public ChatInputService(Plugin plugin, int timeoutSeconds) {
         this.plugin = plugin;
@@ -59,7 +60,8 @@ public final class ChatInputService implements Listener {
     }
 
     public void setBeforeRequest(Consumer<Player> beforeRequest) {
-        this.beforeRequest = beforeRequest == null ? ignored -> { } : beforeRequest;
+        this.beforeRequest = beforeRequest == null ? ignored -> {
+        } : beforeRequest;
     }
 
     public void cancelAll() {
@@ -84,7 +86,8 @@ public final class ChatInputService implements Listener {
         input.timeout.cancel();
         String message = PLAIN_TEXT.serialize(event.message());
         if (message.equalsIgnoreCase("cancel")) {
-            Bukkit.getScheduler().runTask(plugin, () -> event.getPlayer().sendMessage(UiText.warning("Input cancelled.")));
+            Bukkit.getScheduler().runTask(plugin,
+                    () -> event.getPlayer().sendMessage(UiText.warning("Input cancelled.")));
             return;
         }
         Bukkit.getScheduler().runTask(plugin, () -> input.consumer.accept(message));

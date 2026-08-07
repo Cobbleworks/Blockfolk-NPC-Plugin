@@ -35,8 +35,7 @@ class NpcRouteTest {
 
         assertTrue(route.addPoint(point));
         assertFalse(route.addPoint(point));
-        assertThrows(IllegalArgumentException.class,
-            () -> route.addPoint(new RoutePoint("nether", 1, 64, 1)));
+        assertThrows(IllegalArgumentException.class, () -> route.addPoint(new RoutePoint("nether", 1, 64, 1)));
     }
 
     @Test
@@ -45,8 +44,7 @@ class NpcRouteTest {
         RoutePoint regular = new RoutePoint("world", 1, 64, 1);
         route.addPoint(regular);
 
-        RoutePoint withAction = regular.withActions(List.of(
-                new BehaviourAction(BehaviourActionType.WAIT, "10.0")));
+        RoutePoint withAction = regular.withActions(List.of(new BehaviourAction(BehaviourActionType.WAIT, "10.0")));
         assertTrue(route.replacePoint(regular, withAction));
         assertEquals(withAction.actions(), route.findPoint(regular).orElseThrow().actions());
         assertFalse(route.addPoint(regular));
@@ -56,17 +54,14 @@ class NpcRouteTest {
     @Test
     void actionMetadataDoesNotChangeRouteOrdering() {
         NpcRoute route = NpcRoute.create("Patrol");
-        RoutePoint nearWaiting = new RoutePoint("world", 2, 64, 0, List.of(
-                new BehaviourAction(BehaviourActionType.WAIT, "10.0")));
+        RoutePoint nearWaiting = new RoutePoint("world", 2, 64, 0,
+                List.of(new BehaviourAction(BehaviourActionType.WAIT, "10.0")));
         RoutePoint middle = new RoutePoint("world", 5, 64, 0);
         RoutePoint far = new RoutePoint("world", 10, 64, 0);
         List.of(far, nearWaiting, middle).forEach(route::addPoint);
         World world = world("world");
 
-        assertEquals(
-                List.of(nearWaiting, middle, far),
-                route.logicallyOrdered(new Location(world, 2.5, 65.0, 0.5))
-        );
+        assertEquals(List.of(nearWaiting, middle, far), route.logicallyOrdered(new Location(world, 2.5, 65.0, 0.5)));
     }
 
     @Test
@@ -93,15 +88,12 @@ class NpcRouteTest {
     }
 
     private World world(String name) {
-        return (World) Proxy.newProxyInstance(
-            World.class.getClassLoader(),
-            new Class<?>[]{World.class},
-            (proxy, method, arguments) -> switch (method.getName()) {
-                case "getName", "toString" -> name;
-                case "hashCode" -> name.hashCode();
-                case "equals" -> proxy == arguments[0];
-                default -> throw new UnsupportedOperationException(method.getName());
-            }
-        );
+        return (World) Proxy.newProxyInstance(World.class.getClassLoader(), new Class<?>[]{World.class},
+                (proxy, method, arguments) -> switch (method.getName()) {
+                    case "getName", "toString" -> name;
+                    case "hashCode" -> name.hashCode();
+                    case "equals" -> proxy == arguments[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                });
     }
 }

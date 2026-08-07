@@ -6,7 +6,9 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
-/** Bridges compact, color-coded GUI strings to the component-based Paper API. */
+/**
+ * Bridges compact, color-coded GUI strings to the component-based Paper API.
+ */
 public final class LegacyText {
 
     public static final String BLACK = "\u00a70";

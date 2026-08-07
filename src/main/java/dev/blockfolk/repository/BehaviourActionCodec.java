@@ -14,19 +14,23 @@ import dev.blockfolk.model.QuestionOption;
 
 final class BehaviourActionCodec {
 
-    private BehaviourActionCodec() { }
+    private BehaviourActionCodec() {
+    }
 
     static Map<String, Object> encode(BehaviourAction action) {
         Map<String, Object> stored = new LinkedHashMap<>();
         stored.put("type", action.type().name().toLowerCase(Locale.ROOT));
-        if (action.value() != null) stored.put("value", action.value());
-        if (action.question() != null) stored.put("question", encodeQuestion(action.question()));
+        if (action.value() != null)
+            stored.put("value", action.value());
+        if (action.question() != null)
+            stored.put("question", encodeQuestion(action.question()));
         return stored;
     }
 
     static BehaviourAction decode(Map<?, ?> stored) {
         Object rawType = stored.get("type");
-        if (rawType == null) throw new IllegalArgumentException("Action type is required");
+        if (rawType == null)
+            throw new IllegalArgumentException("Action type is required");
         BehaviourActionType type = BehaviourActionType.fromStored(rawType.toString());
         if (type == BehaviourActionType.ASK_QUESTION) {
             Object rawQuestion = stored.get("question");
@@ -44,10 +48,12 @@ final class BehaviourActionCodec {
     }
 
     static List<BehaviourAction> decodeList(Object raw) {
-        if (!(raw instanceof List<?> list)) return List.of();
+        if (!(raw instanceof List<?> list))
+            return List.of();
         List<BehaviourAction> actions = new ArrayList<>();
         for (Object entry : list) {
-            if (entry instanceof Map<?, ?> map) actions.add(decode(map));
+            if (entry instanceof Map<?, ?> map)
+                actions.add(decode(map));
         }
         return actions;
     }
@@ -75,10 +81,13 @@ final class BehaviourActionCodec {
         Object rawOptions = stored.get("options");
         if (rawOptions instanceof List<?> list) {
             for (Object rawOption : list) {
-                if (options.size() == NpcQuestion.MAX_OPTIONS) break;
-                if (!(rawOption instanceof Map<?, ?> option)) continue;
+                if (options.size() == NpcQuestion.MAX_OPTIONS)
+                    break;
+                if (!(rawOption instanceof Map<?, ?> option))
+                    continue;
                 Object label = option.get("label");
-                if (label != null) options.add(new QuestionOption(label.toString(), decodeList(option.get("actions"))));
+                if (label != null)
+                    options.add(new QuestionOption(label.toString(), decodeList(option.get("actions"))));
             }
         }
         return new NpcQuestion(id, prompt, options, decodeList(stored.get("cancel-actions")));

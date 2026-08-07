@@ -64,14 +64,9 @@ public final class NpcInstanceRegistry implements Listener {
         } : removalListener;
     }
 
-    public NpcInstanceRegistry(
-            Plugin plugin,
-            NpcDefinitionRepository definitionRepository,
-            NpcInstanceRepository instanceRepository,
-            NpcRenderer renderer,
-            NativeNpcNavigationService navigationService,
-            DialogService dialogService
-    ) {
+    public NpcInstanceRegistry(Plugin plugin, NpcDefinitionRepository definitionRepository,
+            NpcInstanceRepository instanceRepository, NpcRenderer renderer,
+            NativeNpcNavigationService navigationService, DialogService dialogService) {
         this.plugin = plugin;
         this.instanceKey = new NamespacedKey(plugin, "instance-id");
         this.definitionRepository = definitionRepository;
@@ -83,8 +78,7 @@ public final class NpcInstanceRegistry implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onMannequinRemoved(EntityRemoveEvent event) {
-        if (!(event.getEntity() instanceof Mannequin mannequin)
-                || event.getCause() == EntityRemoveEvent.Cause.UNLOAD
+        if (!(event.getEntity() instanceof Mannequin mannequin) || event.getCause() == EntityRemoveEvent.Cause.UNLOAD
                 || event.getCause() == EntityRemoveEvent.Cause.DEATH) {
             return;
         }
@@ -113,8 +107,8 @@ public final class NpcInstanceRegistry implements Listener {
         for (NpcInstance instance : instanceRepository.loadAll()) {
             instances.put(instance.getId(), instance);
             if (definitionRepository.find(instance.getDefinitionKey()).isEmpty()) {
-                plugin.getLogger().warning("Keeping NPC instance " + instance.getId()
-                        + " unresolved because preset '" + instance.getDefinitionKey() + "' is missing.");
+                plugin.getLogger().warning("Keeping NPC instance " + instance.getId() + " unresolved because preset '"
+                        + instance.getDefinitionKey() + "' is missing.");
             }
         }
     }
@@ -134,7 +128,8 @@ public final class NpcInstanceRegistry implements Listener {
     public void spawnAll() {
         for (NpcInstance instance : instances.values()) {
             if (!instance.isAwaitingRespawn()) {
-                definitionRepository.find(instance.getDefinitionKey()).ifPresent(definition -> spawnInstance(instance, definition));
+                definitionRepository.find(instance.getDefinitionKey())
+                        .ifPresent(definition -> spawnInstance(instance, definition));
             }
         }
     }
@@ -143,8 +138,10 @@ public final class NpcInstanceRegistry implements Listener {
     public void onWorldLoad(WorldLoadEvent event) {
         for (NpcInstance instance : instances.values()) {
             if (instance.isAwaitingRespawn() || instance.getEntityId() != 0
-                    || !instance.getStoredLocation().worldName().equals(event.getWorld().getName())) continue;
-            definitionRepository.find(instance.getDefinitionKey()).ifPresent(definition -> spawnInstance(instance, definition));
+                    || !instance.getStoredLocation().worldName().equals(event.getWorld().getName()))
+                continue;
+            definitionRepository.find(instance.getDefinitionKey())
+                    .ifPresent(definition -> spawnInstance(instance, definition));
         }
     }
 
@@ -190,7 +187,8 @@ public final class NpcInstanceRegistry implements Listener {
     }
 
     public void markAwaitingRespawn(NpcInstance instance, long respawnAtEpochMillis) {
-        if (!instances.containsKey(instance.getId())) return;
+        if (!instances.containsKey(instance.getId()))
+            return;
         renderer.destroy(instance);
         instancesByEntityId.values().remove(instance.getId());
         navigationService.destroy(instance);
@@ -201,7 +199,8 @@ public final class NpcInstanceRegistry implements Listener {
     }
 
     public boolean respawn(NpcInstance instance, NpcDefinition definition) {
-        if (!instances.containsKey(instance.getId())) return false;
+        if (!instances.containsKey(instance.getId()))
+            return false;
         instance.returnToSpawn();
         instance.setRespawnAtEpochMillis(0L);
         if (!renderer.spawn(instance, definition)) {
@@ -257,11 +256,8 @@ public final class NpcInstanceRegistry implements Listener {
         return true;
     }
 
-    public NativeNpcNavigationService.NavigationStatus navigate(
-            NpcInstance instance,
-            Location target,
-            WalkingSpeed walkingSpeed
-    ) {
+    public NativeNpcNavigationService.NavigationStatus navigate(NpcInstance instance, Location target,
+            WalkingSpeed walkingSpeed) {
         if (!instances.containsKey(instance.getId())) {
             return NativeNpcNavigationService.NavigationStatus.STALLED;
         }
@@ -296,13 +292,17 @@ public final class NpcInstanceRegistry implements Listener {
         return renderer.findLivingEntity(instance);
     }
 
-    /** Returns the rendered position, including movement caused by entity collisions. */
+    /**
+     * Returns the rendered position, including movement caused by entity
+     * collisions.
+     */
     public Location currentLocation(NpcInstance instance) {
         if (!instances.containsKey(instance.getId())) {
             return instance.getLocation();
         }
         Location location = renderer.currentLocation(instance).orElseGet(instance::getLocation);
-        if (location.getWorld() != null) instance.setLocation(location);
+        if (location.getWorld() != null)
+            instance.setLocation(location);
         return location.clone();
     }
 
@@ -327,8 +327,7 @@ public final class NpcInstanceRegistry implements Listener {
     }
 
     public Collection<NpcInstance> findByDefinition(NpcDefinition definition) {
-        return instances.values().stream()
-                .filter(instance -> instance.getDefinitionKey().equals(definition.getKey()))
+        return instances.values().stream().filter(instance -> instance.getDefinitionKey().equals(definition.getKey()))
                 .toList();
     }
 
@@ -358,6 +357,7 @@ public final class NpcInstanceRegistry implements Listener {
 
     private void indexEntity(NpcInstance instance) {
         instancesByEntityId.values().remove(instance.getId());
-        if (instance.getEntityId() != 0) instancesByEntityId.put(instance.getEntityId(), instance.getId());
+        if (instance.getEntityId() != 0)
+            instancesByEntityId.put(instance.getEntityId(), instance.getId());
     }
 }

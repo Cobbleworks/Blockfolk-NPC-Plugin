@@ -98,10 +98,7 @@ public final class NativeNpcNavigationService {
             state.retryTicks--;
         }
         boolean stuck = state.stationaryTicks >= STUCK_TICKS;
-        return new NavigationUpdate(
-                stuck ? NavigationStatus.STALLED : NavigationStatus.MOVING,
-                current
-        );
+        return new NavigationUpdate(stuck ? NavigationStatus.STALLED : NavigationStatus.MOVING, current);
     }
 
     public void stop(NpcInstance instance) {
@@ -164,11 +161,8 @@ public final class NativeNpcNavigationService {
         }
         try {
             Husk spawned = location.getWorld().spawn(location, Husk.class, navigator -> {
-                navigator.getPersistentDataContainer().set(
-                        navigatorKey,
-                        PersistentDataType.STRING,
-                        instance.getId().toString()
-                );
+                navigator.getPersistentDataContainer().set(navigatorKey, PersistentDataType.STRING,
+                        instance.getId().toString());
                 configure(navigator);
             });
             navigatorIdsByInstance.put(instance.getId(), spawned.getUniqueId());
@@ -198,7 +192,8 @@ public final class NativeNpcNavigationService {
         configuredNavigators.remove(navigatorId);
 
         if (!location.getChunk().isLoaded()) {
-            if (!loadChunk) return null;
+            if (!loadChunk)
+                return null;
             location.getChunk().load();
         }
         Husk found = null;
@@ -271,15 +266,11 @@ public final class NativeNpcNavigationService {
     }
 
     private boolean sameTarget(Location first, Location second) {
-        return first != null
-                && first.getWorld() == second.getWorld()
-                && first.distanceSquared(second) < 0.0001;
+        return first != null && first.getWorld() == second.getWorld() && first.distanceSquared(second) < 0.0001;
     }
 
     public enum NavigationStatus {
-        MOVING,
-        ARRIVED,
-        STALLED
+        MOVING, ARRIVED, STALLED
     }
 
     public record NavigationUpdate(NavigationStatus status, Location location) {

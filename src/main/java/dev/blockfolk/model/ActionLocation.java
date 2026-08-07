@@ -20,8 +20,8 @@ public record ActionLocation(String worldName, double x, double y, double z) {
     }
 
     public static ActionLocation above(Block block) {
-        return new ActionLocation(block.getWorld().getName(),
-                block.getX() + 0.5, block.getY() + 1.0, block.getZ() + 0.5);
+        return new ActionLocation(block.getWorld().getName(), block.getX() + 0.5, block.getY() + 1.0,
+                block.getZ() + 0.5);
     }
 
     public String serialize() {
@@ -37,8 +37,8 @@ public record ActionLocation(String worldName, double x, double y, double z) {
             return Optional.empty();
         }
         try {
-            return Optional.of(new ActionLocation(parts[0], Double.parseDouble(parts[1]),
-                    Double.parseDouble(parts[2]), Double.parseDouble(parts[3])));
+            return Optional.of(new ActionLocation(parts[0], Double.parseDouble(parts[1]), Double.parseDouble(parts[2]),
+                    Double.parseDouble(parts[3])));
         } catch (IllegalArgumentException exception) {
             return Optional.empty();
         }

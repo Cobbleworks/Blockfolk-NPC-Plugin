@@ -18,7 +18,10 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
-/** Coalesces YAML updates on the server thread and performs file I/O asynchronously. */
+/**
+ * Coalesces YAML updates on the server thread and performs file I/O
+ * asynchronously.
+ */
 final class DebouncedYamlWriter {
 
     private static final long DELAY_TICKS = 10L;
@@ -34,20 +37,23 @@ final class DebouncedYamlWriter {
 
     synchronized void queue(File file, Supplier<YamlConfiguration> configuration) {
         pending.put(file.toPath(), configuration);
-        if (snapshotTask != null) snapshotTask.cancel();
+        if (snapshotTask != null)
+            snapshotTask.cancel();
         snapshotTask = Bukkit.getScheduler().runTaskLater(plugin, this::snapshot, DELAY_TICKS);
     }
 
     synchronized void delete(File file) {
         pending.put(file.toPath(), () -> null);
-        if (snapshotTask != null) snapshotTask.cancel();
+        if (snapshotTask != null)
+            snapshotTask.cancel();
         snapshotTask = Bukkit.getScheduler().runTaskLater(plugin, this::snapshot, DELAY_TICKS);
     }
 
     void flush() {
         Map<Path, String> updates;
         synchronized (this) {
-            if (snapshotTask != null) snapshotTask.cancel();
+            if (snapshotTask != null)
+                snapshotTask.cancel();
             snapshotTask = null;
             updates = materializePending();
         }
@@ -60,7 +66,8 @@ final class DebouncedYamlWriter {
         synchronized (this) {
             snapshotTask = null;
             updates = materializePending();
-            if (updates.isEmpty()) return;
+            if (updates.isEmpty())
+                return;
             writeChain = writeChain.thenRunAsync(() -> write(updates));
         }
     }
@@ -86,11 +93,11 @@ final class DebouncedYamlWriter {
                     return;
                 }
                 Path parent = path.getParent();
-                if (parent != null) Files.createDirectories(parent);
+                if (parent != null)
+                    Files.createDirectories(parent);
                 Path temporary = Files.createTempFile(parent, path.getFileName().toString(), ".tmp");
                 try {
-                    Files.writeString(temporary, content, StandardCharsets.UTF_8,
-                            StandardOpenOption.TRUNCATE_EXISTING);
+                    Files.writeString(temporary, content, StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
                     if (Files.exists(path)) {
                         Files.copy(path, path.resolveSibling(path.getFileName() + ".bak"),
                                 StandardCopyOption.REPLACE_EXISTING);

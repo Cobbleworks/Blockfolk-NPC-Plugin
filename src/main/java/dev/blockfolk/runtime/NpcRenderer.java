@@ -19,7 +19,9 @@ public interface NpcRenderer {
 
     void destroy(NpcInstance instance);
 
-    default void destroyPermanently(NpcInstance instance) { destroy(instance); }
+    default void destroyPermanently(NpcInstance instance) {
+        destroy(instance);
+    }
 
     void refresh(NpcInstance instance, NpcDefinition definition);
 

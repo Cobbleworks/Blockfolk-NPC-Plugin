@@ -3,10 +3,8 @@ package dev.blockfolk.model;
 import org.bukkit.Material;
 
 public enum LootTier {
-    COMMON("Common Loot", Material.COPPER_INGOT, 1.0),
-    UNCOMMON("Uncommon Loot", Material.IRON_INGOT, 0.5),
-    RARE("Rare Loot", Material.GOLD_INGOT, 0.25),
-    LEGENDARY("Legendary Loot", Material.DIAMOND, 0.1);
+    COMMON("Common Loot", Material.COPPER_INGOT, 1.0), UNCOMMON("Uncommon Loot", Material.IRON_INGOT,
+            0.5), RARE("Rare Loot", Material.GOLD_INGOT, 0.25), LEGENDARY("Legendary Loot", Material.DIAMOND, 0.1);
 
     public static final int SLOTS_PER_TIER = 9;
 
@@ -41,9 +39,7 @@ public enum LootTier {
     }
 
     public static boolean isRowStarterSlot(int slot) {
-        return slot >= 0
-                && slot < values().length * SLOTS_PER_TIER
-                && slot % SLOTS_PER_TIER == 0;
+        return slot >= 0 && slot < values().length * SLOTS_PER_TIER && slot % SLOTS_PER_TIER == 0;
     }
 
     public static LootTier forInventorySlot(int slot) {

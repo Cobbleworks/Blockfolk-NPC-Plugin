@@ -47,12 +47,11 @@ class AiGroupDecisionParserTest {
 
     @Test
     void malformedGroupResponseProducesNoNpcActions() {
-        assertEquals(Map.of(), AiGroupDecisionParser.parse("not json",
-                Map.of("npc_1", settings(EnumSet.of(AiActionType.SAY)))));
+        assertEquals(Map.of(),
+                AiGroupDecisionParser.parse("not json", Map.of("npc_1", settings(EnumSet.of(AiActionType.SAY)))));
     }
 
     private static AiControlSettings settings(EnumSet<AiActionType> actions) {
-        return new AiControlSettings("Character", "", "", "", "", actions,
-                true, true, false, false, false);
+        return new AiControlSettings("Character", "", "", "", "", actions, true, true, false, false, false);
     }
 }

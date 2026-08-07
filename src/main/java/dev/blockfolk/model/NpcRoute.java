@@ -11,11 +11,8 @@ import org.bukkit.inventory.ItemStack;
 
 public final class NpcRoute {
 
-    private static final Comparator<RoutePoint> POINT_ORDER = Comparator
-            .comparing(RoutePoint::worldName)
-            .thenComparingInt(RoutePoint::x)
-            .thenComparingInt(RoutePoint::y)
-            .thenComparingInt(RoutePoint::z);
+    private static final Comparator<RoutePoint> POINT_ORDER = Comparator.comparing(RoutePoint::worldName)
+            .thenComparingInt(RoutePoint::x).thenComparingInt(RoutePoint::y).thenComparingInt(RoutePoint::z);
 
     private final String key;
     private String displayName;
@@ -118,16 +115,16 @@ public final class NpcRoute {
             return List.of();
         }
         List<RoutePoint> remaining = new ArrayList<>(points);
-        RoutePoint current = remaining.stream()
-                .min(Comparator.comparingDouble((RoutePoint point) -> point.distanceSquared(origin)).thenComparing(POINT_ORDER))
+        RoutePoint current = remaining.stream().min(Comparator
+                .comparingDouble((RoutePoint point) -> point.distanceSquared(origin)).thenComparing(POINT_ORDER))
                 .orElseThrow();
         List<RoutePoint> ordered = new ArrayList<>();
         ordered.add(current);
         remaining.remove(current);
         while (!remaining.isEmpty()) {
             RoutePoint previous = current;
-            current = remaining.stream()
-                    .min(Comparator.comparingDouble((RoutePoint point) -> previous.distanceSquared(point)).thenComparing(POINT_ORDER))
+            current = remaining.stream().min(Comparator
+                    .comparingDouble((RoutePoint point) -> previous.distanceSquared(point)).thenComparing(POINT_ORDER))
                     .orElseThrow();
             ordered.add(current);
             remaining.remove(current);

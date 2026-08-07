@@ -70,69 +70,35 @@ public final class BlockfolkPlugin extends JavaPlugin {
         npcRenderer = new PaperMannequinNpcRenderer(this);
         navigationService = new NativeNpcNavigationService(this);
         dialogService = new DialogService(this);
-        instanceRegistry = new NpcInstanceRegistry(
-                this,
-                definitionRepository,
-                instanceRepository,
-                npcRenderer,
-                navigationService,
-                dialogService
-        );
+        instanceRegistry = new NpcInstanceRegistry(this, definitionRepository, instanceRepository, npcRenderer,
+                navigationService, dialogService);
         dialogService.setLocationProvider(instanceRegistry::currentLocation);
         chatInputService = new ChatInputService(this, getConfig().getInt("chat-input-timeout-seconds", 60));
-        skinResolver = new SkinResolver(
-                getName() + "/" + getPluginMeta().getVersion(),
-                getConfig().getString("mineskin-api-key", "")
-        );
-        routeGuiService = new RouteGuiService(
-                this,
-                routeRepository,
-                locationRepository,
-                definitionRepository,
-                instanceRegistry,
-                chatInputService,
-                this::openMainGui
-        );
-        customEventGuiService = new CustomEventGuiService(
-                this, customEventRepository, definitionRepository, chatInputService, this::openMainGui);
-        guiService = new GuiService(
-                this,
-                definitionRepository,
-                routeRepository,
-                instanceRegistry,
-                chatInputService,
-                skinResolver,
-                routeGuiService::openRoutes,
-                routeGuiService::createRoute,
-                customEventRepository,
-                customEventGuiService::open,
-                customEventGuiService::createEvent,
-                locationRepository
-        );
+        skinResolver = new SkinResolver(getName() + "/" + getPluginMeta().getVersion(),
+                getConfig().getString("mineskin-api-key", ""));
+        routeGuiService = new RouteGuiService(this, routeRepository, locationRepository, definitionRepository,
+                instanceRegistry, chatInputService, this::openMainGui);
+        customEventGuiService = new CustomEventGuiService(this, customEventRepository, definitionRepository,
+                chatInputService, this::openMainGui);
+        guiService = new GuiService(this, definitionRepository, routeRepository, instanceRegistry, chatInputService,
+                skinResolver, routeGuiService::openRoutes, routeGuiService::createRoute, customEventRepository,
+                customEventGuiService::open, customEventGuiService::createEvent, locationRepository);
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
         questionService = new NpcQuestionService(this, instanceRegistry, chatInputService,
                 getConfig().getInt("question-timeout-seconds", 30));
         chatInputService.setBeforeRequest(questionService::cancelForAdminInput);
-        behaviourService = new NpcBehaviourService(
-                this,
-                definitionRepository,
-                instanceRegistry,
-                dialogService,
-                questionService,
-                getConfig().getInt("proximity-transition-cooldown-seconds", 3)
-        );
+        behaviourService = new NpcBehaviourService(this, definitionRepository, instanceRegistry, dialogService,
+                questionService, getConfig().getInt("proximity-transition-cooldown-seconds", 3));
         behaviourService.setCombatService(combatService);
         routeGuiService.setBehaviourService(behaviourService);
         OpenRouterClient openRouterClient = new OpenRouterClient(
                 getConfig().getString("openrouter.endpoint", "https://openrouter.ai/api/v1/chat/completions"),
-                getConfig().getString("openrouter.api-key", ""),
-                getConfig().getString("openrouter.model", ""),
+                getConfig().getString("openrouter.api-key", ""), getConfig().getString("openrouter.model", ""),
                 getConfig().getInt("openrouter.timeout-seconds", 12),
                 getConfig().getInt("openrouter.max-tokens", 1600));
         aiControlService = new AiControlService(this, definitionRepository, instanceRegistry, combatService,
-                locationRepository,
-                openRouterClient, getConfig().getInt("ai-control.invocation-cooldown-seconds", 2));
+                locationRepository, openRouterClient, getConfig().getInt("ai-control.invocation-cooldown-seconds", 2));
         behaviourService.setAiControlService(aiControlService);
         aiControlService.setRouteState(behaviourService::hasRoute);
         guiService.setAiControlService(aiControlService);
@@ -143,14 +109,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
             behaviourService.trigger(BehaviourEvent.SPAWN, instance, null);
         });
         instanceRegistry.setRemovalListener(behaviourService::forget);
-        routeMovementService = new RouteMovementService(
-                this,
-                definitionRepository,
-                routeRepository,
-                instanceRegistry,
-                combatService,
-                behaviourService
-        );
+        routeMovementService = new RouteMovementService(this, definitionRepository, routeRepository, instanceRegistry,
+                combatService, behaviourService);
         instanceRegistry.setRelocationListener(routeMovementService::resetProgress);
 
         routeRepository.loadAll();
@@ -161,8 +121,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
 
         if (getServer().getPluginManager().isPluginEnabled("BeautyQuests")) {
             try {
-                beautyQuestsIntegration = new BeautyQuestsIntegration(
-                        this, definitionRepository, instanceRegistry, behaviourService);
+                beautyQuestsIntegration = new BeautyQuestsIntegration(this, definitionRepository, instanceRegistry,
+                        behaviourService);
                 beautyQuestsIntegration.register();
                 instanceRegistry.setRemovalListener(instance -> {
                     behaviourService.forget(instance);
@@ -170,8 +130,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 });
             } catch (LinkageError | RuntimeException exception) {
                 beautyQuestsIntegration = null;
-                getLogger().log(Level.WARNING,
-                        "BeautyQuests was detected, but its integration could not be enabled.", exception);
+                getLogger().log(Level.WARNING, "BeautyQuests was detected, but its integration could not be enabled.",
+                        exception);
             }
         }
 
@@ -181,9 +141,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
-        BlockfolkCommand executor = new BlockfolkCommand(
-                definitionRepository, instanceRegistry, guiService, routeGuiService,
-                customEventGuiService, customEventRepository, behaviourService);
+        BlockfolkCommand executor = new BlockfolkCommand(definitionRepository, instanceRegistry, guiService,
+                routeGuiService, customEventGuiService, customEventRepository, behaviourService);
         command.setExecutor(executor);
         command.setTabCompleter(executor);
 
@@ -238,11 +197,16 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 getLogger().log(Level.SEVERE, "Failed to save NPC instances during shutdown.", exception);
             }
         }
-        if (definitionRepository != null) definitionRepository.flush();
-        if (instanceRepository != null) instanceRepository.flush();
-        if (routeRepository != null) routeRepository.flush();
-        if (locationRepository != null) locationRepository.flush();
-        if (customEventRepository != null) customEventRepository.flush();
+        if (definitionRepository != null)
+            definitionRepository.flush();
+        if (instanceRepository != null)
+            instanceRepository.flush();
+        if (routeRepository != null)
+            routeRepository.flush();
+        if (locationRepository != null)
+            locationRepository.flush();
+        if (customEventRepository != null)
+            customEventRepository.flush();
         if (dialogService != null) {
             dialogService.stop();
         }
@@ -262,19 +226,13 @@ public final class BlockfolkPlugin extends JavaPlugin {
                     || SkinTextureUtil.isMinecraftTextureUrl(skinUrl)) {
                 continue;
             }
-            skinResolver.resolve(skinUrl).whenComplete((resolved, error)
-                    -> Bukkit.getScheduler().runTask(this,
-                            () -> finishStoredSkinResolution(definition.getKey(), skinUrl, resolved, error))
-            );
+            skinResolver.resolve(skinUrl).whenComplete((resolved, error) -> Bukkit.getScheduler().runTask(this,
+                    () -> finishStoredSkinResolution(definition.getKey(), skinUrl, resolved, error)));
         }
     }
 
-    private void finishStoredSkinResolution(
-            String definitionKey,
-            String requestedUrl,
-            ResolvedSkin resolved,
-            Throwable error
-    ) {
+    private void finishStoredSkinResolution(String definitionKey, String requestedUrl, ResolvedSkin resolved,
+            Throwable error) {
         if (error != null) {
             getLogger().log(Level.WARNING, "Could not process the stored skin for NPC " + definitionKey, error);
             return;

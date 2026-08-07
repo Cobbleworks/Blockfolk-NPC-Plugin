@@ -74,15 +74,9 @@ public final class RouteGuiService implements Listener {
     private BukkitTask markerTask;
     private NpcBehaviourService behaviourService;
 
-    public RouteGuiService(
-            JavaPlugin plugin,
-            RouteRepository routeRepository,
-            LocationRepository locationRepository,
-            NpcDefinitionRepository definitionRepository,
-            NpcInstanceRegistry instanceRegistry,
-            ChatInputService chatInputService,
-            Consumer<Player> mainGuiOpener
-    ) {
+    public RouteGuiService(JavaPlugin plugin, RouteRepository routeRepository, LocationRepository locationRepository,
+            NpcDefinitionRepository definitionRepository, NpcInstanceRegistry instanceRegistry,
+            ChatInputService chatInputService, Consumer<Player> mainGuiOpener) {
         this.plugin = plugin;
         this.routeRepository = routeRepository;
         this.locationRepository = locationRepository;
@@ -148,11 +142,9 @@ public final class RouteGuiService implements Listener {
         for (int index = from; index < to; index++) {
             RouteBrowserModel.Entry entry = entries.get(index);
             if (entry.folder()) {
-                ItemStack folderIcon = item(entry.npcFolder() ? Material.PLAYER_HEAD : Material.CHEST,
-                        entry.label(), List.of(
-                        LegacyText.GRAY + "" + entry.childCount() + " route(s)",
-                        LegacyText.DARK_GRAY + "Routes used by this NPC",
-                        LegacyText.YELLOW + "Click to open"));
+                ItemStack folderIcon = item(entry.npcFolder() ? Material.PLAYER_HEAD : Material.CHEST, entry.label(),
+                        List.of(LegacyText.GRAY + "" + entry.childCount() + " route(s)",
+                                LegacyText.DARK_GRAY + "Routes used by this NPC", LegacyText.YELLOW + "Click to open"));
                 if (entry.npcFolder()) {
                     definitionRepository.find(RouteBrowserModel.npcKey(entry.path()))
                             .ifPresent(definition -> NpcHeadUtil.applySkin(folderIcon, definition));
@@ -161,35 +153,34 @@ public final class RouteGuiService implements Listener {
                 continue;
             }
             NpcRoute route = entry.route();
-            inventory.setItem(index - from, routeItem(route, List.of(
-                    LegacyText.DARK_GRAY + "Key: " + route.getKey(),
-                    LegacyText.GRAY + "Key points: " + LegacyText.WHITE + route.getPoints().size(),
-                    LegacyText.AQUA + "Middle-click: set icon from main hand",
-                    LegacyText.YELLOW + "Left-click: edit points",
-                    LegacyText.RED + "Shift-right-click: remove route"
-            )));
+            inventory.setItem(index - from,
+                    routeItem(route,
+                            List.of(LegacyText.DARK_GRAY + "Key: " + route.getKey(),
+                                    LegacyText.GRAY + "Key points: " + LegacyText.WHITE + route.getPoints().size(),
+                                    LegacyText.AQUA + "Middle-click: set icon from main hand",
+                                    LegacyText.YELLOW + "Left-click: edit points",
+                                    LegacyText.RED + "Shift-right-click: remove route")));
         }
         inventory.setItem(45, item(folder.isEmpty() ? Material.PLAYER_HEAD : Material.ARROW,
                 folder.isEmpty() ? "Manage NPCs" : "Back to Routes", List.of()));
-        inventory.setItem(46, item(Material.LODESTONE, "Locations", List.of(
-                LegacyText.GRAY + "Define global positions for NPC actions",
-                LegacyText.GREEN + "Uses green waypoint markers",
-                LegacyText.YELLOW + "Click to manage locations"
-        )));
+        inventory.setItem(46,
+                item(Material.LODESTONE, "Locations",
+                        List.of(LegacyText.GRAY + "Define global positions for NPC actions",
+                                LegacyText.GREEN + "Uses green waypoint markers",
+                                LegacyText.YELLOW + "Click to manage locations")));
         if (page > 0) {
             inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
         }
-        inventory.setItem(49, item(Material.COMPASS, "Route Overview", List.of(
-                LegacyText.GRAY + "Routes: " + LegacyText.WHITE + routeRepository.findAll().size(),
-                LegacyText.GRAY + "View: " + LegacyText.WHITE + routeBrowserLabel(folder),
-                LegacyText.GRAY + "NPCs start at their nearest point",
-                LegacyText.GRAY + "then follow nearest unvisited points in a loop",
-                LegacyText.YELLOW + "Click to reorder routes"
-        )));
+        inventory.setItem(49,
+                item(Material.COMPASS, "Route Overview",
+                        List.of(LegacyText.GRAY + "Routes: " + LegacyText.WHITE + routeRepository.findAll().size(),
+                                LegacyText.GRAY + "View: " + LegacyText.WHITE + routeBrowserLabel(folder),
+                                LegacyText.GRAY + "NPCs start at their nearest point",
+                                LegacyText.GRAY + "then follow nearest unvisited points in a loop",
+                                LegacyText.YELLOW + "Click to reorder routes")));
         if (!RouteBrowserModel.isNpcFolder(folder)) {
-            inventory.setItem(51, item(Material.EMERALD, "Create Route", List.of(
-                    LegacyText.YELLOW + "Click, then enter the route name"
-            )));
+            inventory.setItem(51, item(Material.EMERALD, "Create Route",
+                    List.of(LegacyText.YELLOW + "Click, then enter the route name")));
         }
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
@@ -208,31 +199,30 @@ public final class RouteGuiService implements Listener {
         List<NamedLocation> locations = new ArrayList<>(locationRepository.findAll());
         int pages = Math.max(1, (locations.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(
-                new LocationsHolder(page, returnFolder, returnPage), 54, UiText.title("Global Locations"));
+        Inventory inventory = Bukkit.createInventory(new LocationsHolder(page, returnFolder, returnPage), 54,
+                UiText.title("Global Locations"));
         int from = page * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, locations.size());
         for (int index = from; index < to; index++) {
             NamedLocation named = locations.get(index);
-            inventory.setItem(index - from, locationItem(named, List.of(
-                    LegacyText.DARK_GRAY + "Key: " + named.key(),
-                    LegacyText.GRAY + named.location().display(),
-                    LegacyText.AQUA + "Middle-click: set icon from main hand",
-                    LegacyText.YELLOW + "Left-click: teleport",
-                    LegacyText.RED + "Shift-right-click: delete"
-            )));
+            inventory.setItem(index - from, locationItem(named,
+                    List.of(LegacyText.DARK_GRAY + "Key: " + named.key(), LegacyText.GRAY + named.location().display(),
+                            LegacyText.AQUA + "Middle-click: set icon from main hand",
+                            LegacyText.YELLOW + "Left-click: teleport", LegacyText.RED + "Shift-right-click: delete")));
         }
         inventory.setItem(45, item(Material.ARROW, "Back to Routes", List.of()));
-        if (page > 0) inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
-        inventory.setItem(49, item(Material.COMPASS, "Location Overview", List.of(
-                LegacyText.GRAY + "Locations: " + LegacyText.WHITE + locations.size(),
-                LegacyText.GRAY + "Saved locations can be selected by movement actions"
-        )));
-        inventory.setItem(51, item(Material.AMETHYST_SHARD, "Edit Locations", List.of(
-                LegacyText.GRAY + "Left-click a block, then enter a name",
-                LegacyText.YELLOW + "Click to begin placement"
-        )));
-        if (page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        if (page > 0)
+            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
+        inventory.setItem(49,
+                item(Material.COMPASS, "Location Overview",
+                        List.of(LegacyText.GRAY + "Locations: " + LegacyText.WHITE + locations.size(),
+                                LegacyText.GRAY + "Saved locations can be selected by movement actions")));
+        inventory.setItem(51,
+                item(Material.AMETHYST_SHARD, "Edit Locations",
+                        List.of(LegacyText.GRAY + "Left-click a block, then enter a name",
+                                LegacyText.YELLOW + "Click to begin placement")));
+        if (page + 1 < pages)
+            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
@@ -258,24 +248,28 @@ public final class RouteGuiService implements Listener {
         int to = Math.min(from + PAGE_SIZE, holder.keys.size());
         for (int index = from; index < to; index++) {
             String key = holder.keys.get(index);
-            if (key.equals(holder.selectedKey)) continue;
+            if (key.equals(holder.selectedKey))
+                continue;
             NpcRoute route = routeRepository.find(key).orElse(null);
-            if (route != null) inventory.setItem(index - from, reorderItem(route, index));
+            if (route != null)
+                inventory.setItem(index - from, reorderItem(route, index));
         }
-        if (holder.page > 0) inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
-        inventory.setItem(48, item(Material.LIME_CONCRETE, "Save Order", List.of(
-                LegacyText.GRAY + "Apply this order to the routes browser")));
-        inventory.setItem(50, item(Material.RED_CONCRETE, "Cancel", List.of(
-                LegacyText.GRAY + "Discard all ordering changes")));
-        if (holder.page + 1 < pages) inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        if (holder.page > 0)
+            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+        inventory.setItem(48, item(Material.LIME_CONCRETE, "Save Order",
+                List.of(LegacyText.GRAY + "Apply this order to the routes browser")));
+        inventory.setItem(50,
+                item(Material.RED_CONCRETE, "Cancel", List.of(LegacyText.GRAY + "Discard all ordering changes")));
+        if (holder.page + 1 < pages)
+            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         GuiLayout.fillMainBar(inventory);
     }
 
     private ItemStack reorderItem(NpcRoute route, int index) {
-        ItemStack icon = routeItem(route, List.of(
-                LegacyText.DARK_GRAY + route.getKey(),
-                LegacyText.GRAY + "Position: " + LegacyText.WHITE + (index + 1),
-                LegacyText.YELLOW + "Pick up and drop to move"));
+        ItemStack icon = routeItem(route,
+                List.of(LegacyText.DARK_GRAY + route.getKey(),
+                        LegacyText.GRAY + "Position: " + LegacyText.WHITE + (index + 1),
+                        LegacyText.YELLOW + "Pick up and drop to move"));
         ItemMeta meta = icon.getItemMeta();
         meta.getPersistentDataContainer().set(reorderRouteKey, PersistentDataType.STRING, route.getKey());
         icon.setItemMeta(meta);
@@ -300,7 +294,8 @@ public final class RouteGuiService implements Listener {
         editSessions.clear();
         for (UUID playerId : List.copyOf(locationEditSessions.keySet())) {
             Player player = Bukkit.getPlayer(playerId);
-            if (player != null) finishLocationEditing(player);
+            if (player != null)
+                finishLocationEditing(player);
         }
         locationEditSessions.clear();
     }
@@ -381,8 +376,8 @@ public final class RouteGuiService implements Listener {
                     player.sendMessage(UiText.success("Added route point " + route.getPoints().size() + "."));
                 } else {
                     RoutePoint existing = route.findPoint(point).orElseThrow();
-                    player.sendMessage(UiText.warning("That block is already a route point. Actions: "
-                            + actionSummary(existing) + "."));
+                    player.sendMessage(UiText
+                            .warning("That block is already a route point. Actions: " + actionSummary(existing) + "."));
                 }
             } catch (IllegalArgumentException exception) {
                 player.sendMessage(UiText.error("A route cannot contain blocks from different worlds."));
@@ -406,26 +401,27 @@ public final class RouteGuiService implements Listener {
         }
         if (changed) {
             routeRepository.save(route);
-            player.spawnParticle(Particle.END_ROD, point.x() + 0.5, point.y() + 1.1, point.z() + 0.5, 8, 0.2, 0.2, 0.2, 0.0);
-            player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_PLACE, 0.7f, action == Action.RIGHT_CLICK_BLOCK ? 0.7f : 1.2f);
+            player.spawnParticle(Particle.END_ROD, point.x() + 0.5, point.y() + 1.1, point.z() + 0.5, 8, 0.2, 0.2, 0.2,
+                    0.0);
+            player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_PLACE, 0.7f,
+                    action == Action.RIGHT_CLICK_BLOCK ? 0.7f : 1.2f);
         }
     }
 
     @EventHandler
     public void onLocationPointClick(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND || event.getClickedBlock() == null
-                || (event.getAction() != Action.LEFT_CLICK_BLOCK
-                && event.getAction() != Action.RIGHT_CLICK_BLOCK)) {
+                || (event.getAction() != Action.LEFT_CLICK_BLOCK && event.getAction() != Action.RIGHT_CLICK_BLOCK)) {
             return;
         }
         Player player = event.getPlayer();
         LocationEditSession session = validLocationSession(player, event.getItem());
-        if (session == null) return;
+        if (session == null)
+            return;
         event.setCancelled(true);
         ActionLocation position = ActionLocation.above(event.getClickedBlock());
         NamedLocation existing = locationRepository.findAll().stream()
-                .filter(named -> named.location().equals(position))
-                .findFirst().orElse(null);
+                .filter(named -> named.location().equals(position)).findFirst().orElse(null);
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
             if (existing == null) {
                 player.sendMessage(UiText.info("That block is not a global location."));
@@ -457,8 +453,8 @@ public final class RouteGuiService implements Listener {
                 }
                 locationRepository.save(named);
                 player.sendMessage(UiText.success("Saved global location '" + named.displayName() + "'."));
-                player.sendMessage(UiText.prompt(
-                        "Left-click another block to add a location, or drop the shard to finish."));
+                player.sendMessage(
+                        UiText.prompt("Left-click another block to add a location, or drop the shard to finish."));
                 showLocations(player);
             } catch (IllegalArgumentException exception) {
                 player.sendMessage(UiText.error(exception.getMessage()));
@@ -475,8 +471,8 @@ public final class RouteGuiService implements Listener {
             locationEditSessions.remove(player.getUniqueId());
             chatInputService.cancel(player);
             player.sendMessage(UiText.success("Finished editing global locations."));
-            Bukkit.getScheduler().runTask(plugin, () -> openLocations(
-                    player, 0, locationSession.returnFolder(), locationSession.returnPage()));
+            Bukkit.getScheduler().runTask(plugin,
+                    () -> openLocations(player, 0, locationSession.returnFolder(), locationSession.returnPage()));
             return;
         }
         if (validSession(player, event.getItemDrop().getItemStack()) == null) {
@@ -498,8 +494,10 @@ public final class RouteGuiService implements Listener {
         String folder = holder.folder();
         int page = holder.page();
         if (event.getRawSlot() == 45) {
-            if (folder.isEmpty()) mainGuiOpener.accept(player);
-            else openRoutes(player, "", 0);
+            if (folder.isEmpty())
+                mainGuiOpener.accept(player);
+            else
+                openRoutes(player, "", 0);
             return;
         }
         if (event.getRawSlot() == 46) {
@@ -582,13 +580,13 @@ public final class RouteGuiService implements Listener {
         }
         int index = holder.page() * PAGE_SIZE + slot;
         List<NamedLocation> locations = new ArrayList<>(locationRepository.findAll());
-        if (slot < 0 || slot >= PAGE_SIZE || index < 0 || index >= locations.size()) return;
+        if (slot < 0 || slot >= PAGE_SIZE || index < 0 || index >= locations.size())
+            return;
         NamedLocation named = locations.get(index);
         if (event.getClick() == ClickType.MIDDLE) {
             named = named.withIcon(player.getInventory().getItemInMainHand());
             locationRepository.save(named);
-            player.sendMessage(UiText.info(named.icon() == null
-                    ? "Location icon cleared." : "Location icon updated."));
+            player.sendMessage(UiText.info(named.icon() == null ? "Location icon cleared." : "Location icon updated."));
             openLocations(player, holder.page(), holder.returnFolder(), holder.returnPage());
         } else if (event.isRightClick() && event.isShiftClick()) {
             locationRepository.delete(named);
@@ -597,8 +595,8 @@ public final class RouteGuiService implements Listener {
         } else if (event.isLeftClick()) {
             Location destination = named.location().toLocation();
             if (destination == null) {
-                player.sendMessage(UiText.error(
-                        "The world for location '" + named.displayName() + "' is not available."));
+                player.sendMessage(
+                        UiText.error("The world for location '" + named.displayName() + "' is not available."));
                 return;
             }
             player.closeInventory();
@@ -616,8 +614,8 @@ public final class RouteGuiService implements Listener {
         ItemStack held = player.getInventory().getItemInMainHand();
         player.getInventory().setItemInMainHand(createLocationWand(session));
         if (!held.getType().isAir()) {
-            player.getInventory().addItem(held).values().forEach(leftover
-                    -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
+            player.getInventory().addItem(held).values()
+                    .forEach(leftover -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
         }
         player.closeInventory();
         player.sendMessage(UiText.info("Placing a new global location."));
@@ -630,17 +628,16 @@ public final class RouteGuiService implements Listener {
         ItemStack wand = new ItemStack(Material.AMETHYST_SHARD);
         ItemMeta meta = wand.getItemMeta();
         meta.displayName(LegacyText.component(LegacyText.GREEN + "Global Location Editor"));
-        meta.lore(LegacyText.components(List.of(
-                LegacyText.GRAY + "Unique editor: " + session.token().toString().substring(0, 8),
-                LegacyText.YELLOW + "Left-click a block: set position",
-                LegacyText.RED + "Right-click a location: delete it",
-                LegacyText.GREEN + "Global locations are highlighted in green",
-                LegacyText.GRAY + "Drop: finish editing"
-        )));
+        meta.lore(LegacyText
+                .components(List.of(LegacyText.GRAY + "Unique editor: " + session.token().toString().substring(0, 8),
+                        LegacyText.YELLOW + "Left-click a block: set position",
+                        LegacyText.RED + "Right-click a location: delete it",
+                        LegacyText.GREEN + "Global locations are highlighted in green",
+                        LegacyText.GRAY + "Drop: finish editing")));
         meta.setEnchantmentGlintOverride(true);
         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-        meta.getPersistentDataContainer().set(locationWandTokenKey,
-                PersistentDataType.STRING, session.token().toString());
+        meta.getPersistentDataContainer().set(locationWandTokenKey, PersistentDataType.STRING,
+                session.token().toString());
         wand.setItemMeta(meta);
         return wand;
     }
@@ -650,14 +647,15 @@ public final class RouteGuiService implements Listener {
         if (session == null || item == null || item.getType() != Material.AMETHYST_SHARD || !item.hasItemMeta()) {
             return null;
         }
-        String token = item.getItemMeta().getPersistentDataContainer()
-                .get(locationWandTokenKey, PersistentDataType.STRING);
+        String token = item.getItemMeta().getPersistentDataContainer().get(locationWandTokenKey,
+                PersistentDataType.STRING);
         return session.token().toString().equals(token) ? session : null;
     }
 
     private void finishLocationEditing(Player player) {
         LocationEditSession session = locationEditSessions.remove(player.getUniqueId());
-        if (session != null) removeLocationWand(player, session);
+        if (session != null)
+            removeLocationWand(player, session);
     }
 
     private void removeLocationWand(Player player, LocationEditSession session) {
@@ -665,9 +663,8 @@ public final class RouteGuiService implements Listener {
         for (int slot = 0; slot < contents.length; slot++) {
             ItemStack item = contents[slot];
             ItemMeta meta = item == null ? null : item.getItemMeta();
-            if (item != null && item.getType() == Material.AMETHYST_SHARD && meta != null
-                    && session.token().toString().equals(meta.getPersistentDataContainer()
-                            .get(locationWandTokenKey, PersistentDataType.STRING))) {
+            if (item != null && item.getType() == Material.AMETHYST_SHARD && meta != null && session.token().toString()
+                    .equals(meta.getPersistentDataContainer().get(locationWandTokenKey, PersistentDataType.STRING))) {
                 player.getInventory().setItem(slot, null);
             }
         }
@@ -675,7 +672,8 @@ public final class RouteGuiService implements Listener {
 
     private void handleReorderClick(InventoryClickEvent event, Player player, ReorderRoutesHolder holder) {
         event.setCancelled(true);
-        if (!isTopInventoryClick(event)) return;
+        if (!isTopInventoryClick(event))
+            return;
         int slot = event.getRawSlot();
         if (slot == 45 && holder.page > 0) {
             openReorder(player, holder, holder.page - 1);
@@ -692,8 +690,8 @@ public final class RouteGuiService implements Listener {
                 player.sendMessage(UiText.success("Route order saved."));
                 openRoutes(player, holder.returnFolder, holder.returnPage);
             } catch (IllegalArgumentException exception) {
-                player.sendMessage(UiText.info(
-                        "The route list changed while you were editing. Please reorder it again."));
+                player.sendMessage(
+                        UiText.info("The route list changed while you were editing. Please reorder it again."));
                 openReorder(player, holder.returnFolder, holder.returnPage);
             }
             return;
@@ -703,8 +701,8 @@ public final class RouteGuiService implements Listener {
             openRoutes(player, holder.returnFolder, holder.returnPage);
             return;
         }
-        ReorderSupport.selectOrMove(event, player, holder, PAGE_SIZE, reorderRouteKey,
-                this::reorderItem, inventory -> renderReorder(inventory, holder));
+        ReorderSupport.selectOrMove(event, player, holder, PAGE_SIZE, reorderRouteKey, this::reorderItem,
+                inventory -> renderReorder(inventory, holder));
     }
 
     private void handleDeleteClick(InventoryClickEvent event, Player player, DeleteRouteHolder holder) {
@@ -727,21 +725,22 @@ public final class RouteGuiService implements Listener {
                 affected++;
             }
         }
-        if (behaviourService != null) behaviourService.removeRoute(route.getKey());
+        if (behaviourService != null)
+            behaviourService.removeRoute(route.getKey());
         routeRepository.delete(route);
-        player.sendMessage(UiText.success("Deleted route '" + route.getDisplayName()
-                + "' and unassigned " + affected + " preset(s)."));
+        player.sendMessage(UiText
+                .success("Deleted route '" + route.getDisplayName() + "' and unassigned " + affected + " preset(s)."));
         openRoutes(player, holder.folder(), holder.page());
     }
 
     private void openDeleteConfirmation(Player player, NpcRoute route, String folder, int page) {
         Inventory inventory = Bukkit.createInventory(new DeleteRouteHolder(route.getKey(), folder, page), 27,
                 UiText.title("Delete Route", route.getDisplayName()));
-        inventory.setItem(11, item(Material.LIME_CONCRETE, "Confirm", List.of(
-                LegacyText.RED + "Permanently delete this route",
-                LegacyText.GRAY + "NPC presets using it will be unassigned"
-        )));
-        inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel", List.of(LegacyText.GRAY + "Nothing will be changed")));
+        inventory.setItem(11,
+                item(Material.LIME_CONCRETE, "Confirm", List.of(LegacyText.RED + "Permanently delete this route",
+                        LegacyText.GRAY + "NPC presets using it will be unassigned")));
+        inventory.setItem(15,
+                item(Material.RED_CONCRETE, "Cancel", List.of(LegacyText.GRAY + "Nothing will be changed")));
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
@@ -759,9 +758,7 @@ public final class RouteGuiService implements Listener {
             return folder.isEmpty() ? "Root" : folder;
         }
         String npcKey = RouteBrowserModel.npcKey(folder);
-        String npcName = definitionRepository.find(npcKey)
-                .map(NpcDefinition::getDisplayName)
-                .orElse(npcKey);
+        String npcName = definitionRepository.find(npcKey).map(NpcDefinition::getDisplayName).orElse(npcKey);
         return npcName;
     }
 
@@ -773,12 +770,13 @@ public final class RouteGuiService implements Listener {
         ItemStack held = player.getInventory().getItemInMainHand();
         player.getInventory().setItemInMainHand(createWand(route, token));
         if (!held.getType().isAir()) {
-            player.getInventory().addItem(held).values().forEach(leftover
-                    -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
+            player.getInventory().addItem(held).values()
+                    .forEach(leftover -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
         }
         player.closeInventory();
         player.sendMessage(UiText.info("Editing route '" + route.getDisplayName() + "'."));
-        player.sendMessage(UiText.prompt("Left-click blocks to add, right-click to remove, shift-right-click to edit waypoint actions, and drop the shard to save and finish."));
+        player.sendMessage(UiText.prompt(
+                "Left-click blocks to add, right-click to remove, shift-right-click to edit waypoint actions, and drop the shard to save and finish."));
         showRoutePoints(player, route);
     }
 
@@ -786,14 +784,11 @@ public final class RouteGuiService implements Listener {
         ItemStack wand = new ItemStack(Material.AMETHYST_SHARD);
         ItemMeta meta = wand.getItemMeta();
         meta.displayName(LegacyText.component(LegacyText.LIGHT_PURPLE + "Route Editor: " + route.getDisplayName()));
-        meta.lore(LegacyText.components(List.of(
-                LegacyText.GRAY + "Unique editor: " + token.toString().substring(0, 8),
-                LegacyText.YELLOW + "Left-click a block: add point",
-                LegacyText.YELLOW + "Right-click: remove point",
+        meta.lore(LegacyText.components(List.of(LegacyText.GRAY + "Unique editor: " + token.toString().substring(0, 8),
+                LegacyText.YELLOW + "Left-click a block: add point", LegacyText.YELLOW + "Right-click: remove point",
                 LegacyText.GOLD + "Shift-right-click: edit point actions",
                 LegacyText.LIGHT_PURPLE + "Points and walking order stay highlighted",
-                LegacyText.GREEN + "Drop: save and finish"
-        )));
+                LegacyText.GREEN + "Drop: save and finish")));
         meta.setEnchantmentGlintOverride(true);
         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         meta.getPersistentDataContainer().set(wandRouteKey, PersistentDataType.STRING, route.getKey());
@@ -862,7 +857,8 @@ public final class RouteGuiService implements Listener {
         }
         for (UUID playerId : locationEditSessions.keySet()) {
             Player player = Bukkit.getPlayer(playerId);
-            if (player != null && player.isOnline()) showLocations(player);
+            if (player != null && player.isOnline())
+                showLocations(player);
         }
     }
 
@@ -870,9 +866,9 @@ public final class RouteGuiService implements Listener {
         Particle.DustOptions dust = new Particle.DustOptions(Color.fromRGB(70, 255, 120), 1.5f);
         for (NamedLocation named : locationRepository.findAll()) {
             Location location = named.location().toLocation();
-            if (location == null || location.getWorld() != player.getWorld()) continue;
-            player.spawnParticle(Particle.DUST, location.clone().add(0.0, 0.1, 0.0),
-                    6, 0.22, 0.08, 0.22, 0.0, dust);
+            if (location == null || location.getWorld() != player.getWorld())
+                continue;
+            player.spawnParticle(Particle.DUST, location.clone().add(0.0, 0.1, 0.0), 6, 0.22, 0.08, 0.22, 0.0, dust);
         }
     }
 
@@ -925,8 +921,10 @@ public final class RouteGuiService implements Listener {
         }
         Vector back = unit.clone().multiply(-0.45);
         Particle.DustOptions directionDust = new Particle.DustOptions(PATH_DIRECTION_COLOR, 1.1f);
-        showShortParticleLine(player, arrowTip, arrowTip.clone().add(back).add(side.clone().multiply(0.25)), directionDust);
-        showShortParticleLine(player, arrowTip, arrowTip.clone().add(back).subtract(side.clone().multiply(0.25)), directionDust);
+        showShortParticleLine(player, arrowTip, arrowTip.clone().add(back).add(side.clone().multiply(0.25)),
+                directionDust);
+        showShortParticleLine(player, arrowTip, arrowTip.clone().add(back).subtract(side.clone().multiply(0.25)),
+                directionDust);
     }
 
     private void showShortParticleLine(Player player, Location from, Location to, Particle.DustOptions dust) {
@@ -943,8 +941,8 @@ public final class RouteGuiService implements Listener {
         }
         return point.actions().stream()
                 .map(action -> action.value() == null
-                ? action.type().displayName()
-                : action.type().displayName() + " (" + action.value() + ")")
+                        ? action.type().displayName()
+                        : action.type().displayName() + " (" + action.value() + ")")
                 .collect(java.util.stream.Collectors.joining(", "));
     }
 
@@ -983,7 +981,8 @@ public final class RouteGuiService implements Listener {
 
     }
 
-    private record LocationEditSession(UUID token, String returnFolder, int returnPage) { }
+    private record LocationEditSession(UUID token, String returnFolder, int returnPage) {
+    }
 
     @FunctionalInterface
     public interface WaypointActionOpener {
@@ -991,9 +990,11 @@ public final class RouteGuiService implements Listener {
         void open(Player player, String routeKey, RoutePoint point);
     }
 
-    private record RoutesHolder(String folder, int page) implements GuiHolder { }
+    private record RoutesHolder(String folder, int page) implements GuiHolder {
+    }
 
-    private record LocationsHolder(int page, String returnFolder, int returnPage) implements GuiHolder { }
+    private record LocationsHolder(int page, String returnFolder, int returnPage) implements GuiHolder {
+    }
 
     private static final class ReorderRoutesHolder extends ReorderSupport.ReorderState {
         private final String returnFolder;
@@ -1006,5 +1007,6 @@ public final class RouteGuiService implements Listener {
         }
     }
 
-    private record DeleteRouteHolder(String routeKey, String folder, int page) implements GuiHolder { }
+    private record DeleteRouteHolder(String routeKey, String folder, int page) implements GuiHolder {
+    }
 }

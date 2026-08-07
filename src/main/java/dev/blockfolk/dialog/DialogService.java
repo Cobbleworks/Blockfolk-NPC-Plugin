@@ -94,8 +94,8 @@ public final class DialogService {
     }
 
     /**
-     * Shows one behaviour-supplied hologram line for a duration based on its
-     * text length.
+     * Shows one behaviour-supplied hologram line for a duration based on its text
+     * length.
      */
     public void showHologram(NpcInstance instance, NpcDefinition definition, String line) {
         Location npcLocation = locationProvider.apply(instance);
@@ -117,7 +117,8 @@ public final class DialogService {
 
     public void showProcessing(NpcInstance instance) {
         Location npcLocation = locationProvider.apply(instance);
-        if (npcLocation.getWorld() == null) return;
+        if (npcLocation.getWorld() == null)
+            return;
         DialogRuntime runtime = displays.get(instance.getId());
         if (runtime == null || !runtime.display.isValid()) {
             Location location = npcLocation.add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0);
@@ -134,7 +135,8 @@ public final class DialogService {
 
     public void hideProcessing(NpcInstance instance) {
         DialogRuntime runtime = displays.get(instance.getId());
-        if (runtime == null || !runtime.processing) return;
+        if (runtime == null || !runtime.processing)
+            return;
         runtime.display.remove();
         displays.remove(instance.getId());
     }
@@ -167,8 +169,7 @@ public final class DialogService {
                 if (++runtime.processingFrameTicks >= 20) {
                     runtime.processingFrameTicks = 0;
                     runtime.processingFrame = (runtime.processingFrame + 1) % 3;
-                    runtime.display.text(Component.text(PROCESSING_PREFIX
-                            + ".".repeat(runtime.processingFrame + 1)));
+                    runtime.display.text(Component.text(PROCESSING_PREFIX + ".".repeat(runtime.processingFrame + 1)));
                 }
                 continue;
             }

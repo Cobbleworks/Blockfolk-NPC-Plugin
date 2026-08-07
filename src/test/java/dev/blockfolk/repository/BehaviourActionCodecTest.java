@@ -18,9 +18,9 @@ class BehaviourActionCodecTest {
     @Test
     void roundTripsNestedQuestionActions() {
         NpcQuestion question = new NpcQuestion(UUID.randomUUID(), "Choose",
-                List.of(new QuestionOption("First", List.of(
-                        new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Selected"),
-                        new BehaviourAction(BehaviourActionType.WAVE, null)))),
+                List.of(new QuestionOption("First",
+                        List.of(new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Selected"),
+                                new BehaviourAction(BehaviourActionType.WAVE, null)))),
                 List.of(new BehaviourAction(BehaviourActionType.RUN_CONSOLE_COMMAND, "say cancelled")));
         BehaviourAction original = BehaviourAction.ask(question);
 
@@ -31,9 +31,7 @@ class BehaviourActionCodecTest {
 
     @Test
     void decodesActionWithValue() {
-        BehaviourAction decoded = BehaviourActionCodec.decode(Map.of(
-                "type", "send_dialog",
-                "value", "Stored line"));
+        BehaviourAction decoded = BehaviourActionCodec.decode(Map.of("type", "send_dialog", "value", "Stored line"));
 
         assertEquals(new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Stored line"), decoded);
     }
@@ -48,12 +46,10 @@ class BehaviourActionCodecTest {
     @Test
     void limitsQuestionsToFourAnswers() {
         List<Map<String, Object>> options = java.util.stream.IntStream.range(0, 5)
-                .mapToObj(index -> Map.of("label", "Option " + index, "actions", List.of()))
-                .toList();
+                .mapToObj(index -> Map.of("label", "Option " + index, "actions", List.of())).toList();
 
-        BehaviourAction decoded = BehaviourActionCodec.decode(Map.of(
-                "type", "ask_question",
-                "question", Map.of("prompt", "Choose", "options", options)));
+        BehaviourAction decoded = BehaviourActionCodec
+                .decode(Map.of("type", "ask_question", "question", Map.of("prompt", "Choose", "options", options)));
 
         assertEquals(4, decoded.question().options().size());
         assertEquals("Option 3", decoded.question().options().getLast().label());

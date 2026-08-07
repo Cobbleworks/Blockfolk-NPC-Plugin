@@ -7,8 +7,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 
-public record NpcQuestion(UUID id, String prompt, List<QuestionOption> options,
-        List<BehaviourAction> cancelActions) {
+public record NpcQuestion(UUID id, String prompt, List<QuestionOption> options, List<BehaviourAction> cancelActions) {
 
     public static final int MAX_OPTIONS = 4;
     public static final int MAX_BRANCH_ACTIONS = 7;
@@ -24,7 +23,8 @@ public record NpcQuestion(UUID id, String prompt, List<QuestionOption> options,
             throw new IllegalArgumentException("A question may have at most four answers");
         }
         ArrayList<QuestionOption> normalized = new ArrayList<>(slots);
-        while (normalized.size() < MAX_OPTIONS) normalized.add(QuestionOption.empty());
+        while (normalized.size() < MAX_OPTIONS)
+            normalized.add(QuestionOption.empty());
         options = List.copyOf(normalized);
         HashSet<String> labels = new HashSet<>();
         for (QuestionOption option : options) {

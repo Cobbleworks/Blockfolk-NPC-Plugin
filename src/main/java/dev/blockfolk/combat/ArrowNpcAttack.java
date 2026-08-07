@@ -47,12 +47,7 @@ final class ArrowNpcAttack implements NpcAttack {
     }
 
     static Vector aimedVelocity(LivingEntity attacker, LivingEntity target, double speed, double gravity) {
-        return aimedVelocity(
-                attacker.getEyeLocation().toVector(),
-                target.getEyeLocation().toVector(),
-                speed,
-                gravity
-        );
+        return aimedVelocity(attacker.getEyeLocation().toVector(), target.getEyeLocation().toVector(), speed, gravity);
     }
 
     static Vector aimedVelocity(Vector origin, Vector destination, double speed, double gravity) {

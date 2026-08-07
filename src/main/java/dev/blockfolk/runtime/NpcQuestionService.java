@@ -59,22 +59,27 @@ public final class NpcQuestionService implements Listener {
     }
 
     public void stop() {
-        if (rangeTask != null) rangeTask.cancel();
+        if (rangeTask != null)
+            rangeTask.cancel();
         rangeTask = null;
         for (PlayerState state : states.values()) {
-            if (state.timeout != null) state.timeout.cancel();
+            if (state.timeout != null)
+                state.timeout.cancel();
         }
         states.clear();
     }
 
-    /** Queues a question. False means an identical active/queued/resolving request was deduplicated. */
+    /**
+     * Queues a question. False means an identical active/queued/resolving request
+     * was deduplicated.
+     */
     public boolean enqueue(Player player, NpcInstance instance, String npcName, NamedTextColor npcColor,
-            NpcQuestion question,
-            BiConsumer<List<BehaviourAction>, Runnable> resolver) {
+            NpcQuestion question, BiConsumer<List<BehaviourAction>, Runnable> resolver) {
         PlayerState state = states.computeIfAbsent(player.getUniqueId(), ignored -> new PlayerState());
         QuestionKey key = new QuestionKey(instance.getId(), question.id());
         if (!state.questions.offer(new Request(player.getUniqueId(), instance, npcName, npcColor, question, key,
-                UUID.randomUUID(), resolver))) return false;
+                UUID.randomUUID(), resolver)))
+            return false;
         activateNext(player.getUniqueId(), state);
         return true;
     }
@@ -98,7 +103,8 @@ public final class NpcQuestionService implements Listener {
     public void onChat(AsyncChatEvent event) {
         PlayerState state = states.get(event.getPlayer().getUniqueId());
         Request active = state == null ? null : state.active;
-        if (active == null) return;
+        if (active == null)
+            return;
         event.setCancelled(true);
         String input = PLAIN_TEXT.serialize(event.message()).trim();
         UUID token = active.token;
@@ -110,8 +116,7 @@ public final class NpcQuestionService implements Listener {
             try {
                 select(event.getPlayer().getUniqueId(), token, Integer.parseInt(input) - 1);
             } catch (NumberFormatException exception) {
-                event.getPlayer().sendMessage(Component.text("Type an answer number or 'cancel'.",
-                        NamedTextColor.RED));
+                event.getPlayer().sendMessage(Component.text("Type an answer number or 'cancel'.", NamedTextColor.RED));
             }
         });
     }
@@ -127,9 +132,11 @@ public final class NpcQuestionService implements Listener {
     }
 
     private void activateNext(UUID playerId, PlayerState state) {
-        if (state.active != null || state.resolving) return;
+        if (state.active != null || state.resolving)
+            return;
         Player player = Bukkit.getPlayer(playerId);
-        if (player != null && chatInput.isPending(player)) return;
+        if (player != null && chatInput.isPending(player))
+            return;
         Request request = state.questions.poll();
         if (request == null) {
             removeIfEmpty(playerId, state);
@@ -142,8 +149,8 @@ public final class NpcQuestionService implements Listener {
         }
         state.active = request;
         show(player, request);
-        state.timeout = Bukkit.getScheduler().runTaskLater(plugin,
-                () -> cancel(playerId, request.token), timeoutSeconds * 20L);
+        state.timeout = Bukkit.getScheduler().runTaskLater(plugin, () -> cancel(playerId, request.token),
+                timeoutSeconds * 20L);
     }
 
     private void show(Player player, Request request) {
@@ -159,8 +166,8 @@ public final class NpcQuestionService implements Listener {
                 }
             };
             Component option = Component.text("[" + (index + 1) + "] " + label, NamedTextColor.GREEN)
-                    .clickEvent(ClickEvent.callback(callback, options -> options.uses(1)
-                            .lifetime(Duration.ofSeconds(timeoutSeconds))))
+                    .clickEvent(ClickEvent.callback(callback,
+                            options -> options.uses(1).lifetime(Duration.ofSeconds(timeoutSeconds))))
                     .hoverEvent(HoverEvent.showText(Component.text("Click to answer", NamedTextColor.YELLOW)));
             player.sendMessage(option);
         }
@@ -169,20 +176,21 @@ public final class NpcQuestionService implements Listener {
                 Bukkit.getScheduler().runTask(plugin, () -> cancel(player.getUniqueId(), request.token));
             }
         };
-        player.sendMessage(Component.text("[Cancel]", NamedTextColor.RED)
-                .clickEvent(ClickEvent.callback(cancel, options -> options.uses(1)
-                        .lifetime(Duration.ofSeconds(timeoutSeconds)))));
+        player.sendMessage(Component.text("[Cancel]", NamedTextColor.RED).clickEvent(
+                ClickEvent.callback(cancel, options -> options.uses(1).lifetime(Duration.ofSeconds(timeoutSeconds)))));
     }
 
     private void select(UUID playerId, UUID token, int optionIndex) {
         PlayerState state = states.get(playerId);
         Request active = state == null ? null : state.active;
-        if (active == null || !active.token.equals(token)) return;
+        if (active == null || !active.token.equals(token))
+            return;
         List<QuestionOption> options = active.question.configuredOptions();
         if (optionIndex < 0 || optionIndex >= options.size()) {
             Player player = Bukkit.getPlayer(playerId);
-            if (player != null) player.sendMessage(Component.text("Choose a number from 1 to "
-                    + options.size() + ".", NamedTextColor.RED));
+            if (player != null)
+                player.sendMessage(
+                        Component.text("Choose a number from 1 to " + options.size() + ".", NamedTextColor.RED));
             return;
         }
         resolve(playerId, state, options.get(optionIndex).actions());
@@ -205,8 +213,10 @@ public final class NpcQuestionService implements Listener {
 
     private void resolve(UUID playerId, PlayerState state, List<BehaviourAction> branch) {
         Request request = state.active;
-        if (request == null || state.resolving) return;
-        if (state.timeout != null) state.timeout.cancel();
+        if (request == null || state.resolving)
+            return;
+        if (state.timeout != null)
+            state.timeout.cancel();
         state.timeout = null;
         state.active = null;
         state.resolving = true;
@@ -229,7 +239,8 @@ public final class NpcQuestionService implements Listener {
     }
 
     private boolean valid(Request request, Player player) {
-        if (player == null || !player.isOnline()) return false;
+        if (player == null || !player.isOnline())
+            return false;
         if (instances.findById(request.instance.getId()).isEmpty()) {
             return false;
         }
@@ -239,19 +250,20 @@ public final class NpcQuestionService implements Listener {
     }
 
     private void removeIfEmpty(UUID playerId, PlayerState state) {
-        if (state.active == null && !state.resolving && state.questions.isEmpty()) states.remove(playerId, state);
+        if (state.active == null && !state.resolving && state.questions.isEmpty())
+            states.remove(playerId, state);
     }
 
     private static final class PlayerState {
-        private final DeduplicatedFifoQueue<QuestionKey, Request> questions =
-                new DeduplicatedFifoQueue<>(Request::key);
+        private final DeduplicatedFifoQueue<QuestionKey, Request> questions = new DeduplicatedFifoQueue<>(Request::key);
         private Request active;
         private boolean resolving;
         private BukkitTask timeout;
     }
 
-    private record QuestionKey(UUID instanceId, UUID questionId) { }
+    private record QuestionKey(UUID instanceId, UUID questionId) {
+    }
     private record Request(UUID playerId, NpcInstance instance, String npcName, NamedTextColor npcColor,
-            NpcQuestion question, QuestionKey key, UUID token,
-            BiConsumer<List<BehaviourAction>, Runnable> resolver) { }
+            NpcQuestion question, QuestionKey key, UUID token, BiConsumer<List<BehaviourAction>, Runnable> resolver) {
+    }
 }

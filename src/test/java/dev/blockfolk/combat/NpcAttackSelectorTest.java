@@ -31,12 +31,8 @@ class NpcAttackSelectorTest {
 
     @Test
     void potionTrajectoryStaysFlatEnoughForLowCeilings() {
-        Vector velocity = ArrowNpcAttack.aimedVelocity(
-            new Vector(0.0, 1.6, 0.0),
-            new Vector(10.0, 0.6, 0.0),
-            1.2,
-            0.05
-        );
+        Vector velocity = ArrowNpcAttack.aimedVelocity(new Vector(0.0, 1.6, 0.0), new Vector(10.0, 0.6, 0.0), 1.2,
+                0.05);
 
         assertTrue(velocity.getX() > 1.0);
         assertTrue(velocity.getY() < 0.15);

@@ -27,8 +27,7 @@ class RouteBrowserModelTest {
         NpcDefinition merchant = npcUsing("Merchant", "village/shared");
         NpcDefinition stationary = NpcDefinition.create("Stationary");
 
-        List<RouteBrowserModel.Entry> root = RouteBrowserModel.entries(
-                List.of(patrol, shared, unused, groupedUnused),
+        List<RouteBrowserModel.Entry> root = RouteBrowserModel.entries(List.of(patrol, shared, unused, groupedUnused),
                 List.of(guard, merchant, stationary), "");
 
         assertEquals(List.of("Guard", "Merchant", "unused", "wilderness/loop"),
@@ -47,21 +46,19 @@ class RouteBrowserModelTest {
         NpcDefinition guard = npcUsing("Guard", "patrol", "village/shared");
         NpcDefinition merchant = npcUsing("Merchant", "village/shared");
 
-        List<RouteBrowserModel.Entry> guardRoutes = RouteBrowserModel.entries(
-                List.of(patrol, shared), List.of(guard, merchant), "npc:guard");
-        List<RouteBrowserModel.Entry> merchantRoutes = RouteBrowserModel.entries(
-                List.of(patrol, shared), List.of(guard, merchant), "npc:merchant");
+        List<RouteBrowserModel.Entry> guardRoutes = RouteBrowserModel.entries(List.of(patrol, shared),
+                List.of(guard, merchant), "npc:guard");
+        List<RouteBrowserModel.Entry> merchantRoutes = RouteBrowserModel.entries(List.of(patrol, shared),
+                List.of(guard, merchant), "npc:merchant");
         assertEquals(List.of("patrol", "village/shared"),
                 guardRoutes.stream().map(RouteBrowserModel.Entry::label).toList());
-        assertEquals(List.of("village/shared"),
-                merchantRoutes.stream().map(RouteBrowserModel.Entry::label).toList());
+        assertEquals(List.of("village/shared"), merchantRoutes.stream().map(RouteBrowserModel.Entry::label).toList());
     }
 
     private static NpcDefinition npcUsing(String name, String... routeKeys) {
         NpcDefinition definition = NpcDefinition.create(name);
         definition.setBehaviourActions(BehaviourEvent.SPAWN, java.util.Arrays.stream(routeKeys)
-                .map(key -> new BehaviourAction(BehaviourActionType.SET_ROUTE, key))
-                .toList());
+                .map(key -> new BehaviourAction(BehaviourActionType.SET_ROUTE, key)).toList());
         return definition;
     }
 }

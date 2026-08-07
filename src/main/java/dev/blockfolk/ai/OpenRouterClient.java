@@ -53,16 +53,21 @@ public final class OpenRouterClient {
     }
 
     public String configurationIssue() {
-        if (!endpointIssue.isBlank()) return endpointIssue;
-        if (apiKey.isBlank() && model.isBlank()) return "API key and model are missing";
-        if (apiKey.isBlank()) return "API key is missing";
-        if (model.isBlank()) return "Model is missing";
+        if (!endpointIssue.isBlank())
+            return endpointIssue;
+        if (apiKey.isBlank() && model.isBlank())
+            return "API key and model are missing";
+        if (apiKey.isBlank())
+            return "API key is missing";
+        if (model.isBlank())
+            return "Model is missing";
         return "";
     }
 
     public CompletableFuture<String> complete(String systemPrompt, String context) {
-        if (!configured()) return CompletableFuture.failedFuture(
-                new IllegalStateException("OpenRouter API key and model are not configured"));
+        if (!configured())
+            return CompletableFuture
+                    .failedFuture(new IllegalStateException("OpenRouter API key and model are not configured"));
         JsonObject body = new JsonObject();
         body.addProperty("model", model);
         body.addProperty("temperature", 0.4);
@@ -77,21 +82,16 @@ public final class OpenRouterClient {
         messages.add(message("system", systemPrompt));
         messages.add(message("user", context));
         body.add("messages", messages);
-        HttpRequest request = HttpRequest.newBuilder(endpoint)
-                .timeout(timeout)
-                .header("Authorization", "Bearer " + apiKey)
-                .header("Content-Type", "application/json")
-                .header("HTTP-Referer", "https://github.com/blockfolk")
-                .header("X-Title", "Blockfolk AI Behaviour")
-                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
-                .build();
-        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenApply(response -> {
-                    if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                        throw new IllegalStateException("OpenRouter returned HTTP " + response.statusCode());
-                    }
-                    return responseContent(response.body());
-                })
+        HttpRequest request = HttpRequest.newBuilder(endpoint).timeout(timeout)
+                .header("Authorization", "Bearer " + apiKey).header("Content-Type", "application/json")
+                .header("HTTP-Referer", "https://github.com/blockfolk").header("X-Title", "Blockfolk AI Behaviour")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build();
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply(response -> {
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IllegalStateException("OpenRouter returned HTTP " + response.statusCode());
+            }
+            return responseContent(response.body());
+        })
                 // HttpRequest.timeout normally covers this, but an explicit future
                 // deadline also guarantees callers can clear their in-flight state.
                 .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS);
@@ -107,20 +107,25 @@ public final class OpenRouterClient {
             JsonObject choice = choices.get(0).getAsJsonObject();
             JsonObject message = choice.getAsJsonObject("message");
             JsonElement content = message == null ? null : message.get("content");
-            if (content != null && content.isJsonPrimitive()) return content.getAsString();
+            if (content != null && content.isJsonPrimitive())
+                return content.getAsString();
             if (content != null && content.isJsonArray()) {
                 StringBuilder combined = new StringBuilder();
                 for (JsonElement part : content.getAsJsonArray()) {
-                    if (!part.isJsonObject()) continue;
+                    if (!part.isJsonObject())
+                        continue;
                     JsonElement text = part.getAsJsonObject().get("text");
-                    if (text != null && text.isJsonPrimitive()) combined.append(text.getAsString());
+                    if (text != null && text.isJsonPrimitive())
+                        combined.append(text.getAsString());
                 }
-                if (!combined.isEmpty()) return combined.toString();
+                if (!combined.isEmpty())
+                    return combined.toString();
             }
             String finishReason = choice.has("finish_reason") && choice.get("finish_reason").isJsonPrimitive()
-                    ? choice.get("finish_reason").getAsString() : "unknown";
-            throw new IllegalStateException("OpenRouter returned no message content (finish reason: "
-                    + finishReason + ")");
+                    ? choice.get("finish_reason").getAsString()
+                    : "unknown";
+            throw new IllegalStateException(
+                    "OpenRouter returned no message content (finish reason: " + finishReason + ")");
         } catch (IllegalStateException exception) {
             throw exception;
         } catch (RuntimeException exception) {

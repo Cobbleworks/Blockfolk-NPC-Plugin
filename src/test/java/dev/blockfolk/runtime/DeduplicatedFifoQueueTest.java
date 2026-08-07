@@ -36,5 +36,6 @@ class DeduplicatedFifoQueueTest {
         assertTrue(queue.offer(new Entry("gone", 2)));
     }
 
-    private record Entry(String key, int value) { }
+    private record Entry(String key, int value) {
+    }
 }

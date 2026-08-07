@@ -11,11 +11,8 @@ import org.bukkit.entity.Entity;
 import dev.blockfolk.model.NpcInstance;
 
 /** Immutable bindings for the target aliases included in one AI request. */
-public record AiTargetSnapshot(
-        Map<String, UUID> entityIds,
-        Map<String, UUID> npcInstanceIds,
-        Map<String, Location> locations
-) {
+public record AiTargetSnapshot(Map<String, UUID> entityIds, Map<String, UUID> npcInstanceIds,
+        Map<String, Location> locations) {
     public AiTargetSnapshot {
         entityIds = Map.copyOf(entityIds);
         npcInstanceIds = Map.copyOf(npcInstanceIds);
@@ -53,15 +50,18 @@ public record AiTargetSnapshot(
         private final Map<String, Location> locations = new LinkedHashMap<>();
 
         void bindEntity(String alias, Entity entity) {
-            if (entity != null) entityIds.put(alias, entity.getUniqueId());
+            if (entity != null)
+                entityIds.put(alias, entity.getUniqueId());
         }
 
         void bindNpc(String alias, NpcInstance instance) {
-            if (instance != null) npcInstanceIds.put(alias, instance.getId());
+            if (instance != null)
+                npcInstanceIds.put(alias, instance.getId());
         }
 
         void bindLocation(String alias, Location location) {
-            if (location != null) locations.put(alias, location.clone());
+            if (location != null)
+                locations.put(alias, location.clone());
         }
 
         AiTargetSnapshot build() {

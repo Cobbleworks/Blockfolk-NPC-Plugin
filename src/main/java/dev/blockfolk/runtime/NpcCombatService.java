@@ -68,12 +68,8 @@ public final class NpcCombatService implements Listener {
     private BukkitTask task;
     private long currentTick;
 
-    public NpcCombatService(
-            Plugin plugin,
-            NpcDefinitionRepository definitionRepository,
-            NpcInstanceRegistry instanceRegistry,
-            NativeNpcNavigationService navigationService
-    ) {
+    public NpcCombatService(Plugin plugin, NpcDefinitionRepository definitionRepository,
+            NpcInstanceRegistry instanceRegistry, NativeNpcNavigationService navigationService) {
         this.plugin = plugin;
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
@@ -84,7 +80,8 @@ public final class NpcCombatService implements Listener {
         stop();
         task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
         for (NpcInstance instance : instanceRegistry.findAll()) {
-            if (instance.isAwaitingRespawn()) scheduleRespawn(instance);
+            if (instance.isAwaitingRespawn())
+                scheduleRespawn(instance);
         }
     }
 
@@ -123,7 +120,10 @@ public final class NpcCombatService implements Listener {
         return startDirectedCombat(instance, target);
     }
 
-    /** Starts explicitly directed combat without consulting normal category targeting preferences. */
+    /**
+     * Starts explicitly directed combat without consulting normal category
+     * targeting preferences.
+     */
     public boolean startDirectedCombat(NpcInstance instance, Entity target) {
         if (!(target instanceof LivingEntity living) || !isAttackable(instance, living)) {
             return false;
@@ -136,13 +136,16 @@ public final class NpcCombatService implements Listener {
         return false;
     }
 
-    /** Finds the closest entity the NPC may legally attack, independent of aggression settings. */
+    /**
+     * Finds the closest entity the NPC may legally attack, independent of
+     * aggression settings.
+     */
     public LivingEntity findNearestAttackableTarget(NpcInstance instance) {
         LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
-        if (npc == null) return null;
+        if (npc == null)
+            return null;
         return npc.getNearbyEntities(SIGHT_RANGE, SIGHT_RANGE, SIGHT_RANGE).stream()
-                .filter(LivingEntity.class::isInstance)
-                .map(LivingEntity.class::cast)
+                .filter(LivingEntity.class::isInstance).map(LivingEntity.class::cast)
                 .filter(target -> isAttackable(instance, target))
                 .filter(target -> target.getLocation().distanceSquared(npc.getLocation()) <= SIGHT_RANGE * SIGHT_RANGE)
                 .filter(npc::hasLineOfSight)
@@ -243,22 +246,25 @@ public final class NpcCombatService implements Listener {
 
     private void scheduleRespawn(NpcInstance instance) {
         BukkitTask previous = pendingRespawns.remove(instance.getId());
-        if (previous != null) previous.cancel();
+        if (previous != null)
+            previous.cancel();
         long remainingMillis = Math.max(0L, instance.getRespawnAtEpochMillis() - System.currentTimeMillis());
         long delayTicks = Math.max(1L, (remainingMillis + 49L) / 50L);
-        pendingRespawns.put(instance.getId(), Bukkit.getScheduler().runTaskLater(plugin,
-                () -> attemptRespawn(instance), delayTicks));
+        pendingRespawns.put(instance.getId(),
+                Bukkit.getScheduler().runTaskLater(plugin, () -> attemptRespawn(instance), delayTicks));
     }
 
     private void attemptRespawn(NpcInstance instance) {
         pendingRespawns.remove(instance.getId());
-        if (instanceRegistry.findById(instance.getId()).isEmpty()) return;
+        if (instanceRegistry.findById(instance.getId()).isEmpty())
+            return;
         NpcDefinition current = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
         if (current == null || current.getCombatProfile().respawnSeconds() == 0) {
             instanceRegistry.deleteInstance(instance.getId());
             return;
         }
-        if (!instanceRegistry.respawn(instance, current)) scheduleRespawn(instance);
+        if (!instanceRegistry.respawn(instance, current))
+            scheduleRespawn(instance);
     }
 
     private void tick() {
@@ -303,29 +309,26 @@ public final class NpcCombatService implements Listener {
         states.keySet().retainAll(activeInstances);
         fightOptionsOverrides.keySet().retainAll(activeInstances);
         bossBars.entrySet().removeIf(entry -> {
-            if (activeBossBars.contains(entry.getKey())) return false;
+            if (activeBossBars.contains(entry.getKey()))
+                return false;
             entry.getValue().removeAll();
             return true;
         });
     }
 
-    private void updateBossBar(
-            NpcInstance instance,
-            NpcDefinition definition,
-            LivingEntity npc,
-            CombatProfile profile,
-            Set<UUID> activeBossBars
-    ) {
+    private void updateBossBar(NpcInstance instance, NpcDefinition definition, LivingEntity npc, CombatProfile profile,
+            Set<UUID> activeBossBars) {
         if (!profile.showBossBar() || profile.invulnerable()) {
             return;
         }
         activeBossBars.add(instance.getId());
         boolean updateViewers = currentTick % 5L == 0L || !bossBars.containsKey(instance.getId());
-        BossBar bossBar = bossBars.computeIfAbsent(instance.getId(), ignored ->
-                Bukkit.createBossBar(definition.getDisplayName(), BarColor.RED, BarStyle.SOLID));
+        BossBar bossBar = bossBars.computeIfAbsent(instance.getId(),
+                ignored -> Bukkit.createBossBar(definition.getDisplayName(), BarColor.RED, BarStyle.SOLID));
         bossBar.setTitle(definition.getDisplayName());
         bossBar.setProgress(Math.max(0.0, Math.min(1.0, npc.getHealth() / profile.maxHealth())));
-        if (!updateViewers) return;
+        if (!updateViewers)
+            return;
 
         Set<Player> nearby = new HashSet<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -347,8 +350,7 @@ public final class NpcCombatService implements Listener {
     private void flee(NpcInstance instance, LivingEntity npc, CombatState state) {
         Entity threat = Bukkit.getEntity(state.entityId);
         Location threatLocation = threat != null && threat.isValid() ? threat.getLocation() : state.lastKnownLocation;
-        if (currentTick >= state.expiresAt || threatLocation == null
-                || threatLocation.getWorld() != npc.getWorld()) {
+        if (currentTick >= state.expiresAt || threatLocation == null || threatLocation.getWorld() != npc.getWorld()) {
             clearState(instance);
             return;
         }
@@ -416,33 +418,22 @@ public final class NpcCombatService implements Listener {
             away = new Vector(1.0, 0.0, 0.0);
         }
         Location targetLocation = target.getLocation();
-        double targetDistance = Math.sqrt(
-                Math.pow(current.getX() - targetLocation.getX(), 2.0)
-                + Math.pow(current.getZ() - targetLocation.getZ(), 2.0)
-        );
+        double targetDistance = Math.sqrt(Math.pow(current.getX() - targetLocation.getX(), 2.0)
+                + Math.pow(current.getZ() - targetLocation.getZ(), 2.0));
         double retreatDistance = Math.max(2.0, minimumRange - targetDistance + 1.5);
         return current.clone().add(away.normalize().multiply(retreatDistance));
     }
 
-    private void engage(
-            NpcInstance instance,
-            NpcDefinition definition,
-            CombatMode mode,
-            LivingEntity entity
-    ) {
+    private void engage(NpcInstance instance, NpcDefinition definition, CombatMode mode, LivingEntity entity) {
         CombatState previous = states.get(instance.getId());
-        boolean enteringCombat = previous == null || previous.mode != mode || !previous.entityId.equals(entity.getUniqueId());
+        boolean enteringCombat = previous == null || previous.mode != mode
+                || !previous.entityId.equals(entity.getUniqueId());
         if (previous != null && previous.mode == CombatMode.FIGHT
                 && (mode != CombatMode.FIGHT || !previous.entityId.equals(entity.getUniqueId()))) {
             releaseMobTarget(instance, previous);
         }
-        states.put(instance.getId(), new CombatState(
-                mode,
-                entity.getUniqueId(),
-                entity.getLocation(),
-                currentTick + (mode == CombatMode.FLEE ? FLEE_TICKS : Long.MAX_VALUE),
-                currentTick
-        ));
+        states.put(instance.getId(), new CombatState(mode, entity.getUniqueId(), entity.getLocation(),
+                currentTick + (mode == CombatMode.FLEE ? FLEE_TICKS : Long.MAX_VALUE), currentTick));
         if (mode == CombatMode.FIGHT) {
             instanceRegistry.findEntity(instance).ifPresent(npc -> makeMobFightBack(entity, npc));
         }
@@ -455,10 +446,8 @@ public final class NpcCombatService implements Listener {
 
     private LivingEntity findNearestTarget(NpcInstance instance, LivingEntity npc, FightOptions options) {
         return npc.getNearbyEntities(SIGHT_RANGE, SIGHT_RANGE, SIGHT_RANGE).stream()
-                .filter(LivingEntity.class::isInstance)
-                .map(LivingEntity.class::cast)
-                .filter(target -> isAttackable(instance, target))
-                .filter(target -> isSelectedTarget(target, options))
+                .filter(LivingEntity.class::isInstance).map(LivingEntity.class::cast)
+                .filter(target -> isAttackable(instance, target)).filter(target -> isSelectedTarget(target, options))
                 .filter(npc::hasLineOfSight)
                 .min(Comparator.comparingDouble(target -> target.getLocation().distanceSquared(npc.getLocation())))
                 .orElse(null);
@@ -488,8 +477,8 @@ public final class NpcCombatService implements Listener {
         }
         if (target instanceof Player player) {
             NpcDefinition attackerDefinition = definitionRepository.find(attacker.getDefinitionKey()).orElse(null);
-            if (attackerDefinition != null && carriesAlliance(player,
-                    attackerDefinition.getCombatProfile().alliance())) {
+            if (attackerDefinition != null
+                    && carriesAlliance(player, attackerDefinition.getCombatProfile().alliance())) {
                 return false;
             }
             return player.getGameMode() == GameMode.SURVIVAL || player.getGameMode() == GameMode.ADVENTURE;
@@ -501,10 +490,9 @@ public final class NpcCombatService implements Listener {
             }
             NpcDefinition targetDefinition = definitionRepository.find(targetInstance.getDefinitionKey()).orElse(null);
             NpcDefinition attackerDefinition = definitionRepository.find(attacker.getDefinitionKey()).orElse(null);
-            return targetDefinition != null
-                    && !targetDefinition.getCombatProfile().invulnerable()
-                    && (attackerDefinition == null || !attackerDefinition.getCombatProfile()
-                            .alliedWith(targetDefinition.getCombatProfile()));
+            return targetDefinition != null && !targetDefinition.getCombatProfile().invulnerable()
+                    && (attackerDefinition == null
+                            || !attackerDefinition.getCombatProfile().alliedWith(targetDefinition.getCombatProfile()));
         }
         return target instanceof Mob;
     }
@@ -556,15 +544,15 @@ public final class NpcCombatService implements Listener {
             releaseMobTarget(instance, removed);
             instanceRegistry.stopNavigating(instance);
             if (behaviourService != null) {
-                behaviourService.trigger(dev.blockfolk.model.BehaviourEvent.COMBAT_EXITED,
-                        instance, Bukkit.getEntity(removed.entityId));
+                behaviourService.trigger(dev.blockfolk.model.BehaviourEvent.COMBAT_EXITED, instance,
+                        Bukkit.getEntity(removed.entityId));
             }
         }
     }
 
     private void makeMobFightBack(LivingEntity target, LivingEntity npc) {
-        if (target instanceof Mob mob && (mob.getTarget() == null
-                || !mob.getTarget().getUniqueId().equals(npc.getUniqueId()))) {
+        if (target instanceof Mob mob
+                && (mob.getTarget() == null || !mob.getTarget().getUniqueId().equals(npc.getUniqueId()))) {
             mob.setTarget(npc);
         }
     }
@@ -579,8 +567,7 @@ public final class NpcCombatService implements Listener {
     }
 
     private enum CombatMode {
-        FLEE,
-        FIGHT
+        FLEE, FIGHT
     }
 
     private static final class CombatState {
@@ -594,13 +581,8 @@ public final class NpcCombatService implements Listener {
         private long nextRepathAt;
         private boolean retreating;
 
-        private CombatState(
-                CombatMode mode,
-                UUID entityId,
-                Location lastKnownLocation,
-                long expiresAt,
-                long nextAttackAt
-        ) {
+        private CombatState(CombatMode mode, UUID entityId, Location lastKnownLocation, long expiresAt,
+                long nextAttackAt) {
             this.mode = mode;
             this.entityId = entityId;
             this.lastKnownLocation = lastKnownLocation.clone();

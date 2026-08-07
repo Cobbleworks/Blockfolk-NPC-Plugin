@@ -7,7 +7,9 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-/** Keeps keys reserved after polling until the caller explicitly completes them. */
+/**
+ * Keeps keys reserved after polling until the caller explicitly completes them.
+ */
 final class DeduplicatedFifoQueue<K, V> {
     private final ArrayDeque<V> queue = new ArrayDeque<>();
     private final Set<K> reserved = new HashSet<>();
@@ -18,7 +20,8 @@ final class DeduplicatedFifoQueue<K, V> {
     }
 
     boolean offer(V value) {
-        if (!reserved.add(keyExtractor.apply(value))) return false;
+        if (!reserved.add(keyExtractor.apply(value)))
+            return false;
         queue.addLast(value);
         return true;
     }
@@ -35,7 +38,8 @@ final class DeduplicatedFifoQueue<K, V> {
         Iterator<V> iterator = queue.iterator();
         while (iterator.hasNext()) {
             V value = iterator.next();
-            if (!predicate.test(value)) continue;
+            if (!predicate.test(value))
+                continue;
             iterator.remove();
             complete(value);
         }

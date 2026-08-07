@@ -101,7 +101,8 @@ public final class NpcDefinition {
 
     public void setDisplayName(String displayName) {
         this.displayName = Objects.requireNonNullElse(displayName, key).trim();
-        if (this.displayName.isBlank()) this.displayName = key;
+        if (this.displayName.isBlank())
+            this.displayName = key;
     }
 
     public String getSkinUrl() {
@@ -138,9 +139,13 @@ public final class NpcDefinition {
         this.spawnpoint = spawnpoint == null ? null : StoredLocation.from(spawnpoint);
     }
 
-    public StoredLocation getStoredSpawnpoint() { return spawnpoint; }
+    public StoredLocation getStoredSpawnpoint() {
+        return spawnpoint;
+    }
 
-    public void setStoredSpawnpoint(StoredLocation spawnpoint) { this.spawnpoint = spawnpoint; }
+    public void setStoredSpawnpoint(StoredLocation spawnpoint) {
+        this.spawnpoint = spawnpoint;
+    }
 
     public ItemStack[] getInventoryContents() {
         return cloneArray(inventoryContents, 36);
@@ -236,8 +241,8 @@ public final class NpcDefinition {
 
     public void setBehaviourActions(BehaviourEvent event, List<BehaviourAction> actions) {
         if (actions == null || actions.isEmpty()) {
-            behaviours.remove(event); 
-        }else {
+            behaviours.remove(event);
+        } else {
             behaviours.put(event, new ArrayList<>(actions));
         }
     }
@@ -258,20 +263,30 @@ public final class NpcDefinition {
     }
 
     public void setCustomEventActions(String eventName, List<BehaviourAction> actions) {
-        if (actions == null || actions.isEmpty()) customEventBehaviours.remove(eventName);
-        else customEventBehaviours.put(eventName, new ArrayList<>(actions));
+        if (actions == null || actions.isEmpty())
+            customEventBehaviours.remove(eventName);
+        else
+            customEventBehaviours.put(eventName, new ArrayList<>(actions));
     }
 
     public void removeCustomEventAction(String eventName, int index) {
         List<BehaviourAction> actions = customEventBehaviours.get(eventName);
-        if (actions == null || index < 0 || index >= actions.size()) return;
+        if (actions == null || index < 0 || index >= actions.size())
+            return;
         actions.remove(index);
-        if (actions.isEmpty()) customEventBehaviours.remove(eventName);
+        if (actions.isEmpty())
+            customEventBehaviours.remove(eventName);
     }
 
-    public void removeCustomEvent(String eventName) { customEventBehaviours.remove(eventName); }
-    public int customEventActionCount() { return customEventBehaviours.values().stream().mapToInt(List::size).sum(); }
-    public List<String> getCustomEventNames() { return new ArrayList<>(customEventBehaviours.keySet()); }
+    public void removeCustomEvent(String eventName) {
+        customEventBehaviours.remove(eventName);
+    }
+    public int customEventActionCount() {
+        return customEventBehaviours.values().stream().mapToInt(List::size).sum();
+    }
+    public List<String> getCustomEventNames() {
+        return new ArrayList<>(customEventBehaviours.keySet());
+    }
 
     public Set<String> getReferencedRouteKeys() {
         Set<String> routeKeys = new LinkedHashSet<>();
@@ -309,8 +324,10 @@ public final class NpcDefinition {
         for (BehaviourAction action : actions) {
             if (action.type() == BehaviourActionType.SET_ROUTE) {
                 try {
-                    if (action.value() != null && NpcRoute.normalizeKey(action.value()).equals(routeKey)) continue;
-                } catch (IllegalArgumentException ignored) { }
+                    if (action.value() != null && NpcRoute.normalizeKey(action.value()).equals(routeKey))
+                        continue;
+                } catch (IllegalArgumentException ignored) {
+                }
             }
             if (action.type() == BehaviourActionType.ASK_QUESTION && action.question() != null) {
                 NpcQuestion question = action.question();
@@ -344,38 +361,51 @@ public final class NpcDefinition {
         }
     }
 
-    public AiControlSettings getAiControlSettings() { return aiControlSettings; }
+    public AiControlSettings getAiControlSettings() {
+        return aiControlSettings;
+    }
 
     public void setAiControlSettings(AiControlSettings settings) {
         aiControlSettings = settings == null ? AiControlSettings.defaults() : settings;
     }
 
-    public List<String> getAiMemories() { return List.copyOf(aiMemories); }
+    public List<String> getAiMemories() {
+        return List.copyOf(aiMemories);
+    }
 
     public void setAiMemories(List<String> memories) {
         aiMemories.clear();
-        if (memories == null) return;
-        memories.stream().filter(java.util.Objects::nonNull).map(String::trim)
-                .filter(memory -> !memory.isBlank()).forEach(this::addAiMemory);
+        if (memories == null)
+            return;
+        memories.stream().filter(java.util.Objects::nonNull).map(String::trim).filter(memory -> !memory.isBlank())
+                .forEach(this::addAiMemory);
     }
 
     public void addAiMemory(String memory) {
-        if (memory == null || memory.isBlank()) return;
+        if (memory == null || memory.isBlank())
+            return;
         aiMemories.add(memory.trim());
-        while (aiMemories.size() > MAX_AI_MEMORIES) aiMemories.removeFirst();
+        while (aiMemories.size() > MAX_AI_MEMORIES)
+            aiMemories.removeFirst();
     }
 
     public void setAiMemory(int index, String memory) {
-        if (index < 0 || index >= aiMemories.size()) return;
-        if (memory == null || memory.isBlank()) aiMemories.remove(index);
-        else aiMemories.set(index, memory.trim());
+        if (index < 0 || index >= aiMemories.size())
+            return;
+        if (memory == null || memory.isBlank())
+            aiMemories.remove(index);
+        else
+            aiMemories.set(index, memory.trim());
     }
 
     public void removeAiMemory(int index) {
-        if (index >= 0 && index < aiMemories.size()) aiMemories.remove(index);
+        if (index >= 0 && index < aiMemories.size())
+            aiMemories.remove(index);
     }
 
-    public void clearAiMemories() { aiMemories.clear(); }
+    public void clearAiMemories() {
+        aiMemories.clear();
+    }
 
     private static ItemStack[] cloneArray(ItemStack[] source, int length) {
         ItemStack[] copy = new ItemStack[length];

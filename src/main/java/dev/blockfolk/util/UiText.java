@@ -50,8 +50,7 @@ public final class UiText {
     }
 
     private static Component title(String section, String subject, NamedTextColor subjectColor) {
-        return Component.text(section + ": ", NamedTextColor.DARK_AQUA)
-                .decorate(TextDecoration.BOLD)
+        return Component.text(section + ": ", NamedTextColor.DARK_AQUA).decorate(TextDecoration.BOLD)
                 .append(Component.text(subject, subjectColor).decorate(TextDecoration.BOLD));
     }
 
@@ -61,8 +60,7 @@ public final class UiText {
 
     public static Component npcDialog(String npcName, String line, NamedTextColor nameColor) {
         return Component.text(npcName, nameColor == null ? NamedTextColor.GOLD : nameColor)
-                .decorate(TextDecoration.BOLD)
-                .append(plain(": ", NamedTextColor.DARK_GRAY))
+                .decorate(TextDecoration.BOLD).append(plain(": ", NamedTextColor.DARK_GRAY))
                 .append(plain(line, NamedTextColor.WHITE));
     }
 
@@ -71,38 +69,39 @@ public final class UiText {
     }
 
     public static List<Component> npcDialogMessages(String npcName, String text, NamedTextColor nameColor) {
-        return splitNpcDialog(text).stream()
-                .map(line -> npcDialog(npcName, line, nameColor))
-                .toList();
+        return splitNpcDialog(text).stream().map(line -> npcDialog(npcName, line, nameColor)).toList();
     }
 
     static List<String> splitNpcDialog(String text) {
         String remaining = text == null ? "" : text.strip();
-        if (remaining.isEmpty()) return List.of();
+        if (remaining.isEmpty())
+            return List.of();
 
         List<String> messages = new ArrayList<>();
         while (remaining.length() > NPC_DIALOG_CHUNK_LENGTH) {
             int splitAt = lastWhitespaceBefore(remaining, NPC_DIALOG_CHUNK_LENGTH);
-            if (splitAt <= 0) splitAt = safeEndIndex(remaining, NPC_DIALOG_CHUNK_LENGTH);
+            if (splitAt <= 0)
+                splitAt = safeEndIndex(remaining, NPC_DIALOG_CHUNK_LENGTH);
             messages.add(remaining.substring(0, splitAt).stripTrailing());
             remaining = remaining.substring(splitAt).stripLeading();
         }
-        if (!remaining.isEmpty()) messages.add(remaining);
+        if (!remaining.isEmpty())
+            messages.add(remaining);
         return List.copyOf(messages);
     }
 
     private static int lastWhitespaceBefore(String text, int limit) {
         int end = safeEndIndex(text, limit);
         for (int index = end; index > 0; index--) {
-            if (Character.isWhitespace(text.charAt(index - 1))) return index - 1;
+            if (Character.isWhitespace(text.charAt(index - 1)))
+                return index - 1;
         }
         return -1;
     }
 
     private static int safeEndIndex(String text, int limit) {
         int end = Math.min(limit, text.length());
-        if (end < text.length() && end > 0
-                && Character.isHighSurrogate(text.charAt(end - 1))
+        if (end < text.length() && end > 0 && Character.isHighSurrogate(text.charAt(end - 1))
                 && Character.isLowSurrogate(text.charAt(end))) {
             end--;
         }
