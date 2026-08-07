@@ -137,7 +137,6 @@ public final class NpcBehaviourService implements Listener {
     private int entityNearbyTick;
     private long customEmissionTick = -1L;
     private int customEmissionsThisTick;
-    private boolean redstonePhysicsWarningLogged;
 
     public NpcBehaviourService(Plugin plugin, NpcDefinitionRepository definitions, NpcInstanceRegistry instances,
             DialogService dialogService, NpcQuestionService questionService, int proximityCooldownSeconds) {
@@ -1334,25 +1333,9 @@ public final class NpcBehaviourService implements Listener {
             case WALL -> switchData.getFacing().getOppositeFace();
         };
         Block support = block.getRelative(supportFace);
-        try {
-            Object level = block.getWorld().getClass().getMethod("getHandle").invoke(block.getWorld());
-            Class<?> blockPosType = Class.forName("net.minecraft.core.BlockPos");
-            Object supportPos = blockPosType.getConstructor(int.class, int.class, int.class).newInstance(support.getX(),
-                    support.getY(), support.getZ());
-            Object switchPos = blockPosType.getConstructor(int.class, int.class, int.class).newInstance(block.getX(),
-                    block.getY(), block.getZ());
-            Object blockState = level.getClass().getMethod("getBlockState", blockPosType).invoke(level, switchPos);
-            Object sourceBlock = blockState.getClass().getMethod("getBlock").invoke(blockState);
-            Class<?> nativeBlockType = Class.forName("net.minecraft.world.level.block.Block");
-            level.getClass().getMethod("updateNeighborsAt", blockPosType, nativeBlockType).invoke(level, supportPos,
-                    sourceBlock);
-        } catch (ReflectiveOperationException exception) {
-            if (!redstonePhysicsWarningLogged) {
-                redstonePhysicsWarningLogged = true;
-                plugin.getLogger().warning("Could not propagate NPC switch redstone physics: "
-                        + exception.getClass().getSimpleName() + ": " + exception.getMessage());
-            }
-        }
+        // Re-apply the support block through Bukkit with physics enabled. This
+        // notifies its redstone neighbours without reaching into versioned NMS.
+        support.getState().update(true, true);
     }
 
     private void mineNearbyBlocks(NpcInstance instance) {

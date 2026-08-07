@@ -1,6 +1,5 @@
 package dev.blockfolk.runtime;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -26,11 +25,14 @@ import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.NpcQuestion;
 import dev.blockfolk.model.QuestionOption;
 import dev.blockfolk.input.ChatInputService;
-import dev.blockfolk.util.UiText;
+import io.papermc.paper.dialog.Dialog;
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.DialogBase;
+import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.body.DialogBody;
+import io.papermc.paper.registry.data.dialog.type.DialogType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
-import net.kyori.adventure.text.event.ClickEvent;
-import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 
 public final class NpcQuestionService implements Listener {
@@ -62,9 +64,14 @@ public final class NpcQuestionService implements Listener {
         if (rangeTask != null)
             rangeTask.cancel();
         rangeTask = null;
-        for (PlayerState state : states.values()) {
+        for (Map.Entry<UUID, PlayerState> entry : states.entrySet()) {
+            PlayerState state = entry.getValue();
             if (state.timeout != null)
                 state.timeout.cancel();
+            Player player = Bukkit.getPlayer(entry.getKey());
+            if (player != null) {
+                player.closeDialog();
+            }
         }
         states.clear();
     }
@@ -154,30 +161,41 @@ public final class NpcQuestionService implements Listener {
     }
 
     private void show(Player player, Request request) {
-        player.sendMessage(UiText.npcDialog(request.npcName, request.question.prompt(), request.npcColor));
         List<QuestionOption> configuredOptions = request.question.configuredOptions();
+        List<ActionButton> buttons = new ArrayList<>(configuredOptions.size());
         for (int index = 0; index < configuredOptions.size(); index++) {
             int optionIndex = index;
             String label = configuredOptions.get(index).label();
-            ClickCallback<net.kyori.adventure.audience.Audience> callback = audience -> {
-                if (audience instanceof Player clicked && clicked.getUniqueId().equals(player.getUniqueId())) {
-                    Bukkit.getScheduler().runTask(plugin,
-                            () -> select(player.getUniqueId(), request.token, optionIndex));
-                }
-            };
-            Component option = Component.text("[" + (index + 1) + "] " + label, NamedTextColor.GREEN)
-                    .clickEvent(ClickEvent.callback(callback,
-                            options -> options.uses(1).lifetime(Duration.ofSeconds(timeoutSeconds))))
-                    .hoverEvent(HoverEvent.showText(Component.text("Click to answer", NamedTextColor.YELLOW)));
-            player.sendMessage(option);
+            buttons.add(ActionButton.builder(Component.text(label, NamedTextColor.GREEN))
+                    .tooltip(Component.text("Choose answer " + (index + 1), NamedTextColor.YELLOW))
+                    .action(dialogAction(player.getUniqueId(), request.token,
+                            () -> select(player.getUniqueId(), request.token, optionIndex)))
+                    .build());
         }
-        ClickCallback<net.kyori.adventure.audience.Audience> cancel = audience -> {
-            if (audience instanceof Player clicked && clicked.getUniqueId().equals(player.getUniqueId())) {
-                Bukkit.getScheduler().runTask(plugin, () -> cancel(player.getUniqueId(), request.token));
+        ActionButton cancelButton = ActionButton.builder(Component.text("Cancel", NamedTextColor.RED))
+                .tooltip(Component.text("Leave this conversation", NamedTextColor.GRAY))
+                .action(dialogAction(player.getUniqueId(), request.token,
+                        () -> cancel(player.getUniqueId(), request.token)))
+                .build();
+        Dialog dialog = Dialog.create(builder -> builder.empty()
+                .base(DialogBase.builder(Component.text(request.npcName, request.npcColor)).canCloseWithEscape(false)
+                        .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                        .body(List.of(DialogBody.plainMessage(Component.text(request.question.prompt())))).build())
+                .type(DialogType.multiAction(buttons).exitAction(cancelButton).columns(1).build()));
+        player.showDialog(dialog);
+    }
+
+    private DialogAction dialogAction(UUID playerId, UUID token, Runnable action) {
+        return DialogAction.customClick((view, audience) -> {
+            if (audience instanceof Player clicked && clicked.getUniqueId().equals(playerId)) {
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    PlayerState state = states.get(playerId);
+                    if (state != null && state.active != null && state.active.token.equals(token)) {
+                        action.run();
+                    }
+                });
             }
-        };
-        player.sendMessage(Component.text("[Cancel]", NamedTextColor.RED).clickEvent(
-                ClickEvent.callback(cancel, options -> options.uses(1).lifetime(Duration.ofSeconds(timeoutSeconds)))));
+        }, ClickCallback.Options.builder().uses(1).lifetime(java.time.Duration.ofSeconds(timeoutSeconds)).build());
     }
 
     private void select(UUID playerId, UUID token, int optionIndex) {
@@ -220,6 +238,10 @@ public final class NpcQuestionService implements Listener {
         state.timeout = null;
         state.active = null;
         state.resolving = true;
+        Player player = Bukkit.getPlayer(playerId);
+        if (player != null) {
+            player.closeDialog();
+        }
         request.resolver.accept(branch, () -> {
             state.questions.complete(request);
             state.resolving = false;

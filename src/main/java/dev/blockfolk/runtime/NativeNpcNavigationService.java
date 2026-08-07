@@ -14,6 +14,7 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Husk;
+import org.bukkit.entity.Pig;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
@@ -21,7 +22,6 @@ import com.destroystokyo.paper.entity.Pathfinder;
 
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.WalkingSpeed;
-import net.kyori.adventure.util.TriState;
 
 /**
  * Uses an invisible, goal-free mob as the native Minecraft navigator for a
@@ -48,7 +48,7 @@ public final class NativeNpcNavigationService {
     }
 
     public NavigationUpdate navigate(NpcInstance instance, Location target, WalkingSpeed walkingSpeed) {
-        Husk navigator = findOrSpawn(instance);
+        Pig navigator = findOrSpawn(instance);
         if (navigator == null) {
             return new NavigationUpdate(NavigationStatus.STALLED, instance.getLocation());
         }
@@ -102,7 +102,7 @@ public final class NativeNpcNavigationService {
     }
 
     public void stop(NpcInstance instance) {
-        Husk navigator = findNavigator(instance);
+        Pig navigator = findNavigator(instance);
         if (navigator != null) {
             navigator.getPathfinder().stopPathfinding();
         }
@@ -118,7 +118,7 @@ public final class NativeNpcNavigationService {
     }
 
     private void destroy(NpcInstance instance, boolean loadChunk) {
-        Husk navigator = findNavigator(instance, loadChunk);
+        Pig navigator = findNavigator(instance, loadChunk);
         if (navigator != null) {
             navigator.remove();
             configuredNavigators.remove(navigator.getUniqueId());
@@ -131,7 +131,7 @@ public final class NativeNpcNavigationService {
         return entity.getPersistentDataContainer().has(navigatorKey, PersistentDataType.STRING);
     }
 
-    private void requestPath(Husk navigator, Location target, WalkingSpeed walkingSpeed) {
+    private void requestPath(Pig navigator, Location target, WalkingSpeed walkingSpeed) {
         configureSpeed(navigator, walkingSpeed);
         AttributeInstance followRange = navigator.getAttribute(Attribute.FOLLOW_RANGE);
         if (followRange != null) {
@@ -147,8 +147,8 @@ public final class NativeNpcNavigationService {
         }
     }
 
-    private Husk findOrSpawn(NpcInstance instance) {
-        Husk existing = findNavigator(instance, true);
+    private Pig findOrSpawn(NpcInstance instance) {
+        Pig existing = findNavigator(instance, true);
         if (existing != null) {
             if (configuredNavigators.add(existing.getUniqueId())) {
                 configure(existing);
@@ -160,7 +160,7 @@ public final class NativeNpcNavigationService {
             return null;
         }
         try {
-            Husk spawned = location.getWorld().spawn(location, Husk.class, navigator -> {
+            Pig spawned = location.getWorld().spawn(location, Pig.class, navigator -> {
                 navigator.getPersistentDataContainer().set(navigatorKey, PersistentDataType.STRING,
                         instance.getId().toString());
                 configure(navigator);
@@ -174,17 +174,17 @@ public final class NativeNpcNavigationService {
         }
     }
 
-    private Husk findNavigator(NpcInstance instance) {
+    private Pig findNavigator(NpcInstance instance) {
         return findNavigator(instance, false);
     }
 
-    private Husk findNavigator(NpcInstance instance, boolean loadChunk) {
+    private Pig findNavigator(NpcInstance instance, boolean loadChunk) {
         Location location = instance.getLocation();
         if (location.getWorld() == null) {
             return null;
         }
         UUID navigatorId = navigatorIdsByInstance.get(instance.getId());
-        if (navigatorId != null && location.getWorld().getEntity(navigatorId) instanceof Husk navigator
+        if (navigatorId != null && location.getWorld().getEntity(navigatorId) instanceof Pig navigator
                 && navigator.isValid()) {
             return navigator;
         }
@@ -196,11 +196,17 @@ public final class NativeNpcNavigationService {
                 return null;
             location.getChunk().load();
         }
-        Husk found = null;
+        Pig found = null;
         String expectedId = instance.getId().toString();
-        for (Husk navigator : location.getWorld().getEntitiesByClass(Husk.class)) {
-            String taggedId = navigator.getPersistentDataContainer().get(navigatorKey, PersistentDataType.STRING);
+        for (Entity entity : location.getWorld().getEntitiesByClasses(Pig.class, Husk.class)) {
+            String taggedId = entity.getPersistentDataContainer().get(navigatorKey, PersistentDataType.STRING);
             if (!expectedId.equals(taggedId)) {
+                continue;
+            }
+            if (!(entity instanceof Pig navigator)) {
+                // 1.21.x used a hostile Husk navigator. Remove it during the 26.2
+                // migration because hostile mobs cannot be retained reliably in Peaceful.
+                entity.remove();
                 continue;
             }
             if (found == null) {
@@ -215,17 +221,14 @@ public final class NativeNpcNavigationService {
         return found;
     }
 
-    private void configure(Husk navigator) {
+    private void configure(Pig navigator) {
         navigator.setPersistent(true);
         navigator.setRemoveWhenFarAway(false);
-        navigator.setDespawnInPeacefulOverride(TriState.FALSE);
         navigator.setInvisible(true);
         navigator.setSilent(true);
         navigator.setInvulnerable(true);
         navigator.setCollidable(false);
         navigator.setCanPickupItems(false);
-        navigator.setShouldBurnInDay(false);
-        navigator.setCanBreakDoors(false);
         navigator.setAdult();
         navigator.setAI(true);
         navigator.setAware(true);
@@ -247,7 +250,7 @@ public final class NativeNpcNavigationService {
         pathfinder.setCanFloat(true);
     }
 
-    private void configureSpeed(Husk navigator, WalkingSpeed walkingSpeed) {
+    private void configureSpeed(Pig navigator, WalkingSpeed walkingSpeed) {
         AttributeInstance movementSpeed = navigator.getAttribute(Attribute.MOVEMENT_SPEED);
         if (movementSpeed != null) {
             // Generic movement speed is measured in roughly blocks per tick.

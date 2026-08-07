@@ -3,7 +3,6 @@ package dev.blockfolk;
 import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
-import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -34,6 +33,7 @@ import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
 import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.OpenRouterClient;
+import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 
 public final class BlockfolkPlugin extends JavaPlugin {
 
@@ -72,7 +72,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         dialogService = new DialogService(this);
         instanceRegistry = new NpcInstanceRegistry(this, definitionRepository, instanceRepository, npcRenderer,
                 navigationService, dialogService);
-        dialogService.setLocationProvider(instanceRegistry::currentLocation);
+        dialogService.setEntityProvider(instanceRegistry::findEntity);
         chatInputService = new ChatInputService(this, getConfig().getInt("chat-input-timeout-seconds", 60));
         skinResolver = new SkinResolver(getName() + "/" + getPluginMeta().getVersion(),
                 getConfig().getString("mineskin-api-key", ""));
@@ -135,16 +135,10 @@ public final class BlockfolkPlugin extends JavaPlugin {
             }
         }
 
-        PluginCommand command = getCommand("blockfolk");
-        if (command == null) {
-            getLogger().severe("plugin.yml is missing the blockfolk command.");
-            getServer().getPluginManager().disablePlugin(this);
-            return;
-        }
         BlockfolkCommand executor = new BlockfolkCommand(definitionRepository, instanceRegistry, guiService,
                 routeGuiService, customEventGuiService, customEventRepository, behaviourService);
-        command.setExecutor(executor);
-        command.setTabCompleter(executor);
+        getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> event.registrar()
+                .register("blockfolk", "Opens and controls Blockfolk.", java.util.List.of("bf"), executor));
 
         getServer().getPluginManager().registerEvents(guiService, this);
         getServer().getPluginManager().registerEvents(routeGuiService, this);

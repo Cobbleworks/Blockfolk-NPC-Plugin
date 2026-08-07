@@ -472,8 +472,7 @@ public final class NpcCombatService implements Listener {
         return npc.getNearbyEntities(SIGHT_RANGE, SIGHT_RANGE, SIGHT_RANGE).stream()
                 .filter(LivingEntity.class::isInstance).map(LivingEntity.class::cast)
                 .filter(target -> isAttackable(instance, target)).filter(target -> isSelectedTarget(target, options))
-                .filter(target -> !isTemporarilyUnreachable(instance, target))
-                .filter(npc::hasLineOfSight)
+                .filter(target -> !isTemporarilyUnreachable(instance, target)).filter(npc::hasLineOfSight)
                 .min(Comparator.comparingDouble(target -> target.getLocation().distanceSquared(npc.getLocation())))
                 .orElse(null);
     }

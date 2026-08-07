@@ -129,7 +129,7 @@ public final class NpcInstanceRegistry implements Listener {
         for (NpcInstance instance : instances.values()) {
             if (!instance.isAwaitingRespawn()) {
                 definitionRepository.find(instance.getDefinitionKey())
-                        .ifPresent(definition -> spawnInstance(instance, definition));
+                        .ifPresent(definition -> spawnInstanceWhenChunkLoaded(instance, definition));
             }
         }
     }
@@ -141,7 +141,7 @@ public final class NpcInstanceRegistry implements Listener {
                     || !instance.getStoredLocation().worldName().equals(event.getWorld().getName()))
                 continue;
             definitionRepository.find(instance.getDefinitionKey())
-                    .ifPresent(definition -> spawnInstance(instance, definition));
+                    .ifPresent(definition -> spawnInstanceWhenChunkLoaded(instance, definition));
         }
     }
 
@@ -353,6 +353,25 @@ public final class NpcInstanceRegistry implements Listener {
             indexEntity(instance);
             spawnListener.accept(instance, definition);
         }
+    }
+
+    private void spawnInstanceWhenChunkLoaded(NpcInstance instance, NpcDefinition definition) {
+        Location location = instance.getLocation();
+        if (location.getWorld() == null) {
+            return;
+        }
+        if (location.getChunk().isLoaded()) {
+            spawnInstance(instance, definition);
+            return;
+        }
+        location.getWorld().getChunkAtAsync(location).thenRun(() -> {
+            if (!plugin.isEnabled() || instance.isAwaitingRespawn() || instance.getEntityId() != 0
+                    || instances.get(instance.getId()) != instance) {
+                return;
+            }
+            definitionRepository.find(instance.getDefinitionKey())
+                    .ifPresent(currentDefinition -> spawnInstance(instance, currentDefinition));
+        });
     }
 
     private void indexEntity(NpcInstance instance) {

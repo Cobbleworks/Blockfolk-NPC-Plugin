@@ -20,7 +20,6 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
-import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
 
 import dev.blockfolk.model.NpcDefinition;
@@ -335,18 +334,19 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     }
 
     private ResolvableProfile createProfile(NpcInstance instance, NpcDefinition definition) {
-        PlayerProfile profile = Bukkit.createProfileExact(instance.getId(), profileName(instance));
+        ResolvableProfile.Builder profile = ResolvableProfile.resolvableProfile().uuid(instance.getId())
+                .name(profileName(instance));
         String texture = definition.getSkinTextureValue();
         if (texture == null) {
             texture = SkinTextureUtil.toTextureProperty(definition.getSkinUrl());
         }
         if (texture != null) {
             String signature = definition.getSkinTextureSignature();
-            profile.setProperty(signature == null
+            profile.addProperty(signature == null
                     ? new ProfileProperty("textures", texture)
                     : new ProfileProperty("textures", texture, signature));
         }
-        return ResolvableProfile.resolvableProfile(profile);
+        return profile.build();
     }
 
     private String profileName(NpcInstance instance) {

@@ -37,15 +37,22 @@ final class DebouncedYamlWriter {
 
     synchronized void queue(File file, Supplier<YamlConfiguration> configuration) {
         pending.put(file.toPath(), configuration);
-        if (snapshotTask != null)
-            snapshotTask.cancel();
-        snapshotTask = Bukkit.getScheduler().runTaskLater(plugin, this::snapshot, DELAY_TICKS);
+        scheduleSnapshot();
     }
 
     synchronized void delete(File file) {
         pending.put(file.toPath(), () -> null);
+        scheduleSnapshot();
+    }
+
+    private void scheduleSnapshot() {
         if (snapshotTask != null)
             snapshotTask.cancel();
+        snapshotTask = null;
+        // Paper marks a plugin disabled before invoking onDisable. Leave the
+        // pending snapshot for flush() instead of trying to register a task.
+        if (!plugin.isEnabled())
+            return;
         snapshotTask = Bukkit.getScheduler().runTaskLater(plugin, this::snapshot, DELAY_TICKS);
     }
 

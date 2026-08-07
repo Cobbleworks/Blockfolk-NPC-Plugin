@@ -82,7 +82,7 @@ perception, memory, and capability information sent to OpenRouter.
 
 ## Building
 
-Blockfolk requires Java 21 and targets Paper 1.21.11.
+Blockfolk requires Java 25 and targets Paper 26.2.
 
 ```bash
 mvn clean test package

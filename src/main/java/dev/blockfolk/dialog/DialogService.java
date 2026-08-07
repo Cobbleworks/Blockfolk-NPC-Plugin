@@ -4,13 +4,13 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Optional;
 import java.util.function.Function;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
-import org.bukkit.entity.Display;
-import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
@@ -22,15 +22,14 @@ import net.kyori.adventure.text.Component;
 
 public final class DialogService {
 
-    private static final double DIALOG_DISPLAY_Y_OFFSET = 2.4;
     private static final String PROCESSING_PREFIX = "Thinking";
     private static final int MINIMUM_LINE_DURATION_SECONDS = 3;
     private static final int CHARACTERS_PER_SECOND = 12;
 
     private final Plugin plugin;
     private final NamespacedKey instanceKey;
-    private final Map<UUID, DialogRuntime> displays = new HashMap<>();
-    private Function<NpcInstance, Location> locationProvider = NpcInstance::getLocation;
+    private final Map<UUID, DialogRuntime> dialogs = new HashMap<>();
+    private Function<NpcInstance, Optional<LivingEntity>> entityProvider = ignored -> Optional.empty();
     private BukkitTask task;
 
     public DialogService(Plugin plugin) {
@@ -38,8 +37,8 @@ public final class DialogService {
         this.instanceKey = new NamespacedKey(plugin, "dialog-instance-id");
     }
 
-    public void setLocationProvider(Function<NpcInstance, Location> locationProvider) {
-        this.locationProvider = locationProvider == null ? NpcInstance::getLocation : locationProvider;
+    public void setEntityProvider(Function<NpcInstance, Optional<LivingEntity>> entityProvider) {
+        this.entityProvider = entityProvider == null ? ignored -> Optional.empty() : entityProvider;
     }
 
     public static int lineDurationSeconds(String line) {
@@ -52,6 +51,7 @@ public final class DialogService {
     }
 
     public void start() {
+        removeLegacyDisplays(null);
         task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
     }
 
@@ -59,38 +59,20 @@ public final class DialogService {
         if (task != null) {
             task.cancel();
         }
-        for (DialogRuntime runtime : displays.values()) {
-            runtime.display.remove();
-        }
-        displays.clear();
-    }
-
-    private void configureDisplay(TextDisplay display, NpcInstance instance) {
-        display.setBillboard(Display.Billboard.CENTER);
-        display.setSeeThrough(false);
-        display.setShadowed(true);
-        display.setTeleportDuration(1);
-        display.setPersistent(true);
-        display.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
+        dialogs.values().forEach(runtime -> setDescription(runtime.instance, null));
+        dialogs.clear();
     }
 
     public void move(NpcInstance instance) {
-        Location location = locationProvider.apply(instance);
-        if (location.getWorld() == null) {
-            return;
-        }
-        DialogRuntime runtime = displays.get(instance.getId());
-        if (runtime != null && runtime.display.isValid()) {
-            runtime.display.teleport(location.clone().add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0));
-        }
+        // Mannequin descriptions are part of the entity and move with it.
     }
 
     public void detach(UUID instanceId) {
-        DialogRuntime runtime = displays.remove(instanceId);
+        DialogRuntime runtime = dialogs.remove(instanceId);
         if (runtime != null) {
-            runtime.display.remove();
+            setDescription(runtime.instance, null);
         }
-        removeTaggedDisplays(instanceId);
+        removeLegacyDisplays(instanceId);
     }
 
     /**
@@ -98,99 +80,85 @@ public final class DialogService {
      * length.
      */
     public void showHologram(NpcInstance instance, NpcDefinition definition, String line) {
-        Location npcLocation = locationProvider.apply(instance);
-        if (line == null || line.isBlank() || npcLocation.getWorld() == null) {
+        if (line == null || line.isBlank() || !setDescription(instance, Component.text(line))) {
             return;
         }
-        DialogRuntime runtime = displays.get(instance.getId());
-        if (runtime == null || !runtime.display.isValid()) {
-            Location location = npcLocation.add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0);
-            TextDisplay display = (TextDisplay) location.getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
-            configureDisplay(display, instance);
-            runtime = new DialogRuntime(display, instance);
-            displays.put(instance.getId(), runtime);
-        }
-        runtime.display.text(Component.text(line));
+        DialogRuntime runtime = dialogs.computeIfAbsent(instance.getId(), ignored -> new DialogRuntime(instance));
         runtime.processing = false;
         runtime.remainingTicks = lineDurationSeconds(line) * 20;
     }
 
     public void showProcessing(NpcInstance instance) {
-        Location npcLocation = locationProvider.apply(instance);
-        if (npcLocation.getWorld() == null)
+        if (!setDescription(instance, Component.text(PROCESSING_PREFIX + ".")))
             return;
-        DialogRuntime runtime = displays.get(instance.getId());
-        if (runtime == null || !runtime.display.isValid()) {
-            Location location = npcLocation.add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0);
-            TextDisplay display = (TextDisplay) location.getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
-            configureDisplay(display, instance);
-            runtime = new DialogRuntime(display, instance);
-            displays.put(instance.getId(), runtime);
-        }
+        DialogRuntime runtime = dialogs.computeIfAbsent(instance.getId(), ignored -> new DialogRuntime(instance));
         runtime.processing = true;
         runtime.processingFrame = 0;
         runtime.processingFrameTicks = 0;
-        runtime.display.text(Component.text(PROCESSING_PREFIX + "."));
     }
 
     public void hideProcessing(NpcInstance instance) {
-        DialogRuntime runtime = displays.get(instance.getId());
+        DialogRuntime runtime = dialogs.get(instance.getId());
         if (runtime == null || !runtime.processing)
             return;
-        runtime.display.remove();
-        displays.remove(instance.getId());
+        setDescription(instance, null);
+        dialogs.remove(instance.getId());
     }
 
-    private void removeTaggedDisplays(UUID instanceId) {
-        String expectedId = instanceId.toString();
+    private void removeLegacyDisplays(UUID instanceId) {
+        String expectedId = instanceId == null ? null : instanceId.toString();
         for (org.bukkit.World world : Bukkit.getWorlds()) {
             for (TextDisplay display : world.getEntitiesByClass(TextDisplay.class)) {
                 String taggedId = display.getPersistentDataContainer().get(instanceKey, PersistentDataType.STRING);
-                if (expectedId.equals(taggedId)) {
+                if (taggedId != null && (expectedId == null || expectedId.equals(taggedId))) {
                     display.remove();
                 }
             }
         }
     }
 
+    private boolean setDescription(NpcInstance instance, Component description) {
+        LivingEntity entity = entityProvider.apply(instance).orElse(null);
+        if (!(entity instanceof Mannequin mannequin) || !mannequin.isValid()) {
+            return false;
+        }
+        mannequin.setDescription(description);
+        return true;
+    }
+
     private void tick() {
-        Iterator<Map.Entry<UUID, DialogRuntime>> displayIterator = displays.entrySet().iterator();
-        while (displayIterator.hasNext()) {
-            DialogRuntime runtime = displayIterator.next().getValue();
-            if (!runtime.display.isValid()) {
-                displayIterator.remove();
+        Iterator<Map.Entry<UUID, DialogRuntime>> dialogIterator = dialogs.entrySet().iterator();
+        while (dialogIterator.hasNext()) {
+            DialogRuntime runtime = dialogIterator.next().getValue();
+            if (entityProvider.apply(runtime.instance).filter(Mannequin.class::isInstance).isEmpty()) {
+                dialogIterator.remove();
                 continue;
-            }
-            Location location = locationProvider.apply(runtime.instance);
-            if (location.getWorld() != null) {
-                runtime.display.teleport(location.add(0.0, DIALOG_DISPLAY_Y_OFFSET, 0.0));
             }
             if (runtime.processing) {
                 if (++runtime.processingFrameTicks >= 20) {
                     runtime.processingFrameTicks = 0;
                     runtime.processingFrame = (runtime.processingFrame + 1) % 3;
-                    runtime.display.text(Component.text(PROCESSING_PREFIX + ".".repeat(runtime.processingFrame + 1)));
+                    setDescription(runtime.instance,
+                            Component.text(PROCESSING_PREFIX + ".".repeat(runtime.processingFrame + 1)));
                 }
                 continue;
             }
             if (--runtime.remainingTicks <= 0) {
-                runtime.display.remove();
-                displayIterator.remove();
+                setDescription(runtime.instance, null);
+                dialogIterator.remove();
             }
         }
     }
 
     private static final class DialogRuntime {
 
-        private final TextDisplay display;
         private final NpcInstance instance;
         private int remainingTicks;
         private boolean processing;
         private int processingFrame;
         private int processingFrameTicks;
 
-        private DialogRuntime(TextDisplay display, NpcInstance instance) {
-            this.display = display;
+        private DialogRuntime(NpcInstance instance) {
             this.instance = instance;
         }
     }

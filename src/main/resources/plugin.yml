@@ -1,15 +1,9 @@
 name: Blockfolk
 version: ${project.version}
 main: dev.blockfolk.BlockfolkPlugin
-api-version: '1.21.11'
+api-version: '26.2'
 author: Blockfolk
 softdepend: [BeautyQuests]
-commands:
-  blockfolk:
-    aliases: [bf]
-    description: Opens and controls Blockfolk.
-    usage: /bf [create [name]|routes|events [trigger <event>]|npc <name> [spawn|duplicate|tphere|warpto]]
-    permission: blockfolk.admin
 permissions:
   blockfolk.admin:
     description: Allows creating, editing, and spawning Blockfolk NPCs.

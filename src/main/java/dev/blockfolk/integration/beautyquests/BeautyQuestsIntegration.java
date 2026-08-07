@@ -33,11 +33,14 @@ import fr.skytasul.quests.api.QuestsAPI;
 import fr.skytasul.quests.api.npcs.BqInternalNpc;
 import fr.skytasul.quests.api.npcs.BqInternalNpcFactory;
 import fr.skytasul.quests.api.npcs.NpcClickType;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 /** Exposes persistent Blockfolk instances as native BeautyQuests NPCs. */
 public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
 
     private static final String FACTORY_KEY = "blockfolk";
+    private static final PlainTextComponentSerializer PLAIN_TEXT = PlainTextComponentSerializer.plainText();
     private static final Pattern NPC_ID_PATTERN = Pattern
             .compile("blockfolk#([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})");
 
@@ -154,7 +157,11 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
             return null;
         }
         ItemMeta meta = item.getItemMeta();
-        return referencedInstanceId(meta.getLore());
+        return referencedInstanceIdComponents(meta.lore());
+    }
+
+    private static UUID referencedInstanceIdComponents(List<Component> lore) {
+        return lore == null ? null : referencedInstanceId(lore.stream().map(PLAIN_TEXT::serialize).toList());
     }
 
     static UUID referencedInstanceId(List<String> lore) {

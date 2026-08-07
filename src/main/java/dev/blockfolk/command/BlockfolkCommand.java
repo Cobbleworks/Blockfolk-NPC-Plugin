@@ -1,6 +1,7 @@
 package dev.blockfolk.command;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 
@@ -22,8 +23,10 @@ import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
 import dev.blockfolk.util.UiText;
+import io.papermc.paper.command.brigadier.BasicCommand;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 
-public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
+public final class BlockfolkCommand implements CommandExecutor, TabCompleter, BasicCommand {
 
     private final NpcDefinitionRepository definitionRepository;
     private final NpcInstanceRegistry instanceRegistry;
@@ -43,6 +46,26 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter {
         this.customEventGuiService = customEventGuiService;
         this.customEventRepository = customEventRepository;
         this.behaviourService = behaviourService;
+    }
+
+    @Override
+    public void execute(CommandSourceStack commandSourceStack, String[] args) {
+        onCommand(commandSourceStack.getSender(), null, "blockfolk", args);
+    }
+
+    @Override
+    public Collection<String> suggest(CommandSourceStack commandSourceStack, String[] args) {
+        return onTabComplete(commandSourceStack.getSender(), null, "blockfolk", args);
+    }
+
+    @Override
+    public boolean canUse(CommandSender sender) {
+        return sender.hasPermission("blockfolk.admin");
+    }
+
+    @Override
+    public String permission() {
+        return "blockfolk.admin";
     }
 
     @Override
