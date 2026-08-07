@@ -64,7 +64,7 @@ The following state is included when available:
 - current and maximum health;
 - whether the NPC is in combat;
 - whether a route is configured;
-- the material held in the main hand.
+- the material held in the main hand;
 - when Temporary Inventory access is enabled, every occupied slot in that spawned
   instance's temporary inventory, including a safe slot alias, stack size, and material.
 
@@ -84,7 +84,7 @@ Perception uses a 12-block radius for players and other Blockfolk NPCs. It inclu
   each lever is powered;
 - when Temporary Inventory and Interact are enabled, up to five nearby containers,
   including their type, distance, and a bounded summary of their contents;
-- up to five nearest globally saved locations in the same world and within 64 blocks.
+- up to five nearest globally saved locations in the same world and within 64 blocks;
 - counts of reachable ores, logs, and pickaxe-mineable materials, with material aliases
   accepted by `MINE_BLOCKS`.
 
@@ -106,7 +106,7 @@ When the NPC's world is available, the request includes:
 - weather: raining or clear;
 - biome name;
 - broad light level: dark, dim, or bright;
-- an approximate indoors assessment based on whether blocks exist above the NPC.
+- an approximate indoors assessment based on whether blocks exist above the NPC;
 - up to five nearest non-empty signs within 12 blocks, including front and back text,
   approximate distance, and a per-sign text limit.
 
