@@ -180,11 +180,11 @@ This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for d
     <td><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-idle-walk-action.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-idle-walk-action.png" alt="Configuring an NPC idle walking action" width="450"></a></td>
   </tr>
   <tr>
-    <th>Blockfolk - Combat Behavior</th>
+    <th>Blockfolk - AI Item Pickup</th>
     <th>Blockfolk - Default Inventory</th>
   </tr>
   <tr>
-    <td><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-combat-behavior.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-combat-behavior.png" alt="Adding combat behavior to an NPC" width="450"></a></td>
+    <td><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-ai-item-pickup.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-ai-item-pickup.png" alt="An NPC following a request to pick up an item" width="450"></a></td>
     <td><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-default-inventory.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-default-inventory.png" alt="Configuring an NPC default inventory" width="450"></a></td>
   </tr>
   <tr>
@@ -194,11 +194,5 @@ This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for d
   <tr>
     <td><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-container-withdrawal.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-container-withdrawal.png" alt="An NPC withdrawing items from a chest" width="450"></a></td>
     <td><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-ai-personality-response.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-ai-personality-response.png" alt="An NPC responding according to its personality" width="450"></a></td>
-  </tr>
-  <tr>
-    <th colspan="2">Blockfolk - AI Item Pickup</th>
-  </tr>
-  <tr>
-    <td colspan="2" align="center"><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-ai-item-pickup.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-ai-item-pickup.png" alt="An NPC following a request to pick up an item" width="900"></a></td>
   </tr>
 </table>
