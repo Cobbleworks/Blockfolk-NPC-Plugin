@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/plugin-logo.png" alt="Blockfolk Plugin" width="180" />
+  <img src="images/plugin-logo.png" alt="Blockfolk Plugin" width="200" height="200" />
 </p>
 <h1 align="center">Blockfolk NPC Plugin</h1>
 <p align="center">
