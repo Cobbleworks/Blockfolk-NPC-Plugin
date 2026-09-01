@@ -2,7 +2,8 @@ name: Blockfolk
 version: ${project.version}
 main: dev.blockfolk.BlockfolkPlugin
 api-version: '26.2'
-author: Blockfolk
+author: Cobbleworks
+website: https://github.com/Cobbleworks/Blockfolk-NPC-Plugin
 softdepend: [BeautyQuests]
 permissions:
   blockfolk.admin:

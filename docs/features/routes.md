@@ -20,8 +20,8 @@ Point order is derived from position rather than placement order. An NPC starts 
 Shift-right-click a route point with the editor shard to attach an action sequence. These actions run when an NPC reaches that point and can pause, speak, interact, change movement, or invoke AI.
 
 <div class="screenshot-grid">
-  <img src="../screenshots/bf-route-editing.jpeg" alt="Editing a highlighted Blockfolk route in the world">
-  <img src="../screenshots/bf-waypoint-actions.jpeg" alt="Actions configured on a route waypoint">
+  <img src="../screenshots/screenshot-route-editing.jpeg" alt="Editing a highlighted Blockfolk route in the world">
+  <img src="../screenshots/screenshot-waypoint-actions.jpeg" alt="Actions configured on a route waypoint">
 </div>
 
 ## Assign and control routes

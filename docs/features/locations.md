@@ -25,4 +25,4 @@ From the locations browser:
 
 Locations differ from routes: a location is one destination, while a route is a closed sequence of walking points.
 
-![Blockfolk global locations browser](../screenshots/bf-locations.jpeg)
+![Blockfolk global locations browser](../screenshots/screenshot-locations-menu.jpeg)

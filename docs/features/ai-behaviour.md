@@ -80,6 +80,6 @@ While a request is in flight, a hologram cycles through `Thinking.`, `Thinking..
 For the exact prompt structure, perception limits, target aliases, and memory rules, see [AI request context](/reference/ai-request-context).
 
 <div class="screenshot-grid">
-  <img src="../screenshots/bf-ai-behaviour-menu.jpeg" alt="Blockfolk AI Behaviour configuration menu">
-  <img src="../screenshots/bf-ai-response.jpeg" alt="A Blockfolk NPC responding to nearby player chat">
+  <img src="../screenshots/screenshot-ai-behaviour-menu.jpeg" alt="Blockfolk AI Behaviour configuration menu">
+  <img src="../screenshots/screenshot-ai-response.jpeg" alt="A Blockfolk NPC responding to nearby player chat">
 </div>

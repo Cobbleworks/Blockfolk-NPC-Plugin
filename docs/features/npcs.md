@@ -18,8 +18,8 @@ Opening a preset gives access to:
 - spawning and managing persistent instances.
 
 <div class="screenshot-grid">
-  <img src="../screenshots/bf-npc-overview-menu.jpeg" alt="Blockfolk NPC preset browser">
-  <img src="../screenshots/blockfolk-gui-npcs-details.jpeg" alt="Blockfolk NPC preset editor">
+  <img src="../screenshots/screenshot-npc-overview.jpeg" alt="Blockfolk NPC preset browser">
+  <img src="../screenshots/screenshot-npc-details.jpeg" alt="Blockfolk NPC preset editor">
 </div>
 
 ## Preset spawnpoint

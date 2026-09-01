@@ -9,7 +9,7 @@
 
 ## Install Blockfolk
 
-1. Download `Blockfolk.jar` from the [latest GitHub release](https://github.com/andreasjhagen/Blockfolk-NPC/releases/latest).
+1. Download `Blockfolk.jar` from the [latest GitHub release](https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/releases/latest).
 2. Stop the server and place the jar in its `plugins` directory.
 3. Start the server. Blockfolk creates its configuration and data under `plugins/Blockfolk/`.
 4. Run `/bf`. If the preset browser opens, installation is complete.
@@ -27,7 +27,7 @@ Install BeautyQuests before starting the server if you want Blockfolk NPCs to ap
 
 The preset is the reusable configuration. The visible NPC is an instance of that preset. Editing the preset refreshes its spawned copies where appropriate.
 
-![A Blockfolk NPC preset management menu](../screenshots/bf-npc-menu.jpeg)
+![A Blockfolk NPC preset management menu](../screenshots/screenshot-npc-menu.jpeg)
 
 ## Give it something to do
 

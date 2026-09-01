@@ -6,7 +6,7 @@ hero:
   text: NPCs that feel part of the world
   tagline: Create, customize, route, script, and give AI-controlled behaviour to persistent fake-player NPCs on Paper.
   image:
-    src: /icon.png
+    src: /plugin-logo.png
     alt: Blockfolk icon
   actions:
     - theme: brand
@@ -46,9 +46,9 @@ The deterministic behaviour system works on its own. AI behaviour is an optional
 ## A quick look
 
 <div class="screenshot-grid">
-  <img src="./screenshots/bf-npc-overview-menu.jpeg" alt="Blockfolk NPC preset overview">
-  <img src="./screenshots/blockfolk-gui-npcs-details.jpeg" alt="Blockfolk NPC preset editor">
-  <img src="./screenshots/bf-ai-response.jpeg" alt="A Blockfolk NPC responding to nearby chat">
+  <img src="./screenshots/screenshot-npc-overview.jpeg" alt="Blockfolk NPC preset overview">
+  <img src="./screenshots/screenshot-npc-details.jpeg" alt="Blockfolk NPC preset editor">
+  <img src="./screenshots/screenshot-ai-response.jpeg" alt="A Blockfolk NPC responding to nearby chat">
 </div>
 
 Start with [installation and your first NPC](/guide/getting-started), or use the sidebar to jump directly to a feature.

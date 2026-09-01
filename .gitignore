@@ -1,6 +1,19 @@
+# Maven build output
 target/
-*.class
-*.log
+
+# IDE metadata
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+
+# Documentation build output
 docs/node_modules/
 docs/.vitepress/cache/
 docs/.vitepress/dist/

@@ -27,8 +27,8 @@ Nearby chat is configured from the AI menu rather than shown as a deterministic 
 Left-click an action to replace it and right-click to remove it. Shift-left-click an event row to copy it; shift-right-click another compatible row to paste.
 
 <div class="screenshot-grid">
-  <img src="../screenshots/bf-npc-behaviour.jpeg" alt="NPC event behaviour editor">
-  <img src="../screenshots/bf-behaviour-action-select.jpeg" alt="Behaviour action selection menu">
+  <img src="../screenshots/screenshot-behaviour-menu.jpeg" alt="NPC event behaviour editor">
+  <img src="../screenshots/screenshot-behaviour-action-select.jpeg" alt="Behaviour action selection menu">
 </div>
 
 ## Questions

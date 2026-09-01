@@ -3,8 +3,8 @@
 Combat is configured per preset under **Fighting**.
 
 <div class="screenshot-grid">
-  <img src="../screenshots/bf-combat-menu.jpeg" alt="Blockfolk combat configuration menu">
-  <img src="../screenshots/bf-combat-target-menu.jpeg" alt="Blockfolk combat target and aggression menu">
+  <img src="../screenshots/screenshot-combat-menu.jpeg" alt="Blockfolk combat configuration menu">
+  <img src="../screenshots/screenshot-combat-target-menu.jpeg" alt="Blockfolk combat target and aggression menu">
 </div>
 
 ## Health and respawning
@@ -16,7 +16,7 @@ Combat is configured per preset under **Fighting**.
 - Dropped experience changes in steps of 5.
 - The optional boss bar is visible to players within 16 blocks.
 
-![Adjusting an NPC combat respawn time](../screenshots/bf-combat-menu-2.jpeg)
+![Adjusting an NPC combat respawn time](../screenshots/screenshot-combat-respawn.jpeg)
 
 Pending combat respawns survive server restarts and keep the persistent instance UUID.
 

@@ -16,7 +16,7 @@
         <java.version>25</java.version>
         <maven.compiler.release>${java.version}</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <paper.version>26.2.build.107-stable</paper.version>
+        <paper.version>26.2.build.121-stable</paper.version>
         <junit.version>5.10.3</junit.version>
         <spotless.version>3.9.0</spotless.version>
     </properties>

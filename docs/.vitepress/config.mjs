@@ -1,15 +1,15 @@
 import { defineConfig } from 'vitepress'
 
-const repository = 'https://github.com/andreasjhagen/Blockfolk-NPC'
+const repository = 'https://github.com/Cobbleworks/Blockfolk-NPC-Plugin'
 
 export default defineConfig({
   title: 'Blockfolk',
   description: 'Documentation for the Blockfolk NPC system for Paper servers.',
-  base: process.env.DOCS_BASE ?? '/Blockfolk-NPC/',
+  base: process.env.DOCS_BASE ?? '/Blockfolk-NPC-Plugin/',
   cleanUrls: true,
   lastUpdated: true,
   head: [
-    ['link', { rel: 'icon', href: `${process.env.DOCS_BASE ?? '/Blockfolk-NPC/'}icon.png` }],
+    ['link', { rel: 'icon', href: `${process.env.DOCS_BASE ?? '/Blockfolk-NPC-Plugin/'}plugin-logo.png` }],
     ['meta', { name: 'theme-color', content: '#d97706' }]
   ],
   themeConfig: {

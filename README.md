@@ -1,16 +1,150 @@
 <p align="center">
-  <img src="docs/icon.png" alt="Blockfolk icon" width="160">
+  <img src="images/plugin-logo.png" alt="Blockfolk Plugin" width="180" />
+</p>
+<h1 align="center">Blockfolk NPC Plugin</h1>
+<p align="center">
+  <b>Create persistent fake-player NPCs without editing data files by hand.</b><br>
+  <b>Build personalities, routines, routes, conversations, combat profiles, and optional AI behavior through in-game menus.</b>
+</p>
+<p align="center">
+  <a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/releases"><img src="https://img.shields.io/github/v/release/Cobbleworks/Blockfolk-NPC-Plugin?include_prereleases&style=flat-square&color=4CAF50" alt="Latest Release"></a>&nbsp;&nbsp;<a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License"></a>&nbsp;&nbsp;<img src="https://img.shields.io/badge/Java-25+-orange?style=flat-square" alt="Java Version">&nbsp;&nbsp;<img src="https://img.shields.io/badge/Minecraft-26.2-green?style=flat-square" alt="Minecraft Version">&nbsp;&nbsp;<img src="https://img.shields.io/badge/Platform-Paper-yellow?style=flat-square" alt="Platform">&nbsp;&nbsp;<img src="https://img.shields.io/badge/Status-Active-brightgreen?style=flat-square" alt="Status">
 </p>
 
-<h1 align="center">Blockfolk</h1>
+Blockfolk is a GUI-driven NPC system for Paper servers. Administrators create reusable NPC presets, spawn persistent instances, and configure their appearance and behavior from inventory menus. NPCs can follow routes, react to players and world events, fight, gather resources, move items, hold conversations, and integrate with quests. Optional OpenRouter support lets an NPC choose only from the actions that an administrator explicitly enables.
 
-Blockfolk is a GUI-driven fake-player NPC system for Paper servers. It supports reusable NPC presets, persistent instances, skins, equipment, dialog, combat behaviour, and walking routes.
+### **Core Features**
 
-## Documentation
+- **Persistent NPC presets:** Reuse one definition across multiple independently stored instances
+- **In-game administration:** Configure skins, equipment, names, dialog, inventories, routes, and behavior without hand-editing YAML
+- **Behavior sequences:** React to interaction, proximity, combat, time, waypoints, custom events, and other supported triggers
+- **Routes and locations:** Build walking routes in the world and reuse named destinations across NPCs
+- **Configurable combat:** Define attacks, targets, alliances, loot, experience, respawn timing, and nearby boss bars
+- **World interaction:** Mine configured resources, harvest crops, and transfer items to or from containers
+- **Optional AI behavior:** Use OpenRouter for contextual conversation and validated, administrator-approved actions
+- **Quest integration:** Expose persistent Blockfolk NPCs directly to BeautyQuests
 
-The complete administrator guide is published at
-[andreasjhagen.github.io/Blockfolk-NPC](https://andreasjhagen.github.io/Blockfolk-NPC/).
-Its source lives in [`docs`](docs/index.md) and can be previewed locally with:
+### **Supported Platforms**
+
+- **Server Software:** Paper
+- **Minecraft Version:** 26.2
+- **Java Requirement:** Java 25+
+- **Optional Integrations:** BeautyQuests, OpenRouter
+
+## **Table of Contents**
+
+1. [Getting Started](#getting-started)
+    - [Prerequisites](#prerequisites)
+    - [Installation Steps](#installation-steps)
+    - [Verifying Installation](#verifying-installation)
+2. [Third-Party Plugins and Services](#third-party-plugins-and-services)
+    - [BeautyQuests](#beautyquests)
+    - [OpenRouter](#openrouter)
+3. [Configuration](#configuration)
+4. [How It Works](#how-it-works)
+    - [Presets and Instances](#presets-and-instances)
+    - [Behaviors and Routes](#behaviors-and-routes)
+    - [AI Behavior](#ai-behavior)
+5. [Commands](#commands)
+6. [Permissions](#permissions)
+7. [Documentation](#documentation)
+8. [Building from Source](#building-from-source)
+9. [License](#license)
+10. [Screenshots](#screenshots)
+
+## **Getting Started**
+
+### **Prerequisites**
+
+- A **Paper 26.2** server
+- **Java 25** or newer
+- Operator access or the `blockfolk.admin` permission
+
+BeautyQuests and OpenRouter are optional. Blockfolk's deterministic NPC system works without either integration.
+
+### **Installation Steps**
+
+1. Download the latest `Blockfolk-x.x.x.jar` from [Releases](https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/releases)
+2. Stop the server and copy the jar into its `plugins/` directory
+3. Start the server once to create `plugins/Blockfolk/config.yml` and the plugin data files
+4. Run `/bf` to open the NPC preset browser
+5. Create a preset, configure it, and use its **Spawn** action to place a persistent instance
+
+### **Verifying Installation**
+
+- Run `/plugins` and confirm that `Blockfolk` is shown in green
+- Run `/bf` and confirm that the preset browser opens
+- Create a test NPC and restart the server to confirm that its instance returns
+
+## **Third-Party Plugins and Services**
+
+### BeautyQuests
+
+[BeautyQuests](https://github.com/SkytAsul/BeautyQuests) is an optional soft dependency. When installed, spawned Blockfolk NPCs appear in BeautyQuests' NPC selector. Quest starters, stages, markers, and navigation pauses refer to the NPC's persistent instance UUID, so assignments survive restarts and combat respawns.
+
+### OpenRouter
+
+[OpenRouter](https://openrouter.ai/) is optional and is contacted only for presets with AI behavior enabled. Configure `openrouter.api-key` and `openrouter.model` in `config.yml`. Requests run asynchronously, and returned actions are checked against the capabilities enabled for the preset; model output cannot execute arbitrary commands or code.
+
+API usage may incur charges under the selected provider's terms. Keep the API key private and never commit a populated server configuration.
+
+## **Configuration**
+
+The default `config.yml` controls input timeouts, proximity transition cooldowns, MineSkin access, OpenRouter requests, AI throttling, conversation history, perception limits, mining limits, and temporary-inventory capacity.
+
+| Setting | Purpose |
+|---------|---------|
+| `chat-input-timeout-seconds` | Time allowed for administrator text input |
+| `question-timeout-seconds` | Time allowed for a player to answer an NPC question |
+| `proximity-transition-cooldown-seconds` | Debounces rapid approach and leave transitions |
+| `mineskin-api-key` | Optional key for higher MineSkin request limits |
+| `openrouter.*` | Endpoint, key, model, timeout, and response limit for optional AI behavior |
+| `ai-control.*` | AI cooldown, memory, perception, mining, and inventory safeguards |
+
+See the [configuration reference](docs/reference/configuration.md) for every option and its default value.
+
+## **How It Works**
+
+### **Presets and Instances**
+
+A preset stores shared appearance and behavior. Each spawned instance has its own persistent UUID, position, inventory, conversation state, and respawn deadline. Editing a preset updates its spawned copies while preserving the identities used by integrations.
+
+The **Manage Instances** menu provides shortcuts for teleporting to an NPC, moving it and its respawn point, or removing it with confirmation. Shift-right-clicking a spawned NPC opens its preset editor directly.
+
+### **Behaviors and Routes**
+
+Behavior sequences contain ordered actions attached to an event. NPCs can speak, wait, walk, fight, mine, harvest, work with containers, ask questions, invoke custom events, or hand control to the optional AI layer. Routes combine world waypoints with their own arrival actions.
+
+Mining, harvesting, and container transfers emit cancellable Bukkit events so claim, region, and logging plugins can approve, reject, or record the world change.
+
+### **AI Behavior**
+
+AI context is configured per preset through **Identity**, **Personality & Behavior**, **Goal / Role**, and **Knowledge / Information**. An `AI Trigger` behavior action invokes the model for the surrounding event. Nearby chat can also be enabled independently.
+
+Conversation memory can be private per player or shared by everyone speaking to an instance. Optional long-term memory stores up to 45 validated facts per preset. While a request is active, a small thinking indicator appears above participating NPCs; queued interactions resume after the request or cooldown completes.
+
+## **Commands**
+
+| Command | Description |
+|---------|-------------|
+| `/bf` or `/blockfolk` | Open the NPC preset browser |
+| `/bf create` | Start preset creation and enter the name in chat |
+| `/bf create <name>` | Create a preset with the supplied name |
+| `/bf npc <name>` | Open a preset editor; names are tab-completed |
+| `/bf npc <name> spawn` | Spawn a persistent instance of a preset |
+| `/bf npc <name> duplicate` | Duplicate a preset with ` (copy)` appended to its name |
+| `/bf routes` | Open the route manager |
+
+## **Permissions**
+
+| Permission | Description | Default |
+|------------|-------------|---------|
+| `blockfolk.admin` | Create, edit, spawn, and manage Blockfolk NPCs | `op` |
+
+## **Documentation**
+
+The full administrator guide is available at [cobbleworks.github.io/Blockfolk-NPC-Plugin](https://cobbleworks.github.io/Blockfolk-NPC-Plugin/). Its source is kept in [`docs/`](docs/index.md).
+
+To preview it locally:
 
 ```bash
 cd docs
@@ -18,100 +152,53 @@ npm ci
 npm run docs:dev
 ```
 
-## BeautyQuests integration
+## **Building from Source**
 
-BeautyQuests is an optional soft dependency. When it is installed, every spawned
-Blockfolk NPC is available in BeautyQuests' NPC selector. Create or edit a quest,
-choose an NPC-based starter or stage, then left-click the Blockfolk NPC directly in
-the world. No Citizens-style selection stick is required.
-Quest dialogs, interaction stages, markers, and navigation pausing use the same
-persistent NPC instance UUID, so assignments survive server restarts.
-BeautyQuests editor entries assigned to Blockfolk NPCs use the NPC's skinned
-player head as their icon.
-
-## Commands
-
-All commands require the `blockfolk.admin` permission (granted to operators by default).
-
-- `/bf` or `/blockfolk` — open the Blockfolk preset UI.
-- `/bf create` — start creating an NPC and enter its name in chat.
-- `/bf create <name>` — create an NPC preset with the supplied name.
-- `/bf npc <name>` — open the editor for an NPC preset. NPC names are tab-completed.
-- `/bf routes` — open the route manager.
-- `/bf npc <name> spawn` — spawn a persistent copy of the selected NPC preset.
-- `/bf npc <name> duplicate` — duplicate a preset with ` (copy)` appended to its display name.
-
-When a preset has exactly one instance, its `Manage Instances` entry provides shortcuts:
-shift-left-click teleports you to the NPC, and shift-middle-click moves the NPC and its
-respawn location to you. Removing an individual instance requires confirmation.
-Administrators can also shift-right-click a spawned NPC to open its preset editor directly.
-
-Combat respawns retain the persistent instance UUID and their pending deadline across
-server restarts, so integrations such as BeautyQuests continue referring to the same NPC.
-NPC mining, harvesting, and container transfers emit cancellable Bukkit events so region,
-claim, and logging plugins can reject or observe those changes.
-
-Dialog line duration is calculated automatically from the text length at 12 characters
-per second, with a minimum duration of 3 seconds.
-
-Proximity enter/leave transitions are debounced for 3 seconds by default. Adjust
-`proximity-transition-cooldown-seconds` in `config.yml` if needed.
-
-## AI Behaviour
-
-AI Behaviour is configured directly from an NPC preset's dedicated menu. Context is
-split into Identity, Personality & Behaviour, Goal / Role, and Knowledge / Information.
-Add the oxidized-copper-golem `AI Trigger` action to any behaviour sequence to invoke the
-AI for approaches, leaves, combat, custom events, or other supported events. The NPC can
-also respond to chat within eight blocks. Disabling nearby chat responses also stops the
-NPC from reading that chat.
-Each spawned NPC can keep private per-player conversation memory or one shared
-conversation for all players until an administrator opens that NPC preset's editor,
-which resets AI state globally for its spawned copies. The
-model can only select validated capabilities enabled for that preset; it cannot return
-commands or executable code.
-
-With Mine Blocks enabled, the AI perceives nearby ores, logs, and pickaxe-mineable
-materials. It can mine a resource group such as all ores or trees. With Temporary
-Inventory enabled, drops go directly into that spawned instance's inventory and blocks
-are left untouched when their drops do not fit. Without it, drops fall naturally into
-the world.
-
-Long-term memory is optional per preset. When enabled, the model can save durable facts
-with a validated `REMEMBER_FACT` action. Up to 45 facts survive restarts and are shared by
-the preset's spawned copies; adding another discards the oldest. The AI Behaviour menu
-provides a 45-slot memory editor for adding, editing, deleting, or clearing these facts.
-
-Set `openrouter.api-key` and `openrouter.model` in `config.yml` to enable requests.
-Requests run asynchronously and do not delay deterministic NPC behaviour. If players
-speak while a request or cooldown is active, the latest interaction is queued rather
-than silently discarded.
-
-AI requests explicitly disable model reasoning to reduce response latency. While a
-request is in flight, a hologram above each participating NPC cycles through `Thinking.`,
-`Thinking..`, and `Thinking...`; it disappears when the request finishes or fails.
-
-See [AI request context](docs/reference/ai-request-context.md) for the exact state, nearby
-perception, memory, and capability information sent to OpenRouter.
-
-## Building
-
-Blockfolk requires Java 25 and targets Paper 26.2.
+**Requirements:** Java 25 and Maven 3.9+
 
 ```bash
-mvn clean test package
+git clone https://github.com/Cobbleworks/Blockfolk-NPC-Plugin.git
+cd Blockfolk-NPC-Plugin
+mvn clean verify
 ```
 
 The plugin jar is written to `target/Blockfolk.jar`.
 
-## Screenshots
+## **License**
+
+This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
+
+## **Screenshots**
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/bf-npc-overview-menu.jpeg" alt="Blockfolk NPC overview"></td>
-    <td><img src="docs/screenshots/blockfolk-gui-npcs-details.jpeg" alt="Blockfolk NPC details"></td>
+    <th>Blockfolk - NPC Editor</th>
+    <th>Blockfolk - Idle Walking Action</th>
   </tr>
   <tr>
-    <td colspan="2"><img src="docs/screenshots/bf-npc-behaviour.jpeg" alt="Blockfolk NPC behaviour editor"></td>
+    <td><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-npc-editor.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-npc-editor.png" alt="Blockfolk NPC editor" width="450"></a></td>
+    <td><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-idle-walk-action.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-idle-walk-action.png" alt="Configuring an NPC idle walking action" width="450"></a></td>
+  </tr>
+  <tr>
+    <th>Blockfolk - Combat Behavior</th>
+    <th>Blockfolk - Default Inventory</th>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-combat-behavior.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-combat-behavior.png" alt="Adding combat behavior to an NPC" width="450"></a></td>
+    <td><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-default-inventory.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-default-inventory.png" alt="Configuring an NPC default inventory" width="450"></a></td>
+  </tr>
+  <tr>
+    <th>Blockfolk - Container Withdrawal</th>
+    <th>Blockfolk - AI Personality Response</th>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-container-withdrawal.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-container-withdrawal.png" alt="An NPC withdrawing items from a chest" width="450"></a></td>
+    <td><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-ai-personality-response.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-ai-personality-response.png" alt="An NPC responding according to its personality" width="450"></a></td>
+  </tr>
+  <tr>
+    <th colspan="2">Blockfolk - AI Item Pickup</th>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><a href="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-ai-item-pickup.png"><img src="https://github.com/Cobbleworks/Blockfolk-NPC-Plugin/raw/main/images/screenshot-ai-item-pickup.png" alt="An NPC following a request to pick up an item" width="900"></a></td>
   </tr>
 </table>

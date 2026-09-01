@@ -1,8 +1,0 @@
-{
-    "[java]": {
-        "editor.defaultFormatter": "redhat.java",
-        "editor.formatOnSave": true
-    },
-    "java.format.settings.profile": "Blockfolk",
-    "java.format.settings.url": "config/eclipse-formatter.xml"
-}
