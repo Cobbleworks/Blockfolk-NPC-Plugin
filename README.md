@@ -1,7 +1,7 @@
 <p align="center">
-  <img src="images/plugin-logo.png" alt="Blockfolk Plugin" width="200" height="200" />
+  <img src="images/plugin-banner.png" alt="Cobbleworks - Blockfolk NPC Plugin banner" width="818" />
 </p>
-<h1 align="center">Blockfolk NPC Plugin</h1>
+<h1 align="center">Cobbleworks - Blockfolk NPC Plugin</h1>
 <p align="center">
   <b>Create persistent fake-player NPCs without editing data files by hand.</b><br>
   <b>Build personalities, routines, routes, conversations, combat profiles, and optional AI behavior through in-game menus.</b>
@@ -12,7 +12,7 @@
 
 Blockfolk is a GUI-driven NPC system for Paper servers. Administrators create reusable NPC presets, spawn persistent instances, and configure their appearance and behavior from inventory menus. NPCs can follow routes, react to players and world events, fight, gather resources, move items, hold conversations, and integrate with quests. Optional OpenRouter support lets an NPC choose only from the actions that an administrator explicitly enables.
 
-### **Core Features**
+## **Core Features**
 
 - **Persistent NPC presets:** Reuse one definition across multiple independently stored instances
 - **In-game administration:** Configure skins, equipment, names, dialog, inventories, routes, and behavior without hand-editing YAML
@@ -23,7 +23,7 @@ Blockfolk is a GUI-driven NPC system for Paper servers. Administrators create re
 - **Optional AI behavior:** Use OpenRouter for contextual conversation and validated, administrator-approved actions
 - **Quest integration:** Expose persistent Blockfolk NPCs directly to BeautyQuests
 
-### **Supported Platforms**
+## **Supported Platforms**
 
 - **Server Software:** Paper
 - **Minecraft Version:** 26.2
@@ -32,24 +32,26 @@ Blockfolk is a GUI-driven NPC system for Paper servers. Administrators create re
 
 ## **Table of Contents**
 
-1. [Getting Started](#getting-started)
+1. [Core Features](#core-features)
+2. [Supported Platforms](#supported-platforms)
+3. [Getting Started](#getting-started)
     - [Prerequisites](#prerequisites)
     - [Installation Steps](#installation-steps)
     - [Verifying Installation](#verifying-installation)
-2. [Third-Party Plugins and Services](#third-party-plugins-and-services)
+4. [Third-Party Plugins and Services](#third-party-plugins-and-services)
     - [BeautyQuests](#beautyquests)
     - [OpenRouter](#openrouter)
-3. [Configuration](#configuration)
-4. [How It Works](#how-it-works)
+5. [Configuration](#configuration)
+6. [How It Works](#how-it-works)
     - [Presets and Instances](#presets-and-instances)
     - [Behaviors and Routes](#behaviors-and-routes)
     - [AI Behavior](#ai-behavior)
-5. [Commands](#commands)
-6. [Permissions](#permissions)
-7. [Documentation](#documentation)
-8. [Building from Source](#building-from-source)
-9. [License](#license)
-10. [Screenshots](#screenshots)
+7. [Commands](#commands)
+8. [Permissions](#permissions)
+9. [Documentation](#documentation)
+10. [Building from Source](#building-from-source)
+11. [License](#license)
+12. [Screenshots](#screenshots)
 
 ## **Getting Started**
 
