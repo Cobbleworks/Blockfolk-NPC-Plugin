@@ -818,6 +818,10 @@ public final class GuiService implements Listener {
     }
 
     private void openAiControl(Player player, NpcDefinition definition) {
+        // Dialog transitions close the current dialog before its callback opens the
+        // next one. Do not leave the editor inventory underneath, or it briefly
+        // becomes visible during every AI dialog transition.
+        player.closeInventory();
         aiGuiService.open(player, definition);
     }
 

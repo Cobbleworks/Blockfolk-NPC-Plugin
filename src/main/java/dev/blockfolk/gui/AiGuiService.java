@@ -339,6 +339,7 @@ final class AiGuiService {
                 .tooltip(Component.text("Remove this memory", NamedTextColor.RED))
                 .action(dialogAction(player, (response, clicked) -> updateMemory(clicked, definitionKey, index, "")))
                 .build();
+        ActionButton backButton = memoryBackButton(player, definitionKey);
         return Dialog
                 .create(builder -> builder
                         .empty().base(
@@ -352,7 +353,7 @@ final class AiGuiService {
                                                 .maxLength(Math.max(MEMORY_MAX_LENGTH, memory.length()))
                                                 .multiline(MEMORY_BOX).build()))
                                         .build())
-                        .type(DialogType.multiAction(List.of(save, delete)).columns(2).build()));
+                        .type(DialogType.multiAction(List.of(save, delete)).columns(2).exitAction(backButton).build()));
     }
 
     private Dialog addMemoryDialog(Player player, String definitionKey) {
@@ -360,6 +361,7 @@ final class AiGuiService {
                 .action(dialogAction(player,
                         (response, clicked) -> addMemory(clicked, definitionKey, text(response, "memory"))))
                 .build();
+        ActionButton backButton = memoryBackButton(player, definitionKey);
         return Dialog
                 .create(builder -> builder
                         .empty().base(
@@ -372,7 +374,13 @@ final class AiGuiService {
                                                 .width(FORM_WIDTH).maxLength(MEMORY_MAX_LENGTH).multiline(MEMORY_BOX)
                                                 .build()))
                                         .build())
-                        .type(DialogType.notice(add)));
+                        .type(DialogType.multiAction(List.of(add)).columns(1).exitAction(backButton).build()));
+    }
+
+    private ActionButton memoryBackButton(Player player, String definitionKey) {
+        return ActionButton.builder(Component.text("Back to Memories", NamedTextColor.RED))
+                .tooltip(Component.text("Return without saving", NamedTextColor.GRAY))
+                .action(dialogAction(player, (response, clicked) -> reopen(clicked, definitionKey, true))).build();
     }
 
     private Dialog clearMemoriesDialog(Player player, String definitionKey, int count) {

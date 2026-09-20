@@ -51,13 +51,11 @@ import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.UiText;
 import io.papermc.paper.dialog.Dialog;
-import io.papermc.paper.registry.RegistryKey;
 import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.action.DialogAction;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
-import io.papermc.paper.registry.set.RegistrySet;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -214,31 +212,51 @@ public final class RouteGuiService implements Listener {
     }
 
     private Dialog locationListDialog(Player player, String folder, LocationsHolder context, boolean root) {
-        List<Dialog> children = new ArrayList<>();
+        List<ActionButton> entries = new ArrayList<>();
         for (LocationBrowserModel.Entry entry : locationEntries(folder)) {
-            children.add(entry.folder()
-                    ? locationListDialog(player, entry.path(), context, false)
-                    : locationDialog(player, entry.location(), folder, context));
+            if (entry.folder()) {
+                entries.add(ActionButton.builder(Component.text(entry.label(), NamedTextColor.AQUA))
+                        .tooltip(Component.text(entry.childCount() + " saved location(s)", NamedTextColor.GRAY))
+                        .width(150)
+                        .action(dialogAction(player,
+                                () -> player.showDialog(locationListDialog(player, entry.path(), context, false))))
+                        .build());
+            } else {
+                NamedLocation location = entry.location();
+                entries.add(
+                        ActionButton.builder(Component.text(entry.label(), NamedTextColor.GOLD))
+                                .tooltip(Component.text(location.location().display(), NamedTextColor.GRAY)).width(150)
+                                .action(dialogAction(player,
+                                        () -> player.showDialog(locationDialog(player, location, folder, context))))
+                                .build());
+            }
         }
-        children.add(locationManagementDialog(player, folder, context));
+        entries.add(ActionButton.builder(Component.text("Manage Locations", NamedTextColor.GREEN))
+                .tooltip(Component.text("Place or reorder global locations", NamedTextColor.GRAY)).width(150)
+                .action(dialogAction(player,
+                        () -> player.showDialog(locationManagementDialog(player, folder, context))))
+                .build());
 
         String groupName = folder.isEmpty() ? "Global Locations" : locationFolderLabel(folder);
         DialogBase.Builder base = DialogBase.builder(Component.text(groupName, NamedTextColor.DARK_AQUA))
                 .externalTitle(Component.text(root ? groupName : groupName + " (group)",
                         root ? NamedTextColor.GOLD : NamedTextColor.AQUA))
-                .body(List.of(DialogBody.plainMessage(Component.text(children.size() == 1
+                .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                .body(List.of(DialogBody.plainMessage(Component.text(entries.size() == 1
                         ? "No saved locations in this group yet."
                         : "Choose a location or open a group.", NamedTextColor.GRAY))));
-        var type = DialogType.dialogList(RegistrySet.valueSet(RegistryKey.DIALOG, children)).columns(1)
-                .buttonWidth(300);
-        if (root) {
-            type.exitAction(ActionButton.builder(Component.text("Back to Routes", NamedTextColor.RED))
-                    .tooltip(Component.text("Return to the route browser", NamedTextColor.GRAY))
-                    .action(dialogAction(player,
-                            () -> openRoutes(player, context.returnFolder(), context.returnPage())))
-                    .build());
-        }
-        return Dialog.create(builder -> builder.empty().base(base.build()).type(type.build()));
+        String parent = LocationBrowserModel.parent(folder);
+        ActionButton backButton = ActionButton
+                .builder(Component.text(root ? "Back to Routes" : "Back", NamedTextColor.RED)).tooltip(Component
+                        .text(root ? "Return to the route browser" : "Return to the parent group", NamedTextColor.GRAY))
+                .action(dialogAction(player, () -> {
+                    if (root)
+                        openRoutes(player, context.returnFolder(), context.returnPage());
+                    else
+                        player.showDialog(locationListDialog(player, parent, context, parent.isEmpty()));
+                })).build();
+        return Dialog.create(builder -> builder.empty().base(base.build())
+                .type(DialogType.multiAction(entries).columns(3).exitAction(backButton).build()));
     }
 
     private Dialog locationDialog(Player player, NamedLocation location, String folder, LocationsHolder context) {
@@ -262,6 +280,11 @@ public final class RouteGuiService implements Listener {
                         .action(dialogAction(player,
                                 () -> confirmLocationDeletion(player, location.key(), folder, context)))
                         .build());
+        ActionButton backButton = ActionButton.builder(Component.text("Back", NamedTextColor.RED))
+                .tooltip(Component.text("Return to the location group", NamedTextColor.GRAY))
+                .action(dialogAction(player,
+                        () -> player.showDialog(locationListDialog(player, folder, context, folder.isEmpty()))))
+                .build();
         return Dialog.create(builder -> builder.empty()
                 .base(DialogBase.builder(Component.text(location.displayName(), NamedTextColor.GOLD))
                         .externalTitle(Component.text(
@@ -272,7 +295,7 @@ public final class RouteGuiService implements Listener {
                                 DialogBody.plainMessage(
                                         Component.text(location.location().display(), NamedTextColor.GRAY))))
                         .build())
-                .type(DialogType.multiAction(actions).columns(1).build()));
+                .type(DialogType.multiAction(actions).columns(3).exitAction(backButton).build()));
     }
 
     private Dialog locationManagementDialog(Player player, String folder, LocationsHolder context) {
@@ -285,13 +308,18 @@ public final class RouteGuiService implements Listener {
                 ActionButton.builder(Component.text("Reorder Locations", NamedTextColor.YELLOW))
                         .tooltip(Component.text("Change the global location order", NamedTextColor.GRAY))
                         .action(dialogAction(player, () -> openLocationReorder(player, back))).build());
+        ActionButton backButton = ActionButton.builder(Component.text("Back", NamedTextColor.RED))
+                .tooltip(Component.text("Return to the location group", NamedTextColor.GRAY))
+                .action(dialogAction(player,
+                        () -> player.showDialog(locationListDialog(player, folder, context, folder.isEmpty()))))
+                .build();
         return Dialog.create(builder -> builder.empty().base(DialogBase
                 .builder(Component.text("Manage Locations", NamedTextColor.DARK_AQUA))
                 .externalTitle(Component.text("Manage this group", NamedTextColor.GREEN))
                 .afterAction(DialogBase.DialogAfterAction.CLOSE)
                 .body(List.of(DialogBody.plainMessage(
                         Component.text("New names may use / to create more nested groups.", NamedTextColor.GRAY))))
-                .build()).type(DialogType.multiAction(actions).columns(1).build()));
+                .build()).type(DialogType.multiAction(actions).columns(2).exitAction(backButton).build()));
     }
 
     private DialogAction dialogAction(Player player, Runnable action) {

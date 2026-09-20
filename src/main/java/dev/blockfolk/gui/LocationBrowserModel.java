@@ -2,6 +2,7 @@ package dev.blockfolk.gui;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +35,9 @@ final class LocationBrowserModel {
                         new Entry(false, location.key(), displayLeaf(location), 0, location));
             }
         }
-        return new ArrayList<>(result.values());
+        List<Entry> entries = new ArrayList<>(result.values());
+        entries.sort(Comparator.comparing(Entry::folder).reversed());
+        return entries;
     }
 
     static String parent(String path) {

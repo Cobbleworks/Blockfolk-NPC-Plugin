@@ -20,15 +20,15 @@ class LocationBrowserModelTest {
         NamedLocation forge = location("Town Center/Shops/Forge");
 
         List<LocationBrowserModel.Entry> root = LocationBrowserModel.entries(List.of(spawn, market, forge), "");
-        assertEquals(List.of("Spawn", "Town Center"), root.stream().map(LocationBrowserModel.Entry::label).toList());
-        assertFalse(root.get(0).folder());
-        assertTrue(root.get(1).folder());
-        assertEquals(2, root.get(1).childCount());
+        assertEquals(List.of("Town Center", "Spawn"), root.stream().map(LocationBrowserModel.Entry::label).toList());
+        assertTrue(root.get(0).folder());
+        assertFalse(root.get(1).folder());
+        assertEquals(2, root.get(0).childCount());
 
         List<LocationBrowserModel.Entry> town = LocationBrowserModel.entries(List.of(spawn, market, forge),
                 "town-center");
-        assertEquals(List.of("Market Square", "Shops"), town.stream().map(LocationBrowserModel.Entry::label).toList());
-        assertEquals("town-center/shops", town.get(1).path());
+        assertEquals(List.of("Shops", "Market Square"), town.stream().map(LocationBrowserModel.Entry::label).toList());
+        assertEquals("town-center/shops", town.get(0).path());
     }
 
     @Test
@@ -37,8 +37,8 @@ class LocationBrowserModelTest {
                 .entries(List.of(location("Town"), location("Town/Market")), "");
 
         assertEquals(2, root.size());
-        assertFalse(root.get(0).folder());
-        assertTrue(root.get(1).folder());
+        assertTrue(root.get(0).folder());
+        assertFalse(root.get(1).folder());
     }
 
     private static NamedLocation location(String name) {
