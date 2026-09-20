@@ -35,6 +35,7 @@ public final class NativeNpcNavigationService {
     private static final double ARRIVAL_VERTICAL = 1.5;
     private static final int REPATH_TICKS = 40;
     private static final int STUCK_TICKS = 5 * 20;
+    private static final double NORMAL_NAVIGATOR_MOVEMENT_SPEED = 0.25;
 
     private final Plugin plugin;
     private final NamespacedKey navigatorKey;
@@ -253,9 +254,12 @@ public final class NativeNpcNavigationService {
     private void configureSpeed(Pig navigator, WalkingSpeed walkingSpeed) {
         AttributeInstance movementSpeed = navigator.getAttribute(Attribute.MOVEMENT_SPEED);
         if (movementSpeed != null) {
-            // Generic movement speed is measured in roughly blocks per tick.
-            movementSpeed.setBaseValue(walkingSpeed.blocksPerSecond() / 20.0);
+            movementSpeed.setBaseValue(navigatorMovementSpeed(walkingSpeed));
         }
+    }
+
+    static double navigatorMovementSpeed(WalkingSpeed walkingSpeed) {
+        return NORMAL_NAVIGATOR_MOVEMENT_SPEED * walkingSpeed.blocksPerSecond() / WalkingSpeed.NORMAL.blocksPerSecond();
     }
 
     private void updateProgress(NavigationState state, Location current) {

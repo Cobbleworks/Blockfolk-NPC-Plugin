@@ -82,8 +82,8 @@ final class AiGuiService {
                 List.of(LegacyText.GRAY + "Long-term facts: " + LegacyText.WHITE + definition.getAiMemories().size()
                         + LegacyText.GRAY + " / " + NpcDefinition.MAX_AI_MEMORIES,
                         LegacyText.GRAY + "Enabled memories provide context and let the AI remember facts",
-                        LegacyText.YELLOW + "Left-click to view and edit",
-                        LegacyText.YELLOW + "Right-click to " + (settings.memoryEnabled() ? "disable" : "enable"),
+                        LegacyText.YELLOW + "Left-click to " + (settings.memoryEnabled() ? "disable" : "enable"),
+                        LegacyText.YELLOW + "Right-click to view and edit",
                         LegacyText.RED + "Shift-right-click to clear all memories")));
         inventory.setItem(20,
                 toggleItem(Material.ENDER_EYE,
@@ -202,12 +202,13 @@ final class AiGuiService {
                 player.sendMessage(UiText.info("Cleared all memories for " + definition.getDisplayName() + "."));
                 open(player, definition);
             } else if (event.isRightClick()) {
+                openMemories(player, definition);
+            } else if (event.isLeftClick()) {
                 AiControlSettings settings = definition.getAiControlSettings();
                 definition.setAiControlSettings(settings.withMemoryEnabled(!settings.memoryEnabled()));
                 definitions.save(definition);
                 open(player, definition);
-            } else
-                openMemories(player, definition);
+            }
             return;
         }
         if (slot == 20) {
