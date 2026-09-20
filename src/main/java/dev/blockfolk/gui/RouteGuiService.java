@@ -166,7 +166,7 @@ public final class RouteGuiService implements Listener {
         inventory.setItem(45, item(folder.isEmpty() ? Material.PLAYER_HEAD : Material.ARROW,
                 folder.isEmpty() ? "Manage NPCs" : "Back to Routes", List.of()));
         inventory.setItem(46,
-                item(Material.RAIL, "Manage Locations",
+                item(Material.LODESTONE, "Manage Locations",
                         List.of(LegacyText.GRAY + "Define global positions for NPC actions",
                                 LegacyText.GREEN + "Uses green waypoint markers",
                                 LegacyText.YELLOW + "Click to manage locations")));

@@ -305,8 +305,9 @@ public final class GuiService implements Listener {
             inventory.setItem(index - from, definitionIcon(definition, lore));
         }
         inventory.setItem(45,
-                item(Material.RAIL, "Manage Routes", List.of(LegacyText.GRAY + "Create and edit NPC walking routes",
-                        LegacyText.YELLOW + "Click to open route setup")));
+                item(Material.POWERED_RAIL, "Manage Routes",
+                        List.of(LegacyText.GRAY + "Create and edit NPC walking routes",
+                                LegacyText.YELLOW + "Click to open route setup")));
         inventory.setItem(46,
                 item(Material.BELL, "Custom Events",
                         List.of(LegacyText.GRAY + "Define events NPCs can emit and react to",
