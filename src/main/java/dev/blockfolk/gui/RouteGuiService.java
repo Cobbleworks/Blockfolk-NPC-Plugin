@@ -207,6 +207,9 @@ public final class RouteGuiService implements Listener {
     private void openLocations(Player player, String folder, int requestedPage, String returnFolder, int returnPage) {
         finishEditing(player, false);
         finishLocationEditing(player);
+        // Keep the route inventory from appearing briefly while one locations
+        // dialog closes and its callback opens the next dialog.
+        player.closeInventory();
         LocationsHolder context = new LocationsHolder(folder, 0, returnFolder, returnPage);
         player.showDialog(locationListDialog(player, folder, context, true));
     }
