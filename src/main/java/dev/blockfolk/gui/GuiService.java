@@ -415,7 +415,7 @@ public final class GuiService implements Listener {
                 List.of(LegacyText.GRAY + "Armor, hands, and stored inventory", LegacyText.YELLOW + "Click to edit")));
         if (instances == 0) {
             inventory.setItem(16,
-                    item(Material.ARMOR_STAND, "Spawn NPC", List.of(LegacyText.GRAY + "Creates the first visible NPC",
+                    item(Material.COMPASS, "Spawn NPC", List.of(LegacyText.GRAY + "Creates the first visible NPC",
                             LegacyText.GRAY + "at the preset spawnpoint", LegacyText.YELLOW + "Click to spawn")));
         } else {
             List<String> instanceLore = new ArrayList<>(
@@ -425,7 +425,7 @@ public final class GuiService implements Listener {
                 instanceLore.add(LegacyText.YELLOW + "Shift + left-click: teleport to NPC");
                 instanceLore.add(LegacyText.AQUA + "Shift + middle-click: move NPC to you");
             }
-            inventory.setItem(16, item(Material.ENDER_EYE, "Manage Instances", instanceLore));
+            inventory.setItem(16, item(Material.ARMOR_STAND, "Manage Instances", instanceLore));
         }
         int behaviourCount = MANUAL_BEHAVIOUR_EVENTS.stream()
                 .mapToInt(event -> definition.getBehaviourActions(event).size()).sum();
@@ -443,11 +443,16 @@ public final class GuiService implements Listener {
         String aiStatus = !ai.enabled()
                 ? "Paused"
                 : aiGuiService.hasTrigger(definition) || ai.respondToChat() ? "Active" : "No Triggers";
-        inventory.setItem(23, item(ai.enabled() ? Material.OXIDIZED_COPPER_GOLEM_STATUE : Material.COPPER_GOLEM_STATUE,
-                "AI Behaviour: " + aiStatus,
+        List<String> aiLore = new ArrayList<>(
                 List.of(LegacyText.GRAY + "Context sections: " + LegacyText.WHITE + ai.configuredSectionCount() + "/5",
-                        LegacyText.GRAY + "Triggered by behaviours and chat",
-                        LegacyText.YELLOW + "Click to configure")));
+                        LegacyText.GRAY + "Triggered by behaviours and chat"));
+        if (aiControlService == null || !aiControlService.configured()) {
+            String issue = aiControlService == null ? "service unavailable" : aiControlService.configurationIssue();
+            aiLore.add(LegacyText.RED + "OpenRouter is NOT ready: " + issue);
+        }
+        aiLore.add(LegacyText.YELLOW + "Click to configure");
+        inventory.setItem(23, item(ai.enabled() ? Material.OXIDIZED_COPPER_GOLEM_STATUE : Material.COPPER_GOLEM_STATUE,
+                "AI Behaviour: " + aiStatus, aiLore));
         CombatProfile combat = definition.getCombatProfile();
         inventory.setItem(15, item(Material.IRON_SWORD, "Fighting & Survival",
                 List.of(LegacyText.GRAY + "Health: " + LegacyText.WHITE + healthLabel(combat),
@@ -868,7 +873,7 @@ public final class GuiService implements Listener {
         }
         inventory.setItem(49, item(Material.BARRIER, "Back to Preset", List.of()));
         inventory.setItem(50,
-                item(Material.ARMOR_STAND, "Spawn Another Here",
+                item(Material.COMPASS, "Spawn Another Here",
                         List.of(LegacyText.GRAY + "Creates another visible persistent NPC",
                                 LegacyText.GRAY + "at your current location", LegacyText.YELLOW + "Click to spawn")));
         if (page + 1 < pages) {

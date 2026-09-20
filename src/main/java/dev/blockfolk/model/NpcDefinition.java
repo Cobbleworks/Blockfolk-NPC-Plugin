@@ -86,7 +86,11 @@ public final class NpcDefinition {
     }
 
     public static String toKey(String value) {
-        String sanitized = value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]+", "-");
+        String sanitized = value.toLowerCase(Locale.ROOT)
+                .replace('ö', 'o')
+                .replace('ä', 'a')
+                .replace('ü', 'u')
+                .replaceAll("[^a-z0-9_-]+", "-");
         sanitized = sanitized.replaceAll("^-+|-+$", "");
         return sanitized.isBlank() ? "npc" : sanitized;
     }

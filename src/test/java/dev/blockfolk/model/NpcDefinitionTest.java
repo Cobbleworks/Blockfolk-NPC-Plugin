@@ -25,6 +25,7 @@ class NpcDefinitionTest {
     @Test
     void createsStableStorageKeyFromDisplayName() {
         assertEquals("royal-guard-01", NpcDefinition.toKey("Royal Guard 01!"));
+        assertEquals("jager-konig-uber", NpcDefinition.toKey("Jäger König Über"));
         assertEquals("npc", NpcDefinition.toKey("!!!"));
     }
 

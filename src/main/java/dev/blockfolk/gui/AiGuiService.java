@@ -127,7 +127,7 @@ final class AiGuiService {
                 ? Material.RED_DYE
                 : hasTrigger ? Material.LIME_DYE : Material.YELLOW_DYE;
         inventory.setItem(49, item(statusMaterial, "AI Behaviour: " + status,
-                List.of(LegacyText.GRAY + "Applies to every spawned instance of this preset", providerStatusLore(),
+                List.of(LegacyText.GRAY + "Applies to every spawned instance of this preset",
                         hasTrigger
                                 ? LegacyText.GRAY + "Automatic triggers are configured"
                                 : LegacyText.RED + "No requests are made and nearby chat is not read",
@@ -145,12 +145,6 @@ final class AiGuiService {
                 return true;
         }
         return false;
-    }
-
-    private String providerStatusLore() {
-        return aiControl != null && aiControl.configured()
-                ? LegacyText.GREEN + "OpenRouter is ready"
-                : LegacyText.RED + "OpenRouter: " + providerConfigurationIssue();
     }
 
     private boolean containsTrigger(List<BehaviourAction> actions) {
@@ -382,10 +376,6 @@ final class AiGuiService {
     private boolean isTopInventoryClick(InventoryClickEvent event) {
         int slot = event.getRawSlot();
         return slot >= 0 && slot < event.getView().getTopInventory().getSize();
-    }
-
-    private String providerConfigurationIssue() {
-        return aiControl == null ? "service unavailable" : aiControl.configurationIssue();
     }
 
     private record AiControlHolder(String key) implements GuiHolder {
