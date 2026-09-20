@@ -1,57 +1,64 @@
 package dev.blockfolk.gui;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 import java.util.function.BiConsumer;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
 import org.bukkit.entity.Player;
-import org.bukkit.event.inventory.ClickType;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryHolder;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.plugin.Plugin;
 
 import dev.blockfolk.ai.AiActionType;
 import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.AiControlSettings;
-import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.repository.NpcDefinitionRepository;
-import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.TextUtil;
 import dev.blockfolk.util.UiText;
+import io.papermc.paper.dialog.Dialog;
+import io.papermc.paper.dialog.DialogResponseView;
+import io.papermc.paper.registry.RegistryKey;
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.DialogBase;
+import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.body.DialogBody;
+import io.papermc.paper.registry.data.dialog.input.DialogInput;
+import io.papermc.paper.registry.data.dialog.input.TextDialogInput;
+import io.papermc.paper.registry.data.dialog.type.DialogType;
+import io.papermc.paper.registry.set.RegistrySet;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickCallback;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
 
-/** Owns the AI behaviour and long-term-memory menus. */
+/** Owns the native AI behaviour and long-term-memory dialogs. */
 final class AiGuiService {
 
-    private static final int IDENTITY_SLOT = 1;
-    private static final int BEHAVIOUR_SLOT = 2;
-    private static final int GOAL_SLOT = 3;
-    private static final int INFORMATION_SLOT = 4;
-    private static final int LIKES_DISLIKES_SLOT = 5;
-    private static final int MEMORY_SLOT = 6;
-    private static final int CONVERSATION_SLOT = 11;
-    private static final int INVENTORY_SLOT = 13;
-    private static final int[] ACTION_SLOTS = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
-    private static final List<AiActionType> ACTION_TYPES = Arrays.stream(AiActionType.values())
+    private static final int FORM_WIDTH = 400;
+    private static final int CONTEXT_MAX_LENGTH = 8_192;
+    private static final int MEMORY_MAX_LENGTH = 4_096;
+    private static final TextDialogInput.MultilineOptions CONTEXT_BOX = TextDialogInput.MultilineOptions.create(6, 90);
+    private static final TextDialogInput.MultilineOptions MEMORY_BOX = TextDialogInput.MultilineOptions.create(5, 80);
+    private static final List<AiActionType> OPTIONAL_ACTIONS = Arrays.stream(AiActionType.values())
+            .filter(type -> type != AiActionType.SAY && type != AiActionType.DO_NOTHING)
             .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM).toList();
 
+    private final Plugin plugin;
     private final NpcDefinitionRepository definitions;
-    private final ChatInputService chatInput;
     private final BiConsumer<Player, NpcDefinition> back;
     private AiControlService aiControl;
 
-    AiGuiService(NpcDefinitionRepository definitions, ChatInputService chatInput,
-            BiConsumer<Player, NpcDefinition> back) {
+    AiGuiService(Plugin plugin, NpcDefinitionRepository definitions, BiConsumer<Player, NpcDefinition> back) {
+        this.plugin = plugin;
         this.definitions = definitions;
-        this.chatInput = chatInput;
         this.back = back;
     }
 
@@ -59,80 +66,64 @@ final class AiGuiService {
         this.aiControl = aiControl;
     }
 
-    boolean handles(InventoryHolder holder) {
-        return holder instanceof AiControlHolder || holder instanceof AiMemoryHolder;
-    }
-
-    void handleClick(InventoryClickEvent event, Player player) {
-        InventoryHolder holder = event.getView().getTopInventory().getHolder();
-        if (holder instanceof AiControlHolder control)
-            handleControlClick(event, player, control);
-        else if (holder instanceof AiMemoryHolder memory)
-            handleMemoryClick(event, player, memory);
-    }
-
     void open(Player player, NpcDefinition definition) {
         AiControlSettings settings = definition.getAiControlSettings();
-        Inventory inventory = Bukkit.createInventory(new AiControlHolder(definition.getKey()), 54,
-                Component.text("AI Behaviour"));
-        inventory.setItem(IDENTITY_SLOT, contextItem(Material.NAME_TAG, "Identity", settings.identity(),
-                "Who this NPC is, its name, history, and role"));
-        inventory.setItem(BEHAVIOUR_SLOT, contextItem(Material.WRITABLE_BOOK, "Personality & Behaviour",
-                settings.behaviour(), "How it speaks, acts, reacts, and treats others"));
-        inventory.setItem(GOAL_SLOT, contextItem(Material.COMPASS, "Goal / Role", settings.goal(),
-                "What it should accomplish or prioritize"));
-        inventory.setItem(INFORMATION_SLOT, contextItem(Material.KNOWLEDGE_BOOK, "Knowledge / Information",
-                settings.information(), "Facts, lore, rules, and local knowledge it may use"));
-        inventory.setItem(LIKES_DISLIKES_SLOT, contextItem(Material.CAKE, "Likes & Dislikes", settings.likesDislikes(),
-                "Things it enjoys, avoids, values, or strongly dislikes"));
-        inventory.setItem(MEMORY_SLOT, item(settings.memoryEnabled() ? Material.ENDER_CHEST : Material.CHEST,
-                "Memory: " + (settings.memoryEnabled() ? "Enabled" : "Disabled"),
-                List.of(LegacyText.GRAY + "Long-term facts: " + LegacyText.WHITE + definition.getAiMemories().size()
-                        + LegacyText.GRAY + " / " + NpcDefinition.MAX_AI_MEMORIES,
-                        LegacyText.GRAY + "Enabled memories provide context and let the AI remember facts",
-                        LegacyText.YELLOW + "Left-click to " + (settings.memoryEnabled() ? "disable" : "enable"),
-                        LegacyText.YELLOW + "Right-click to view and edit",
-                        LegacyText.RED + "Shift-right-click to clear all memories")));
-        inventory.setItem(CONVERSATION_SLOT,
-                toggleItem(Material.ENDER_EYE,
-                        "Conversation: " + (settings.sharedConversation() ? "Shared" : "Private"),
-                        settings.sharedConversation(),
-                        settings.sharedConversation()
-                                ? "All players share this NPC instance's conversation"
-                                : "Each player has a separate conversation with this NPC instance"));
-        inventory.setItem(INVENTORY_SLOT, toggleItem(Material.CHEST, "Temporary Inventory", settings.inventoryEnabled(),
-                "Lets the AI see, mine into, and drop items carried by each instance"));
-        for (int index = 0; index < ACTION_TYPES.size(); index++) {
-            AiActionType type = ACTION_TYPES.get(index);
-            boolean chatToggle = type == AiActionType.SAY;
-            boolean intrinsic = type == AiActionType.DO_NOTHING;
-            boolean enabled = chatToggle
-                    ? settings.respondToChat()
-                    : intrinsic || settings.allowedActions().contains(type);
-            String displayName = chatToggle ? "Respond to Nearby Chat" : type.displayName();
-            inventory.setItem(ACTION_SLOTS[index],
-                    item(enabled ? Material.REDSTONE_TORCH : Material.LEVER,
-                            displayName + ": " + (enabled ? "Enabled" : "Disabled"),
-                            List.of(chatToggle
-                                    ? LegacyText.GRAY + "Reads and answers player chat within 8 blocks"
-                                    : LegacyText.GRAY + capabilityDescription(type),
-                                    intrinsic
-                                            ? LegacyText.DARK_GRAY + "Always available"
-                                            : LegacyText.YELLOW + "Click to toggle")));
+        List<DialogInput> inputs = new ArrayList<>();
+        inputs.add(contextInput("identity", "Identity", settings.identity()));
+        inputs.add(contextInput("behaviour", "Personality & Behaviour", settings.behaviour()));
+        inputs.add(contextInput("goal", "Goal / Role", settings.goal()));
+        inputs.add(contextInput("information", "Knowledge / Information", settings.information()));
+        inputs.add(contextInput("likes_dislikes", "Likes & Dislikes", settings.likesDislikes()));
+        inputs.add(DialogInput.bool("enabled", Component.text("AI behaviour enabled")).initial(settings.enabled())
+                .build());
+        inputs.add(DialogInput.bool("respond_to_chat", Component.text("Respond to nearby chat"))
+                .initial(settings.respondToChat()).build());
+        inputs.add(DialogInput.bool("memory_enabled", Component.text("Use long-term memories"))
+                .initial(settings.memoryEnabled()).build());
+        inputs.add(DialogInput.bool("inventory_enabled", Component.text("Use temporary inventory"))
+                .initial(settings.inventoryEnabled()).build());
+        inputs.add(DialogInput.bool("shared_conversation", Component.text("Share conversation between players"))
+                .initial(settings.sharedConversation()).build());
+        for (AiActionType type : OPTIONAL_ACTIONS) {
+            Component label = Component.text("Allow: " + type.displayName())
+                    .hoverEvent(HoverEvent.showText(Component.text(capabilityDescription(type), NamedTextColor.GRAY)));
+            inputs.add(
+                    DialogInput.bool(actionKey(type), label).initial(settings.allowedActions().contains(type)).build());
         }
-        inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
+
+        ActionButton save = ActionButton.builder(Component.text("Save & Back", NamedTextColor.GREEN))
+                .tooltip(Component.text("Apply this configuration", NamedTextColor.GRAY))
+                .action(dialogAction(player, (response, clicked) -> applySettings(clicked, definition.getKey(),
+                        response, current -> back.accept(clicked, current))))
+                .build();
+        ActionButton memories = ActionButton.builder(Component.text("Save & Manage Memories", NamedTextColor.AQUA))
+                .tooltip(Component.text(definition.getAiMemories().size() + " saved long-term memories",
+                        NamedTextColor.GRAY))
+                .action(dialogAction(player, (response, clicked) -> applySettings(clicked, definition.getKey(),
+                        response, current -> openMemories(clicked, current))))
+                .build();
+        ActionButton cancel = ActionButton.builder(Component.text("Discard", NamedTextColor.RED))
+                .tooltip(Component.text("Close without saving", NamedTextColor.GRAY)).build();
+
         boolean hasTrigger = hasTrigger(definition) || settings.respondToChat();
-        String status = !settings.enabled() ? "Paused" : hasTrigger ? "Active" : "No Triggers";
-        Material statusMaterial = !settings.enabled()
-                ? Material.RED_DYE
-                : hasTrigger ? Material.LIME_DYE : Material.YELLOW_DYE;
-        inventory.setItem(49, item(statusMaterial, "AI Behaviour: " + status,
-                List.of(LegacyText.GRAY + "Applies to every spawned instance of this preset",
-                        hasTrigger
-                                ? LegacyText.GRAY + "Automatic triggers are configured"
-                                : LegacyText.RED + "No requests are made and nearby chat is not read",
-                        LegacyText.YELLOW + "Click to " + (settings.enabled() ? "pause" : "resume"))));
-        openInventory(player, inventory);
+        String status = !settings.enabled() ? "Paused" : hasTrigger ? "Active" : "Enabled, but has no trigger";
+        List<DialogBody> body = new ArrayList<>();
+        body.add(DialogBody.plainMessage(Component.text("Status: " + status,
+                settings.enabled() && hasTrigger ? NamedTextColor.GREEN : NamedTextColor.YELLOW)));
+        body.add(DialogBody.plainMessage(
+                Component.text("Configure the NPC context, runtime options, and actions the model may request.",
+                        NamedTextColor.GRAY)));
+        if (aiControl != null && !aiControl.configured()) {
+            body.add(DialogBody.plainMessage(
+                    Component.text("OpenRouter is not ready: " + aiControl.configurationIssue(), NamedTextColor.RED)));
+        }
+
+        Dialog dialog = Dialog.create(builder -> builder.empty()
+                .base(DialogBase.builder(Component.text("AI Behaviour", NamedTextColor.DARK_AQUA))
+                        .externalTitle(Component.text("AI: " + definition.getDisplayName(), NamedTextColor.AQUA))
+                        .afterAction(DialogBase.DialogAfterAction.CLOSE).body(body).inputs(inputs).build())
+                .type(DialogType.multiAction(List.of(save, memories, cancel)).columns(3).build()));
+        player.showDialog(dialog);
     }
 
     boolean hasTrigger(NpcDefinition definition) {
@@ -163,174 +154,214 @@ final class AiGuiService {
         return false;
     }
 
+    private DialogInput contextInput(String key, String label, String value) {
+        return DialogInput.text(key, Component.text(label, NamedTextColor.YELLOW)).width(FORM_WIDTH).initial(value)
+                .maxLength(Math.max(CONTEXT_MAX_LENGTH, value.length())).multiline(CONTEXT_BOX).build();
+    }
+
+    private void applySettings(Player player, String definitionKey, DialogResponseView response,
+            java.util.function.Consumer<NpcDefinition> continuation) {
+        NpcDefinition definition = definitions.find(definitionKey).orElse(null);
+        if (definition == null) {
+            player.sendMessage(UiText.error("That NPC preset no longer exists."));
+            player.closeDialog();
+            return;
+        }
+        String identity = text(response, "identity");
+        String behaviour = text(response, "behaviour");
+        String likesDislikes = text(response, "likes_dislikes");
+        String goal = text(response, "goal");
+        String information = text(response, "information");
+        boolean enabled = bool(response, "enabled");
+        boolean hasContext = !identity.isBlank() || !behaviour.isBlank() || !likesDislikes.isBlank() || !goal.isBlank()
+                || !information.isBlank();
+        if (enabled && !hasContext) {
+            enabled = false;
+            player.sendMessage(
+                    UiText.warning("Configure at least one AI context section before activating AI behaviour."));
+        }
+
+        EnumSet<AiActionType> actions = EnumSet.of(AiActionType.SAY, AiActionType.DO_NOTHING);
+        for (AiActionType type : OPTIONAL_ACTIONS) {
+            if (bool(response, actionKey(type)))
+                actions.add(type);
+        }
+        definition.setAiControlSettings(new AiControlSettings(identity, behaviour, likesDislikes, goal, information,
+                actions, enabled, bool(response, "respond_to_chat"), bool(response, "memory_enabled"),
+                bool(response, "inventory_enabled"), bool(response, "shared_conversation")));
+        definitions.save(definition);
+        if (enabled && aiControl != null && !aiControl.configured()) {
+            player.sendMessage(
+                    UiText.warning("AI behaviour is active, but OpenRouter " + aiControl.configurationIssue() + "."));
+        } else {
+            player.sendMessage(UiText.success("AI behaviour settings saved."));
+        }
+        continuation.accept(definition);
+    }
+
     private void openMemories(Player player, NpcDefinition definition) {
-        Inventory inventory = Bukkit.createInventory(new AiMemoryHolder(definition.getKey()), 54,
-                UiText.title("Memory", definition.getDisplayName()));
+        List<Dialog> entries = new ArrayList<>();
         List<String> memories = definition.getAiMemories();
         for (int index = 0; index < memories.size(); index++) {
-            inventory.setItem(index,
-                    item(Material.PAPER, "Memory " + (index + 1),
-                            List.of(LegacyText.WHITE + TextUtil.abbreviateSingleLine(memories.get(index), 96),
-                                    LegacyText.YELLOW + "Left-click to edit",
-                                    LegacyText.RED + "Right-click to delete")));
+            entries.add(memoryDialog(player, definition.getKey(), index, memories.get(index)));
         }
-        inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
-        inventory.setItem(49,
-                item(Material.LIME_DYE, "Add Memory",
-                        List.of(LegacyText.GRAY + "The oldest memory is discarded when all 45 slots are full",
-                                LegacyText.YELLOW + "Click to add a fact")));
-        openInventory(player, inventory);
+        entries.add(addMemoryDialog(player, definition.getKey()));
+        if (!memories.isEmpty())
+            entries.add(clearMemoriesDialog(player, definition.getKey(), memories.size()));
+
+        ActionButton backButton = ActionButton.builder(Component.text("Back to AI Behaviour", NamedTextColor.RED))
+                .tooltip(Component.text("Return to the AI configuration form", NamedTextColor.GRAY))
+                .action(dialogAction(player, (response, clicked) -> reopen(clicked, definition.getKey(), false)))
+                .build();
+        Dialog dialog = Dialog.create(builder -> builder.empty()
+                .base(DialogBase.builder(Component.text("Long-Term Memory", NamedTextColor.DARK_AQUA))
+                        .externalTitle(Component.text("Memories: " + definition.getDisplayName(), NamedTextColor.AQUA))
+                        .body(List
+                                .of(DialogBody.plainMessage(Component.text(
+                                        memories.size() + " / " + NpcDefinition.MAX_AI_MEMORIES
+                                                + " facts saved. The oldest is discarded when full.",
+                                        NamedTextColor.GRAY))))
+                        .build())
+                .type(DialogType.dialogList(RegistrySet.valueSet(RegistryKey.DIALOG, entries)).columns(1)
+                        .buttonWidth(FORM_WIDTH).exitAction(backButton).build()));
+        player.showDialog(dialog);
     }
 
-    private void handleControlClick(InventoryClickEvent event, Player player, AiControlHolder holder) {
-        event.setCancelled(true);
-        if (!isTopInventoryClick(event))
-            return;
-        NpcDefinition definition = definitions.find(holder.key()).orElse(null);
+    private Dialog memoryDialog(Player player, String definitionKey, int index, String memory) {
+        ActionButton save = ActionButton.builder(Component.text("Save", NamedTextColor.GREEN))
+                .action(dialogAction(player,
+                        (response, clicked) -> updateMemory(clicked, definitionKey, index, text(response, "memory"))))
+                .build();
+        ActionButton delete = ActionButton.builder(Component.text("Delete", NamedTextColor.RED))
+                .tooltip(Component.text("Remove this memory", NamedTextColor.RED))
+                .action(dialogAction(player, (response, clicked) -> updateMemory(clicked, definitionKey, index, "")))
+                .build();
+        return Dialog
+                .create(builder -> builder
+                        .empty().base(
+                                DialogBase.builder(Component.text("Memory " + (index + 1), NamedTextColor.GOLD))
+                                        .externalTitle(Component
+                                                .text((index + 1) + ". " + TextUtil.abbreviateSingleLine(memory, 72),
+                                                        NamedTextColor.GOLD))
+                                        .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                                        .inputs(List.of(DialogInput.text("memory", Component.text("Remembered fact"))
+                                                .width(FORM_WIDTH).initial(memory)
+                                                .maxLength(Math.max(MEMORY_MAX_LENGTH, memory.length()))
+                                                .multiline(MEMORY_BOX).build()))
+                                        .build())
+                        .type(DialogType.multiAction(List.of(save, delete)).columns(2).build()));
+    }
+
+    private Dialog addMemoryDialog(Player player, String definitionKey) {
+        ActionButton add = ActionButton.builder(Component.text("Add Memory", NamedTextColor.GREEN))
+                .action(dialogAction(player,
+                        (response, clicked) -> addMemory(clicked, definitionKey, text(response, "memory"))))
+                .build();
+        return Dialog
+                .create(builder -> builder
+                        .empty().base(
+                                DialogBase
+                                        .builder(Component.text("Add Memory",
+                                                NamedTextColor.GREEN))
+                                        .externalTitle(Component.text("+ Add Memory", NamedTextColor.GREEN))
+                                        .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                                        .inputs(List.of(DialogInput.text("memory", Component.text("Fact to remember"))
+                                                .width(FORM_WIDTH).maxLength(MEMORY_MAX_LENGTH).multiline(MEMORY_BOX)
+                                                .build()))
+                                        .build())
+                        .type(DialogType.notice(add)));
+    }
+
+    private Dialog clearMemoriesDialog(Player player, String definitionKey, int count) {
+        ActionButton clear = ActionButton.builder(Component.text("Clear All", NamedTextColor.RED))
+                .tooltip(Component.text("Permanently remove every saved memory", NamedTextColor.RED))
+                .action(dialogAction(player, (response, clicked) -> clearMemories(clicked, definitionKey))).build();
+        ActionButton cancel = ActionButton.builder(Component.text("Keep Memories", NamedTextColor.GREEN))
+                .action(dialogAction(player, (response, clicked) -> reopen(clicked, definitionKey, true))).build();
+        return Dialog.create(builder -> builder.empty().base(DialogBase
+                .builder(Component.text("Clear All Memories?", NamedTextColor.RED))
+                .externalTitle(Component.text("Clear All Memories", NamedTextColor.RED))
+                .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                .body(List.of(DialogBody.plainMessage(
+                        Component.text("Permanently remove all " + count + " saved memories?", NamedTextColor.GRAY))))
+                .build()).type(DialogType.confirmation(clear, cancel)));
+    }
+
+    private void addMemory(Player player, String definitionKey, String value) {
+        NpcDefinition definition = definitions.find(definitionKey).orElse(null);
         if (definition == null) {
-            player.closeInventory();
+            player.sendMessage(UiText.error("That NPC preset no longer exists."));
             return;
         }
-        int slot = event.getRawSlot();
-        if (slot >= IDENTITY_SLOT && slot <= LIKES_DISLIKES_SLOT) {
-            requestContext(player, definition, slot);
-            return;
-        }
-        if (slot == MEMORY_SLOT) {
-            if (event.getClick() == ClickType.SHIFT_RIGHT) {
-                definition.clearAiMemories();
-                definitions.save(definition);
-                player.sendMessage(UiText.info("Cleared all memories for " + definition.getDisplayName() + "."));
-                open(player, definition);
-            } else if (event.isRightClick()) {
-                openMemories(player, definition);
-            } else if (event.isLeftClick()) {
-                AiControlSettings settings = definition.getAiControlSettings();
-                definition.setAiControlSettings(settings.withMemoryEnabled(!settings.memoryEnabled()));
-                definitions.save(definition);
-                open(player, definition);
-            }
-            return;
-        }
-        if (slot == CONVERSATION_SLOT) {
-            AiControlSettings settings = definition.getAiControlSettings();
-            definition.setAiControlSettings(settings.withSharedConversation(!settings.sharedConversation()));
-        } else if (slot == INVENTORY_SLOT) {
-            AiControlSettings settings = definition.getAiControlSettings();
-            definition.setAiControlSettings(settings.withInventoryEnabled(!settings.inventoryEnabled()));
-        } else if (slot == 45) {
-            back.accept(player, definition);
-            return;
-        } else if (slot == 49) {
-            AiControlSettings settings = definition.getAiControlSettings();
-            if (!settings.enabled() && !settings.hasContext()) {
-                player.sendMessage(
-                        Component.text("Configure at least one AI context section before activating AI behaviour."));
-                return;
-            }
-            definition.setAiControlSettings(settings.withEnabled(!settings.enabled()));
-            definitions.save(definition);
-            if (!settings.enabled() && aiControl != null && !aiControl.configured()) {
-                player.sendMessage(Component.text("AI behaviour is active, but OpenRouter "
-                        + aiControl.configurationIssue() + ". Check config.yml and restart the server."));
-            }
-            open(player, definition);
-            return;
+        if (value.isBlank()) {
+            player.sendMessage(UiText.warning("A memory cannot be blank."));
         } else {
-            for (int index = 0; index < ACTION_TYPES.size(); index++) {
-                if (slot != ACTION_SLOTS[index])
-                    continue;
-                AiActionType type = ACTION_TYPES.get(index);
-                if (type == AiActionType.SAY) {
-                    definition.setAiControlSettings(definition.getAiControlSettings()
-                            .withRespondToChat(!definition.getAiControlSettings().respondToChat()));
-                } else if (type != AiActionType.DO_NOTHING) {
-                    definition.setAiControlSettings(definition.getAiControlSettings().toggle(type));
-                }
-                definitions.save(definition);
-                open(player, definition);
-                return;
-            }
-            return;
+            definition.addAiMemory(value);
+            definitions.save(definition);
+            player.sendMessage(UiText.success("Memory added."));
         }
-        definitions.save(definition);
-        open(player, definition);
+        openMemories(player, definition);
     }
 
-    private void handleMemoryClick(InventoryClickEvent event, Player player, AiMemoryHolder holder) {
-        event.setCancelled(true);
-        if (!isTopInventoryClick(event))
-            return;
-        NpcDefinition definition = definitions.find(holder.key()).orElse(null);
+    private void updateMemory(Player player, String definitionKey, int index, String value) {
+        NpcDefinition definition = definitions.find(definitionKey).orElse(null);
         if (definition == null) {
-            player.closeInventory();
+            player.sendMessage(UiText.error("That NPC preset no longer exists."));
             return;
         }
-        int slot = event.getRawSlot();
-        if (slot == 45) {
-            open(player, definition);
-            return;
-        }
-        if (slot == 49) {
-            requestMemory(player, definition, -1);
-            return;
-        }
-        if (slot < 0 || slot >= definition.getAiMemories().size())
-            return;
-        if (event.isRightClick()) {
-            definition.removeAiMemory(slot);
+        if (index < 0 || index >= definition.getAiMemories().size()) {
+            player.sendMessage(UiText.warning("That memory has already changed."));
+        } else {
+            definition.setAiMemory(index, value);
             definitions.save(definition);
+            player.sendMessage(value.isBlank() ? UiText.success("Memory deleted.") : UiText.success("Memory updated."));
+        }
+        openMemories(player, definition);
+    }
+
+    private void clearMemories(Player player, String definitionKey) {
+        NpcDefinition definition = definitions.find(definitionKey).orElse(null);
+        if (definition == null) {
+            player.sendMessage(UiText.error("That NPC preset no longer exists."));
+            return;
+        }
+        definition.clearAiMemories();
+        definitions.save(definition);
+        player.sendMessage(UiText.success("All long-term memories cleared."));
+        openMemories(player, definition);
+    }
+
+    private void reopen(Player player, String definitionKey, boolean memories) {
+        NpcDefinition definition = definitions.find(definitionKey).orElse(null);
+        if (definition == null) {
+            player.sendMessage(UiText.error("That NPC preset no longer exists."));
+            return;
+        }
+        if (memories)
             openMemories(player, definition);
-        } else
-            requestMemory(player, definition, slot);
-    }
-
-    private void requestMemory(Player player, NpcDefinition definition, int index) {
-        String prompt = index < 0
-                ? "Enter a fact for the NPC to remember:"
-                : "Edit this memory, or enter 'clear' to delete it:";
-        chatInput.request(player, prompt, value -> {
-            if (index < 0)
-                definition.addAiMemory(value);
-            else
-                definition.setAiMemory(index, value.equalsIgnoreCase("clear") ? "" : value);
-            definitions.save(definition);
-            openMemories(player, definition);
-        });
-    }
-
-    private void requestContext(Player player, NpcDefinition definition, int slot) {
-        String section = switch (slot) {
-            case IDENTITY_SLOT -> "identity";
-            case BEHAVIOUR_SLOT -> "personality and behaviour";
-            case GOAL_SLOT -> "goal or role";
-            case INFORMATION_SLOT -> "knowledge and information";
-            case LIKES_DISLIKES_SLOT -> "likes and dislikes";
-            default -> throw new IllegalArgumentException("Unknown AI context slot: " + slot);
-        };
-        chatInput.request(player, "Enter the NPC's " + section + ", or 'clear':", value -> {
-            String normalized = value.equalsIgnoreCase("clear") ? "" : value;
-            AiControlSettings current = definition.getAiControlSettings();
-            definition.setAiControlSettings(switch (slot) {
-                case IDENTITY_SLOT -> current.withIdentity(normalized);
-                case BEHAVIOUR_SLOT -> current.withBehaviour(normalized);
-                case GOAL_SLOT -> current.withGoal(normalized);
-                case INFORMATION_SLOT -> current.withInformation(normalized);
-                case LIKES_DISLIKES_SLOT -> current.withLikesDislikes(normalized);
-                default -> current;
-            });
-            definitions.save(definition);
+        else
             open(player, definition);
-        });
     }
 
-    private ItemStack contextItem(Material material, String name, String value, String description) {
-        return item(material, name,
-                List.of(LegacyText.GRAY + description,
-                        value.isBlank()
-                                ? LegacyText.DARK_GRAY + "Not configured"
-                                : LegacyText.WHITE + TextUtil.abbreviateSingleLine(value, 48),
-                        LegacyText.YELLOW + "Click to edit; enter 'clear' to remove"));
+    private DialogAction dialogAction(Player player, BiConsumer<DialogResponseView, Player> action) {
+        UUID playerId = player.getUniqueId();
+        return DialogAction.customClick((response, audience) -> {
+            if (audience instanceof Player clicked && clicked.getUniqueId().equals(playerId))
+                Bukkit.getScheduler().runTask(plugin, () -> action.accept(response, clicked));
+        }, ClickCallback.Options.builder().uses(1).lifetime(Duration.ofMinutes(15)).build());
+    }
+
+    private String actionKey(AiActionType type) {
+        return "action_" + type.name().toLowerCase(Locale.ROOT);
+    }
+
+    private String text(DialogResponseView response, String key) {
+        String value = response.getText(key);
+        return value == null ? "" : value.trim();
+    }
+
+    private boolean bool(DialogResponseView response, String key) {
+        return Boolean.TRUE.equals(response.getBoolean(key));
     }
 
     private String capabilityDescription(AiActionType type) {
@@ -352,35 +383,5 @@ final class AiGuiService {
             case DROP_ITEM -> "Drops a carried item from Temporary Inventory";
             case DO_NOTHING -> "Takes no action when a response is not needed";
         };
-    }
-
-    private ItemStack toggleItem(Material material, String name, boolean enabled, String description) {
-        return item(material, name, List.of(LegacyText.GRAY + description,
-                enabled ? LegacyText.GREEN + "On" : LegacyText.RED + "Off", LegacyText.YELLOW + "Click to toggle"));
-    }
-
-    private ItemStack item(Material material, String name, List<String> lore) {
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(LegacyText.component(LegacyText.GOLD + name));
-        meta.lore(LegacyText.components(lore));
-        item.setItemMeta(meta);
-        return item;
-    }
-
-    private void openInventory(Player player, Inventory inventory) {
-        GuiLayout.fillMainBar(inventory);
-        player.openInventory(inventory);
-    }
-
-    private boolean isTopInventoryClick(InventoryClickEvent event) {
-        int slot = event.getRawSlot();
-        return slot >= 0 && slot < event.getView().getTopInventory().getSize();
-    }
-
-    private record AiControlHolder(String key) implements GuiHolder {
-    }
-
-    private record AiMemoryHolder(String key) implements GuiHolder {
     }
 }

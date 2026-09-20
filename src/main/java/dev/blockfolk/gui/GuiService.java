@@ -161,7 +161,7 @@ public final class GuiService implements Listener {
         this.waypointActionKey = new NamespacedKey(plugin, "behaviour-waypoint-action");
         this.waypointTokenKey = new NamespacedKey(plugin, "behaviour-waypoint-token");
         this.reorderIconKey = new NamespacedKey(plugin, "reorder-definition");
-        this.aiGuiService = new AiGuiService(definitionRepository, chatInputService, this::openEditor);
+        this.aiGuiService = new AiGuiService(plugin, definitionRepository, this::openEditor);
     }
 
     public void setBehaviourService(NpcBehaviourService behaviourService) {
@@ -970,8 +970,6 @@ public final class GuiService implements Listener {
             handleCustomBehaviourClick(event, player, customBehaviourHolder);
         } else if (holder instanceof ActionPickerHolder pickerHolder) {
             handleActionPickerClick(event, player, pickerHolder);
-        } else if (aiGuiService.handles(holder)) {
-            aiGuiService.handleClick(event, player);
         } else if (holder instanceof AnimationPickerHolder animationHolder) {
             handleAnimationPickerClick(event, player, animationHolder);
         } else if (holder instanceof BehaviourValuePickerHolder valuePickerHolder) {
@@ -3077,8 +3075,7 @@ public final class GuiService implements Listener {
                 || holder instanceof RoutePointValuePickerHolder || holder instanceof SavedLocationPickerHolder
                 || holder instanceof QuestionEditorHolder || holder instanceof QuestionBranchPickerHolder
                 || holder instanceof QuestionBranchRoutePickerHolder
-                || holder instanceof QuestionBranchAnimationPickerHolder || holder instanceof ConfirmationHolder
-                || aiGuiService.handles(holder);
+                || holder instanceof QuestionBranchAnimationPickerHolder || holder instanceof ConfirmationHolder;
     }
 
     private ItemStack definitionIcon(NpcDefinition definition, List<String> lore) {
