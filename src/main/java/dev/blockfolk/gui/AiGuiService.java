@@ -3,9 +3,7 @@ package dev.blockfolk.gui;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.EnumSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
@@ -36,7 +34,6 @@ import io.papermc.paper.registry.data.dialog.type.DialogType;
 import io.papermc.paper.registry.set.RegistrySet;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
-import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 
 /** Owns the native AI behaviour and long-term-memory dialogs. */
@@ -68,43 +65,6 @@ final class AiGuiService {
 
     void open(Player player, NpcDefinition definition) {
         AiControlSettings settings = definition.getAiControlSettings();
-        List<DialogInput> inputs = new ArrayList<>();
-        inputs.add(contextInput("identity", "Identity", settings.identity()));
-        inputs.add(contextInput("behaviour", "Personality & Behaviour", settings.behaviour()));
-        inputs.add(contextInput("goal", "Goal / Role", settings.goal()));
-        inputs.add(contextInput("information", "Knowledge / Information", settings.information()));
-        inputs.add(contextInput("likes_dislikes", "Likes & Dislikes", settings.likesDislikes()));
-        inputs.add(DialogInput.bool("enabled", Component.text("AI behaviour enabled")).initial(settings.enabled())
-                .build());
-        inputs.add(DialogInput.bool("respond_to_chat", Component.text("Respond to nearby chat"))
-                .initial(settings.respondToChat()).build());
-        inputs.add(DialogInput.bool("memory_enabled", Component.text("Use long-term memories"))
-                .initial(settings.memoryEnabled()).build());
-        inputs.add(DialogInput.bool("inventory_enabled", Component.text("Use temporary inventory"))
-                .initial(settings.inventoryEnabled()).build());
-        inputs.add(DialogInput.bool("shared_conversation", Component.text("Share conversation between players"))
-                .initial(settings.sharedConversation()).build());
-        for (AiActionType type : OPTIONAL_ACTIONS) {
-            Component label = Component.text("Allow: " + type.displayName())
-                    .hoverEvent(HoverEvent.showText(Component.text(capabilityDescription(type), NamedTextColor.GRAY)));
-            inputs.add(
-                    DialogInput.bool(actionKey(type), label).initial(settings.allowedActions().contains(type)).build());
-        }
-
-        ActionButton save = ActionButton.builder(Component.text("Save & Back", NamedTextColor.GREEN))
-                .tooltip(Component.text("Apply this configuration", NamedTextColor.GRAY))
-                .action(dialogAction(player, (response, clicked) -> applySettings(clicked, definition.getKey(),
-                        response, current -> back.accept(clicked, current))))
-                .build();
-        ActionButton memories = ActionButton.builder(Component.text("Save & Manage Memories", NamedTextColor.AQUA))
-                .tooltip(Component.text(definition.getAiMemories().size() + " saved long-term memories",
-                        NamedTextColor.GRAY))
-                .action(dialogAction(player, (response, clicked) -> applySettings(clicked, definition.getKey(),
-                        response, current -> openMemories(clicked, current))))
-                .build();
-        ActionButton cancel = ActionButton.builder(Component.text("Discard", NamedTextColor.RED))
-                .tooltip(Component.text("Close without saving", NamedTextColor.GRAY)).build();
-
         boolean hasTrigger = hasTrigger(definition) || settings.respondToChat();
         String status = !settings.enabled() ? "Paused" : hasTrigger ? "Active" : "Enabled, but has no trigger";
         List<DialogBody> body = new ArrayList<>();
@@ -118,11 +78,121 @@ final class AiGuiService {
                     Component.text("OpenRouter is not ready: " + aiControl.configurationIssue(), NamedTextColor.RED)));
         }
 
+        List<ActionButton> sections = List.of(sectionButton(player, "Context & Persona", NamedTextColor.GOLD,
+                settings.configuredSectionCount() + " / 5 sections configured", () -> openContext(player, definition)),
+                sectionButton(player, "Runtime Settings", NamedTextColor.AQUA,
+                        settings.enabled() ? "Enabled" : "Paused", () -> openRuntime(player, definition)),
+                sectionButton(player, "Action Privileges", NamedTextColor.LIGHT_PURPLE,
+                        enabledPrivilegeCount(settings) + " / " + OPTIONAL_ACTIONS.size() + " optional actions allowed",
+                        () -> openPrivileges(player, definition)),
+                sectionButton(player, "Long-Term Memory", NamedTextColor.GREEN,
+                        definition.getAiMemories().size() + " / " + NpcDefinition.MAX_AI_MEMORIES + " facts saved",
+                        () -> openMemories(player, definition)));
+        ActionButton backButton = ActionButton.builder(Component.text("Back to NPC", NamedTextColor.RED))
+                .tooltip(Component.text("Return to the NPC editor", NamedTextColor.GRAY))
+                .action(dialogAction(player, (response, clicked) -> back.accept(clicked, definition))).build();
         Dialog dialog = Dialog.create(builder -> builder.empty()
                 .base(DialogBase.builder(Component.text("AI Behaviour", NamedTextColor.DARK_AQUA))
                         .externalTitle(Component.text("AI: " + definition.getDisplayName(), NamedTextColor.AQUA))
-                        .afterAction(DialogBase.DialogAfterAction.CLOSE).body(body).inputs(inputs).build())
-                .type(DialogType.multiAction(List.of(save, memories, cancel)).columns(3).build()));
+                        .afterAction(DialogBase.DialogAfterAction.CLOSE).body(body).build())
+                .type(DialogType.multiAction(sections).columns(2).exitAction(backButton).build()));
+        player.showDialog(dialog);
+    }
+
+    private void openContext(Player player, NpcDefinition definition) {
+        AiControlSettings settings = definition.getAiControlSettings();
+        List<DialogInput> inputs = List.of(contextInput("identity", "Identity", settings.identity()),
+                contextInput("behaviour", "Personality & Behaviour", settings.behaviour()),
+                contextInput("goal", "Goal / Role", settings.goal()),
+                contextInput("information", "Knowledge / Information", settings.information()),
+                contextInput("likes_dislikes", "Likes & Dislikes", settings.likesDislikes()));
+        ActionButton save = ActionButton.builder(Component.text("Save Context", NamedTextColor.GREEN))
+                .tooltip(Component.text("Save and return to the AI overview", NamedTextColor.GRAY))
+                .action(dialogAction(player,
+                        (response, clicked) -> saveContext(clicked, definition.getKey(), response)))
+                .build();
+        ActionButton discard = ActionButton.builder(Component.text("Discard", NamedTextColor.RED))
+                .tooltip(Component.text("Return without saving", NamedTextColor.GRAY))
+                .action(dialogAction(player, (response, clicked) -> reopen(clicked, definition.getKey(), false)))
+                .build();
+        Dialog dialog = Dialog
+                .create(builder -> builder
+                        .empty().base(
+                                DialogBase.builder(Component.text("Context & Persona", NamedTextColor.GOLD))
+                                        .externalTitle(Component.text("Context & Persona", NamedTextColor.GOLD))
+                                        .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                                        .body(List.of(DialogBody.plainMessage(Component.text(
+                                                "These sections become the NPC's persistent system context.",
+                                                NamedTextColor.GRAY))))
+                                        .inputs(inputs).build())
+                        .type(DialogType.multiAction(List.of(save, discard)).columns(2).build()));
+        player.showDialog(dialog);
+    }
+
+    private void openRuntime(Player player, NpcDefinition definition) {
+        AiControlSettings settings = definition.getAiControlSettings();
+        List<DialogInput> inputs = List.of(
+                DialogInput.bool("enabled", Component.text("AI behaviour enabled")).initial(settings.enabled()).build(),
+                DialogInput.bool("respond_to_chat", Component.text("Respond to nearby chat"))
+                        .initial(settings.respondToChat()).build(),
+                DialogInput.bool("memory_enabled", Component.text("Use long-term memories"))
+                        .initial(settings.memoryEnabled()).build(),
+                DialogInput.bool("inventory_enabled", Component.text("Use temporary inventory"))
+                        .initial(settings.inventoryEnabled()).build(),
+                DialogInput.bool("shared_conversation", Component.text("Share conversation between players"))
+                        .initial(settings.sharedConversation()).build());
+        ActionButton save = ActionButton.builder(Component.text("Save Settings", NamedTextColor.GREEN))
+                .tooltip(Component.text("Save and return to the AI overview", NamedTextColor.GRAY))
+                .action(dialogAction(player,
+                        (response, clicked) -> saveRuntime(clicked, definition.getKey(), response)))
+                .build();
+        ActionButton discard = ActionButton.builder(Component.text("Discard", NamedTextColor.RED))
+                .tooltip(Component.text("Return without saving", NamedTextColor.GRAY))
+                .action(dialogAction(player, (response, clicked) -> reopen(clicked, definition.getKey(), false)))
+                .build();
+        Dialog dialog = Dialog
+                .create(builder -> builder
+                        .empty().base(
+                                DialogBase.builder(Component.text("Runtime Settings", NamedTextColor.AQUA))
+                                        .externalTitle(Component.text("Runtime Settings", NamedTextColor.AQUA))
+                                        .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                                        .body(List.of(DialogBody.plainMessage(Component.text(
+                                                "Controls when AI runs and which instance data it may use.",
+                                                NamedTextColor.GRAY))))
+                                        .inputs(inputs).build())
+                        .type(DialogType.multiAction(List.of(save, discard)).columns(2).build()));
+        player.showDialog(dialog);
+    }
+
+    private void openPrivileges(Player player, NpcDefinition definition) {
+        AiControlSettings settings = definition.getAiControlSettings();
+        List<ActionButton> privileges = new ArrayList<>();
+        for (AiActionType type : OPTIONAL_ACTIONS) {
+            boolean enabled = settings.allowedActions().contains(type);
+            privileges
+                    .add(ActionButton
+                            .builder(Component.text((enabled ? "✓ " : "✗ ") + type.displayName(),
+                                    enabled ? NamedTextColor.GREEN : NamedTextColor.GRAY))
+                            .tooltip(Component.text(capabilityDescription(type), NamedTextColor.GRAY)).width(130)
+                            .action(dialogAction(player,
+                                    (response, clicked) -> togglePrivilege(clicked, definition.getKey(), type)))
+                            .build());
+        }
+        ActionButton backButton = ActionButton.builder(Component.text("Back to AI Overview", NamedTextColor.RED))
+                .tooltip(Component.text("Return to the grouped AI settings", NamedTextColor.GRAY))
+                .action(dialogAction(player, (response, clicked) -> reopen(clicked, definition.getKey(), false)))
+                .build();
+        Dialog dialog = Dialog.create(builder -> builder.empty().base(DialogBase
+                .builder(Component.text("Action Privileges", NamedTextColor.LIGHT_PURPLE))
+                .externalTitle(Component.text("Action Privileges", NamedTextColor.LIGHT_PURPLE))
+                .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                .body(List.of(
+                        DialogBody.plainMessage(Component.text(
+                                "Click an action to allow or deny it. Changes save immediately.", NamedTextColor.GRAY)),
+                        DialogBody.plainMessage(Component.text(
+                                "Speaking and doing nothing are always available. Remembering and dropping items are controlled by Runtime Settings.",
+                                NamedTextColor.DARK_GRAY))))
+                .build()).type(DialogType.multiAction(privileges).columns(3).exitAction(backButton).build()));
         player.showDialog(dialog);
     }
 
@@ -159,44 +229,77 @@ final class AiGuiService {
                 .maxLength(Math.max(CONTEXT_MAX_LENGTH, value.length())).multiline(CONTEXT_BOX).build();
     }
 
-    private void applySettings(Player player, String definitionKey, DialogResponseView response,
-            java.util.function.Consumer<NpcDefinition> continuation) {
+    private ActionButton sectionButton(Player player, String label, NamedTextColor color, String tooltip,
+            Runnable action) {
+        return ActionButton.builder(Component.text(label, color)).tooltip(Component.text(tooltip, NamedTextColor.GRAY))
+                .width(190).action(dialogAction(player, (response, clicked) -> action.run())).build();
+    }
+
+    private int enabledPrivilegeCount(AiControlSettings settings) {
+        return (int) OPTIONAL_ACTIONS.stream().filter(settings.allowedActions()::contains).count();
+    }
+
+    private void saveContext(Player player, String definitionKey, DialogResponseView response) {
         NpcDefinition definition = definitions.find(definitionKey).orElse(null);
         if (definition == null) {
             player.sendMessage(UiText.error("That NPC preset no longer exists."));
             player.closeDialog();
             return;
         }
+        AiControlSettings current = definition.getAiControlSettings();
         String identity = text(response, "identity");
         String behaviour = text(response, "behaviour");
         String likesDislikes = text(response, "likes_dislikes");
         String goal = text(response, "goal");
         String information = text(response, "information");
-        boolean enabled = bool(response, "enabled");
         boolean hasContext = !identity.isBlank() || !behaviour.isBlank() || !likesDislikes.isBlank() || !goal.isBlank()
                 || !information.isBlank();
-        if (enabled && !hasContext) {
+        definition.setAiControlSettings(new AiControlSettings(identity, behaviour, likesDislikes, goal, information,
+                current.allowedActions(), hasContext && current.enabled(), current.respondToChat(),
+                current.memoryEnabled(), current.inventoryEnabled(), current.sharedConversation()));
+        definitions.save(definition);
+        player.sendMessage(UiText.success("AI context saved."));
+        open(player, definition);
+    }
+
+    private void saveRuntime(Player player, String definitionKey, DialogResponseView response) {
+        NpcDefinition definition = definitions.find(definitionKey).orElse(null);
+        if (definition == null) {
+            player.sendMessage(UiText.error("That NPC preset no longer exists."));
+            player.closeDialog();
+            return;
+        }
+        AiControlSettings current = definition.getAiControlSettings();
+        boolean enabled = bool(response, "enabled");
+        if (enabled && !current.hasContext()) {
             enabled = false;
             player.sendMessage(
                     UiText.warning("Configure at least one AI context section before activating AI behaviour."));
         }
-
-        EnumSet<AiActionType> actions = EnumSet.of(AiActionType.SAY, AiActionType.DO_NOTHING);
-        for (AiActionType type : OPTIONAL_ACTIONS) {
-            if (bool(response, actionKey(type)))
-                actions.add(type);
-        }
-        definition.setAiControlSettings(new AiControlSettings(identity, behaviour, likesDislikes, goal, information,
-                actions, enabled, bool(response, "respond_to_chat"), bool(response, "memory_enabled"),
+        definition.setAiControlSettings(new AiControlSettings(current.identity(), current.behaviour(),
+                current.likesDislikes(), current.goal(), current.information(), current.allowedActions(), enabled,
+                bool(response, "respond_to_chat"), bool(response, "memory_enabled"),
                 bool(response, "inventory_enabled"), bool(response, "shared_conversation")));
         definitions.save(definition);
         if (enabled && aiControl != null && !aiControl.configured()) {
             player.sendMessage(
                     UiText.warning("AI behaviour is active, but OpenRouter " + aiControl.configurationIssue() + "."));
         } else {
-            player.sendMessage(UiText.success("AI behaviour settings saved."));
+            player.sendMessage(UiText.success("AI runtime settings saved."));
         }
-        continuation.accept(definition);
+        open(player, definition);
+    }
+
+    private void togglePrivilege(Player player, String definitionKey, AiActionType type) {
+        NpcDefinition definition = definitions.find(definitionKey).orElse(null);
+        if (definition == null) {
+            player.sendMessage(UiText.error("That NPC preset no longer exists."));
+            player.closeDialog();
+            return;
+        }
+        definition.setAiControlSettings(definition.getAiControlSettings().toggle(type));
+        definitions.save(definition);
+        openPrivileges(player, definition);
     }
 
     private void openMemories(Player player, NpcDefinition definition) {
@@ -349,10 +452,6 @@ final class AiGuiService {
             if (audience instanceof Player clicked && clicked.getUniqueId().equals(playerId))
                 Bukkit.getScheduler().runTask(plugin, () -> action.accept(response, clicked));
         }, ClickCallback.Options.builder().uses(1).lifetime(Duration.ofMinutes(15)).build());
-    }
-
-    private String actionKey(AiActionType type) {
-        return "action_" + type.name().toLowerCase(Locale.ROOT);
     }
 
     private String text(DialogResponseView response, String key) {
