@@ -1,5 +1,6 @@
 package dev.blockfolk.gui;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -49,7 +50,17 @@ import dev.blockfolk.runtime.NpcInstanceRegistry;
 import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.UiText;
+import io.papermc.paper.dialog.Dialog;
+import io.papermc.paper.registry.RegistryKey;
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.DialogBase;
+import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.body.DialogBody;
+import io.papermc.paper.registry.data.dialog.type.DialogType;
+import io.papermc.paper.registry.set.RegistrySet;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickCallback;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 public final class RouteGuiService implements Listener {
 
@@ -198,47 +209,160 @@ public final class RouteGuiService implements Listener {
     private void openLocations(Player player, String folder, int requestedPage, String returnFolder, int returnPage) {
         finishEditing(player, false);
         finishLocationEditing(player);
-        List<LocationBrowserModel.Entry> entries = locationEntries(folder);
-        int pages = Math.max(1, (entries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
-        int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        String title = folder.isEmpty() ? "Global Locations" : "Locations: " + locationFolderLabel(folder);
-        Inventory inventory = Bukkit.createInventory(new LocationsHolder(folder, page, returnFolder, returnPage), 54,
-                UiText.title(title));
-        int from = page * PAGE_SIZE;
-        int to = Math.min(from + PAGE_SIZE, entries.size());
-        for (int index = from; index < to; index++) {
-            LocationBrowserModel.Entry entry = entries.get(index);
-            if (entry.folder()) {
-                inventory.setItem(index - from,
-                        item(Material.CHEST, entry.label(),
-                                List.of(LegacyText.GRAY + "" + entry.childCount() + " location(s)",
-                                        LegacyText.DARK_GRAY + entry.path(), LegacyText.YELLOW + "Click to open")));
-                continue;
-            }
-            NamedLocation named = entry.location();
-            inventory.setItem(index - from, locationItem(named, entry.label(),
-                    List.of(LegacyText.DARK_GRAY + "Key: " + named.key(), LegacyText.GRAY + named.location().display(),
-                            LegacyText.AQUA + "Middle-click: set icon from main hand",
-                            LegacyText.YELLOW + "Left-click: teleport", LegacyText.RED + "Shift-right-click: delete")));
+        LocationsHolder context = new LocationsHolder(folder, 0, returnFolder, returnPage);
+        player.showDialog(locationListDialog(player, folder, context, true));
+    }
+
+    private Dialog locationListDialog(Player player, String folder, LocationsHolder context, boolean root) {
+        List<Dialog> children = new ArrayList<>();
+        for (LocationBrowserModel.Entry entry : locationEntries(folder)) {
+            children.add(entry.folder()
+                    ? locationListDialog(player, entry.path(), context, false)
+                    : locationDialog(player, entry.location(), folder, context));
         }
-        inventory.setItem(45, item(Material.ARROW, folder.isEmpty() ? "Back to Routes" : "Up One Group", List.of()));
-        if (page > 0)
-            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
-        inventory.setItem(49, item(Material.COMPASS, "Location Overview",
-                List.of(LegacyText.GRAY + "Locations: " + LegacyText.WHITE + locationRepository.findAll().size(),
-                        LegacyText.GRAY + "Group: " + LegacyText.WHITE
-                                + (folder.isEmpty() ? "Root" : locationFolderLabel(folder)),
-                        LegacyText.GRAY + "Saved locations can be selected by movement actions",
-                        LegacyText.YELLOW + "Click to reorder locations")));
-        inventory.setItem(51,
-                item(Material.AMETHYST_SHARD, "Edit Locations",
-                        List.of(LegacyText.GRAY + "Use / in names to create groups",
-                                LegacyText.GRAY + "Left-click a block, then enter a name",
-                                LegacyText.YELLOW + "Click to begin placement")));
-        if (page + 1 < pages)
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
-        GuiLayout.fillMainBar(inventory);
-        player.openInventory(inventory);
+        children.add(locationManagementDialog(player, folder, context));
+
+        String groupName = folder.isEmpty() ? "Global Locations" : locationFolderLabel(folder);
+        DialogBase.Builder base = DialogBase.builder(Component.text(groupName, NamedTextColor.DARK_AQUA))
+                .externalTitle(Component.text(root ? groupName : groupName + " (group)",
+                        root ? NamedTextColor.GOLD : NamedTextColor.AQUA))
+                .body(List.of(DialogBody.plainMessage(Component.text(children.size() == 1
+                        ? "No saved locations in this group yet."
+                        : "Choose a location or open a group.", NamedTextColor.GRAY))));
+        var type = DialogType.dialogList(RegistrySet.valueSet(RegistryKey.DIALOG, children)).columns(1)
+                .buttonWidth(300);
+        if (root) {
+            type.exitAction(ActionButton.builder(Component.text("Back to Routes", NamedTextColor.RED))
+                    .tooltip(Component.text("Return to the route browser", NamedTextColor.GRAY))
+                    .action(dialogAction(player,
+                            () -> openRoutes(player, context.returnFolder(), context.returnPage())))
+                    .build());
+        }
+        return Dialog.create(builder -> builder.empty().base(base.build()).type(type.build()));
+    }
+
+    private Dialog locationDialog(Player player, NamedLocation location, String folder, LocationsHolder context) {
+        ItemStack icon = location.icon();
+        if (icon == null || icon.getType().isAir())
+            icon = new ItemStack(Material.LODESTONE);
+        else
+            icon = icon.clone();
+        icon.setAmount(1);
+        ItemStack displayIcon = icon;
+        List<ActionButton> actions = List.of(
+                ActionButton.builder(Component.text("Teleport", NamedTextColor.GREEN))
+                        .tooltip(Component.text("Teleport to this location", NamedTextColor.GRAY))
+                        .action(dialogAction(player, () -> teleportToLocation(player, location.key()))).build(),
+                ActionButton.builder(Component.text("Set Held Icon", NamedTextColor.AQUA))
+                        .tooltip(Component.text("Use the item in your main hand", NamedTextColor.GRAY))
+                        .action(dialogAction(player, () -> setLocationIcon(player, location.key(), folder, context)))
+                        .build(),
+                ActionButton.builder(Component.text("Delete", NamedTextColor.RED))
+                        .tooltip(Component.text("Ask before permanently deleting this location", NamedTextColor.RED))
+                        .action(dialogAction(player,
+                                () -> confirmLocationDeletion(player, location.key(), folder, context)))
+                        .build());
+        return Dialog.create(builder -> builder.empty()
+                .base(DialogBase.builder(Component.text(location.displayName(), NamedTextColor.GOLD))
+                        .externalTitle(Component.text(
+                                LocationBrowserModel.entries(List.of(location), folder).getFirst().label(),
+                                NamedTextColor.GOLD))
+                        .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                        .body(List.of(DialogBody.item(displayIcon).showTooltip(true).build(),
+                                DialogBody.plainMessage(
+                                        Component.text(location.location().display(), NamedTextColor.GRAY))))
+                        .build())
+                .type(DialogType.multiAction(actions).columns(1).build()));
+    }
+
+    private Dialog locationManagementDialog(Player player, String folder, LocationsHolder context) {
+        LocationsHolder back = new LocationsHolder(folder, 0, context.returnFolder(), context.returnPage());
+        List<ActionButton> actions = List.of(
+                ActionButton.builder(Component.text("Place Locations", NamedTextColor.GREEN))
+                        .tooltip(
+                                Component.text("Add locations to this group with the editor wand", NamedTextColor.GRAY))
+                        .action(dialogAction(player, () -> beginLocationEditing(player, back))).build(),
+                ActionButton.builder(Component.text("Reorder Locations", NamedTextColor.YELLOW))
+                        .tooltip(Component.text("Change the global location order", NamedTextColor.GRAY))
+                        .action(dialogAction(player, () -> openLocationReorder(player, back))).build());
+        return Dialog.create(builder -> builder.empty().base(DialogBase
+                .builder(Component.text("Manage Locations", NamedTextColor.DARK_AQUA))
+                .externalTitle(Component.text("Manage this group", NamedTextColor.GREEN))
+                .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                .body(List.of(DialogBody.plainMessage(
+                        Component.text("New names may use / to create more nested groups.", NamedTextColor.GRAY))))
+                .build()).type(DialogType.multiAction(actions).columns(1).build()));
+    }
+
+    private DialogAction dialogAction(Player player, Runnable action) {
+        UUID playerId = player.getUniqueId();
+        return DialogAction.customClick((response, audience) -> {
+            if (audience instanceof Player clicked && clicked.getUniqueId().equals(playerId))
+                Bukkit.getScheduler().runTask(plugin, action);
+        }, ClickCallback.Options.builder().uses(1).lifetime(Duration.ofMinutes(10)).build());
+    }
+
+    private void teleportToLocation(Player player, String key) {
+        NamedLocation location = locationRepository.find(key).orElse(null);
+        if (location == null) {
+            player.sendMessage(UiText.error("That global location no longer exists."));
+            return;
+        }
+        Location destination = location.location().toLocation();
+        if (destination == null) {
+            player.sendMessage(
+                    UiText.error("The world for location '" + location.displayName() + "' is not available."));
+            return;
+        }
+        player.closeDialog();
+        player.teleport(destination);
+        player.sendMessage(UiText.success("Teleported to '" + location.displayName() + "'."));
+    }
+
+    private void setLocationIcon(Player player, String key, String folder, LocationsHolder context) {
+        NamedLocation location = locationRepository.find(key).orElse(null);
+        if (location == null) {
+            player.sendMessage(UiText.error("That global location no longer exists."));
+            return;
+        }
+        NamedLocation updated = location.withIcon(player.getInventory().getItemInMainHand());
+        locationRepository.save(updated);
+        player.sendMessage(UiText.info(updated.icon() == null ? "Location icon cleared." : "Location icon updated."));
+        openLocations(player, folder, 0, context.returnFolder(), context.returnPage());
+    }
+
+    private void deleteLocation(Player player, String key, String folder, LocationsHolder context) {
+        NamedLocation location = locationRepository.find(key).orElse(null);
+        if (location == null) {
+            player.sendMessage(UiText.error("That global location no longer exists."));
+            return;
+        }
+        locationRepository.delete(location);
+        player.sendMessage(UiText.success("Deleted global location '" + location.displayName() + "'."));
+        openLocations(player, folder, 0, context.returnFolder(), context.returnPage());
+    }
+
+    private void confirmLocationDeletion(Player player, String key, String folder, LocationsHolder context) {
+        NamedLocation location = locationRepository.find(key).orElse(null);
+        if (location == null) {
+            player.sendMessage(UiText.error("That global location no longer exists."));
+            return;
+        }
+        ActionButton confirm = ActionButton.builder(Component.text("Delete", NamedTextColor.RED))
+                .tooltip(Component.text("This cannot be undone", NamedTextColor.RED))
+                .action(dialogAction(player, () -> deleteLocation(player, key, folder, context))).build();
+        ActionButton cancel = ActionButton.builder(Component.text("Keep Location", NamedTextColor.GREEN))
+                .tooltip(Component.text("Return to the location browser", NamedTextColor.GRAY))
+                .action(dialogAction(player,
+                        () -> openLocations(player, folder, 0, context.returnFolder(), context.returnPage())))
+                .build();
+        Dialog confirmation = Dialog.create(builder -> builder.empty().base(DialogBase
+                .builder(Component.text("Delete Location?", NamedTextColor.RED))
+                .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                .body(List.of(DialogBody.plainMessage(
+                        Component.text("Permanently delete '" + location.displayName() + "'?", NamedTextColor.GRAY))))
+                .build()).type(DialogType.confirmation(confirm, cancel)));
+        player.showDialog(confirmation);
     }
 
     private void openLocationReorder(Player player, LocationsHolder back) {

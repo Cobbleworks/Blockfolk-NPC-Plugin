@@ -1,5 +1,6 @@
 package dev.blockfolk.gui;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -70,8 +71,18 @@ import dev.blockfolk.util.SkinTextureUtil;
 import dev.blockfolk.util.UiText;
 import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.AiControlSettings;
+import io.papermc.paper.dialog.Dialog;
+import io.papermc.paper.dialog.DialogResponseView;
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.DialogBase;
+import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.body.DialogBody;
+import io.papermc.paper.registry.data.dialog.input.DialogInput;
+import io.papermc.paper.registry.data.dialog.input.SingleOptionDialogInput;
+import io.papermc.paper.registry.data.dialog.type.DialogType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -469,27 +480,76 @@ public final class GuiService implements Listener {
     }
 
     public void openProperties(Player player, NpcDefinition definition) {
-        Inventory inventory = Bukkit.createInventory(new PropertiesHolder(definition.getKey()), 27,
-                UiText.title("NPC Properties", definition.getDisplayName()));
-        inventory.setItem(9, toggleItem(Material.PISTON, "Pushable", definition.isPushable(),
-                List.of(LegacyText.GRAY + "Allow players to move the NPC by bumping into it")));
-        inventory.setItem(11, toggleItem(Material.NAME_TAG, "Show Name", definition.isShowName(),
-                List.of(LegacyText.GRAY + "Show the name hologram above the NPC")));
-        inventory.setItem(13,
-                toggleItem(Material.SPYGLASS, "Look at Player", definition.isLookAtPlayer(),
-                        List.of(LegacyText.GRAY + "Turn the head toward the nearest player",
-                                LegacyText.GRAY + "with a subtle, natural body turn")));
-        inventory.setItem(15,
-                toggleItem(Material.HOPPER, "Item Pickup", definition.isItemPickup(),
-                        List.of(LegacyText.GRAY + "Pick up nearby dropped item entities",
-                                LegacyText.GRAY + "into this instance's temporary inventory")));
-        NpcColor color = definition.getColor();
-        inventory.setItem(17,
-                item(color.material(), "Name Color",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + color.displayName(),
-                                LegacyText.YELLOW + "Click to cycle through concrete colors")));
-        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
-        openInventory(player, inventory);
+        List<SingleOptionDialogInput.OptionEntry> colors = java.util.Arrays.stream(NpcColor.values())
+                .map(color -> SingleOptionDialogInput.OptionEntry.create(
+                        color.name().toLowerCase(java.util.Locale.ROOT),
+                        Component.text(color.displayName(), color.textColor()), color == definition.getColor()))
+                .toList();
+        ActionButton save = ActionButton.builder(Component.text("Save", NamedTextColor.GREEN))
+                .tooltip(Component.text("Save and apply these properties", NamedTextColor.GRAY))
+                .action(DialogAction.customClick((response, audience) -> {
+                    if (audience instanceof Player clicked && clicked.getUniqueId().equals(player.getUniqueId()))
+                        saveProperties(player.getUniqueId(), definition.getKey(), response);
+                }, ClickCallback.Options.builder().uses(1).lifetime(Duration.ofMinutes(10)).build())).build();
+        ActionButton cancel = ActionButton.builder(Component.text("Cancel", NamedTextColor.RED))
+                .tooltip(Component.text("Discard changes", NamedTextColor.GRAY)).build();
+        Dialog dialog = Dialog.create(builder -> builder
+                .empty().base(
+                        DialogBase.builder(Component.text("NPC Properties", NamedTextColor.DARK_AQUA))
+                                .externalTitle(Component.text("Properties: " + definition.getDisplayName()))
+                                .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                                .body(List.of(DialogBody
+                                        .plainMessage(Component.text("Identity and everyday interaction settings.",
+                                                NamedTextColor.GRAY))))
+                                .inputs(List.of(
+                                DialogInput.text("name", Component.text("Display name", NamedTextColor.YELLOW))
+                                        .initial(definition.getDisplayName())
+                                        .maxLength(Math.max(128, definition.getDisplayName().length())).width(300)
+                                        .build(),
+                                        DialogInput
+                                                .singleOption("color",
+                                                        Component.text("Name color", NamedTextColor.YELLOW), colors)
+                                                .width(300).build(),
+                                        DialogInput.bool("show_name", Component.text("Show name above NPC"))
+                                                .initial(definition.isShowName()).build(),
+                                        DialogInput.bool("pushable", Component.text("Players can push NPC"))
+                                                .initial(definition.isPushable()).build(),
+                                        DialogInput.bool("look_at_player", Component.text("Look at nearby players"))
+                                                .initial(definition.isLookAtPlayer()).build(),
+                                        DialogInput.bool("item_pickup", Component.text("Pick up nearby items"))
+                                                .initial(definition.isItemPickup()).build()))
+                                .build())
+                .type(DialogType.confirmation(save, cancel)));
+        player.showDialog(dialog);
+    }
+
+    private void saveProperties(UUID playerId, String definitionKey, DialogResponseView response) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player == null)
+                return;
+            NpcDefinition current = definitionRepository.find(definitionKey).orElse(null);
+            if (current == null) {
+                player.sendMessage(UiText.error("That NPC preset no longer exists."));
+                player.closeDialog();
+                return;
+            }
+            String displayName = response.getText("name");
+            if (displayName == null || displayName.isBlank()) {
+                player.sendMessage(UiText.error("NPC display names cannot be blank."));
+                openProperties(player, current);
+                return;
+            }
+            current.setDisplayName(displayName.trim());
+            current.setColor(NpcColor.fromStored(response.getText("color")));
+            current.setShowName(Boolean.TRUE.equals(response.getBoolean("show_name")));
+            current.setPushable(Boolean.TRUE.equals(response.getBoolean("pushable")));
+            current.setLookAtPlayer(Boolean.TRUE.equals(response.getBoolean("look_at_player")));
+            current.setItemPickup(Boolean.TRUE.equals(response.getBoolean("item_pickup")));
+            saveRefresh(current);
+            player.sendMessage(UiText.success("NPC properties updated."));
+            openEditor(player, current);
+        });
     }
 
     public void openInventoryEditor(Player player, NpcDefinition definition) {
@@ -894,8 +954,6 @@ public final class GuiService implements Listener {
             handleReorderClick(event, player, reorderHolder);
         } else if (holder instanceof EditorHolder editorHolder) {
             handleEditorClick(event, player, editorHolder.key());
-        } else if (holder instanceof PropertiesHolder propertiesHolder) {
-            handlePropertiesClick(event, player, propertiesHolder.key());
         } else if (holder instanceof FightingHolder fightingHolder) {
             handleFightingClick(event, player, fightingHolder.key());
         } else if (holder instanceof TargetsHolder targetsHolder) {
@@ -1193,33 +1251,6 @@ public final class GuiService implements Listener {
             default -> {
             }
         }
-    }
-
-    private void handlePropertiesClick(InventoryClickEvent event, Player player, String key) {
-        event.setCancelled(true);
-        if (!isTopInventoryClick(event))
-            return;
-        NpcDefinition definition = definitionRepository.find(key).orElse(null);
-        if (definition == null) {
-            player.closeInventory();
-            return;
-        }
-        switch (event.getRawSlot()) {
-            case 9 -> definition.setPushable(!definition.isPushable());
-            case 11 -> definition.setShowName(!definition.isShowName());
-            case 13 -> definition.setLookAtPlayer(!definition.isLookAtPlayer());
-            case 15 -> definition.setItemPickup(!definition.isItemPickup());
-            case 17 -> definition.setColor(definition.getColor().next());
-            case 22 -> {
-                openEditor(player, definition);
-                return;
-            }
-            default -> {
-                return;
-            }
-        }
-        saveRefresh(definition);
-        openProperties(player, definition);
     }
 
     private void handleFightingClick(InventoryClickEvent event, Player player, String key) {
@@ -3037,15 +3068,15 @@ public final class GuiService implements Listener {
 
     private boolean isManagedHolder(InventoryHolder holder) {
         return holder instanceof MainHolder || holder instanceof ReorderHolder || holder instanceof EditorHolder
-                || holder instanceof PropertiesHolder || holder instanceof FightingHolder
-                || holder instanceof TargetsHolder || holder instanceof FightOptionsActionHolder
-                || holder instanceof InstancesHolder || holder instanceof BehaviourHolder
-                || holder instanceof CustomBehaviourHolder || holder instanceof ActionPickerHolder
-                || holder instanceof AnimationPickerHolder || holder instanceof BehaviourValuePickerHolder
-                || holder instanceof RoutePointActionsHolder || holder instanceof RoutePointActionPickerHolder
-                || holder instanceof RoutePointAnimationPickerHolder || holder instanceof RoutePointValuePickerHolder
-                || holder instanceof SavedLocationPickerHolder || holder instanceof QuestionEditorHolder
-                || holder instanceof QuestionBranchPickerHolder || holder instanceof QuestionBranchRoutePickerHolder
+                || holder instanceof FightingHolder || holder instanceof TargetsHolder
+                || holder instanceof FightOptionsActionHolder || holder instanceof InstancesHolder
+                || holder instanceof BehaviourHolder || holder instanceof CustomBehaviourHolder
+                || holder instanceof ActionPickerHolder || holder instanceof AnimationPickerHolder
+                || holder instanceof BehaviourValuePickerHolder || holder instanceof RoutePointActionsHolder
+                || holder instanceof RoutePointActionPickerHolder || holder instanceof RoutePointAnimationPickerHolder
+                || holder instanceof RoutePointValuePickerHolder || holder instanceof SavedLocationPickerHolder
+                || holder instanceof QuestionEditorHolder || holder instanceof QuestionBranchPickerHolder
+                || holder instanceof QuestionBranchRoutePickerHolder
                 || holder instanceof QuestionBranchAnimationPickerHolder || holder instanceof ConfirmationHolder
                 || aiGuiService.handles(holder);
     }
@@ -3336,9 +3367,6 @@ public final class GuiService implements Listener {
     }
 
     private record EditorHolder(String key) implements GuiHolder {
-    }
-
-    private record PropertiesHolder(String key) implements GuiHolder {
     }
 
     private record FightingHolder(String key) implements GuiHolder {
