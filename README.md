@@ -132,9 +132,11 @@ Conversation memory can be private per player or shared by everyone speaking to 
 | `/bf create` | Start preset creation and enter the name in chat |
 | `/bf create <name>` | Create a preset with the supplied name |
 | `/bf npc <name>` | Open a preset editor; names are tab-completed |
+| `/bf npc <name> edit` | Open the same preset editor explicitly |
 | `/bf npc <name> spawn` | Spawn a persistent instance of a preset |
 | `/bf npc <name> duplicate` | Duplicate a preset with ` (copy)` appended to its name |
 | `/bf routes` | Open the route manager |
+| `/bf locations` | Open the global-location manager |
 
 ## **Permissions**
 

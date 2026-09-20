@@ -20,4 +20,19 @@ class NamedLocationTest {
         assertThrows(IllegalArgumentException.class,
                 () -> NamedLocation.create("  ", new ActionLocation("world", 1, 2, 3)));
     }
+
+    @Test
+    void groupedDisplayNamePreservesGroupSeparatorsInKey() {
+        NamedLocation location = NamedLocation.create("Town Center/Market Square",
+                new ActionLocation("world", 1, 2, 3));
+
+        assertEquals("town-center/market-square", location.key());
+        assertEquals("Town Center/Market Square", location.displayName());
+    }
+
+    @Test
+    void malformedGroupPathsAreRejected() {
+        assertThrows(IllegalArgumentException.class,
+                () -> NamedLocation.create("Town//Market", new ActionLocation("world", 1, 2, 3)));
+    }
 }

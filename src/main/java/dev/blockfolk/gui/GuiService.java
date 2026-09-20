@@ -449,7 +449,7 @@ public final class GuiService implements Listener {
                         aiGuiService.providerStatusLore(), LegacyText.GRAY + "Triggered by behaviours and chat",
                         LegacyText.YELLOW + "Click to configure")));
         CombatProfile combat = definition.getCombatProfile();
-        inventory.setItem(15, item(Material.IRON_SWORD, "Fighting",
+        inventory.setItem(15, item(Material.IRON_SWORD, "Fighting & Survival",
                 List.of(LegacyText.GRAY + "Health: " + LegacyText.WHITE + healthLabel(combat),
                         LegacyText.GRAY + "Respawn: " + LegacyText.WHITE + respawnLabel(combat),
                         LegacyText.GRAY + "Experience: " + LegacyText.WHITE + experienceLabel(combat),
@@ -525,7 +525,7 @@ public final class GuiService implements Listener {
     public void openFightingEditor(Player player, NpcDefinition definition) {
         CombatProfile combat = definition.getCombatProfile();
         Inventory inventory = Bukkit.createInventory(new FightingHolder(definition.getKey()), 36,
-                UiText.title("Fighting", definition.getDisplayName()));
+                UiText.title("Fighting & Survival", definition.getDisplayName()));
         inventory.setItem(1,
                 item(Material.LIME_DYE, "+ " + CombatProfile.HEALTH_STEP + " Health",
                         List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + healthLabel(combat),
@@ -590,6 +590,9 @@ public final class GuiService implements Listener {
                 item(Material.NAME_TAG, "Alliance",
                         List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + allianceLabel(combat),
                                 LegacyText.GRAY + "NPCs with the same alliance will not fight",
+                                LegacyText.GRAY + "Players can appear allied by carrying an item",
+                                LegacyText.GRAY + "whose custom name matches the alliance",
+                                LegacyText.DARK_GRAY + "Matching ignores capitalization; any inventory slot works",
                                 LegacyText.YELLOW + "Click to enter text")));
         inventory.setItem(31, item(Material.BARRIER, "Back", List.of()));
         openInventory(player, inventory);
@@ -2165,32 +2168,50 @@ public final class GuiService implements Listener {
     }
 
     private void openSavedLocationPicker(Player player, UUID token, int requestedPage) {
+        openSavedLocationPicker(player, token, "", requestedPage);
+    }
+
+    private void openSavedLocationPicker(Player player, UUID token, String folder, int requestedPage) {
         BehaviourActionType type = waypointType(player, token);
         if (type != BehaviourActionType.MOVE_TO) {
             player.sendMessage(UiText.warning("That Move To selection is no longer active."));
             return;
         }
-        List<NamedLocation> locations = new ArrayList<>(locationRepository.findAll());
-        int pages = Math.max(1, (locations.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        List<LocationBrowserModel.Entry> entries = LocationBrowserModel.entries(locationRepository.findAll(), folder);
+        int pages = Math.max(1, (entries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(new SavedLocationPickerHolder(token, page), 54,
-                UiText.title("Select Global Location"));
+        Inventory inventory = Bukkit.createInventory(new SavedLocationPickerHolder(token, folder, page), 54,
+                UiText.title(folder.isEmpty() ? "Select Global Location" : "Locations: " + folder));
         int from = page * PAGE_SIZE;
-        int to = Math.min(from + PAGE_SIZE, locations.size());
+        int to = Math.min(from + PAGE_SIZE, entries.size());
         for (int index = from; index < to; index++) {
-            NamedLocation named = locations.get(index);
+            LocationBrowserModel.Entry entry = entries.get(index);
+            if (entry.folder()) {
+                inventory.setItem(index - from,
+                        item(Material.CHEST, entry.label(),
+                                List.of(LegacyText.GRAY + "" + entry.childCount() + " location(s)",
+                                        LegacyText.YELLOW + "Click to open")));
+                continue;
+            }
+            NamedLocation named = entry.location();
+            ItemStack icon = named.icon();
             inventory.setItem(index - from,
-                    item(Material.LODESTONE, named.displayName(), List.of(LegacyText.GRAY + named.location().display(),
-                            LegacyText.YELLOW + "Click to set Move To position")));
+                    item(icon == null ? new ItemStack(Material.LODESTONE) : icon, entry.label(),
+                            List.of(LegacyText.GRAY + named.location().display(),
+                                    LegacyText.YELLOW + "Click to set Move To position")));
         }
-        if (locations.isEmpty()) {
+        if (entries.isEmpty()) {
             inventory.setItem(22, item(Material.BARRIER, "No Saved Locations",
                     List.of(LegacyText.GRAY + "Create locations from the Routes menu")));
         }
         if (page > 0)
             inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
-        inventory.setItem(49, item(Material.RECOVERY_COMPASS, "Back to Block Selection",
-                List.of(LegacyText.GRAY + "Keep using the compass in the world")));
+        inventory.setItem(49,
+                item(folder.isEmpty() ? Material.RECOVERY_COMPASS : Material.ARROW,
+                        folder.isEmpty() ? "Back to Block Selection" : "Up One Group",
+                        List.of(folder.isEmpty()
+                                ? LegacyText.GRAY + "Keep using the compass in the world"
+                                : LegacyText.GRAY + "Return to the parent location group")));
         if (page + 1 < pages)
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         openInventory(player, inventory);
@@ -2216,23 +2237,33 @@ public final class GuiService implements Listener {
         }
         int slot = event.getRawSlot();
         if (slot == 47) {
-            openSavedLocationPicker(player, holder.token(), holder.page() - 1);
+            openSavedLocationPicker(player, holder.token(), holder.folder(), holder.page() - 1);
             return;
         }
         if (slot == 49) {
-            player.closeInventory();
-            sendWaypointPrompt(player, BehaviourActionType.MOVE_TO, holder.token());
+            if (holder.folder().isEmpty()) {
+                player.closeInventory();
+                sendWaypointPrompt(player, BehaviourActionType.MOVE_TO, holder.token());
+            } else {
+                openSavedLocationPicker(player, holder.token(), LocationBrowserModel.parent(holder.folder()), 0);
+            }
             return;
         }
         if (slot == 53) {
-            openSavedLocationPicker(player, holder.token(), holder.page() + 1);
+            openSavedLocationPicker(player, holder.token(), holder.folder(), holder.page() + 1);
             return;
         }
-        List<NamedLocation> locations = new ArrayList<>(locationRepository.findAll());
+        List<LocationBrowserModel.Entry> entries = LocationBrowserModel.entries(locationRepository.findAll(),
+                holder.folder());
         int index = holder.page() * PAGE_SIZE + slot;
-        if (slot < 0 || slot >= PAGE_SIZE || index < 0 || index >= locations.size())
+        if (slot < 0 || slot >= PAGE_SIZE || index < 0 || index >= entries.size())
             return;
-        applySavedLocation(player, holder.token(), locations.get(index));
+        LocationBrowserModel.Entry entry = entries.get(index);
+        if (entry.folder()) {
+            openSavedLocationPicker(player, holder.token(), entry.path(), 0);
+            return;
+        }
+        applySavedLocation(player, holder.token(), entry.location());
     }
 
     private void applySavedLocation(Player player, UUID token, NamedLocation named) {
@@ -3341,7 +3372,7 @@ public final class GuiService implements Listener {
 
     }
 
-    private record SavedLocationPickerHolder(UUID token, int page) implements GuiHolder {
+    private record SavedLocationPickerHolder(UUID token, String folder, int page) implements GuiHolder {
     }
 
     private record AnimationPickerHolder(String key, BehaviourEvent event, String customEvent, int actionIndex,

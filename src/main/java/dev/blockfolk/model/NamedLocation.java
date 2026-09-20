@@ -1,5 +1,7 @@
 package dev.blockfolk.model;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 import org.bukkit.inventory.ItemStack;
@@ -38,9 +40,19 @@ public record NamedLocation(String key, String displayName, ActionLocation locat
 
     public static String normalizeKey(String value) {
         String name = Objects.requireNonNull(value, "location name").trim();
-        if (name.isEmpty()) {
-            throw new IllegalArgumentException("Location name is required.");
+        if (name.isEmpty() || name.startsWith("/") || name.endsWith("/") || name.contains("//")) {
+            throw new IllegalArgumentException(
+                    "Location names may contain letters, numbers, _ and -, with / between groups");
         }
-        return NpcDefinition.toKey(name);
+        List<String> groups = new ArrayList<>();
+        for (String group : name.split("/")) {
+            String trimmed = group.trim();
+            if (trimmed.isEmpty() || trimmed.equals(".") || trimmed.equals("..")) {
+                throw new IllegalArgumentException(
+                        "Location names may contain letters, numbers, _ and -, with / between groups");
+            }
+            groups.add(NpcDefinition.toKey(trimmed));
+        }
+        return String.join("/", groups);
     }
 }

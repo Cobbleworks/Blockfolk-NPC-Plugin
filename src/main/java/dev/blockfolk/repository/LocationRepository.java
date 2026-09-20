@@ -2,9 +2,13 @@ package dev.blockfolk.repository;
 
 import java.io.File;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -19,6 +23,7 @@ public final class LocationRepository {
     private final File file;
     private final DebouncedYamlWriter writer;
     private final Map<String, NamedLocation> locations = new LinkedHashMap<>();
+    private final List<String> locationOrder = new java.util.ArrayList<>();
 
     public LocationRepository(JavaPlugin plugin) {
         this.file = new File(plugin.getDataFolder(), "locations.yml");
@@ -27,9 +32,13 @@ public final class LocationRepository {
 
     public void loadAll() {
         locations.clear();
-        ConfigurationSection root = YamlConfiguration.loadConfiguration(file).getConfigurationSection("locations");
-        if (root == null)
+        locationOrder.clear();
+        YamlConfiguration configuration = YamlConfiguration.loadConfiguration(file);
+        ConfigurationSection root = configuration.getConfigurationSection("locations");
+        if (root == null) {
+            loadOrder(configuration);
             return;
+        }
         for (String storedKey : root.getKeys(false)) {
             ConfigurationSection section = root.getConfigurationSection(storedKey);
             if (section == null)
@@ -37,13 +46,17 @@ public final class LocationRepository {
             try {
                 ActionLocation location = new ActionLocation(section.getString("world"), section.getDouble("x"),
                         section.getDouble("y"), section.getDouble("z"));
-                NamedLocation named = new NamedLocation(storedKey, section.getString("display-name", storedKey),
-                        location, section.getItemStack("icon"));
+                String displayName = section.getString("display-name", storedKey);
+                String key = section.contains("key")
+                        ? section.getString("key")
+                        : NamedLocation.normalizeKey(displayName);
+                NamedLocation named = new NamedLocation(key, displayName, location, section.getItemStack("icon"));
                 locations.put(named.key(), named);
             } catch (IllegalArgumentException ignored) {
                 // Ignore malformed saved locations without preventing plugin startup.
             }
         }
+        loadOrder(configuration);
     }
 
     public Optional<NamedLocation> find(String keyOrName) {
@@ -55,20 +68,46 @@ public final class LocationRepository {
     }
 
     public Collection<NamedLocation> findAll() {
-        return java.util.List.copyOf(locations.values());
+        return locationOrder.stream().map(locations::get).filter(java.util.Objects::nonNull).toList();
     }
 
     public NamedLocation save(NamedLocation location) {
-        locations.put(location.key(), location);
+        if (locations.put(location.key(), location) == null)
+            locationOrder.add(location.key());
         saveAll();
         return location;
+    }
+
+    public void reorder(List<String> orderedKeys) {
+        List<String> normalized = orderedKeys.stream().map(NamedLocation::normalizeKey).toList();
+        if (normalized.size() != locations.size() || new HashSet<>(normalized).size() != normalized.size()
+                || !locations.keySet().containsAll(normalized)) {
+            throw new IllegalArgumentException("The location order must contain every location exactly once.");
+        }
+        locationOrder.clear();
+        locationOrder.addAll(normalized);
+        saveAll();
     }
 
     public boolean delete(NamedLocation location) {
         if (locations.remove(location.key()) == null)
             return false;
+        locationOrder.remove(location.key());
         saveAll();
         return true;
+    }
+
+    private void loadOrder(YamlConfiguration configuration) {
+        Set<String> seen = new HashSet<>();
+        for (String storedKey : configuration.getStringList("order")) {
+            try {
+                String key = NamedLocation.normalizeKey(storedKey);
+                if (locations.containsKey(key) && seen.add(key))
+                    locationOrder.add(key);
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        locations.keySet().stream().filter(seen::add).sorted(Comparator.naturalOrder()).forEach(locationOrder::add);
     }
 
     private void saveAll() {
@@ -77,9 +116,12 @@ public final class LocationRepository {
 
     private YamlConfiguration serialize() {
         YamlConfiguration configuration = new YamlConfiguration();
+        configuration.set("order", locationOrder);
         ConfigurationSection root = configuration.createSection("locations");
-        for (NamedLocation named : locations.values()) {
-            ConfigurationSection section = root.createSection(named.key());
+        int index = 0;
+        for (NamedLocation named : findAll()) {
+            ConfigurationSection section = root.createSection(Integer.toString(index++));
+            section.set("key", named.key());
             section.set("display-name", named.displayName());
             section.set("world", named.location().worldName());
             section.set("x", named.location().x());

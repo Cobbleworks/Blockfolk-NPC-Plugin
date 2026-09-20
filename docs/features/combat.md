@@ -1,6 +1,6 @@
 # Combat
 
-Combat is configured per preset under **Fighting**.
+Combat is configured per preset under **Fighting & Survival**.
 
 <div class="screenshot-grid">
   <img src="../screenshots/screenshot-combat-menu.jpeg" alt="Blockfolk combat configuration menu">
@@ -33,7 +33,10 @@ Target categories are non-animal mobs, animals, survival/adventure players, and 
 
 ## Alliances
 
-NPCs with the same non-empty alliance value do not fight each other. Use a consistent spelling across the presets that should cooperate.
+NPCs with the same non-empty alliance value do not fight each other. Use a consistent spelling across the presets
+that should cooperate. A player can appear allied to an NPC by carrying an item whose custom display name matches
+that NPC's alliance. The comparison ignores capitalization and checks every inventory slot; allied NPCs will neither
+choose that player as a target nor retaliate against them.
 
 ## Runtime combat actions
 

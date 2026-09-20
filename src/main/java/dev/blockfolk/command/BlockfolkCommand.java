@@ -96,6 +96,10 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             routeGuiService.openRoutes(player);
             return true;
         }
+        if (args.length == 1 && args[0].equalsIgnoreCase("locations")) {
+            routeGuiService.openLocations(player);
+            return true;
+        }
         if (args.length == 1 && args[0].equalsIgnoreCase("events")) {
             customEventGuiService.open(player);
             return true;
@@ -119,7 +123,8 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             guiService.openEditor(player, definition);
             return true;
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("npc")) {
+        if ((args.length == 2 || args.length == 3 && args[2].equalsIgnoreCase("edit"))
+                && args[0].equalsIgnoreCase("npc")) {
             NpcDefinition definition = definitionRepository.find(args[1]).orElse(null);
             if (definition == null) {
                 player.sendMessage(UiText.error("Unknown NPC: " + args[1]));
@@ -197,7 +202,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return true;
         }
         player.sendMessage(UiText.info(
-                "Usage: /bf [create [name]|routes|events [trigger <event>]|npc <name> [spawn|duplicate|tphere|warpto]]"));
+                "Usage: /bf [create [name]|routes|locations|events [trigger <event>]|npc <name> [edit|spawn|duplicate|tphere|warpto]]"));
         return true;
     }
 
@@ -210,6 +215,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             List<String> suggestions = new ArrayList<>();
             suggestions.add("create");
             suggestions.add("routes");
+            suggestions.add("locations");
             suggestions.add("events");
             suggestions.add("npc");
             return filter(suggestions, args[0]);
@@ -224,7 +230,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return filter(customEventRepository.findAll().stream().map(CustomEvent::getName).toList(), args[2]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("npc")) {
-            return filter(List.of("spawn", "duplicate", "tphere", "warpto"), args[2]);
+            return filter(List.of("edit", "spawn", "duplicate", "tphere", "warpto"), args[2]);
         }
         return List.of();
     }
