@@ -31,6 +31,14 @@ import net.kyori.adventure.text.Component;
 /** Owns the AI behaviour and long-term-memory menus. */
 final class AiGuiService {
 
+    private static final int IDENTITY_SLOT = 1;
+    private static final int BEHAVIOUR_SLOT = 2;
+    private static final int GOAL_SLOT = 3;
+    private static final int INFORMATION_SLOT = 4;
+    private static final int LIKES_DISLIKES_SLOT = 5;
+    private static final int MEMORY_SLOT = 6;
+    private static final int CONVERSATION_SLOT = 11;
+    private static final int INVENTORY_SLOT = 13;
     private static final int[] ACTION_SLOTS = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
     private static final List<AiActionType> ACTION_TYPES = Arrays.stream(AiActionType.values())
             .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM).toList();
@@ -67,17 +75,17 @@ final class AiGuiService {
         AiControlSettings settings = definition.getAiControlSettings();
         Inventory inventory = Bukkit.createInventory(new AiControlHolder(definition.getKey()), 54,
                 Component.text("AI Behaviour"));
-        inventory.setItem(10, contextItem(Material.NAME_TAG, "Identity", settings.identity(),
+        inventory.setItem(IDENTITY_SLOT, contextItem(Material.NAME_TAG, "Identity", settings.identity(),
                 "Who this NPC is, its name, history, and role"));
-        inventory.setItem(11, contextItem(Material.WRITABLE_BOOK, "Personality & Behaviour", settings.behaviour(),
-                "How it speaks, acts, reacts, and treats others"));
-        inventory.setItem(12, contextItem(Material.COMPASS, "Goal / Role", settings.goal(),
+        inventory.setItem(BEHAVIOUR_SLOT, contextItem(Material.WRITABLE_BOOK, "Personality & Behaviour",
+                settings.behaviour(), "How it speaks, acts, reacts, and treats others"));
+        inventory.setItem(GOAL_SLOT, contextItem(Material.COMPASS, "Goal / Role", settings.goal(),
                 "What it should accomplish or prioritize"));
-        inventory.setItem(13, contextItem(Material.KNOWLEDGE_BOOK, "Knowledge / Information", settings.information(),
-                "Facts, lore, rules, and local knowledge it may use"));
-        inventory.setItem(14, contextItem(Material.CAKE, "Likes & Dislikes", settings.likesDislikes(),
+        inventory.setItem(INFORMATION_SLOT, contextItem(Material.KNOWLEDGE_BOOK, "Knowledge / Information",
+                settings.information(), "Facts, lore, rules, and local knowledge it may use"));
+        inventory.setItem(LIKES_DISLIKES_SLOT, contextItem(Material.CAKE, "Likes & Dislikes", settings.likesDislikes(),
                 "Things it enjoys, avoids, values, or strongly dislikes"));
-        inventory.setItem(15, item(settings.memoryEnabled() ? Material.ENDER_CHEST : Material.CHEST,
+        inventory.setItem(MEMORY_SLOT, item(settings.memoryEnabled() ? Material.ENDER_CHEST : Material.CHEST,
                 "Memory: " + (settings.memoryEnabled() ? "Enabled" : "Disabled"),
                 List.of(LegacyText.GRAY + "Long-term facts: " + LegacyText.WHITE + definition.getAiMemories().size()
                         + LegacyText.GRAY + " / " + NpcDefinition.MAX_AI_MEMORIES,
@@ -85,14 +93,14 @@ final class AiGuiService {
                         LegacyText.YELLOW + "Left-click to " + (settings.memoryEnabled() ? "disable" : "enable"),
                         LegacyText.YELLOW + "Right-click to view and edit",
                         LegacyText.RED + "Shift-right-click to clear all memories")));
-        inventory.setItem(20,
+        inventory.setItem(CONVERSATION_SLOT,
                 toggleItem(Material.ENDER_EYE,
                         "Conversation: " + (settings.sharedConversation() ? "Shared" : "Private"),
                         settings.sharedConversation(),
                         settings.sharedConversation()
                                 ? "All players share this NPC instance's conversation"
                                 : "Each player has a separate conversation with this NPC instance"));
-        inventory.setItem(22, toggleItem(Material.CHEST, "Temporary Inventory", settings.inventoryEnabled(),
+        inventory.setItem(INVENTORY_SLOT, toggleItem(Material.CHEST, "Temporary Inventory", settings.inventoryEnabled(),
                 "Lets the AI see, mine into, and drop items carried by each instance"));
         for (int index = 0; index < ACTION_TYPES.size(); index++) {
             AiActionType type = ACTION_TYPES.get(index);
@@ -118,13 +126,12 @@ final class AiGuiService {
         Material statusMaterial = !settings.enabled()
                 ? Material.RED_DYE
                 : hasTrigger ? Material.LIME_DYE : Material.YELLOW_DYE;
-        inventory.setItem(49,
-                item(statusMaterial, "AI Behaviour: " + status,
-                        List.of(LegacyText.GRAY + "Applies to every spawned instance of this preset",
-                                hasTrigger
-                                        ? LegacyText.GRAY + "Automatic triggers are configured"
-                                        : LegacyText.RED + "No requests are made and nearby chat is not read",
-                                LegacyText.YELLOW + "Click to " + (settings.enabled() ? "pause" : "resume"))));
+        inventory.setItem(49, item(statusMaterial, "AI Behaviour: " + status,
+                List.of(LegacyText.GRAY + "Applies to every spawned instance of this preset", providerStatusLore(),
+                        hasTrigger
+                                ? LegacyText.GRAY + "Automatic triggers are configured"
+                                : LegacyText.RED + "No requests are made and nearby chat is not read",
+                        LegacyText.YELLOW + "Click to " + (settings.enabled() ? "pause" : "resume"))));
         openInventory(player, inventory);
     }
 
@@ -140,7 +147,7 @@ final class AiGuiService {
         return false;
     }
 
-    String providerStatusLore() {
+    private String providerStatusLore() {
         return aiControl != null && aiControl.configured()
                 ? LegacyText.GREEN + "OpenRouter is ready"
                 : LegacyText.RED + "OpenRouter: " + providerConfigurationIssue();
@@ -191,11 +198,11 @@ final class AiGuiService {
             return;
         }
         int slot = event.getRawSlot();
-        if (slot >= 10 && slot <= 14) {
+        if (slot >= IDENTITY_SLOT && slot <= LIKES_DISLIKES_SLOT) {
             requestContext(player, definition, slot);
             return;
         }
-        if (slot == 15) {
+        if (slot == MEMORY_SLOT) {
             if (event.getClick() == ClickType.SHIFT_RIGHT) {
                 definition.clearAiMemories();
                 definitions.save(definition);
@@ -211,10 +218,10 @@ final class AiGuiService {
             }
             return;
         }
-        if (slot == 20) {
+        if (slot == CONVERSATION_SLOT) {
             AiControlSettings settings = definition.getAiControlSettings();
             definition.setAiControlSettings(settings.withSharedConversation(!settings.sharedConversation()));
-        } else if (slot == 22) {
+        } else if (slot == INVENTORY_SLOT) {
             AiControlSettings settings = definition.getAiControlSettings();
             definition.setAiControlSettings(settings.withInventoryEnabled(!settings.inventoryEnabled()));
         } else if (slot == 45) {
@@ -300,22 +307,22 @@ final class AiGuiService {
 
     private void requestContext(Player player, NpcDefinition definition, int slot) {
         String section = switch (slot) {
-            case 10 -> "identity";
-            case 11 -> "personality and behaviour";
-            case 12 -> "goal or role";
-            case 13 -> "knowledge and information";
-            case 14 -> "likes and dislikes";
+            case IDENTITY_SLOT -> "identity";
+            case BEHAVIOUR_SLOT -> "personality and behaviour";
+            case GOAL_SLOT -> "goal or role";
+            case INFORMATION_SLOT -> "knowledge and information";
+            case LIKES_DISLIKES_SLOT -> "likes and dislikes";
             default -> throw new IllegalArgumentException("Unknown AI context slot: " + slot);
         };
         chatInput.request(player, "Enter the NPC's " + section + ", or 'clear':", value -> {
             String normalized = value.equalsIgnoreCase("clear") ? "" : value;
             AiControlSettings current = definition.getAiControlSettings();
             definition.setAiControlSettings(switch (slot) {
-                case 10 -> current.withIdentity(normalized);
-                case 11 -> current.withBehaviour(normalized);
-                case 12 -> current.withGoal(normalized);
-                case 13 -> current.withInformation(normalized);
-                case 14 -> current.withLikesDislikes(normalized);
+                case IDENTITY_SLOT -> current.withIdentity(normalized);
+                case BEHAVIOUR_SLOT -> current.withBehaviour(normalized);
+                case GOAL_SLOT -> current.withGoal(normalized);
+                case INFORMATION_SLOT -> current.withInformation(normalized);
+                case LIKES_DISLIKES_SLOT -> current.withLikesDislikes(normalized);
                 default -> current;
             });
             definitions.save(definition);

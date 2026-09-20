@@ -213,8 +213,7 @@ public final class GuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Choose Waypoint Action"));
         for (Map.Entry<Integer, BehaviourActionType> entry : ACTION_PICKER_ACTIONS.entrySet()) {
             BehaviourActionType type = entry.getValue();
-            inventory.setItem(entry.getKey(),
-                    item(actionMaterial(type), type.displayName(), List.of(LegacyText.YELLOW + "Click to configure")));
+            inventory.setItem(entry.getKey(), item(actionMaterial(type), type.displayName(), actionPickerLore(type)));
         }
         inventory.setItem(ACTION_PICKER_ANIMATIONS_SLOT,
                 item(Material.ARMOR_STAND, "Animations", List.of(LegacyText.GRAY + "Poses, waving, and jumping",
@@ -447,7 +446,7 @@ public final class GuiService implements Listener {
         inventory.setItem(23, item(ai.enabled() ? Material.OXIDIZED_COPPER_GOLEM_STATUE : Material.COPPER_GOLEM_STATUE,
                 "AI Behaviour: " + aiStatus,
                 List.of(LegacyText.GRAY + "Context sections: " + LegacyText.WHITE + ai.configuredSectionCount() + "/5",
-                        aiGuiService.providerStatusLore(), LegacyText.GRAY + "Triggered by behaviours and chat",
+                        LegacyText.GRAY + "Triggered by behaviours and chat",
                         LegacyText.YELLOW + "Click to configure")));
         CombatProfile combat = definition.getCombatProfile();
         inventory.setItem(15, item(Material.IRON_SWORD, "Fighting & Survival",
@@ -732,8 +731,7 @@ public final class GuiService implements Listener {
             BehaviourActionType type = entry.getValue();
             if (!includeQuestion && type == BehaviourActionType.ASK_QUESTION)
                 continue;
-            inventory.setItem(entry.getKey(),
-                    item(actionMaterial(type), type.displayName(), List.of(LegacyText.YELLOW + "Click to configure")));
+            inventory.setItem(entry.getKey(), item(actionMaterial(type), type.displayName(), actionPickerLore(type)));
         }
         inventory.setItem(ACTION_PICKER_ANIMATIONS_SLOT,
                 item(Material.ARMOR_STAND, "Animations", List.of(LegacyText.GRAY + "Poses, waving, and jumping",
@@ -3215,6 +3213,45 @@ public final class GuiService implements Listener {
             case JUMP -> Material.SLIME_BLOCK;
             case FOLLOW -> Material.LEAD;
             case UNFOLLOW -> Material.SHEARS;
+        };
+    }
+
+    private List<String> actionPickerLore(BehaviourActionType type) {
+        return List.of(LegacyText.GRAY + actionDescription(type), LegacyText.YELLOW + "Click to configure");
+    }
+
+    private String actionDescription(BehaviourActionType type) {
+        return switch (type) {
+            case SEND_DIALOG -> "Sends a configured message in chat";
+            case SHOW_HOLO_DIALOG -> "Shows a configured message above the NPC";
+            case ASK_QUESTION -> "Asks a question with configurable answer branches";
+            case SET_ROUTE -> "Assigns a route and starts following it";
+            case RUN_CONSOLE_COMMAND -> "Runs a configured command as the server";
+            case START_COMBAT -> "Starts combat with the triggering entity";
+            case CHANGE_FIGHT_OPTIONS -> "Changes aggression and target settings";
+            case START_NAVIGATION -> "Starts or resumes route navigation";
+            case STOP_NAVIGATION -> "Pauses the current route navigation";
+            case SET_WALK_SPEED -> "Changes the NPC's movement speed";
+            case MOVE_TO -> "Walks to a selected block or saved location";
+            case TELEPORT_TO -> "Teleports to a selected block or saved location";
+            case WAIT -> "Delays the next action for a chosen duration";
+            case AI_TRIGGER -> "Lets the configured AI choose a response or action";
+            case INTERACT -> "Uses nearby buttons and levers";
+            case MINE_BLOCKS -> "Mines nearby blocks around the NPC";
+            case TAKE_ITEM -> "Picks up a nearby or offered item";
+            case SHOW_INVENTORY -> "Opens the NPC's inventory for the player";
+            case DROP_INVENTORY -> "Drops every item in the NPC's inventory";
+            case HARVEST -> "Harvests and replants nearby mature crops";
+            case EMIT_EVENT -> "Triggers a custom event for listening NPCs";
+            case SLEEP -> "Puts the NPC into its sleeping pose";
+            case SWIM -> "Puts the NPC into its swimming pose";
+            case FALL_FLY -> "Puts the NPC into its fall-flying pose";
+            case STAND -> "Returns the NPC to its standing pose";
+            case SNEAK -> "Puts the NPC into its sneaking pose";
+            case WAVE -> "Makes the NPC wave its main hand";
+            case JUMP -> "Makes the NPC jump";
+            case FOLLOW -> "Starts following the nearest player";
+            case UNFOLLOW -> "Stops following the current player";
         };
     }
 
