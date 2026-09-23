@@ -150,7 +150,7 @@ public final class GuiService implements Listener {
         this.waypointActionKey = new NamespacedKey(plugin, "behaviour-waypoint-action");
         this.waypointTokenKey = new NamespacedKey(plugin, "behaviour-waypoint-token");
         this.reorderIconKey = new NamespacedKey(plugin, "reorder-definition");
-        this.aiGuiService = new AiGuiService(definitionRepository, chatInputService, this::openEditor);
+        this.aiGuiService = new AiGuiService(plugin, definitionRepository, chatInputService, this::openEditor);
     }
 
     public void setBehaviourService(NpcBehaviourService behaviourService) {

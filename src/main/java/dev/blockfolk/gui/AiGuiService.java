@@ -13,6 +13,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.plugin.Plugin;
 
 import dev.blockfolk.ai.AiActionType;
 import dev.blockfolk.ai.AiControlService;
@@ -26,11 +27,22 @@ import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.TextUtil;
 import dev.blockfolk.util.UiText;
+import io.papermc.paper.dialog.Dialog;
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.DialogBase;
+import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.input.DialogInput;
+import io.papermc.paper.registry.data.dialog.input.TextDialogInput;
+import io.papermc.paper.registry.data.dialog.type.DialogType;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickCallback;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 /** Owns the AI behaviour and long-term-memory menus. */
 final class AiGuiService {
 
+    private static final String CONTEXT_INPUT_KEY = "context";
+    private static final int CONTEXT_MAX_LENGTH = 8192;
     private static final int IDENTITY_SLOT = 1;
     private static final int BEHAVIOUR_SLOT = 2;
     private static final int GOAL_SLOT = 3;
@@ -44,12 +56,14 @@ final class AiGuiService {
             .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM).toList();
 
     private final NpcDefinitionRepository definitions;
+    private final Plugin plugin;
     private final ChatInputService chatInput;
     private final BiConsumer<Player, NpcDefinition> back;
     private AiControlService aiControl;
 
-    AiGuiService(NpcDefinitionRepository definitions, ChatInputService chatInput,
+    AiGuiService(Plugin plugin, NpcDefinitionRepository definitions, ChatInputService chatInput,
             BiConsumer<Player, NpcDefinition> back) {
+        this.plugin = plugin;
         this.definitions = definitions;
         this.chatInput = chatInput;
         this.back = back;
@@ -126,12 +140,13 @@ final class AiGuiService {
         Material statusMaterial = !settings.enabled()
                 ? Material.RED_DYE
                 : hasTrigger ? Material.LIME_DYE : Material.YELLOW_DYE;
-        inventory.setItem(49, item(statusMaterial, "AI Behaviour: " + status,
-                List.of(LegacyText.GRAY + "Applies to every spawned instance of this preset",
-                        hasTrigger
-                                ? LegacyText.GRAY + "Automatic triggers are configured"
-                                : LegacyText.RED + "No requests are made and nearby chat is not read",
-                        LegacyText.YELLOW + "Click to " + (settings.enabled() ? "pause" : "resume"))));
+        inventory.setItem(49,
+                item(statusMaterial, "AI Behaviour: " + status,
+                        List.of(LegacyText.GRAY + "Applies to every spawned instance of this preset",
+                                hasTrigger
+                                        ? LegacyText.GRAY + "Automatic triggers are configured"
+                                        : LegacyText.RED + "No requests are made and nearby chat is not read",
+                                LegacyText.YELLOW + "Click to " + (settings.enabled() ? "pause" : "resume"))));
         openInventory(player, inventory);
     }
 
@@ -300,28 +315,58 @@ final class AiGuiService {
     }
 
     private void requestContext(Player player, NpcDefinition definition, int slot) {
-        String section = switch (slot) {
-            case IDENTITY_SLOT -> "identity";
-            case BEHAVIOUR_SLOT -> "personality and behaviour";
-            case GOAL_SLOT -> "goal or role";
-            case INFORMATION_SLOT -> "knowledge and information";
-            case LIKES_DISLIKES_SLOT -> "likes and dislikes";
+        AiControlSettings settings = definition.getAiControlSettings();
+        String title = switch (slot) {
+            case IDENTITY_SLOT -> "Identity";
+            case BEHAVIOUR_SLOT -> "Personality & Behaviour";
+            case GOAL_SLOT -> "Goal / Role";
+            case INFORMATION_SLOT -> "Knowledge / Information";
+            case LIKES_DISLIKES_SLOT -> "Likes & Dislikes";
             default -> throw new IllegalArgumentException("Unknown AI context slot: " + slot);
         };
-        chatInput.request(player, "Enter the NPC's " + section + ", or 'clear':", value -> {
-            String normalized = value.equalsIgnoreCase("clear") ? "" : value;
-            AiControlSettings current = definition.getAiControlSettings();
-            definition.setAiControlSettings(switch (slot) {
-                case IDENTITY_SLOT -> current.withIdentity(normalized);
-                case BEHAVIOUR_SLOT -> current.withBehaviour(normalized);
-                case GOAL_SLOT -> current.withGoal(normalized);
-                case INFORMATION_SLOT -> current.withInformation(normalized);
-                case LIKES_DISLIKES_SLOT -> current.withLikesDislikes(normalized);
-                default -> current;
-            });
-            definitions.save(definition);
-            open(player, definition);
-        });
+        String value = switch (slot) {
+            case IDENTITY_SLOT -> settings.identity();
+            case BEHAVIOUR_SLOT -> settings.behaviour();
+            case GOAL_SLOT -> settings.goal();
+            case INFORMATION_SLOT -> settings.information();
+            case LIKES_DISLIKES_SLOT -> settings.likesDislikes();
+            default -> throw new IllegalArgumentException("Unknown AI context slot: " + slot);
+        };
+        ActionButton save = ActionButton.builder(Component.text("Save", NamedTextColor.GREEN))
+                .action(DialogAction.customClick((view, audience) -> {
+                    if (!(audience instanceof Player submitting)
+                            || !submitting.getUniqueId().equals(player.getUniqueId()))
+                        return;
+                    String input = view.getText(CONTEXT_INPUT_KEY);
+                    if (input == null)
+                        return;
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        NpcDefinition currentDefinition = definitions.find(definition.getKey()).orElse(null);
+                        if (currentDefinition == null || !submitting.isOnline())
+                            return;
+                        AiControlSettings current = currentDefinition.getAiControlSettings();
+                        currentDefinition.setAiControlSettings(switch (slot) {
+                            case IDENTITY_SLOT -> current.withIdentity(input);
+                            case BEHAVIOUR_SLOT -> current.withBehaviour(input);
+                            case GOAL_SLOT -> current.withGoal(input);
+                            case INFORMATION_SLOT -> current.withInformation(input);
+                            case LIKES_DISLIKES_SLOT -> current.withLikesDislikes(input);
+                            default -> current;
+                        });
+                        definitions.save(currentDefinition);
+                        open(submitting, currentDefinition);
+                    });
+                }, ClickCallback.Options.builder().uses(1).build())).build();
+        ActionButton cancel = ActionButton.builder(Component.text("Cancel", NamedTextColor.RED)).build();
+        Dialog dialog = Dialog.create(builder -> builder.empty()
+                .base(DialogBase.builder(Component.text(title)).canCloseWithEscape(true)
+                        .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                        .inputs(List.of(DialogInput.text(CONTEXT_INPUT_KEY, Component.text("AI prompt")).width(400)
+                                .initial(value).maxLength(Math.max(CONTEXT_MAX_LENGTH, value.length()))
+                                .multiline(TextDialogInput.MultilineOptions.create(null, 160)).build()))
+                        .build())
+                .type(DialogType.confirmation(save, cancel)));
+        player.showDialog(dialog);
     }
 
     private ItemStack contextItem(Material material, String name, String value, String description) {
@@ -330,7 +375,7 @@ final class AiGuiService {
                         value.isBlank()
                                 ? LegacyText.DARK_GRAY + "Not configured"
                                 : LegacyText.WHITE + TextUtil.abbreviateSingleLine(value, 48),
-                        LegacyText.YELLOW + "Click to edit; enter 'clear' to remove"));
+                        LegacyText.YELLOW + "Click to edit; empty the field to remove"));
     }
 
     private String capabilityDescription(AiActionType type) {
