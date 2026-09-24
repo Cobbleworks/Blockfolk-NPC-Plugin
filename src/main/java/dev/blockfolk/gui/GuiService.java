@@ -122,6 +122,7 @@ public final class GuiService implements Listener {
     private final NamespacedKey waypointTokenKey;
     private final NamespacedKey reorderIconKey;
     private final AiGuiService aiGuiService;
+    private final NpcCreationDialog creationDialog;
     private NpcBehaviourService behaviourService;
     private AiControlService aiControlService;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
@@ -151,6 +152,7 @@ public final class GuiService implements Listener {
         this.waypointTokenKey = new NamespacedKey(plugin, "behaviour-waypoint-token");
         this.reorderIconKey = new NamespacedKey(plugin, "reorder-definition");
         this.aiGuiService = new AiGuiService(plugin, definitionRepository, chatInputService, this::openEditor);
+        this.creationDialog = new NpcCreationDialog(plugin, definitionRepository, instanceRegistry, this::openEditor);
     }
 
     public void setBehaviourService(NpcBehaviourService behaviourService) {
@@ -284,7 +286,11 @@ public final class GuiService implements Listener {
     }
 
     public void beginCreate(Player player) {
-        beginCreate(player, 0);
+        creationDialog.show(player, "");
+    }
+
+    public void beginCreate(Player player, String name) {
+        creationDialog.show(player, name);
     }
 
     public void openMain(Player player, int requestedPage) {
@@ -1035,7 +1041,7 @@ public final class GuiService implements Listener {
             return;
         }
         if (event.getRawSlot() == 51) {
-            beginCreate(player, page);
+            beginCreate(player);
             return;
         }
         if (event.getRawSlot() == 53) {
@@ -1088,28 +1094,6 @@ public final class GuiService implements Listener {
         }
         ReorderSupport.selectOrMove(event, player, holder, PAGE_SIZE, reorderIconKey, this::reorderIcon,
                 inventory -> renderReorder(inventory, holder));
-    }
-
-    private void beginCreate(Player player, int returnPage) {
-        chatInputService.request(player, "Enter a new NPC name:", value -> {
-            if (value.isBlank()) {
-                player.sendMessage(UiText.error("NPC names cannot be blank."));
-                openMain(player, returnPage);
-                return;
-            }
-            NpcDefinition definition = NpcDefinition.create(value);
-            if (definitionRepository.find(definition.getKey()).isPresent()) {
-                player.sendMessage(UiText.error("An NPC with that key already exists."));
-                openMain(player, returnPage);
-                return;
-            }
-            definition.setSpawnpoint(player.getLocation());
-            definitionRepository.save(definition);
-            if (instanceRegistry.spawnPersistent(definition, definition.getSpawnpoint()) == null) {
-                player.sendMessage(UiText.warning("Preset created, but its NPC could not be rendered."));
-            }
-            openEditor(player, definition);
-        });
     }
 
     private void handleEditorClick(InventoryClickEvent event, Player player, String key) {

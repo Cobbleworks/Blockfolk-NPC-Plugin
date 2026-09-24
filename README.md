@@ -129,8 +129,8 @@ Conversation memory can be private per player or shared by everyone speaking to 
 | Command | Description |
 |---------|-------------|
 | `/bf` or `/blockfolk` | Open the NPC preset browser |
-| `/bf create` | Start preset creation and enter the name in chat |
-| `/bf create <name>` | Create a preset with the supplied name |
+| `/bf create` | Open the NPC creation dialog for name, HP, respawn time, and basic properties |
+| `/bf create <name>` | Open the creation dialog with the name prefilled |
 | `/bf npc <name>` | Open a preset editor; names are tab-completed |
 | `/bf npc <name> edit` | Open the same preset editor explicitly |
 | `/bf npc <name> spawn` | Spawn a persistent instance of a preset |

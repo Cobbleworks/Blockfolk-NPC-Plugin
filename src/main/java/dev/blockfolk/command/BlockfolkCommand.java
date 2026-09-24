@@ -110,17 +110,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         }
         if (args.length >= 2 && args[0].equalsIgnoreCase("create")) {
             String name = String.join(" ", List.of(args).subList(1, args.length));
-            NpcDefinition definition = NpcDefinition.create(name);
-            if (definitionRepository.find(definition.getKey()).isPresent()) {
-                player.sendMessage(UiText.error("An NPC with that key already exists."));
-                return true;
-            }
-            definition.setSpawnpoint(player.getLocation());
-            definitionRepository.save(definition);
-            if (instanceRegistry.spawnPersistent(definition, definition.getSpawnpoint()) == null) {
-                player.sendMessage(UiText.warning("Preset created, but its NPC could not be rendered."));
-            }
-            guiService.openEditor(player, definition);
+            guiService.beginCreate(player, name);
             return true;
         }
         if ((args.length == 2 || args.length == 3 && args[2].equalsIgnoreCase("edit"))
