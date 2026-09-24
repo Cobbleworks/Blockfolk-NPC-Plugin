@@ -19,6 +19,9 @@ public record AiControlSettings(String identity, String behaviour, String likesD
         EnumSet<AiActionType> normalized = EnumSet.copyOf(allowedActions);
         normalized.remove(AiActionType.REMEMBER_FACT);
         normalized.remove(AiActionType.DROP_ITEM);
+        normalizePair(normalized, AiActionType.START_COMBAT, AiActionType.STOP_COMBAT);
+        normalizePair(normalized, AiActionType.FOLLOW, AiActionType.UNFOLLOW);
+        normalizePair(normalized, AiActionType.START_ROUTE, AiActionType.PAUSE_ROUTE);
         normalized.add(AiActionType.SAY);
         normalized.add(AiActionType.DO_NOTHING);
         allowedActions = Set.copyOf(normalized);
@@ -81,8 +84,18 @@ public record AiControlSettings(String identity, String behaviour, String likesD
 
     public AiControlSettings toggle(AiActionType action) {
         EnumSet<AiActionType> updated = EnumSet.copyOf(allowedActions);
-        if (!updated.remove(action))
+        boolean actionEnabled = !updated.contains(action);
+        if (actionEnabled)
             updated.add(action);
+        else
+            updated.remove(action);
+        AiActionType paired = pairedAction(action);
+        if (paired != null) {
+            if (actionEnabled)
+                updated.add(paired);
+            else
+                updated.remove(paired);
+        }
         updated.add(AiActionType.DO_NOTHING);
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, updated, enabled,
                 respondToChat, memoryEnabled, sharedConversation);
@@ -114,6 +127,25 @@ public record AiControlSettings(String identity, String behaviour, String likesD
         if (!target.isEmpty())
             target.append("\n\n");
         target.append(heading).append(":\n").append(value);
+    }
+
+    private static void normalizePair(EnumSet<AiActionType> actions, AiActionType first, AiActionType second) {
+        if (actions.contains(first) || actions.contains(second)) {
+            actions.add(first);
+            actions.add(second);
+        }
+    }
+
+    private static AiActionType pairedAction(AiActionType action) {
+        return switch (action) {
+            case START_COMBAT -> AiActionType.STOP_COMBAT;
+            case STOP_COMBAT -> AiActionType.START_COMBAT;
+            case FOLLOW -> AiActionType.UNFOLLOW;
+            case UNFOLLOW -> AiActionType.FOLLOW;
+            case START_ROUTE -> AiActionType.PAUSE_ROUTE;
+            case PAUSE_ROUTE -> AiActionType.START_ROUTE;
+            default -> null;
+        };
     }
 
     private static String normalize(String value) {

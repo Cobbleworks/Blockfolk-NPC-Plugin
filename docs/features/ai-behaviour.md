@@ -54,7 +54,7 @@ Group requests use aliases such as `npc_1` and `npc_2` only as safe routing keys
 
 ## Restrict capabilities
 
-Every capability is toggled per preset. Available controls include speech, animations, starting/stopping combat, fleeing, following, interacting, moving, mining, returning home, and starting or pausing a route. **Do Nothing** is always available.
+Every capability is toggled per preset. **Start/Stop Combat**, **Follow/Unfollow**, and **Start/Pause Route** each use one switch that enables both actions. Other controls include speech, animations, fleeing, interacting, moving, mining, and returning home. **Do Nothing** is always available.
 
 The model cannot issue commands, executable code, arbitrary coordinates, or unlisted entity identifiers. A response using a disabled or malformed action is rejected.
 

@@ -3,6 +3,8 @@ package dev.blockfolk.ai;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.EnumSet;
+
 import org.junit.jupiter.api.Test;
 
 class AiControlSettingsTest {
@@ -19,6 +21,31 @@ class AiControlSettingsTest {
     void doNothingCannotBeDisabled() {
         AiControlSettings settings = AiControlSettings.defaults().toggle(AiActionType.DO_NOTHING);
         assertTrue(settings.allowedActions().contains(AiActionType.DO_NOTHING));
+    }
+
+    @Test
+    void pairedCapabilitiesToggleTogether() {
+        AiControlSettings settings = AiControlSettings.defaults();
+        AiActionType[][] pairs = {{AiActionType.START_COMBAT, AiActionType.STOP_COMBAT},
+                {AiActionType.FOLLOW, AiActionType.UNFOLLOW}, {AiActionType.START_ROUTE, AiActionType.PAUSE_ROUTE}};
+        for (AiActionType[] pair : pairs) {
+            settings = settings.toggle(pair[0]);
+            assertTrue(settings.allowedActions().contains(pair[0]));
+            assertTrue(settings.allowedActions().contains(pair[1]));
+            settings = settings.toggle(pair[0]);
+            assertFalse(settings.allowedActions().contains(pair[0]));
+            assertFalse(settings.allowedActions().contains(pair[1]));
+        }
+    }
+
+    @Test
+    void olderSingleActionSettingsEnableBothSidesOfPair() {
+        AiControlSettings settings = new AiControlSettings("", "", "", "", "",
+                EnumSet.of(AiActionType.STOP_COMBAT, AiActionType.FOLLOW, AiActionType.PAUSE_ROUTE), false, true, false,
+                false);
+
+        assertTrue(settings.allowedActions().containsAll(EnumSet.of(AiActionType.START_COMBAT, AiActionType.STOP_COMBAT,
+                AiActionType.FOLLOW, AiActionType.UNFOLLOW, AiActionType.START_ROUTE, AiActionType.PAUSE_ROUTE)));
     }
 
     @Test
