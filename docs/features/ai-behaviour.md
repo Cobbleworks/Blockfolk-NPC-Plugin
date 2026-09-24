@@ -42,7 +42,9 @@ At least one section is required before AI behaviour can be activated.
 
 ## Choose triggers
 
-Add **AI Trigger** to any standard event, custom event, waypoint, or question branch. The surrounding event becomes the reason included in the request.
+Add **AI Trigger** to any standard event, custom event, waypoint, or question branch. A dialog asks for an optional prompt
+to guide the AI for that specific trigger. Leave it empty to use the surrounding event as the request reason without
+extra guidance.
 
 Enable **Respond to Nearby Chat** for direct player conversation within eight blocks. One chat message creates a coordinated request for all eligible NPCs in range; the closest NPC is the default speaker.
 

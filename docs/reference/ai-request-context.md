@@ -4,7 +4,7 @@ This page describes the bounded gameplay state Blockfolk sends to OpenRouter. Re
 
 ## When a request is sent
 
-An NPC preset must be active, have at least one context section, and have a trigger. **AI Trigger** can be placed in standard, custom-event, waypoint, and question-branch routines. **Respond to Nearby Chat** creates requests directly for player chat within eight blocks.
+An NPC preset must be active, have at least one context section, and have a trigger. **AI Trigger** can be placed in standard, custom-event, waypoint, and question-branch routines. Each trigger can include optional prompt guidance, sent alongside the event in single-NPC requests. **Respond to Nearby Chat** creates requests directly for player chat within eight blocks.
 
 One chat message creates one coordinated request for up to five eligible NPCs, ordered by distance. Busy NPCs do not delay those that are available; they can participate in a later message.
 

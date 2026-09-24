@@ -67,10 +67,20 @@ import dev.blockfolk.util.ResolvedSkin;
 import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
+import dev.blockfolk.util.TextUtil;
 import dev.blockfolk.util.UiText;
 import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.AiControlSettings;
+import io.papermc.paper.dialog.Dialog;
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.DialogBase;
+import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.body.DialogBody;
+import io.papermc.paper.registry.data.dialog.input.DialogInput;
+import io.papermc.paper.registry.data.dialog.input.TextDialogInput;
+import io.papermc.paper.registry.data.dialog.type.DialogType;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -103,6 +113,8 @@ public final class GuiService implements Listener {
             Map.entry(28, BehaviourActionType.START_COMBAT), Map.entry(29, BehaviourActionType.CHANGE_FIGHT_OPTIONS));
     private static final int ACTION_PICKER_ANIMATIONS_SLOT = 32;
     private static final int ACTION_PICKER_BACK_SLOT = 49;
+    private static final String AI_TRIGGER_PROMPT_INPUT = "ai_trigger_prompt";
+    private static final int AI_TRIGGER_PROMPT_MAX_LENGTH = 2048;
     private static final Set<Integer> INVENTORY_EDIT_SLOTS = Set.of(1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16,
             17, 19, 20, 21, 22, 23, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34, 35, 45, 46, 47, 48, 50, 51);
 
@@ -1629,6 +1641,12 @@ public final class GuiService implements Listener {
                 holder.actionIndex());
         if (type == BehaviourActionType.ASK_QUESTION) {
             requestRouteQuestion(player, action);
+        } else if (type == BehaviourActionType.AI_TRIGGER) {
+            requestAiTriggerPrompt(player, current.actions(), action.actionIndex(), prompt -> {
+                RoutePoint updated = setRoutePointAction(action, type, prompt);
+                if (updated != null)
+                    openWaypointActions(player, action.routeKey(), updated);
+            });
         } else if (type == BehaviourActionType.SET_ROUTE) {
             openRoutePointValuePicker(player, action, BehaviourValuePickerType.ROUTE, 0);
         } else if (type == BehaviourActionType.SET_WALK_SPEED) {
@@ -1832,6 +1850,17 @@ public final class GuiService implements Listener {
         }
         if (type == BehaviourActionType.ASK_QUESTION) {
             requestQuestion(player, definition, holder);
+        } else if (type == BehaviourActionType.AI_TRIGGER) {
+            List<BehaviourAction> actions = holder.customEvent() == null
+                    ? definition.getBehaviourActions(holder.event())
+                    : definition.getCustomEventActions(holder.customEvent());
+            requestAiTriggerPrompt(player, actions, holder.actionIndex(), prompt -> {
+                NpcDefinition current = definitionRepository.find(holder.key()).orElse(null);
+                if (current == null)
+                    return;
+                setAction(current, holder, type, prompt);
+                openBehaviourHome(player, current, holder);
+            });
         } else if (type == BehaviourActionType.SET_ROUTE) {
             openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.ROUTE, 0);
         } else if (type == BehaviourActionType.SET_WALK_SPEED) {
@@ -1895,6 +1924,37 @@ public final class GuiService implements Listener {
             if (updated != null)
                 openQuestionEditor(player, QuestionTarget.route(holder.routeKey(), updated, holder.actionIndex()));
         });
+    }
+
+    private void requestAiTriggerPrompt(Player player, List<BehaviourAction> actions, int index,
+            Consumer<String> onSave) {
+        String initial = index < actions.size() && actions.get(index).type() == BehaviourActionType.AI_TRIGGER
+                && actions.get(index).value() != null ? actions.get(index).value() : "";
+        ActionButton save = ActionButton.builder(Component.text("Save", NamedTextColor.GREEN))
+                .action(DialogAction.customClick((view, audience) -> {
+                    if (!(audience instanceof Player submitting)
+                            || !submitting.getUniqueId().equals(player.getUniqueId()))
+                        return;
+                    String prompt = view.getText(AI_TRIGGER_PROMPT_INPUT);
+                    if (prompt == null || prompt.length() > Math.max(AI_TRIGGER_PROMPT_MAX_LENGTH, initial.length()))
+                        return;
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (submitting.isOnline() && submitting.hasPermission("blockfolk.admin"))
+                            onSave.accept(prompt);
+                    });
+                }, ClickCallback.Options.builder().uses(1).build())).build();
+        ActionButton cancel = ActionButton.builder(Component.text("Cancel", NamedTextColor.RED)).build();
+        Dialog dialog = Dialog.create(builder -> builder.empty()
+                .base(DialogBase.builder(Component.text("AI Trigger Prompt")).canCloseWithEscape(true)
+                        .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                        .body(List.of(DialogBody.plainMessage(Component
+                                .text("Optional guidance for this AI trigger. Leave empty to use the event context."))))
+                        .inputs(List.of(DialogInput.text(AI_TRIGGER_PROMPT_INPUT, Component.text("Prompt")).width(400)
+                                .initial(initial).maxLength(Math.max(AI_TRIGGER_PROMPT_MAX_LENGTH, initial.length()))
+                                .multiline(TextDialogInput.MultilineOptions.create(null, 160)).build()))
+                        .build())
+                .type(DialogType.confirmation(save, cancel)));
+        player.showDialog(dialog);
     }
 
     private void requestFightOptionsAction(Player player, NpcDefinition definition, ActionPickerHolder holder) {
@@ -2574,6 +2634,17 @@ public final class GuiService implements Listener {
             openQuestionBranchRoutePicker(player, holder, "", 0);
             return;
         }
+        if (type == BehaviourActionType.AI_TRIGGER) {
+            BehaviourAction question = questionAction(holder.target());
+            if (question == null)
+                return;
+            List<BehaviourAction> actions = questionBranch(question.question(), holder.optionIndex());
+            requestAiTriggerPrompt(player, actions, holder.actionIndex(), prompt -> {
+                setQuestionBranchAction(holder, new BehaviourAction(type, prompt));
+                openAfterQuestionBranchPicker(player, holder);
+            });
+            return;
+        }
         if (!type.requiresValue()) {
             setQuestionBranchAction(holder, new BehaviourAction(type, null));
             openAfterQuestionBranchPicker(player, holder);
@@ -3248,6 +3319,9 @@ public final class GuiService implements Listener {
         if (action.type() == BehaviourActionType.ASK_QUESTION) {
             return action.question().prompt() + " (" + action.question().configuredOptions().size() + " answers)";
         }
+        if (action.type() == BehaviourActionType.AI_TRIGGER) {
+            return action.value() == null ? "No prompt" : TextUtil.abbreviateSingleLine(action.value(), 80);
+        }
         if (!action.type().requiresValue() || action.value() == null) {
             return "No setting required";
         }
@@ -3272,7 +3346,8 @@ public final class GuiService implements Listener {
         }
         for (int index = 0; index < actions.size(); index++) {
             BehaviourAction action = actions.get(index);
-            boolean showValue = action.type() == BehaviourActionType.ASK_QUESTION || action.type().requiresValue();
+            boolean showValue = action.type() == BehaviourActionType.ASK_QUESTION
+                    || action.type() == BehaviourActionType.AI_TRIGGER || action.type().requiresValue();
             String summary = LegacyText.GRAY + Integer.toString(index + 1) + ". " + LegacyText.WHITE
                     + action.type().displayName()
                     + (showValue ? LegacyText.GRAY + ": " + LegacyText.WHITE + actionValueDisplay(action) : "");

@@ -172,8 +172,8 @@ public final class AiControlService {
                 : routeState;
     }
 
-    public void invoke(BehaviourEvent event, String eventDetail, NpcInstance instance, NpcDefinition definition,
-            Entity actor, Consumer<AiDecisionResult> resultHandler) {
+    public void invoke(BehaviourEvent event, String eventDetail, String guidance, NpcInstance instance,
+            NpcDefinition definition, Entity actor, Consumer<AiDecisionResult> resultHandler) {
         AiControlSettings settings = definition.getAiControlSettings();
         if (!settings.enabled() || !settings.hasContext()) {
             return;
@@ -190,7 +190,7 @@ public final class AiControlService {
         long previous = lastInvocation.getOrDefault(instance.getId(), 0L);
         if (now - previous < cooldownMillis || !inFlight.add(instance.getId())) {
             pending.put(instance.getId(),
-                    new PendingInvocation(event, eventDetail, instance, definition, actor, resultHandler));
+                    new PendingInvocation(event, eventDetail, guidance, instance, definition, actor, resultHandler));
             schedulePending(instance.getId(), Math.max(1L, cooldownMillis - (now - previous)));
             return;
         }
@@ -199,7 +199,7 @@ public final class AiControlService {
         long generation = generations.getOrDefault(instance.getId(), 0L);
         RequestContext context;
         try {
-            context = buildContext(event, detail, instance, definition, actor, settings, true);
+            context = buildContext(event, detail, guidance, instance, definition, actor, settings, true);
         } catch (RuntimeException error) {
             inFlight.remove(instance.getId());
             plugin.getLogger().log(Level.WARNING, "Could not build AI Behaviour context for " + definition.getKey(),
@@ -345,7 +345,7 @@ public final class AiControlService {
                         generations.getOrDefault(participant.instance().getId(), 0L));
                 system.append("\n\n").append(alias).append(" (NPC ").append(participant.definition().getDisplayName())
                         .append("):\n").append(participant.settings().systemContext());
-                RequestContext participantContext = buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail,
+                RequestContext participantContext = buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail, null,
                         participant.instance(), participant.definition(), player, participant.settings(), false);
                 memory.rememberEvent(participant.instance().getId(), eventDetail);
                 targetsByInstance.put(participant.instance().getId(), participantContext.targets());
@@ -591,8 +591,8 @@ public final class AiControlService {
             if (invocation == null || instances.findById(instanceId).isEmpty()) {
                 return;
             }
-            invoke(invocation.event(), invocation.eventDetail(), invocation.instance(), invocation.definition(),
-                    invocation.actor(), invocation.resultHandler());
+            invoke(invocation.event(), invocation.eventDetail(), invocation.guidance(), invocation.instance(),
+                    invocation.definition(), invocation.actor(), invocation.resultHandler());
         }, ticks);
     }
 
@@ -621,7 +621,7 @@ public final class AiControlService {
         }, ticks);
     }
 
-    private RequestContext buildContext(BehaviourEvent event, String detail, NpcInstance instance,
+    private RequestContext buildContext(BehaviourEvent event, String detail, String guidance, NpcInstance instance,
             NpcDefinition definition, Entity actor, AiControlSettings settings, boolean includeEvent) {
         AiTargetSnapshot.Builder targets = AiTargetSnapshot.builder();
         if (actor != null) {
@@ -640,6 +640,9 @@ public final class AiControlService {
         StringBuilder out = new StringBuilder(1200);
         if (includeEvent) {
             out.append("Event:\n").append(detail).append("\n\n");
+            if (guidance != null && !guidance.isBlank()) {
+                out.append("Trigger guidance:\n").append(guidance.trim()).append("\n\n");
+            }
         }
         out.append("NPC state:\n").append("Name: ").append(definition.getDisplayName()).append('\n').append("World: ")
                 .append(world == null ? "unknown" : world.getName()).append('\n');
@@ -1109,7 +1112,7 @@ public final class AiControlService {
 
     }
 
-    private record PendingInvocation(BehaviourEvent event, String eventDetail, NpcInstance instance,
+    private record PendingInvocation(BehaviourEvent event, String eventDetail, String guidance, NpcInstance instance,
             NpcDefinition definition, Entity actor, Consumer<AiDecisionResult> resultHandler) {
 
     }

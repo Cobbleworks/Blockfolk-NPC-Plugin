@@ -658,7 +658,7 @@ public final class NpcBehaviourService implements Listener {
             // WAIT is handled by executeSequence: it only delays the next action.
             case WAIT -> {
             }
-            case AI_TRIGGER -> invokeAi(event, eventDetail, instance, definition, actor);
+            case AI_TRIGGER -> invokeAi(event, eventDetail, action.value(), instance, definition, actor);
             case INTERACT -> interactWithNearbySwitches(instance);
             case MINE_BLOCKS -> mineNearbyBlocks(instance, definition);
             case TAKE_ITEM -> takeNearbyItem(instance, actor);
@@ -745,10 +745,10 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private void invokeAi(BehaviourEvent event, String eventDetail, NpcInstance instance, NpcDefinition definition,
-            Entity actor) {
+    private void invokeAi(BehaviourEvent event, String eventDetail, String guidance, NpcInstance instance,
+            NpcDefinition definition, Entity actor) {
         if (aiControlService != null)
-            aiControlService.invoke(event, eventDetail, instance, definition, actor,
+            aiControlService.invoke(event, eventDetail, guidance, instance, definition, actor,
                     result -> applyAiDecision(event, result, instance, definition, actor, true));
     }
 
