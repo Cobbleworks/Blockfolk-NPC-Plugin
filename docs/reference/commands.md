@@ -6,6 +6,10 @@ All Blockfolk commands require `blockfolk.admin`, granted to server operators by
 | --- | --- |
 | `/bf` | Open the NPC preset browser. |
 | `/blockfolk` | Long alias for `/bf`. |
+| `/bf config` | Show the active OpenRouter model, timeout, and token limit. Also works from the console. |
+| `/bf config --model <id>` | Save a new model identifier and use it for subsequent AI requests. Also works from the console. |
+| `/bf config --timeout-seconds <seconds>` | Save a request timeout of at least 2 seconds and apply it to subsequent requests. |
+| `/bf config --max-tokens <count>` | Save an output limit of at least 350 tokens and apply it to subsequent requests. |
 | `/bf create` | Begin creating a preset and enter its name in chat. |
 | `/bf create <name>` | Create a preset with the supplied display name. |
 | `/bf npc <name>` | Open a preset editor; names are tab-completed. |
@@ -22,7 +26,7 @@ All Blockfolk commands require `blockfolk.admin`, granted to server operators by
 ```yaml
 permissions:
   blockfolk.admin:
-    description: Allows creating, editing, and spawning Blockfolk NPCs.
+    description: Allows managing Blockfolk NPCs and plugin settings.
     default: op
 ```
 

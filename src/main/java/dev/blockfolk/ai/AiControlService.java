@@ -125,7 +125,7 @@ public final class AiControlService {
     private final NpcInstanceRegistry instances;
     private final NpcCombatService combat;
     private final LocationRepository locations;
-    private final OpenRouterClient client;
+    private volatile OpenRouterClient client;
     private final AiMemoryStore memory;
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Long> lastInvocation = new ConcurrentHashMap<>();
@@ -253,6 +253,11 @@ public final class AiControlService {
 
     public boolean configured() {
         return client.configured();
+    }
+
+    public void setClient(OpenRouterClient client) {
+        this.client = java.util.Objects.requireNonNull(client);
+        warnedNotConfigured = false;
     }
 
     /**

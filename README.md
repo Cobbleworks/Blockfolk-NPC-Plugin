@@ -87,6 +87,8 @@ BeautyQuests and OpenRouter are optional. Blockfolk's deterministic NPC system w
 
 [OpenRouter](https://openrouter.ai/) is optional and is contacted only for presets with AI behavior enabled. Configure `openrouter.api-key` and `openrouter.model` in `config.yml`. Requests run asynchronously, and returned actions are checked against the capabilities enabled for the preset; model output cannot execute arbitrary commands or code.
 
+Run `/bf config --model <id>` to switch the model without restarting. `/bf config` shows the active model, request timeout, and token limit.
+
 API usage may incur charges under the selected provider's terms. Keep the API key private and never commit a populated server configuration.
 
 ## **Configuration**
@@ -129,6 +131,10 @@ Conversation memory can be private per player or shared by everyone speaking to 
 | Command | Description |
 |---------|-------------|
 | `/bf` or `/blockfolk` | Open the NPC preset browser |
+| `/bf config` | Show active OpenRouter request settings |
+| `/bf config --model <id>` | Save and immediately use a new OpenRouter model |
+| `/bf config --timeout-seconds <seconds>` | Set the request timeout for new AI requests |
+| `/bf config --max-tokens <count>` | Set the output limit for new AI requests |
 | `/bf create` | Open the NPC creation dialog for name, HP, respawn time, and basic properties |
 | `/bf create <name>` | Open the creation dialog with the name prefilled |
 | `/bf npc <name>` | Open a preset editor; names are tab-completed |

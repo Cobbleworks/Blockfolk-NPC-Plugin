@@ -4,7 +4,7 @@ AI behaviour is an optional OpenRouter-powered layer. The model receives bounded
 
 ## Configure OpenRouter
 
-Set at least the API key and model in `plugins/Blockfolk/config.yml`, then restart the server:
+Set at least the API key in `plugins/Blockfolk/config.yml`, then restart the server:
 
 ```yaml
 openrouter:
@@ -16,6 +16,8 @@ openrouter:
 ```
 
 Keep the endpoint on HTTPS. The AI menu reports whether OpenRouter is ready.
+
+Use `/bf config --model <id>` to switch models while the server is running. `/bf config` shows the active model, timeout, and token limit; `--timeout-seconds` and `--max-tokens` can also be changed without a restart. These commands save their values to `config.yml` and affect subsequent requests.
 
 Conversation history is controlled separately under `ai-control`:
 

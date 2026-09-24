@@ -7,5 +7,5 @@ website: https://github.com/Cobbleworks/Blockfolk-NPC-Plugin
 softdepend: [BeautyQuests]
 permissions:
   blockfolk.admin:
-    description: Allows creating, editing, and spawning Blockfolk NPCs.
+    description: Allows managing Blockfolk NPCs and plugin settings.
     default: op

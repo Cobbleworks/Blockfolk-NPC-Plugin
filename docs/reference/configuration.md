@@ -1,6 +1,6 @@
 # config.yml
 
-Global settings are created at `plugins/Blockfolk/config.yml`. Restart the server after changing provider settings.
+Global settings are created at `plugins/Blockfolk/config.yml`. Use `/bf config` to view the active OpenRouter request settings. Changes made with `/bf config --model <id>`, `/bf config --timeout-seconds <seconds>`, or `/bf config --max-tokens <count>` are saved to this file and apply to subsequent AI requests without a restart. Requests already in progress keep the settings they started with. Restart the server after editing `config.yml` directly or changing the endpoint or API key.
 
 ## General settings
 

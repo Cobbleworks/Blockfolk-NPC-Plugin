@@ -240,8 +240,9 @@ final class AiGuiService {
             definition.setAiControlSettings(settings.withEnabled(!settings.enabled()));
             definitions.save(definition);
             if (!settings.enabled() && aiControl != null && !aiControl.configured()) {
-                player.sendMessage(Component.text("AI behaviour is active, but OpenRouter "
-                        + aiControl.configurationIssue() + ". Check config.yml and restart the server."));
+                player.sendMessage(
+                        Component.text("AI behaviour is active, but OpenRouter " + aiControl.configurationIssue()
+                                + ". Check config.yml, or set the model with /bf config --model <id>."));
             }
             open(player, definition);
             return;

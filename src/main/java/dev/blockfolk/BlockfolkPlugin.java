@@ -93,11 +93,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 questionService, getConfig().getInt("proximity-transition-cooldown-seconds", 3));
         behaviourService.setCombatService(combatService);
         routeGuiService.setBehaviourService(behaviourService);
-        OpenRouterClient openRouterClient = new OpenRouterClient(
-                getConfig().getString("openrouter.endpoint", "https://openrouter.ai/api/v1/chat/completions"),
-                getConfig().getString("openrouter.api-key", ""), getConfig().getString("openrouter.model", ""),
-                getConfig().getInt("openrouter.timeout-seconds", 12),
-                getConfig().getInt("openrouter.max-tokens", 1600));
+        OpenRouterClient openRouterClient = createOpenRouterClient();
         aiControlService = new AiControlService(this, definitionRepository, instanceRegistry, combatService,
                 locationRepository, openRouterClient, getConfig().getInt("ai-control.invocation-cooldown-seconds", 2),
                 getConfig().getInt("ai-control.conversation-history-limit", AiMemoryStore.DEFAULT_MAX_MESSAGES));
@@ -137,7 +133,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
             }
         }
 
-        BlockfolkCommand executor = new BlockfolkCommand(definitionRepository, instanceRegistry, guiService,
+        BlockfolkCommand executor = new BlockfolkCommand(this, definitionRepository, instanceRegistry, guiService,
                 routeGuiService, customEventGuiService, customEventRepository, behaviourService);
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> event.registrar()
                 .register("blockfolk", "Opens and controls Blockfolk.", java.util.List.of("bf"), executor));
@@ -213,6 +209,18 @@ public final class BlockfolkPlugin extends JavaPlugin {
 
     private void openMainGui(Player player) {
         guiService.openMain(player);
+    }
+
+    public void refreshOpenRouterClient() {
+        aiControlService.setClient(createOpenRouterClient());
+    }
+
+    private OpenRouterClient createOpenRouterClient() {
+        return new OpenRouterClient(
+                getConfig().getString("openrouter.endpoint", "https://openrouter.ai/api/v1/chat/completions"),
+                getConfig().getString("openrouter.api-key", ""), getConfig().getString("openrouter.model", ""),
+                getConfig().getInt("openrouter.timeout-seconds", 12),
+                getConfig().getInt("openrouter.max-tokens", 1600));
     }
 
     private void resolveStoredExternalSkins() {
