@@ -49,4 +49,4 @@ See [Custom events](/features/custom-events) for creation, manual triggering, or
 
 ## Waypoint actions
 
-Route points may have their own action row. Shift-right-click a point while using the route editor to configure actions that run when that waypoint is reached.
+Route points may have their own action row. Right-click a point while using the route editor to configure actions that run when that waypoint is reached.

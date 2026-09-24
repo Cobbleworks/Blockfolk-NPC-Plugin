@@ -78,6 +78,21 @@ public final class LocationRepository {
         return location;
     }
 
+    public NamedLocation replace(NamedLocation previous, NamedLocation replacement) {
+        int index = locationOrder.indexOf(previous.key());
+        if (index < 0 || !previous.equals(locations.get(previous.key()))) {
+            throw new IllegalArgumentException("That location has changed. Select it again to replace it.");
+        }
+        if (!previous.key().equals(replacement.key()) && locations.containsKey(replacement.key())) {
+            throw new IllegalArgumentException("A location with that key already exists.");
+        }
+        locations.remove(previous.key());
+        locations.put(replacement.key(), replacement);
+        locationOrder.set(index, replacement.key());
+        saveAll();
+        return replacement;
+    }
+
     public void reorder(List<String> orderedKeys) {
         List<String> normalized = orderedKeys.stream().map(NamedLocation::normalizeKey).toList();
         if (normalized.size() != locations.size() || new HashSet<>(normalized).size() != normalized.size()

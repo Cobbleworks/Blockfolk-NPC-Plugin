@@ -456,7 +456,7 @@ public final class RouteGuiService implements Listener {
                 player.sendMessage(UiText.error("A route cannot contain blocks from different worlds."));
                 return;
             }
-        } else if (!player.isSneaking()) {
+        } else if (player.isSneaking()) {
             changed = route.removePoint(point);
             player.sendMessage(UiText.info(changed ? "Removed route point." : "That block is not a route point."));
         } else {
@@ -507,35 +507,51 @@ public final class RouteGuiService implements Listener {
             player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_PLACE, 0.7f, 0.7f);
             return;
         }
-        if (existing != null) {
+        if (existing != null && !player.isSneaking()) {
             player.sendMessage(UiText.info("Global location: '" + existing.displayName() + "'."));
             return;
         }
-        player.spawnParticle(Particle.DUST, position.toLocation(), 10, 0.22, 0.08, 0.22, 0.0,
-                new Particle.DustOptions(Color.fromRGB(70, 255, 120), 1.5f));
-        player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_PLACE, 0.7f, 1.2f);
-        chatInputService.request(player, "Enter a name for this global location:", value -> {
-            if (!session.equals(locationEditSessions.get(player.getUniqueId()))) {
-                return;
-            }
-            try {
-                String name = session.folder().isEmpty() || value.contains("/")
-                        ? value
-                        : locationFolderDisplayPath(session.folder()) + "/" + value;
-                NamedLocation named = NamedLocation.create(name, position);
-                if (locationRepository.find(named.key()).isPresent()) {
-                    player.sendMessage(UiText.error("A location with that key already exists."));
-                    return;
-                }
-                locationRepository.save(named);
-                player.sendMessage(UiText.success("Saved global location '" + named.displayName() + "'."));
-                player.sendMessage(
-                        UiText.prompt("Left-click another block to add a location, or drop the shard to finish."));
-                showLocations(player);
-            } catch (IllegalArgumentException exception) {
-                player.sendMessage(UiText.error(exception.getMessage()));
-            }
-        });
+        chatInputService.request(player,
+                existing == null
+                        ? "Enter a name for this global location:"
+                        : "Enter a new name to replace '" + existing.displayName() + "':",
+                value -> {
+                    if (!session.equals(locationEditSessions.get(player.getUniqueId()))) {
+                        return;
+                    }
+                    try {
+                        String name = session.folder().isEmpty() || value.contains("/")
+                                ? value
+                                : locationFolderDisplayPath(session.folder()) + "/" + value;
+                        NamedLocation named = NamedLocation.create(name, position);
+                        if (existing == null) {
+                            if (locationRepository.find(named.key()).isPresent()) {
+                                player.sendMessage(UiText.error("A location with that key already exists."));
+                                return;
+                            }
+                            if (locationRepository.findAll().stream()
+                                    .anyMatch(location -> location.location().equals(position))) {
+                                player.sendMessage(UiText.error("That block already has a global location."));
+                                return;
+                            }
+                            locationRepository.save(named);
+                            player.sendMessage(UiText.success("Saved global location '" + named.displayName() + "'."));
+                        } else {
+                            locationRepository.replace(existing,
+                                    new NamedLocation(named.key(), named.displayName(), position, existing.icon()));
+                            player.sendMessage(UiText.success("Replaced global location '" + existing.displayName()
+                                    + "' with '" + named.displayName() + "'."));
+                        }
+                        player.spawnParticle(Particle.DUST, position.toLocation(), 10, 0.22, 0.08, 0.22, 0.0,
+                                new Particle.DustOptions(Color.fromRGB(70, 255, 120), 1.5f));
+                        player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_PLACE, 0.7f, 1.2f);
+                        player.sendMessage(UiText.prompt(
+                                "Left-click to add, shift-left-click to replace, or drop the shard to finish."));
+                        showLocations(player);
+                    } catch (IllegalArgumentException exception) {
+                        player.sendMessage(UiText.error(exception.getMessage()));
+                    }
+                });
     }
 
     @EventHandler
@@ -710,7 +726,7 @@ public final class RouteGuiService implements Listener {
         player.closeInventory();
         player.sendMessage(UiText.info("Placing a new global location."));
         player.sendMessage(UiText.prompt(
-                "Left-click a block to add a named location, right-click to delete one, and drop the shard to finish."));
+                "Left-click to add a location, shift-left-click one to replace it, right-click to delete one, and drop the shard to finish."));
         showLocations(player);
     }
 
@@ -721,6 +737,7 @@ public final class RouteGuiService implements Listener {
         meta.lore(LegacyText
                 .components(List.of(LegacyText.GRAY + "Unique editor: " + session.token().toString().substring(0, 8),
                         LegacyText.YELLOW + "Left-click a block: set position",
+                        LegacyText.YELLOW + "Shift-left-click a location: replace it",
                         LegacyText.RED + "Right-click a location: delete it",
                         LegacyText.GREEN + "Global locations are highlighted in green",
                         LegacyText.GRAY + "Drop: finish editing")));
@@ -930,7 +947,7 @@ public final class RouteGuiService implements Listener {
         player.closeInventory();
         player.sendMessage(UiText.info("Editing route '" + route.getDisplayName() + "'."));
         player.sendMessage(UiText.prompt(
-                "Left-click blocks to add, right-click to remove, shift-right-click to edit waypoint actions, and drop the shard to save and finish."));
+                "Left-click blocks to add, right-click to edit waypoint actions, shift-right-click to remove, and drop the shard to save and finish."));
         showRoutePoints(player, route);
     }
 
@@ -939,8 +956,9 @@ public final class RouteGuiService implements Listener {
         ItemMeta meta = wand.getItemMeta();
         meta.displayName(LegacyText.component(LegacyText.LIGHT_PURPLE + "Route Editor: " + route.getDisplayName()));
         meta.lore(LegacyText.components(List.of(LegacyText.GRAY + "Unique editor: " + token.toString().substring(0, 8),
-                LegacyText.YELLOW + "Left-click a block: add point", LegacyText.YELLOW + "Right-click: remove point",
-                LegacyText.GOLD + "Shift-right-click: edit point actions",
+                LegacyText.YELLOW + "Left-click a block: add point",
+                LegacyText.GOLD + "Right-click: edit point actions",
+                LegacyText.YELLOW + "Shift-right-click: remove point",
                 LegacyText.LIGHT_PURPLE + "Points and walking order stay highlighted",
                 LegacyText.GREEN + "Drop: save and finish")));
         meta.setEnchantmentGlintOverride(true);

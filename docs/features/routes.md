@@ -6,7 +6,7 @@ Routes are reusable walking loops built directly in the world. Open the route ma
 
 1. Choose **Create Route** and enter a unique name in chat. Route keys may contain `/`, but the browser groups assigned routes by NPC rather than by name segments.
 2. Open the new route. Blockfolk gives you a unique amethyst-shard route editor.
-3. Left-click blocks to add points and right-click points to remove them.
+3. Left-click blocks to add points and shift-right-click points to remove them.
 4. Drop the editor shard to save and finish.
 
 All points in one route must be in the same world. Points remain highlighted while editing.
@@ -17,7 +17,7 @@ Point order is derived from position rather than placement order. An NPC starts 
 
 ## Waypoint actions
 
-Shift-right-click a route point with the editor shard to attach an action sequence. These actions run when an NPC reaches that point and can pause, speak, interact, change movement, or invoke AI.
+Right-click a route point with the editor shard to attach an action sequence. These actions run when an NPC reaches that point and can pause, speak, interact, change movement, or invoke AI.
 
 <div class="screenshot-grid">
   <img src="../screenshots/screenshot-route-editing.jpeg" alt="Editing a highlighted Blockfolk route in the world">
