@@ -43,7 +43,7 @@ An administrator with `blockfolk.admin` can hold Shift and right-click a spawned
 
 ## Edit and delete
 
-Click the preset icon in its editor to open NPC properties. Shift-right-click the same icon to begin deletion. Preset changes are persisted automatically; equipment has an explicit **Save Equipment** control.
+Click the preset icon in its editor to open NPC properties. Shift-right-click the same icon to begin deletion. Preset changes are persisted automatically; equipment and loot have an explicit **Save Equipment & Loot** control.
 
 ::: warning Integration references
 An integration such as BeautyQuests targets a spawned instance, not merely the preset. Removing that instance breaks the external reference even if another copy of the same preset exists.

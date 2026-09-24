@@ -1,11 +1,13 @@
 package dev.blockfolk.model;
 
 import org.junit.jupiter.api.Test;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -107,6 +109,7 @@ class NpcDefinitionTest {
     @Test
     void copyPreservesEveryVisibleProperty() {
         NpcDefinition source = NpcDefinition.create("Guard");
+        source.setInitialTemporaryInventoryContents(new ItemStack[27]);
         source.setShowName(false);
         source.setLookAtPlayer(false);
         source.setItemPickup(true);
@@ -124,5 +127,18 @@ class NpcDefinitionTest {
         assertEquals(NpcColor.BLUE, copy.getColor());
         assertEquals(source.getBehaviourActions(BehaviourEvent.RIGHT_CLICK),
                 copy.getBehaviourActions(BehaviourEvent.RIGHT_CLICK));
+        assertEquals(27, copy.getInitialTemporaryInventoryContents().length);
+    }
+
+    @Test
+    void temporaryInventoryTemplateKeepsTwentySevenIndependentSlots() {
+        NpcDefinition definition = NpcDefinition.create("Guard");
+        ItemStack[] template = new ItemStack[3];
+        definition.setInitialTemporaryInventoryContents(template);
+
+        ItemStack[] contents = definition.getInitialTemporaryInventoryContents();
+        assertEquals(27, contents.length);
+        assertNotSame(template, contents);
+        assertNotSame(contents, definition.getInitialTemporaryInventoryContents());
     }
 }

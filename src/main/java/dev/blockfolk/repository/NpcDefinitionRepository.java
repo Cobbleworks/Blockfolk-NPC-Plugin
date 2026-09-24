@@ -100,6 +100,8 @@ public final class NpcDefinitionRepository {
             LocationCodec.write(configuration.createSection("spawnpoint"), definition.getStoredSpawnpoint());
         }
         configuration.set("inventory.contents", Arrays.asList(definition.getInventoryContents()));
+        configuration.set("inventory.initial-temporary-contents",
+                Arrays.asList(definition.getInitialTemporaryInventoryContents()));
         configuration.set("inventory.armor", Arrays.asList(definition.getArmorContents()));
         configuration.set("inventory.main-hand", definition.getMainHand());
         configuration.set("inventory.off-hand", definition.getOffHand());
@@ -209,6 +211,8 @@ public final class NpcDefinitionRepository {
                 configuration.getString("skin-texture-signature"));
         definition.setStoredSpawnpoint(LocationCodec.readStored(configuration.getConfigurationSection("spawnpoint")));
         definition.setInventoryContents(readItemArray(configuration, "inventory.contents", 36));
+        definition.setInitialTemporaryInventoryContents(
+                readItemArray(configuration, "inventory.initial-temporary-contents", 27));
         definition.setArmorContents(readItemArray(configuration, "inventory.armor", 4));
         definition.setMainHand(configuration.getItemStack("inventory.main-hand"));
         definition.setOffHand(configuration.getItemStack("inventory.off-hand"));

@@ -106,7 +106,12 @@ public final class NpcInstanceRegistry implements Listener {
         instancesByEntityId.clear();
         for (NpcInstance instance : instanceRepository.loadAll()) {
             instances.put(instance.getId(), instance);
-            if (definitionRepository.find(instance.getDefinitionKey()).isEmpty()) {
+            Optional<NpcDefinition> definition = definitionRepository.find(instance.getDefinitionKey());
+            if (definition.isPresent()) {
+                if (!instance.isAwaitingRespawn()) {
+                    instance.setTemporaryInventoryContents(definition.get().getInitialTemporaryInventoryContents());
+                }
+            } else {
                 plugin.getLogger().warning("Keeping NPC instance " + instance.getId() + " unresolved because preset '"
                         + instance.getDefinitionKey() + "' is missing.");
             }
@@ -115,6 +120,7 @@ public final class NpcInstanceRegistry implements Listener {
 
     public NpcInstance spawnPersistent(NpcDefinition definition, Location location) {
         NpcInstance instance = new NpcInstance(UUID.randomUUID(), definition.getKey(), location);
+        instance.setTemporaryInventoryContents(definition.getInitialTemporaryInventoryContents());
         if (!renderer.spawn(instance, definition)) {
             return null;
         }
@@ -203,6 +209,7 @@ public final class NpcInstanceRegistry implements Listener {
             return false;
         instance.returnToSpawn();
         instance.setRespawnAtEpochMillis(0L);
+        instance.setTemporaryInventoryContents(definition.getInitialTemporaryInventoryContents());
         if (!renderer.spawn(instance, definition)) {
             instance.setRespawnAtEpochMillis(System.currentTimeMillis() + 5_000L);
             instanceRepository.saveAll(instances.values());

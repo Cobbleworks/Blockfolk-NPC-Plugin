@@ -429,8 +429,8 @@ public final class GuiService implements Listener {
                 item(Material.RED_BED, "Preset Spawnpoint",
                         List.of(LegacyText.GRAY + formatLocation(definition.getStoredSpawnpoint()),
                                 LegacyText.YELLOW + "Click to use your current location")));
-        inventory.setItem(14, item(Material.CHEST, "Equipment",
-                List.of(LegacyText.GRAY + "Armor, hands, and stored inventory", LegacyText.YELLOW + "Click to edit")));
+        inventory.setItem(14, item(Material.CHEST, "Equipment & Loot", List.of(
+                LegacyText.GRAY + "Armor, hands, loot, and temporary inventory", LegacyText.YELLOW + "Click to edit")));
         if (instances == 0) {
             inventory.setItem(16,
                     item(Material.COMPASS, "Spawn NPC", List.of(LegacyText.GRAY + "Creates the first visible NPC",
@@ -513,7 +513,7 @@ public final class GuiService implements Listener {
     public void openInventoryEditor(Player player, NpcDefinition definition) {
         Inventory inventory = Bukkit.createInventory(
                 new EquipmentHolder(definition.getKey(), equipmentFingerprint(definition)), 54,
-                UiText.title("Equipment", definition.getDisplayName()));
+                UiText.title("Equipment & Loot", definition.getDisplayName()));
         ItemStack[] contents = definition.getInventoryContents();
         for (int index = 0; index < contents.length; index++) {
             if (!LootTier.isRowStarterSlot(index)) {
@@ -530,9 +530,8 @@ public final class GuiService implements Listener {
         inventory.setItem(39, label("Boots", Material.CHAINMAIL_BOOTS));
         inventory.setItem(41, label("Main Hand", Material.IRON_SWORD));
         inventory.setItem(42, label("Off Hand", Material.SHIELD));
-        inventory.setItem(44,
-                item(Material.CHEST, "NPC loot above", List.of(LegacyText.GRAY + "Each filled slot rolls independently",
-                        LegacyText.GRAY + "Equipment is stored below")));
+        inventory.setItem(44, item(Material.BARREL, "Temporary Inventory",
+                List.of(LegacyText.GRAY + "Pre-fill the NPC's carried items", LegacyText.YELLOW + "Click to edit")));
         ItemStack[] armor = definition.getArmorContents();
         inventory.setItem(45, armor[3]);
         inventory.setItem(46, armor[2]);
@@ -540,8 +539,23 @@ public final class GuiService implements Listener {
         inventory.setItem(48, armor[0]);
         inventory.setItem(50, definition.getMainHand());
         inventory.setItem(51, definition.getOffHand());
-        inventory.setItem(53, item(Material.LIME_DYE, "Save Equipment",
+        inventory.setItem(53, item(Material.LIME_DYE, "Save Equipment & Loot",
                 List.of(LegacyText.GRAY + "Saves and refreshes every instance")));
+        openInventory(player, inventory);
+    }
+
+    public void openTemporaryInventoryEditor(Player player, NpcDefinition definition) {
+        Inventory inventory = Bukkit.createInventory(
+                new TemporaryInventoryHolder(definition.getKey(),
+                        java.util.Arrays.hashCode(definition.getInitialTemporaryInventoryContents())),
+                36, UiText.title("Temporary Inventory", definition.getDisplayName()));
+        ItemStack[] contents = definition.getInitialTemporaryInventoryContents();
+        for (int slot = 0; slot < contents.length; slot++) {
+            inventory.setItem(slot, contents[slot]);
+        }
+        inventory.setItem(31, item(Material.BARRIER, "Back to Equipment & Loot", List.of()));
+        inventory.setItem(35, item(Material.LIME_DYE, "Save Temporary Inventory",
+                List.of(LegacyText.GRAY + "Used by new and respawned NPCs")));
         openInventory(player, inventory);
     }
 
@@ -922,6 +936,8 @@ public final class GuiService implements Listener {
             handleFightOptionsActionClick(event, player, fightOptionsHolder);
         } else if (holder instanceof EquipmentHolder equipmentHolder) {
             handleEquipmentClick(event, player, equipmentHolder.key());
+        } else if (holder instanceof TemporaryInventoryHolder temporaryHolder) {
+            handleTemporaryInventoryClick(event, player, temporaryHolder);
         } else if (holder instanceof InstancesHolder instancesHolder) {
             handleInstancesClick(event, player, instancesHolder);
         } else if (holder instanceof BehaviourHolder behaviourHolder) {
@@ -992,6 +1008,10 @@ public final class GuiService implements Listener {
             if (event.getRawSlots().stream().anyMatch(slot -> slot < topSize && !INVENTORY_EDIT_SLOTS.contains(slot))) {
                 event.setCancelled(true);
             }
+        } else if (holder instanceof TemporaryInventoryHolder) {
+            if (event.getRawSlots().stream().anyMatch(slot -> slot < 36 && slot >= 27)) {
+                event.setCancelled(true);
+            }
         } else if (isManagedHolder(holder)) {
             event.setCancelled(true);
         }
@@ -1011,6 +1031,23 @@ public final class GuiService implements Listener {
                 } else {
                     instance.setTemporaryInventoryContents(event.getInventory().getContents());
                 }
+            });
+            return;
+        }
+        if (event.getInventory().getHolder() instanceof TemporaryInventoryHolder holder) {
+            if (event.getPlayer() instanceof Player player && explicitInventorySaves.remove(player.getUniqueId())) {
+                return;
+            }
+            definitionRepository.find(holder.key()).ifPresent(definition -> {
+                if (holder.fingerprint() != java.util.Arrays
+                        .hashCode(definition.getInitialTemporaryInventoryContents())) {
+                    event.getPlayer().sendMessage(UiText.warning(
+                            "Temporary inventory changed while you were editing; your stale copy was not saved."));
+                    return;
+                }
+                definition.setInitialTemporaryInventoryContents(
+                        java.util.Arrays.copyOf(event.getInventory().getContents(), 27));
+                definitionRepository.save(definition);
             });
             return;
         }
@@ -1392,6 +1429,24 @@ public final class GuiService implements Listener {
             return;
         }
         int slot = event.getRawSlot();
+        if (slot == 44) {
+            event.setCancelled(true);
+            definitionRepository.find(key).ifPresent(definition -> {
+                EquipmentHolder holder = (EquipmentHolder) event.getView().getTopInventory().getHolder();
+                if (holder.fingerprint() != equipmentFingerprint(definition)) {
+                    player.sendMessage(UiText.warning(
+                            "Equipment changed while you were editing; review the current version and try again."));
+                    explicitInventorySaves.add(player.getUniqueId());
+                    openInventoryEditor(player, definition);
+                    return;
+                }
+                readEquipmentEditor(event.getView().getTopInventory(), definition);
+                saveRefresh(definition);
+                explicitInventorySaves.add(player.getUniqueId());
+                openTemporaryInventoryEditor(player, definition);
+            });
+            return;
+        }
         if (slot == 53) {
             event.setCancelled(true);
             definitionRepository.find(key).ifPresent(definition -> {
@@ -1412,6 +1467,47 @@ public final class GuiService implements Listener {
         }
         if (!INVENTORY_EDIT_SLOTS.contains(slot)) {
             event.setCancelled(true);
+        }
+    }
+
+    private void handleTemporaryInventoryClick(InventoryClickEvent event, Player player,
+            TemporaryInventoryHolder holder) {
+        if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY
+                || event.getAction() == InventoryAction.COLLECT_TO_CURSOR) {
+            event.setCancelled(true);
+            return;
+        }
+        if (!isTopInventoryClick(event)) {
+            return;
+        }
+        int slot = event.getRawSlot();
+        if (slot < 27) {
+            return;
+        }
+        event.setCancelled(true);
+        if (slot != 31 && slot != 35) {
+            return;
+        }
+        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
+        if (definition == null) {
+            player.closeInventory();
+            return;
+        }
+        if (holder.fingerprint() != java.util.Arrays.hashCode(definition.getInitialTemporaryInventoryContents())) {
+            player.sendMessage(UiText.warning(
+                    "Temporary inventory changed while you were editing; review the current version and try again."));
+            explicitInventorySaves.add(player.getUniqueId());
+            openTemporaryInventoryEditor(player, definition);
+            return;
+        }
+        definition.setInitialTemporaryInventoryContents(
+                java.util.Arrays.copyOf(event.getView().getTopInventory().getContents(), 27));
+        definitionRepository.save(definition);
+        explicitInventorySaves.add(player.getUniqueId());
+        if (slot == 31) {
+            openInventoryEditor(player, definition);
+        } else {
+            openEditor(player, definition);
         }
     }
 
@@ -3429,6 +3525,9 @@ public final class GuiService implements Listener {
     }
 
     private record EquipmentHolder(String key, int fingerprint) implements GuiHolder {
+    }
+
+    private record TemporaryInventoryHolder(String key, int fingerprint) implements GuiHolder {
     }
 
     private record InstancesHolder(String key, int page) implements GuiHolder {

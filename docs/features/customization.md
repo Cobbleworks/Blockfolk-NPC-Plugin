@@ -14,9 +14,9 @@ Under **NPC Properties**, you can configure:
 | Item Pickup | Collects nearby item entities into that instance's temporary inventory. |
 | Name Color | Cycles the color used for the visible NPC name. |
 
-## Equipment
+## Equipment & Loot
 
-The equipment editor stores helmet, chestplate, leggings, boots, main-hand item, and off-hand item. Select **Save Equipment** to persist the contents and refresh every spawned instance.
+The **Equipment & Loot** editor stores helmet, chestplate, leggings, boots, main-hand item, and off-hand item. Select **Save Equipment & Loot** to persist the contents and refresh every spawned instance.
 
 ![Blockfolk equipment and loot editor](../screenshots/screenshot-equipment-menu.jpeg)
 
@@ -35,4 +35,4 @@ Loot is separate from the armor and held-item slots below it.
 
 ## Temporary inventory
 
-Every instance can carry a temporary 36-slot inventory at runtime. Item pickup and several AI capabilities use it. The preset's **Temporary Inventory** AI option controls whether AI can perceive and manipulate those contents; it is separate from the preset equipment and loot editor.
+Every instance can carry a temporary 27-slot inventory at runtime. Item pickup and several AI capabilities use it. Click the barrel in **Equipment & Loot** to pre-fill a preset's temporary inventory. New and respawned instances start with these items; existing active instances keep their current contents. Changes in this editor save when you leave it. The preset's **Temporary Inventory** AI option controls whether AI can perceive and manipulate those contents.

@@ -25,6 +25,7 @@ public final class NpcDefinition {
     private String skinTextureSignature;
     private StoredLocation spawnpoint;
     private ItemStack[] inventoryContents;
+    private ItemStack[] initialTemporaryInventoryContents;
     private ItemStack[] armorContents;
     private ItemStack mainHand;
     private ItemStack offHand;
@@ -44,6 +45,7 @@ public final class NpcDefinition {
         this.key = key;
         this.displayName = key;
         this.inventoryContents = new ItemStack[36];
+        this.initialTemporaryInventoryContents = new ItemStack[27];
         this.armorContents = new ItemStack[4];
         this.combatProfile = CombatProfile.disabled();
         this.movementProfile = MovementProfile.disabled();
@@ -68,6 +70,7 @@ public final class NpcDefinition {
         copy.setResolvedSkin(skinUrl, skinTextureValue, skinTextureSignature);
         copy.setStoredSpawnpoint(spawnpoint);
         copy.setInventoryContents(inventoryContents);
+        copy.setInitialTemporaryInventoryContents(initialTemporaryInventoryContents);
         copy.setArmorContents(armorContents);
         copy.setMainHand(mainHand);
         copy.setOffHand(offHand);
@@ -154,6 +157,14 @@ public final class NpcDefinition {
 
     public void setInventoryContents(ItemStack[] inventoryContents) {
         this.inventoryContents = cloneArray(inventoryContents, 36);
+    }
+
+    public ItemStack[] getInitialTemporaryInventoryContents() {
+        return cloneArray(initialTemporaryInventoryContents, 27);
+    }
+
+    public void setInitialTemporaryInventoryContents(ItemStack[] contents) {
+        this.initialTemporaryInventoryContents = cloneArray(contents, 27);
     }
 
     public ItemStack[] getArmorContents() {
