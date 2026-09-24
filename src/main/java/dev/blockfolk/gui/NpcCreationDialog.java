@@ -35,7 +35,7 @@ final class NpcCreationDialog {
     private static final String LOOK_AT_PLAYER = "look_at_player";
     private static final String PUSHABLE = "pushable";
     private static final int MAX_NAME_LENGTH = 64;
-    private static final int MAX_RESPAWN_SECONDS = 3600;
+    private static final int MAX_RESPAWN_SECONDS = 600;
 
     private final Plugin plugin;
     private final NpcDefinitionRepository definitions;
