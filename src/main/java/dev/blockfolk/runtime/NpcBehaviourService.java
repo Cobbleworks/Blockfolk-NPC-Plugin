@@ -660,7 +660,7 @@ public final class NpcBehaviourService implements Listener {
             }
             case AI_TRIGGER -> invokeAi(event, eventDetail, instance, definition, actor);
             case INTERACT -> interactWithNearbySwitches(instance);
-            case MINE_BLOCKS -> mineNearbyBlocks(instance);
+            case MINE_BLOCKS -> mineNearbyBlocks(instance, definition);
             case TAKE_ITEM -> takeNearbyItem(instance, actor);
             case SHOW_INVENTORY -> showInventory(instance, actor);
             case DROP_INVENTORY -> dropInventory(instance);
@@ -720,8 +720,7 @@ public final class NpcBehaviourService implements Listener {
                     instances.stand(instance);
                     instances.stopNavigating(instance);
                 });
-                case MINE_BLOCKS -> mineNearbyBlocks(instance, action.target(), true,
-                        definition.getAiControlSettings().inventoryEnabled());
+                case MINE_BLOCKS -> mineNearbyBlocks(instance, action.target(), true, definition.isItemPickup());
                 case RETURN_HOME -> {
                     stopFollowing(instance);
                     moveTargets.put(instance.getId(), instance.getSpawnLocation());
@@ -739,7 +738,7 @@ public final class NpcBehaviourService implements Listener {
                     aiControlService.rememberFact(definition, action.text());
                     announceMemory(instance, definition);
                 }
-                case DROP_ITEM -> dropAiInventoryItem(instance, definition, action.target());
+                case DROP_ITEM -> dropAiInventoryItem(instance, action.target());
                 case DO_NOTHING -> {
                 }
             }
@@ -784,9 +783,8 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private void dropAiInventoryItem(NpcInstance instance, NpcDefinition definition, String target) {
-        if (!definition.getAiControlSettings().inventoryEnabled() || target == null
-                || !target.startsWith("inventory_slot_"))
+    private void dropAiInventoryItem(NpcInstance instance, String target) {
+        if (target == null || !target.startsWith("inventory_slot_"))
             return;
         int slot = targetIndex(target);
         ItemStack[] contents = instance.getTemporaryInventoryContents();
@@ -1338,8 +1336,8 @@ public final class NpcBehaviourService implements Listener {
         support.getState().update(true, true);
     }
 
-    private void mineNearbyBlocks(NpcInstance instance) {
-        mineNearbyBlocks(instance, "mineable_blocks", false, true);
+    private void mineNearbyBlocks(NpcInstance instance, NpcDefinition definition) {
+        mineNearbyBlocks(instance, "mineable_blocks", false, definition.isItemPickup());
     }
 
     private void mineNearbyBlocks(NpcInstance instance, String requestedTarget, boolean autonomousRange,

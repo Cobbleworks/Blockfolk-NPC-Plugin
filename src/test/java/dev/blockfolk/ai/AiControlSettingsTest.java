@@ -60,18 +60,9 @@ class AiControlSettingsTest {
     }
 
     @Test
-    void inventorySettingIsOptInAndPreservedByOtherChanges() {
-        AiControlSettings settings = AiControlSettings.defaults().withInventoryEnabled(true).withIdentity("A courier")
-                .withRespondToChat(false);
-
-        assertTrue(settings.inventoryEnabled());
-        assertFalse(AiControlSettings.defaults().inventoryEnabled());
-    }
-
-    @Test
     void sharedConversationSettingIsOptInAndPreservedByOtherChanges() {
         AiControlSettings settings = AiControlSettings.defaults().withSharedConversation(true)
-                .withIdentity("A communal storyteller").withInventoryEnabled(true);
+                .withIdentity("A communal storyteller");
 
         assertTrue(settings.sharedConversation());
         assertFalse(AiControlSettings.defaults().sharedConversation());

@@ -5,7 +5,7 @@ import java.util.Set;
 
 public record AiControlSettings(String identity, String behaviour, String likesDislikes, String goal,
         String information, Set<AiActionType> allowedActions, boolean enabled, boolean respondToChat,
-        boolean memoryEnabled, boolean inventoryEnabled, boolean sharedConversation) {
+        boolean memoryEnabled, boolean sharedConversation) {
 
     public AiControlSettings {
         identity = normalize(identity);
@@ -25,7 +25,7 @@ public record AiControlSettings(String identity, String behaviour, String likesD
     }
 
     public static AiControlSettings defaults() {
-        return new AiControlSettings("", "", "", "", "", AiActionType.safeDefaults(), false, true, false, false, false);
+        return new AiControlSettings("", "", "", "", "", AiActionType.safeDefaults(), false, true, false, false);
     }
 
     public boolean hasContext() {
@@ -76,7 +76,7 @@ public record AiControlSettings(String identity, String behaviour, String likesD
                 || !normalize(information).isBlank();
         boolean updatedEnabled = !hasUpdatedContext ? false : !hadContext || enabled;
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions,
-                updatedEnabled, respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
+                updatedEnabled, respondToChat, memoryEnabled, sharedConversation);
     }
 
     public AiControlSettings toggle(AiActionType action) {
@@ -85,32 +85,27 @@ public record AiControlSettings(String identity, String behaviour, String likesD
             updated.add(action);
         updated.add(AiActionType.DO_NOTHING);
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, updated, enabled,
-                respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
+                respondToChat, memoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withEnabled(boolean enabled) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions, enabled,
-                respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
+                respondToChat, memoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withRespondToChat(boolean respondToChat) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions, enabled,
-                respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
+                respondToChat, memoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withMemoryEnabled(boolean memoryEnabled) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions, enabled,
-                respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
-    }
-
-    public AiControlSettings withInventoryEnabled(boolean inventoryEnabled) {
-        return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions, enabled,
-                respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
+                respondToChat, memoryEnabled, sharedConversation);
     }
 
     public AiControlSettings withSharedConversation(boolean sharedConversation) {
         return new AiControlSettings(identity, behaviour, likesDislikes, goal, information, allowedActions, enabled,
-                respondToChat, memoryEnabled, inventoryEnabled, sharedConversation);
+                respondToChat, memoryEnabled, sharedConversation);
     }
 
     private static void append(StringBuilder target, String heading, String value) {

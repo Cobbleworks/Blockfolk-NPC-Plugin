@@ -107,22 +107,19 @@ class AiDecisionParserTest {
     }
 
     @Test
-    void containerInteractionsRequireTemporaryInventoryAccess() {
+    void containerInteractionsAreAvailableWhenInteractIsEnabled() {
         AiControlSettings interact = settings("Storekeeper", "", "Manage supplies", EnumSet.of(AiActionType.INTERACT));
         String take = "{\"actions\":[{\"type\":\"INTERACT\",\"target\":\"take_from_container\"}]}";
         String store = "{\"actions\":[{\"type\":\"INTERACT\",\"target\":\"store_in_container\"}]}";
 
-        assertEquals(AiActionType.DO_NOTHING, AiDecisionParser.parse(take, interact).actions().getFirst().type());
-        assertEquals("take_from_container",
-                AiDecisionParser.parse(take, interact.withInventoryEnabled(true)).actions().getFirst().target());
-        assertEquals("store_in_container",
-                AiDecisionParser.parse(store, interact.withInventoryEnabled(true)).actions().getFirst().target());
+        assertEquals("take_from_container", AiDecisionParser.parse(take, interact).actions().getFirst().target());
+        assertEquals("store_in_container", AiDecisionParser.parse(store, interact).actions().getFirst().target());
     }
 
     @Test
     void acceptsExplicitSwitchAndContainerAliases() {
         AiControlSettings interact = settings("Caretaker", "", "Operate nearby mechanisms",
-                EnumSet.of(AiActionType.INTERACT)).withInventoryEnabled(true);
+                EnumSet.of(AiActionType.INTERACT));
 
         AiDecision decision = AiDecisionParser.parse("""
                 {"actions":[
@@ -201,39 +198,32 @@ class AiDecisionParserTest {
     }
 
     @Test
-    void dropItemRequiresInventoryToggleAndSlotAlias() {
+    void dropItemRequiresSlotAlias() {
         String response = "{\"actions\":[{\"type\":\"DROP_ITEM\",\"target\":\"inventory_slot_4\"}]}";
 
-        AiDecision disabled = AiDecisionParser.parse(response, AiControlSettings.defaults());
-        AiDecision enabled = AiDecisionParser.parse(response, AiControlSettings.defaults().withInventoryEnabled(true));
-        AiDecision invalidTarget = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"DROP_ITEM\",\"target\":\"diamond\"}]}",
-                AiControlSettings.defaults().withInventoryEnabled(true));
+        AiDecision accepted = AiDecisionParser.parse(response, AiControlSettings.defaults());
+        AiDecision invalidTarget = AiDecisionParser
+                .parse("{\"actions\":[{\"type\":\"DROP_ITEM\",\"target\":\"diamond\"}]}", AiControlSettings.defaults());
 
-        assertEquals(AiActionType.DO_NOTHING, disabled.actions().getFirst().type());
-        assertEquals(AiActionType.DROP_ITEM, enabled.actions().getFirst().type());
+        assertEquals(AiActionType.DROP_ITEM, accepted.actions().getFirst().type());
         assertEquals(AiActionType.DO_NOTHING, invalidTarget.actions().getFirst().type());
     }
 
     @Test
-    void miningRequiresCapabilityAndAResourceTargetButNotInventory() {
-        AiControlSettings enabled = AiControlSettings.defaults().withInventoryEnabled(true)
-                .toggle(AiActionType.MINE_BLOCKS);
+    void miningRequiresCapabilityAndAResourceTarget() {
+        AiControlSettings enabled = AiControlSettings.defaults().toggle(AiActionType.MINE_BLOCKS);
 
         AiDecision accepted = AiDecisionParser
                 .parse("{\"actions\":[{\"type\":\"MINE_BLOCKS\",\"target\":\"all_ores\"}]}", enabled);
-        AiDecision noInventory = AiDecisionParser.parse(
-                "{\"actions\":[{\"type\":\"MINE_BLOCKS\",\"target\":\"trees\"}]}", enabled.withInventoryEnabled(false));
         AiDecision noTarget = AiDecisionParser.parse("{\"actions\":[{\"type\":\"MINE_BLOCKS\"}]}", enabled);
 
         assertEquals(AiActionType.MINE_BLOCKS, accepted.actions().getFirst().type());
         assertEquals("all_ores", accepted.actions().getFirst().target());
-        assertEquals(AiActionType.MINE_BLOCKS, noInventory.actions().getFirst().type());
         assertEquals(AiActionType.DO_NOTHING, noTarget.actions().getFirst().type());
     }
 
     private static AiControlSettings settings(String identity, String behaviour, String goal,
             EnumSet<AiActionType> actions) {
-        return new AiControlSettings(identity, behaviour, "", goal, "", actions, true, true, false, false, false);
+        return new AiControlSettings(identity, behaviour, "", goal, "", actions, true, true, false, false);
     }
 }

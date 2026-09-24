@@ -48,9 +48,8 @@ final class AiGuiService {
     private static final int GOAL_SLOT = 3;
     private static final int INFORMATION_SLOT = 4;
     private static final int LIKES_DISLIKES_SLOT = 5;
-    private static final int MEMORY_SLOT = 6;
+    private static final int MEMORY_SLOT = 7;
     private static final int CONVERSATION_SLOT = 11;
-    private static final int INVENTORY_SLOT = 13;
     private static final int[] ACTION_SLOTS = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
     private static final List<AiActionType> ACTION_TYPES = Arrays.stream(AiActionType.values())
             .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM).toList();
@@ -114,8 +113,6 @@ final class AiGuiService {
                         settings.sharedConversation()
                                 ? "All players share this NPC instance's conversation"
                                 : "Each player has a separate conversation with this NPC instance"));
-        inventory.setItem(INVENTORY_SLOT, toggleItem(Material.CHEST, "Temporary Inventory", settings.inventoryEnabled(),
-                "Lets the AI see, mine into, and drop items carried by each instance"));
         for (int index = 0; index < ACTION_TYPES.size(); index++) {
             AiActionType type = ACTION_TYPES.get(index);
             boolean chatToggle = type == AiActionType.SAY;
@@ -230,9 +227,6 @@ final class AiGuiService {
         if (slot == CONVERSATION_SLOT) {
             AiControlSettings settings = definition.getAiControlSettings();
             definition.setAiControlSettings(settings.withSharedConversation(!settings.sharedConversation()));
-        } else if (slot == INVENTORY_SLOT) {
-            AiControlSettings settings = definition.getAiControlSettings();
-            definition.setAiControlSettings(settings.withInventoryEnabled(!settings.inventoryEnabled()));
         } else if (slot == 45) {
             back.accept(player, definition);
             return;
@@ -389,7 +383,7 @@ final class AiGuiService {
             case UNFOLLOW -> "Stops following the player it is currently following";
             case INTERACT -> "Uses nearby buttons, levers, or containers";
             case MOVE_TO -> "Walks to a known location, player, NPC, or entity";
-            case MINE_BLOCKS -> "Mines nearby resources; inventory controls where drops go";
+            case MINE_BLOCKS -> "Mines nearby resources; collects drops when item pickup is enabled";
             case RETURN_HOME -> "Walks back to this instance's respawn location";
             case START_ROUTE -> "Resumes this instance's configured route";
             case PAUSE_ROUTE -> "Pauses this instance's configured route";

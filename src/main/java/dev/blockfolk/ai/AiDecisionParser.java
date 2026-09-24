@@ -53,12 +53,6 @@ public final class AiDecisionParser {
         if (type == AiActionType.REMEMBER_FACT && !settings.memoryEnabled()) {
             return java.util.Optional.empty();
         }
-        if (type == AiActionType.DROP_ITEM && !settings.inventoryEnabled()) {
-            return java.util.Optional.empty();
-        }
-        if (type == AiActionType.INTERACT && isContainerInteraction(object) && !settings.inventoryEnabled()) {
-            return java.util.Optional.empty();
-        }
         if (type != AiActionType.DO_NOTHING && type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM
                 && !settings.allowedActions().contains(type)) {
             return java.util.Optional.empty();
@@ -107,11 +101,6 @@ public final class AiDecisionParser {
         if (TARGETS.contains(target))
             return true;
         return type == AiActionType.MOVE_TO && target.matches("nearby_(location|player|npc|entity)_[1-9][0-9]*");
-    }
-
-    private static boolean isContainerInteraction(JsonObject object) {
-        String target = string(object, "target", true);
-        return target != null && (target.startsWith("take_from_container") || target.startsWith("store_in_container"));
     }
 
     private static String string(JsonObject object, String name, boolean normalize) {
