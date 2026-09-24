@@ -138,16 +138,8 @@ public final class NpcDefinitionRepository {
                 ai.allowedActions().stream()
                         .filter(action -> action != AiActionType.REMEMBER_FACT && action != AiActionType.DROP_ITEM)
                         .map(action -> action.name().toLowerCase(Locale.ROOT)).sorted().toList());
-        for (BehaviourEvent event : BehaviourEvent.values()) {
-            List<Map<String, Object>> actions = BehaviourActionCodec.encodeList(definition.getBehaviourActions(event));
-            configuration.set("behaviours." + event.name().toLowerCase(Locale.ROOT),
-                    actions.isEmpty() ? null : actions);
-        }
-        for (String eventName : definition.getCustomEventNames()) {
-            List<Map<String, Object>> actions = BehaviourActionCodec
-                    .encodeList(definition.getCustomEventActions(eventName));
-            configuration.set("custom-event-behaviours." + encodeEventName(eventName), actions);
-        }
+        configuration.set("behaviour-rows", BehaviourRowCodec.encode(definition.getBehaviourRows()));
+        configuration.set("custom-event-rows", BehaviourRowCodec.encodeCustom(definition.getCustomBehaviourRows()));
         return configuration;
     }
 
@@ -257,28 +249,42 @@ public final class NpcDefinitionRepository {
                 configuration.getBoolean("ai-control.memory.enabled", false),
                 configuration.getBoolean("ai-control.conversation.shared", false)));
         definition.setAiMemories(configuration.getStringList("ai-control.memory.facts"));
-        for (BehaviourEvent event : BehaviourEvent.values()) {
-            String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);
-            definition.setBehaviourActions(event, decodeActions(configuration.getMapList(path), file, "behaviour"));
+        if (configuration.contains("behaviour-rows")) {
+            BehaviourRowCodec
+                    .decode(configuration.getList("behaviour-rows"),
+                            message -> plugin.getLogger().warning(message + " in " + file.getName()))
+                    .forEach(row -> definition.addBehaviourRow(row.event(), row.actions()));
+        } else {
+            for (BehaviourEvent event : BehaviourEvent.values()) {
+                String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);
+                definition.setBehaviourActions(event, decodeActions(configuration.getMapList(path), file, "behaviour"));
+            }
         }
-        ConfigurationSection custom = configuration.getConfigurationSection("custom-event-behaviours");
-        if (custom != null) {
-            for (String encodedName : custom.getKeys(false)) {
-                String eventName;
-                try {
-                    eventName = decodeEventName(encodedName);
-                } catch (IllegalArgumentException exception) {
-                    plugin.getLogger().warning(() -> "Ignoring malformed custom event name in " + file.getName());
-                    continue;
+        if (configuration.contains("custom-event-rows")) {
+            BehaviourRowCodec
+                    .decodeCustom(configuration.getList("custom-event-rows"),
+                            message -> plugin.getLogger().warning(message + " in " + file.getName()))
+                    .forEach(row -> definition.addCustomBehaviourRow(row.eventName(), row.actions()));
+        } else {
+            ConfigurationSection custom = configuration.getConfigurationSection("custom-event-behaviours");
+            if (custom != null) {
+                for (String encodedName : custom.getKeys(false)) {
+                    String eventName;
+                    try {
+                        eventName = decodeEventName(encodedName);
+                    } catch (IllegalArgumentException exception) {
+                        plugin.getLogger().warning(() -> "Ignoring malformed custom event name in " + file.getName());
+                        continue;
+                    }
+                    definition.setCustomEventActions(eventName,
+                            decodeActions(custom.getMapList(encodedName), file, "custom-event"));
                 }
-                definition.setCustomEventActions(eventName,
-                        decodeActions(custom.getMapList(encodedName), file, "custom-event"));
             }
         }
         return definition;
     }
 
-    private List<BehaviourAction> decodeActions(List<Map<?, ?>> storedActions, File file, String kind) {
+    private List<BehaviourAction> decodeActions(List<? extends Map<?, ?>> storedActions, File file, String kind) {
         List<BehaviourAction> actions = new ArrayList<>();
         for (Map<?, ?> entry : storedActions) {
             Object type = entry.get("type");
@@ -292,11 +298,6 @@ public final class NpcDefinitionRepository {
             }
         }
         return actions;
-    }
-
-    private static String encodeEventName(String value) {
-        return java.util.Base64.getUrlEncoder().withoutPadding()
-                .encodeToString(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private static String decodeEventName(String value) {

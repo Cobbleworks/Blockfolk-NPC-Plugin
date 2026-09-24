@@ -312,7 +312,7 @@ public final class CustomEventGuiService implements Listener {
         CustomEvent event = events.find(holder.eventName()).orElse(null);
         if (event != null) {
             for (NpcDefinition definition : definitions.findAll()) {
-                if (!definition.getCustomEventActions(event.getName()).isEmpty()) {
+                if (definition.getCustomEventNames().contains(event.getName())) {
                     definition.removeCustomEvent(event.getName());
                     definitions.save(definition);
                 }

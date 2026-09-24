@@ -56,6 +56,41 @@ class NpcDefinitionTest {
     }
 
     @Test
+    void repeatedCustomEventRowsRunInOrderAndKeepEmptySelections() {
+        NpcDefinition definition = NpcDefinition.create("Guard");
+        BehaviourAction first = new BehaviourAction(BehaviourActionType.SEND_DIALOG, "First");
+        BehaviourAction second = new BehaviourAction(BehaviourActionType.WAVE, null);
+        int firstRow = definition.addCustomBehaviourRow("town/alarm");
+        definition.addCustomBehaviourRow("town/quiet", List.of(second));
+        definition.addCustomBehaviourRow("town/alarm", List.of(second));
+        definition.setCustomBehaviourRowActions(firstRow, List.of(first));
+
+        assertEquals(List.of(first, second), definition.getCustomEventActions("town/alarm"));
+        assertEquals(List.of("town/alarm", "town/quiet"), definition.getCustomEventNames());
+        assertEquals(3, definition.customEventActionCount());
+        assertEquals(definition.getCustomBehaviourRows(), definition.copyAs("Copy").getCustomBehaviourRows());
+
+        definition.removeCustomBehaviourRowAction(firstRow, 0);
+        assertTrue(definition.getCustomEventNames().contains("town/alarm"));
+        assertTrue(definition.getCustomBehaviourRows().get(firstRow).actions().isEmpty());
+        definition.removeCustomEvent("town/alarm");
+        assertEquals(List.of("town/quiet"), definition.getCustomEventNames());
+    }
+
+    @Test
+    void legacyCustomEventActionListsSplitIntoSevenActionRows() {
+        NpcDefinition definition = NpcDefinition.create("Guard");
+        List<BehaviourAction> actions = java.util.stream.IntStream.range(0, 8)
+                .mapToObj(index -> new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Line " + index)).toList();
+
+        definition.setCustomEventActions("town/alarm", actions);
+
+        assertEquals(2, definition.getCustomBehaviourRows().size());
+        assertEquals(7, definition.getCustomBehaviourRows().getFirst().actions().size());
+        assertEquals(actions, definition.getCustomEventActions("town/alarm"));
+    }
+
+    @Test
     void findsRoutesReferencedByMovementEventsCustomEventsAndQuestions() {
         NpcDefinition definition = NpcDefinition.create("Guard");
         definition.setMovementProfile(MovementProfile.routing("Day Patrol", WalkingSpeed.NORMAL));
@@ -102,6 +137,22 @@ class NpcDefinitionTest {
         assertEquals(java.util.Set.of("other"), definition.getReferencedRouteKeys());
         assertFalse(definition.getMovementProfile().enabled());
         assertEquals(2, definition.getBehaviourActions(BehaviourEvent.SPAWN).size());
+    }
+
+    @Test
+    void routeCleanupPreservesSelectedEventRows() {
+        NpcDefinition definition = NpcDefinition.create("Guard");
+        definition.addBehaviourRow(BehaviourEvent.SPAWN,
+                List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "patrol")));
+        definition.addBehaviourRow(BehaviourEvent.RIGHT_CLICK,
+                List.of(new BehaviourAction(BehaviourActionType.WAVE, null)));
+        definition.addBehaviourRow(BehaviourEvent.SPAWN,
+                List.of(new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Ready")));
+
+        assertTrue(definition.removeRouteReferences("patrol"));
+        assertEquals(3, definition.getBehaviourRows().size());
+        assertTrue(definition.getBehaviourRows().getFirst().actions().isEmpty());
+        assertEquals("Ready", definition.getBehaviourActions(BehaviourEvent.SPAWN).getFirst().value());
     }
 
     @Test

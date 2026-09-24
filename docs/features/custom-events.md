@@ -29,7 +29,7 @@ The trigger command works from a player or the server console.
 
 ## React to an event
 
-Open an NPC preset and choose **Custom Event Behaviour**. Select the event and build its ordered action row just like a standard behaviour routine. Every active instance of that preset runs the row when the event is emitted.
+Open an NPC preset and choose **Custom Event Behaviour**. Click **Add Custom Event Row**, choose a custom event, then add actions to that row. You can add the same event again to continue its actions on another row. Every active instance of that preset runs matching rows in their displayed order when the event is emitted.
 
 One event can coordinate many presets. For example, `town/alarm` might make guards start combat, civilians flee, and a gatekeeper close a lever-controlled gate.
 

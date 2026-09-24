@@ -1,11 +1,9 @@
 package dev.blockfolk.model;
 
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -35,8 +33,8 @@ public final class NpcDefinition {
     private boolean itemPickup;
     private boolean pushable;
     private NpcColor color;
-    private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
-    private Map<String, List<BehaviourAction>> customEventBehaviours;
+    private final List<BehaviourRow> behaviourRows;
+    private final List<CustomBehaviourRow> customBehaviourRows;
     private AiControlSettings aiControlSettings;
     private List<String> aiMemories;
 
@@ -51,8 +49,8 @@ public final class NpcDefinition {
         this.lookAtPlayer = true;
         this.pushable = true;
         this.color = NpcColor.ORANGE;
-        this.behaviours = new EnumMap<>(BehaviourEvent.class);
-        this.customEventBehaviours = new java.util.LinkedHashMap<>();
+        this.behaviourRows = new ArrayList<>();
+        this.customBehaviourRows = new ArrayList<>();
         this.aiControlSettings = AiControlSettings.defaults();
         this.aiMemories = new ArrayList<>();
     }
@@ -80,8 +78,8 @@ public final class NpcDefinition {
         copy.setColor(color);
         copy.setAiControlSettings(aiControlSettings);
         copy.setAiMemories(aiMemories);
-        behaviours.forEach(copy::setBehaviourActions);
-        customEventBehaviours.forEach(copy::setCustomEventActions);
+        behaviourRows.forEach(row -> copy.addBehaviourRow(row.event(), row.actions()));
+        customBehaviourRows.forEach(row -> copy.addCustomBehaviourRow(row.eventName(), row.actions()));
         return copy;
     }
 
@@ -237,56 +235,165 @@ public final class NpcDefinition {
     }
 
     public List<BehaviourAction> getBehaviourActions(BehaviourEvent event) {
-        return new ArrayList<>(behaviours.getOrDefault(event, List.of()));
+        List<BehaviourAction> actions = new ArrayList<>();
+        for (BehaviourRow row : behaviourRows) {
+            if (row.event() == event)
+                actions.addAll(row.actions());
+        }
+        return actions;
     }
 
     public void setBehaviourActions(BehaviourEvent event, List<BehaviourAction> actions) {
-        if (actions == null || actions.isEmpty()) {
-            behaviours.remove(event);
-        } else {
-            behaviours.put(event, new ArrayList<>(actions));
+        int first = -1;
+        for (int index = 0; index < behaviourRows.size(); index++) {
+            if (behaviourRows.get(index).event() == event) {
+                first = index;
+                break;
+            }
+        }
+        behaviourRows.removeIf(row -> row.event() == event);
+        if (actions == null || actions.isEmpty())
+            return;
+        int insertAt = first < 0 ? behaviourRows.size() : first;
+        for (int offset = 0; offset < actions.size(); offset += BehaviourRow.MAX_ACTIONS) {
+            int end = Math.min(offset + BehaviourRow.MAX_ACTIONS, actions.size());
+            behaviourRows.add(insertAt++, new BehaviourRow(event, actions.subList(offset, end)));
         }
     }
 
     public void removeBehaviourAction(BehaviourEvent event, int index) {
-        List<BehaviourAction> actions = behaviours.get(event);
-        if (actions == null || index < 0 || index >= actions.size()) {
+        if (index < 0)
             return;
+        for (int rowIndex = 0; rowIndex < behaviourRows.size(); rowIndex++) {
+            BehaviourRow row = behaviourRows.get(rowIndex);
+            if (row.event() != event)
+                continue;
+            if (index < row.actions().size()) {
+                removeBehaviourRowAction(rowIndex, index);
+                if (behaviourRows.get(rowIndex).actions().isEmpty())
+                    behaviourRows.remove(rowIndex);
+                return;
+            }
+            index -= row.actions().size();
         }
-        actions.remove(index);
-        if (actions.isEmpty()) {
-            behaviours.remove(event);
-        }
+    }
+
+    public List<BehaviourRow> getBehaviourRows() {
+        return List.copyOf(behaviourRows);
+    }
+
+    public int addBehaviourRow(BehaviourEvent event) {
+        return addBehaviourRow(event, List.of());
+    }
+
+    public int addBehaviourRow(BehaviourEvent event, List<BehaviourAction> actions) {
+        behaviourRows.add(new BehaviourRow(event, actions));
+        return behaviourRows.size() - 1;
+    }
+
+    public void setBehaviourRowActions(int rowIndex, List<BehaviourAction> actions) {
+        BehaviourRow current = behaviourRows.get(rowIndex);
+        behaviourRows.set(rowIndex, new BehaviourRow(current.event(), actions));
+    }
+
+    public void removeBehaviourRowAction(int rowIndex, int actionIndex) {
+        BehaviourRow row = behaviourRows.get(rowIndex);
+        if (actionIndex < 0 || actionIndex >= row.actions().size())
+            return;
+        List<BehaviourAction> actions = new ArrayList<>(row.actions());
+        actions.remove(actionIndex);
+        setBehaviourRowActions(rowIndex, actions);
+    }
+
+    public void removeBehaviourRow(int rowIndex) {
+        behaviourRows.remove(rowIndex);
     }
 
     public List<BehaviourAction> getCustomEventActions(String eventName) {
-        return new ArrayList<>(customEventBehaviours.getOrDefault(eventName, List.of()));
+        List<BehaviourAction> actions = new ArrayList<>();
+        for (CustomBehaviourRow row : customBehaviourRows) {
+            if (row.eventName().equals(eventName))
+                actions.addAll(row.actions());
+        }
+        return actions;
     }
 
     public void setCustomEventActions(String eventName, List<BehaviourAction> actions) {
+        int first = -1;
+        for (int index = 0; index < customBehaviourRows.size(); index++) {
+            if (customBehaviourRows.get(index).eventName().equals(eventName)) {
+                first = index;
+                break;
+            }
+        }
+        customBehaviourRows.removeIf(row -> row.eventName().equals(eventName));
         if (actions == null || actions.isEmpty())
-            customEventBehaviours.remove(eventName);
-        else
-            customEventBehaviours.put(eventName, new ArrayList<>(actions));
+            return;
+        int insertAt = first < 0 ? customBehaviourRows.size() : first;
+        for (int offset = 0; offset < actions.size(); offset += BehaviourRow.MAX_ACTIONS) {
+            int end = Math.min(offset + BehaviourRow.MAX_ACTIONS, actions.size());
+            customBehaviourRows.add(insertAt++, new CustomBehaviourRow(eventName, actions.subList(offset, end)));
+        }
     }
 
     public void removeCustomEventAction(String eventName, int index) {
-        List<BehaviourAction> actions = customEventBehaviours.get(eventName);
-        if (actions == null || index < 0 || index >= actions.size())
+        if (index < 0)
             return;
-        actions.remove(index);
-        if (actions.isEmpty())
-            customEventBehaviours.remove(eventName);
+        for (int rowIndex = 0; rowIndex < customBehaviourRows.size(); rowIndex++) {
+            CustomBehaviourRow row = customBehaviourRows.get(rowIndex);
+            if (!row.eventName().equals(eventName))
+                continue;
+            if (index < row.actions().size()) {
+                removeCustomBehaviourRowAction(rowIndex, index);
+                if (customBehaviourRows.get(rowIndex).actions().isEmpty())
+                    customBehaviourRows.remove(rowIndex);
+                return;
+            }
+            index -= row.actions().size();
+        }
+    }
+
+    public List<CustomBehaviourRow> getCustomBehaviourRows() {
+        return List.copyOf(customBehaviourRows);
+    }
+
+    public int addCustomBehaviourRow(String eventName) {
+        return addCustomBehaviourRow(eventName, List.of());
+    }
+
+    public int addCustomBehaviourRow(String eventName, List<BehaviourAction> actions) {
+        customBehaviourRows.add(new CustomBehaviourRow(eventName, actions));
+        return customBehaviourRows.size() - 1;
+    }
+
+    public void setCustomBehaviourRowActions(int rowIndex, List<BehaviourAction> actions) {
+        CustomBehaviourRow current = customBehaviourRows.get(rowIndex);
+        customBehaviourRows.set(rowIndex, new CustomBehaviourRow(current.eventName(), actions));
+    }
+
+    public void removeCustomBehaviourRowAction(int rowIndex, int actionIndex) {
+        CustomBehaviourRow row = customBehaviourRows.get(rowIndex);
+        if (actionIndex < 0 || actionIndex >= row.actions().size())
+            return;
+        List<BehaviourAction> actions = new ArrayList<>(row.actions());
+        actions.remove(actionIndex);
+        setCustomBehaviourRowActions(rowIndex, actions);
+    }
+
+    public void removeCustomBehaviourRow(int rowIndex) {
+        customBehaviourRows.remove(rowIndex);
     }
 
     public void removeCustomEvent(String eventName) {
-        customEventBehaviours.remove(eventName);
+        customBehaviourRows.removeIf(row -> row.eventName().equals(eventName));
     }
     public int customEventActionCount() {
-        return customEventBehaviours.values().stream().mapToInt(List::size).sum();
+        return customBehaviourRows.stream().mapToInt(row -> row.actions().size()).sum();
     }
     public List<String> getCustomEventNames() {
-        return new ArrayList<>(customEventBehaviours.keySet());
+        Set<String> names = new LinkedHashSet<>();
+        customBehaviourRows.forEach(row -> names.add(row.eventName()));
+        return new ArrayList<>(names);
     }
 
     public Set<String> getReferencedRouteKeys() {
@@ -307,12 +414,10 @@ public final class NpcDefinition {
     public boolean removeRouteReferences(String routeKey) {
         String normalized = NpcRoute.normalizeKey(routeKey);
         boolean referenced = getReferencedRouteKeys().contains(normalized);
-        for (BehaviourEvent event : BehaviourEvent.values()) {
-            setBehaviourActions(event, withoutRoute(getBehaviourActions(event), normalized));
-        }
-        for (String eventName : getCustomEventNames()) {
-            setCustomEventActions(eventName, withoutRoute(getCustomEventActions(eventName), normalized));
-        }
+        for (int index = 0; index < behaviourRows.size(); index++)
+            setBehaviourRowActions(index, withoutRoute(behaviourRows.get(index).actions(), normalized));
+        for (int index = 0; index < customBehaviourRows.size(); index++)
+            setCustomBehaviourRowActions(index, withoutRoute(customBehaviourRows.get(index).actions(), normalized));
         if (movementProfile.routeKey() != null && movementProfile.routeKey().equals(normalized)) {
             movementProfile = MovementProfile.disabled().withWalkingSpeed(movementProfile.walkingSpeed());
             referenced = true;

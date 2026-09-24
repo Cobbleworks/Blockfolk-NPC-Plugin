@@ -1,6 +1,6 @@
 # Behaviour routines
 
-Behaviour routines connect an event to an ordered row of up to seven actions. Actions run from left to right.
+Behaviour routines connect an event to a row of up to seven actions. Add more rows for the same event when you need more actions. Matching rows run in their displayed order, with actions running from left to right within each row.
 
 ## Events
 
@@ -24,10 +24,9 @@ Nearby chat is configured from the AI menu rather than shown as a deterministic 
 | Combat | Start Combat, Change Fight Options |
 | Animation | Sleeping, Swimming, Fall Flying, Standing, Sneaking, Wave, Jump |
 
-Left-click an action to replace it and right-click to remove it. Shift-left-click an event row to copy it; shift-right-click another compatible row to paste.
+Click **Add Event Row**, choose an event, then fill that row's action slots. You can choose the same event again to extend its sequence. Left-click an action to replace it and right-click to remove it. Right-click an event icon to remove its row. Shift-left-click an event row to copy its actions; shift-right-click another row to paste them.
 
 <div class="screenshot-grid">
-  <img src="../screenshots/screenshot-behaviour-menu.jpeg" alt="NPC event behaviour editor">
   <img src="../screenshots/screenshot-behaviour-action-select.jpeg" alt="Behaviour action selection menu">
 </div>
 

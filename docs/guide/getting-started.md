@@ -34,8 +34,8 @@ The preset is the reusable configuration. The visible NPC is an instance of that
 For a simple greeting:
 
 1. Open the preset's **Event Behaviour** menu.
-2. Find **On Player Approach** and add **Send Dialog**.
-3. Enter the greeting in chat.
+2. Click **Add Event Row** and choose **On Player Approach**.
+3. Add **Send Dialog** to the new row and enter the greeting in chat.
 
 For movement, create a [route](/features/routes), assign it with a behaviour action, and start navigation. For contextual conversation, configure [AI behaviour](/features/ai-behaviour) and add an **AI Trigger** action.
 
