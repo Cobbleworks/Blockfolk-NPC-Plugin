@@ -90,7 +90,6 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
                 // The definition controls native player-bump movement separately.
                 spawned.setImmovable(false);
                 spawned.setAI(false);
-                spawned.setGravity(false);
                 spawned.setCollidable(true);
                 spawned.setInvulnerable(true);
                 spawned.setSilent(true);
@@ -193,8 +192,11 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
 
     @Override
     public void jump(NpcInstance instance) {
-        if (findEntity(instance) != null) {
+        Mannequin mannequin = findEntity(instance);
+        if (mannequin != null && mannequin.isOnGround() && !jumpTicksByInstance.containsKey(instance.getId())) {
             jumpTicksByInstance.putIfAbsent(instance.getId(), 0);
+            // The scripted jump supplies its own vertical motion for 12 ticks.
+            mannequin.setGravity(false);
         }
     }
 
@@ -231,6 +233,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
             if (entry.getValue() >= JUMP_DURATION_TICKS) {
                 Location landed = mannequin.getLocation().subtract(0.0, jumpOffset(entry.getValue() - 1), 0.0);
                 mannequin.teleport(landed);
+                mannequin.setGravity(true);
                 return true;
             }
             double previousOffset = jumpOffset(entry.getValue() - 1);
@@ -304,6 +307,8 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         mannequin.setDescription(null);
         mannequin.setInvisible(false);
         mannequin.setImmovable(!definition.isPushable());
+        // Also repairs mannequins spawned by older versions with NoGravity set.
+        mannequin.setGravity(!jumpTicksByInstance.containsKey(instance.getId()));
         mannequin.setCollidable(true);
         mannequin.setRotation(instance.getLocation().getYaw(), instance.getLocation().getPitch());
         mannequin.setProfile(createProfile(instance, definition));
