@@ -1,11 +1,13 @@
 package dev.blockfolk.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.util.List;
 import java.util.UUID;
 
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
 import dev.blockfolk.model.NpcInstance;
@@ -34,6 +36,19 @@ class NpcBehaviourServiceTest {
                 NpcBehaviourService.nearbyChatInstances(List.of(outside, boundary, closest), sentFrom));
         assertEquals(List.of(),
                 NpcBehaviourService.nearbyChatInstances(List.of(outside, boundary, closest), laterPlayerLocation));
+    }
+
+    @Test
+    void harvestSupportsOtherPlantableSeedsOnFarmland() {
+        assertEquals(new NpcBehaviourService.Planting(Material.WHEAT_SEEDS, Material.WHEAT),
+                NpcBehaviourService.plantingForSeed(Material.WHEAT_SEEDS, Material.FARMLAND));
+        assertEquals(new NpcBehaviourService.Planting(Material.PUMPKIN_SEEDS, Material.PUMPKIN_STEM),
+                NpcBehaviourService.plantingForSeed(Material.PUMPKIN_SEEDS, Material.FARMLAND));
+        assertEquals(new NpcBehaviourService.Planting(Material.PITCHER_POD, Material.PITCHER_CROP),
+                NpcBehaviourService.plantingForSeed(Material.PITCHER_POD, Material.FARMLAND));
+        assertEquals(new NpcBehaviourService.Planting(Material.NETHER_WART, Material.NETHER_WART),
+                NpcBehaviourService.plantingForSeed(Material.NETHER_WART, Material.SOUL_SAND));
+        assertNull(NpcBehaviourService.plantingForSeed(Material.WHEAT_SEEDS, Material.DIRT));
     }
 
     private static NpcInstance instanceAt(String key, double x) {

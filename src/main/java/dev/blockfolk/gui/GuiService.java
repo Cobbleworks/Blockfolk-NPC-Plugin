@@ -3397,7 +3397,7 @@ public final class GuiService implements Listener {
             case TAKE_ITEM -> "Picks up a nearby or offered item";
             case SHOW_INVENTORY -> "Opens the NPC's inventory for the player";
             case DROP_INVENTORY -> "Drops every item in the NPC's inventory";
-            case HARVEST -> "Harvests and replants nearby mature crops";
+            case HARVEST -> "Harvests crops and plants carried seeds on nearby soil";
             case EMIT_EVENT -> "Triggers a custom event for listening NPCs";
             case SLEEP -> "Puts the NPC into its sleeping pose";
             case SWIM -> "Puts the NPC into its swimming pose";

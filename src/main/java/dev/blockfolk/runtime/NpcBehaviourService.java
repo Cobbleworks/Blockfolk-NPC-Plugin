@@ -1635,7 +1635,7 @@ public final class NpcBehaviourService implements Listener {
             }
         }
 
-        for (int y = -1; y <= 1; y++) {
+        for (int y = -2; y <= 1; y++) {
             for (int x = -3; x <= 3; x++) {
                 for (int z = -3; z <= 3; z++) {
                     Block soil = center.getBlock().getRelative(x, y, z);
@@ -1643,13 +1643,11 @@ public final class NpcBehaviourService implements Listener {
                     if (!above.getType().isAir())
                         continue;
                     Planting planting = firstPlantingForSoil(carried, soil.getType());
-                    if (planting == null || !consumeOne(carried, planting.item()))
+                    if (planting == null)
                         continue;
                     BlockData planted = planting.crop().createBlockData();
-                    if (!authorizeBlockChange(instance, above, planted)) {
-                        carried.addItem(new ItemStack(planting.item()));
+                    if (!authorizeBlockChange(instance, above, planted) || !consumeOne(carried, planting.item()))
                         continue;
-                    }
                     above.setBlockData(planted, true);
                     worked = true;
                 }
@@ -1690,20 +1688,33 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private Planting firstPlantingForSoil(Inventory inventory, Material soil) {
-        List<Planting> options = soil == Material.FARMLAND
-                ? List.of(new Planting(Material.WHEAT_SEEDS, Material.WHEAT),
-                        new Planting(Material.CARROT, Material.CARROTS),
-                        new Planting(Material.POTATO, Material.POTATOES),
-                        new Planting(Material.BEETROOT_SEEDS, Material.BEETROOTS),
-                        new Planting(Material.TORCHFLOWER_SEEDS, Material.TORCHFLOWER_CROP))
-                : soil == Material.SOUL_SAND
-                        ? List.of(new Planting(Material.NETHER_WART, Material.NETHER_WART))
-                        : List.of();
-        for (Planting option : options) {
-            if (inventory.contains(option.item()))
-                return option;
+        for (ItemStack item : inventory.getContents()) {
+            if (item == null || item.getType().isAir() || item.getAmount() <= 0)
+                continue;
+            Planting planting = plantingForSeed(item.getType(), soil);
+            if (planting != null)
+                return planting;
         }
         return null;
+    }
+
+    static Planting plantingForSeed(Material seed, Material soil) {
+        if (soil == Material.SOUL_SAND)
+            return seed == Material.NETHER_WART ? new Planting(seed, Material.NETHER_WART) : null;
+        if (soil != Material.FARMLAND)
+            return null;
+        Material crop = switch (seed) {
+            case WHEAT_SEEDS -> Material.WHEAT;
+            case CARROT -> Material.CARROTS;
+            case POTATO -> Material.POTATOES;
+            case BEETROOT_SEEDS -> Material.BEETROOTS;
+            case MELON_SEEDS -> Material.MELON_STEM;
+            case PUMPKIN_SEEDS -> Material.PUMPKIN_STEM;
+            case TORCHFLOWER_SEEDS -> Material.TORCHFLOWER_CROP;
+            case PITCHER_POD -> Material.PITCHER_CROP;
+            default -> null;
+        };
+        return crop == null ? null : new Planting(seed, crop);
     }
 
     private Planting plantingForCrop(Material crop) {
@@ -1718,7 +1729,7 @@ public final class NpcBehaviourService implements Listener {
         };
     }
 
-    private record Planting(Material item, Material crop) {
+    record Planting(Material item, Material crop) {
     }
 
     private record InventorySource(Inventory inventory, Location containerLocation) {
