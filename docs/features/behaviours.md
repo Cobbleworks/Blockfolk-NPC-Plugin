@@ -24,7 +24,7 @@ Nearby chat is configured from the AI menu rather than shown as a deterministic 
 | Combat | Start Combat, Change Fight Options |
 | Animation | Sleeping, Swimming, Fall Flying, Standing, Sneaking, Wave, Jump |
 
-**Harvest** collects mature crops and plants seeds from the NPC's temporary inventory on nearby empty farmland. It also plants nether wart on empty soul sand. Each planting uses one item from that inventory.
+**Harvest** collects mature crops and plants seeds from the NPC's temporary inventory on nearby empty farmland. It also plants nether wart on empty soul sand. Each planting uses one item from that inventory. Melon and pumpkin stems are planted only where an adjacent fruit space can remain open. Harvest collects their fruit and leaves the stems in place.
 
 Left-click an action to replace it and right-click to remove it. Shift-left-click an event row to copy it; shift-right-click another compatible row to paste.
 

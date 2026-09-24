@@ -103,6 +103,8 @@ public final class NpcBehaviourService implements Listener {
     private static final int MAX_QUEUED_AI_INTERACTIONS = 8;
     private static final double SWITCH_USE_RANGE_SQUARED = 2.5 * 2.5;
     private static final long IDLE_REPEAT_TICKS = 1L * 20L;
+    private static final List<BlockFace> HORIZONTAL_FACES = List.of(BlockFace.NORTH, BlockFace.EAST, BlockFace.SOUTH,
+            BlockFace.WEST);
     private final Plugin plugin;
     private final NpcDefinitionRepository definitions;
     private final NpcInstanceRegistry instances;
@@ -1613,6 +1615,16 @@ public final class NpcBehaviourService implements Listener {
             for (int x = -3; x <= 3; x++) {
                 for (int z = -3; z <= 3; z++) {
                     Block block = center.getBlock().getRelative(x, y, z);
+                    if (isHarvestableStemFruit(block)) {
+                        BlockData replacement = Material.AIR.createBlockData();
+                        if (!authorizeBlockChange(instance, block, replacement))
+                            continue;
+                        for (ItemStack drop : block.getDrops())
+                            addHarvestDrop(carried, center, drop);
+                        block.setBlockData(replacement, true);
+                        worked = true;
+                        continue;
+                    }
                     Planting planting = plantingForCrop(block.getType());
                     if (planting == null || !(block.getBlockData() instanceof Ageable age)
                             || age.getAge() < age.getMaximumAge())
@@ -1640,9 +1652,9 @@ public final class NpcBehaviourService implements Listener {
                 for (int z = -3; z <= 3; z++) {
                     Block soil = center.getBlock().getRelative(x, y, z);
                     Block above = soil.getRelative(0, 1, 0);
-                    if (!above.getType().isAir())
+                    if (!above.getType().isAir() || blocksExistingStemFruitSpace(above))
                         continue;
-                    Planting planting = firstPlantingForSoil(carried, soil.getType());
+                    Planting planting = firstPlantingForSoil(carried, soil.getType(), above);
                     if (planting == null)
                         continue;
                     BlockData planted = planting.crop().createBlockData();
@@ -1687,15 +1699,67 @@ public final class NpcBehaviourService implements Listener {
         return false;
     }
 
-    private Planting firstPlantingForSoil(Inventory inventory, Material soil) {
+    private Planting firstPlantingForSoil(Inventory inventory, Material soil, Block plantingSpot) {
         for (ItemStack item : inventory.getContents()) {
             if (item == null || item.getType().isAir() || item.getAmount() <= 0)
                 continue;
             Planting planting = plantingForSeed(item.getType(), soil);
-            if (planting != null)
+            if (planting == null)
+                continue;
+            StemFruit fruit = stemFruit(planting.crop());
+            if (fruit == null || hasFruitSpace(plantingSpot, null, fruit))
                 return planting;
         }
         return null;
+    }
+
+    private boolean blocksExistingStemFruitSpace(Block plantingSpot) {
+        for (BlockFace face : HORIZONTAL_FACES) {
+            Block stem = plantingSpot.getRelative(face);
+            StemFruit fruit = stemFruit(stem.getType());
+            if (fruit != null && fruit.support().isTagged(plantingSpot.getRelative(BlockFace.DOWN).getType())
+                    && !hasFruitSpace(stem, plantingSpot, fruit))
+                return true;
+        }
+        return false;
+    }
+
+    private boolean isHarvestableStemFruit(Block block) {
+        Material fruit = block.getType();
+        if (fruit != Material.MELON && fruit != Material.PUMPKIN)
+            return false;
+        for (BlockFace face : HORIZONTAL_FACES) {
+            StemFruit stem = stemFruit(block.getRelative(face).getType());
+            if (stem != null && stem.fruit() == fruit)
+                return true;
+        }
+        return false;
+    }
+
+    private boolean hasFruitSpace(Block stem, Block blocked, StemFruit fruit) {
+        for (BlockFace face : HORIZONTAL_FACES) {
+            Block adjacent = stem.getRelative(face);
+            if (adjacent.equals(blocked))
+                continue;
+            if (adjacent.getType().isAir() && fruit.support().isTagged(adjacent.getRelative(BlockFace.DOWN).getType()))
+                return true;
+            if (isAttachedStem(stem.getType()) && adjacent.getType() == fruit.fruit())
+                return true;
+        }
+        return false;
+    }
+
+    private boolean isAttachedStem(Material stem) {
+        return stem == Material.ATTACHED_MELON_STEM || stem == Material.ATTACHED_PUMPKIN_STEM;
+    }
+
+    private StemFruit stemFruit(Material stem) {
+        return switch (stem) {
+            case MELON_STEM, ATTACHED_MELON_STEM -> new StemFruit(Tag.SUPPORTS_MELON_STEM_FRUIT, Material.MELON);
+            case PUMPKIN_STEM, ATTACHED_PUMPKIN_STEM ->
+                new StemFruit(Tag.SUPPORTS_PUMPKIN_STEM_FRUIT, Material.PUMPKIN);
+            default -> null;
+        };
     }
 
     static Planting plantingForSeed(Material seed, Material soil) {
@@ -1730,6 +1794,9 @@ public final class NpcBehaviourService implements Listener {
     }
 
     record Planting(Material item, Material crop) {
+    }
+
+    private record StemFruit(Tag<Material> support, Material fruit) {
     }
 
     private record InventorySource(Inventory inventory, Location containerLocation) {
