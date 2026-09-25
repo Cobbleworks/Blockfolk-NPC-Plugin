@@ -2,8 +2,10 @@ package dev.blockfolk.gui;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -14,7 +16,9 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
@@ -55,6 +59,7 @@ public final class RouteGuiService implements Listener {
 
     private static final int PAGE_SIZE = 45;
     private static final double PATH_PARTICLE_SPACING = 0.6;
+    private static final double LOCATION_LABEL_RANGE_SQUARED = 64.0 * 64.0;
     private static final Color PATH_COLOR = Color.fromRGB(120, 210, 255);
     private static final Color PATH_DIRECTION_COLOR = Color.fromRGB(75, 255, 145);
     private final JavaPlugin plugin;
@@ -71,6 +76,7 @@ public final class RouteGuiService implements Listener {
     private final NamespacedKey locationWandTokenKey;
     private final Map<UUID, EditSession> editSessions = new HashMap<>();
     private final Map<UUID, LocationEditSession> locationEditSessions = new HashMap<>();
+    private final Map<UUID, Map<String, TextDisplay>> locationLabels = new HashMap<>();
     private WaypointActionOpener waypointActionOpener;
     private BukkitTask markerTask;
     private NpcBehaviourService behaviourService;
@@ -365,6 +371,9 @@ public final class RouteGuiService implements Listener {
                 finishLocationEditing(player);
         }
         locationEditSessions.clear();
+        for (UUID playerId : List.copyOf(locationLabels.keySet())) {
+            removeLocationLabels(playerId);
+        }
     }
 
     @EventHandler
@@ -501,6 +510,7 @@ public final class RouteGuiService implements Listener {
                 return;
             }
             locationRepository.delete(existing);
+            showLocations(player);
             player.sendMessage(UiText.success("Deleted global location '" + existing.displayName() + "'."));
             player.spawnParticle(Particle.DUST, position.toLocation(), 10, 0.22, 0.08, 0.22, 0.0,
                     new Particle.DustOptions(Color.fromRGB(70, 255, 120), 1.5f));
@@ -561,6 +571,7 @@ public final class RouteGuiService implements Listener {
         if (locationSession != null) {
             event.getItemDrop().remove();
             locationEditSessions.remove(player.getUniqueId());
+            removeLocationLabels(player.getUniqueId());
             chatInputService.cancel(player);
             player.sendMessage(UiText.success("Finished editing global locations."));
             Bukkit.getScheduler().runTask(plugin, () -> openLocations(player, locationSession.folder(),
@@ -761,6 +772,7 @@ public final class RouteGuiService implements Listener {
 
     private void finishLocationEditing(Player player) {
         LocationEditSession session = locationEditSessions.remove(player.getUniqueId());
+        removeLocationLabels(player.getUniqueId());
         if (session != null)
             removeLocationWand(player, session);
     }
@@ -1036,12 +1048,55 @@ public final class RouteGuiService implements Listener {
 
     private void showLocations(Player player) {
         Particle.DustOptions dust = new Particle.DustOptions(Color.fromRGB(70, 255, 120), 1.5f);
+        Location playerLocation = player.getLocation();
+        Map<String, TextDisplay> labels = locationLabels.computeIfAbsent(player.getUniqueId(),
+                ignored -> new HashMap<>());
+        Set<String> visibleKeys = new HashSet<>();
         for (NamedLocation named : locationRepository.findAll()) {
             Location location = named.location().toLocation();
             if (location == null || location.getWorld() != player.getWorld())
                 continue;
             player.spawnParticle(Particle.DUST, location.clone().add(0.0, 0.1, 0.0), 6, 0.22, 0.08, 0.22, 0.0, dust);
+            if (location.distanceSquared(playerLocation) > LOCATION_LABEL_RANGE_SQUARED
+                    || !location.getWorld().isChunkLoaded(location.getBlockX() >> 4, location.getBlockZ() >> 4))
+                continue;
+            visibleKeys.add(named.key());
+            Location labelLocation = location.clone().add(0.0, 0.8, 0.0);
+            TextDisplay label = labels.get(named.key());
+            if (label == null || !label.isValid() || label.getWorld() != location.getWorld()) {
+                if (label != null)
+                    label.remove();
+                label = location.getWorld().spawn(labelLocation, TextDisplay.class, display -> {
+                    display.setPersistent(false);
+                    display.setVisibleByDefault(false);
+                    display.setBillboard(Display.Billboard.CENTER);
+                    display.setShadowed(true);
+                    display.text(Component.text(named.displayName()));
+                });
+                labels.put(named.key(), label);
+                player.showEntity(plugin, label);
+            } else {
+                if (!label.getLocation().equals(labelLocation))
+                    label.teleport(labelLocation);
+                Component name = Component.text(named.displayName());
+                if (!name.equals(label.text()))
+                    label.text(name);
+            }
         }
+        labels.entrySet().removeIf(entry -> {
+            if (visibleKeys.contains(entry.getKey()))
+                return false;
+            entry.getValue().remove();
+            return true;
+        });
+        if (labels.isEmpty())
+            locationLabels.remove(player.getUniqueId());
+    }
+
+    private void removeLocationLabels(UUID playerId) {
+        Map<String, TextDisplay> labels = locationLabels.remove(playerId);
+        if (labels != null)
+            labels.values().forEach(TextDisplay::remove);
     }
 
     private void showRoutePoints(Player player, NpcRoute route) {

@@ -1,6 +1,7 @@
 package dev.blockfolk.ai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.UUID;
@@ -60,5 +61,26 @@ class AiMemoryStoreTest {
         memory.rememberMessage(npc, player, false, "not retained");
 
         assertTrue(memory.recentConversation(npc, player, false).isEmpty());
+    }
+
+    @Test
+    void idleReviewClaimsShortConversationAndOnlyNotifiesNewParticipants() {
+        AiMemoryStore memory = new AiMemoryStore(2);
+        UUID npc = UUID.randomUUID();
+        UUID alex = UUID.randomUUID();
+        UUID sam = UUID.randomUUID();
+        for (int index = 1; index <= 9; index++)
+            memory.rememberMessage(npc, index % 2 == 0 ? sam : alex, true, "line " + index);
+
+        assertNull(memory.claimDreamBatch(npc, alex, true));
+        AiMemoryStore.DreamBatch first = memory.claimDreamBatch(npc, alex, true, true);
+        assertEquals(9, first.lines().size());
+        assertEquals(java.util.Set.of(alex, sam), first.participants());
+        memory.completeDreamBatch(first);
+
+        memory.rememberMessage(npc, alex, true, "line 10");
+        AiMemoryStore.DreamBatch second = memory.claimDreamBatch(npc, alex, true, true);
+        assertEquals(List.of("line 8", "line 9", "line 10"), second.lines());
+        assertEquals(java.util.Set.of(alex), second.participants());
     }
 }

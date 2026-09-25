@@ -12,7 +12,7 @@ and choose **Manage Locations**.
 4. Drop the shard to finish editing.
 
 Shift-left-click an existing location to enter a new name and replace it. Right-click one to delete it. Saved locations
-are highlighted in green during the session.
+are highlighted in green during the session, with their names shown above the marked blocks when nearby.
 
 ## Manage locations
 

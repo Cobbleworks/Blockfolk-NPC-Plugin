@@ -1,12 +1,12 @@
 # AI request context
 
-This page describes the bounded gameplay state Blockfolk sends to OpenRouter. Requests use JSON response formatting, temperature `0.4`, the configured token limit, and disabled model reasoning for lower latency.
+This page describes the bounded gameplay state Blockfolk sends to OpenRouter. Gameplay requests use native function calls, temperature `0.4`, the configured token limit, and disabled model reasoning for lower latency. Long-term memory review uses JSON response formatting.
 
 ## When a request is sent
 
 An NPC preset must be active, have at least one context section, and have a trigger. **AI Trigger** can be placed in standard, custom-event, waypoint, and question-branch routines. Each trigger can include optional prompt guidance, sent alongside the event in single-NPC requests. **Respond to Nearby Chat** creates requests directly for player chat within eight blocks.
 
-One chat message creates one coordinated request for up to five eligible NPCs, ordered by distance. Busy NPCs do not delay those that are available; they can participate in a later message.
+One chat message creates one coordinated request for up to five eligible NPCs. The named NPC, or the closest one when no NPC is named, is the intended speaker and appears first. If that NPC is busy, the chat turn waits in a bounded queue. Other busy NPCs can join a later turn.
 
 ## Messages sent to OpenRouter
 
@@ -15,20 +15,21 @@ Each request contains:
 1. A system message with configured identity, personality and behaviour, likes and dislikes, goal or role, and knowledge or information. Empty sections are omitted.
 2. A user message with the triggering event, NPC state, perceived surroundings, recent memory, and enabled capabilities.
 
-Single-NPC requests return up to three validated actions. Group chat returns responses keyed by safe aliases such as `npc_1` and `npc_2`.
+Gameplay turns can continue for up to three model rounds. Each response can call up to three action functions per NPC, and each NPC can take up to eight actions in a turn. After a batch runs, Blockfolk returns tool results and a fresh snapshot of the NPC state so the model can choose a dependent next action or finish. Group chat calls include readable NPC Response IDs derived from display names and persistent NPC instance IDs, such as `npc_mr_mario_1234567890abcdef`.
 
 ### Aliases and real names
 
-Aliases do not replace NPC names in the model context. Blockfolk sends an explicit mapping for every participant, for example:
+Response IDs do not replace NPC names in the model context. Blockfolk sends an explicit mapping for every participant, for example:
 
 ```text
-npc_1 (NPC Mr. Mario)
-=== npc_1: Mr. Mario (closest; default speaker) ===
+Response ID: npc_mr_mario_1234567890abcdef
+Display name: Mr. Mario
+=== Mr. Mario [Response ID: npc_mr_mario_1234567890abcdef] (intended speaker) ===
 ```
 
-The exact player message is included as the event. This lets the model understand a player addressing “Mr. Mario” while still requiring `npc_1` in the response JSON. The alias is a request-local routing and validation key; the display name supplies the conversational identity.
+The exact player message is included as the event. This lets Blockfolk select “Mr. Mario” as the intended speaker when the player addresses him, even when another NPC is closer. The model supplies that NPC's Response ID in each group action call so Blockfolk can apply actions to the correct instance. The ID stays the same when nearby NPCs join or leave; its normalized name portion changes if the display name is edited. Two instances with the same display name have different instance suffixes.
 
-Nearby players, NPCs, entities, locations, switches, containers, and inventory slots use the same pattern: a safe alias paired with a readable name or type. Arbitrary coordinates, UUIDs, and unlisted targets are rejected.
+Nearby NPC action targets use the same name and instance suffix, prefixed with `nearby_`, such as `nearby_npc_mr_mario_1234567890abcdef`. Players, other entities, locations, switches, containers, and inventory slots use safe aliases paired with a readable name or type. Arbitrary coordinates, full UUIDs, and unlisted targets are rejected.
 
 ## NPC state
 
@@ -68,6 +69,8 @@ Blockfolk keeps:
 - recent conversation lines up to `ai-control.conversation-history-limit`, which defaults to `20`;
 - up to 45 optional long-term preset facts when memory is enabled.
 
+After a completed player conversation turn, enabled long-term memory reviews batches of about ten new conversation lines. It also reviews shorter conversations after 30 seconds without player interaction. The previous exchange is included as overlap context. The review can save durable preferences, plans, promises, agreements, deals, and similar details; empty reviews do not add a fact. When a new fact is saved, the players who contributed to that batch receive a chat notice. This review happens after the gameplay response and is not a gameplay action.
+
 Private conversation is scoped to one player and one spawned NPC. Shared conversation is scoped to one spawned NPC and is visible to every player speaking with that instance. Conversations are not shared between separate spawned copies of the preset.
 
 In coordinated group chat, every participating NPC remembers every spoken line from that group turn. Each line includes the speaking NPC's display name.
@@ -76,6 +79,6 @@ Opening the preset editor clears runtime event and conversation memory, pending 
 
 ## Capability validation
 
-The request lists only the actions enabled for that preset. Depending on settings and current state, these can include speech, animation, combat, fleeing, following, world interaction, moving, returning home, route control, mining, dropping inventory items, remembering facts, and doing nothing.
+The request provides functions for the actions available to the NPC. Depending on settings and current state, these can include speech, animation, combat, fleeing, following, world interaction, moving, returning home, route control, mining, dropping inventory items, and doing nothing. Group requests use the union of available functions, with each NPC's own capabilities checked on receipt.
 
-The parser validates the response against the same capability set and the captured target snapshot before gameplay actions run. Commands, executable code, unknown actions, disabled actions, arbitrary coordinates, and unknown targets are rejected.
+The parser validates calls against the advertised functions, the NPC's capability set, and the captured target snapshot before gameplay actions run. Commands, executable code, unknown actions, disabled actions, arbitrary coordinates, and unknown targets are rejected.

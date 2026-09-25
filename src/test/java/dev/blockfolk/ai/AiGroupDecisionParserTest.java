@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -46,9 +47,66 @@ class AiGroupDecisionParserTest {
     }
 
     @Test
+    void keepsNpcSpeechInModelResponseOrder() {
+        Map<String, AiControlSettings> participants = new LinkedHashMap<>();
+        participants.put("npc_mira", settings(EnumSet.of(AiActionType.SAY)));
+        participants.put("npc_mr_mario", settings(EnumSet.of(AiActionType.SAY)));
+        Map<String, AiDecision> decisions = AiGroupDecisionParser.parse("""
+                {"responses":[
+                  {"npc":"npc_mr_mario","actions":[{"type":"SAY","text":"First"}]},
+                  {"npc":"npc_mira","actions":[{"type":"SAY","text":"Second"}]}
+                ]}
+                """, participants);
+
+        assertEquals(java.util.List.of("npc_mr_mario", "npc_mira"), java.util.List.copyOf(decisions.keySet()));
+    }
+
+    @Test
     void malformedGroupResponseProducesNoNpcActions() {
         assertEquals(Map.of(),
                 AiGroupDecisionParser.parse("not json", Map.of("npc_1", settings(EnumSet.of(AiActionType.SAY)))));
+    }
+
+    @Test
+    void missingActionListAndUnknownAliasesAreReportedAsUnusable() {
+        Map<String, AiControlSettings> participants = Map.of("npc_1", settings(EnumSet.of(AiActionType.SAY)));
+        assertFalse(
+                AiGroupDecisionParser.parseDetailed("{\"responses\":[{\"npc\":\"npc_1\"}]}", participants).usable());
+        assertFalse(AiGroupDecisionParser
+                .parseDetailed("{\"responses\":[{\"npc\":\"npc_99\",\"actions\":[]}]}", participants).usable());
+    }
+
+    @Test
+    void validatesTargetsAgainstTheRespondingNpcSnapshot() {
+        String npcId = "npc_guard_1234567890abcdef";
+        String target = "nearby_npc_mr_mario_fedcba9876543210";
+        Map<String, AiControlSettings> participants = Map.of(npcId, settings(EnumSet.of(AiActionType.START_COMBAT)));
+        String response = "{\"responses\":[{\"npc\":\"" + npcId
+                + "\",\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"" + target + "\"}]}]}";
+        AiTargetSnapshot bound = new AiTargetSnapshot(Map.of(), Map.of(target, UUID.randomUUID()), Map.of());
+
+        assertEquals(true, AiGroupDecisionParser.parseDetailed(response, participants, Map.of(npcId, bound)).usable());
+        assertFalse(AiGroupDecisionParser.parseDetailed(response, participants,
+                Map.of(npcId, new AiTargetSnapshot(Map.of(), Map.of(), Map.of()))).usable());
+    }
+
+    @Test
+    void rejectsFunctionUnavailableToOneGroupParticipant() {
+        String response = """
+                {"responses":[
+                  {"npc":"npc_1","actions":[{"type":"DROP_ITEM","target":"inventory_slot_1"}]},
+                  {"npc":"npc_2","actions":[{"type":"DROP_ITEM","target":"inventory_slot_1"}]}
+                ]}
+                """;
+        Map<String, AiControlSettings> participants = Map.of("npc_1", settings(EnumSet.of(AiActionType.SAY)), "npc_2",
+                settings(EnumSet.of(AiActionType.SAY)));
+        Map<String, java.util.Set<AiActionType>> available = Map.of("npc_1", EnumSet.of(AiActionType.SAY), "npc_2",
+                EnumSet.of(AiActionType.SAY, AiActionType.DROP_ITEM));
+
+        var parsed = AiGroupDecisionParser.parseDetailed(response, participants, null, available);
+
+        assertFalse(parsed.value().containsKey("npc_1"));
+        assertEquals(AiActionType.DROP_ITEM, parsed.value().get("npc_2").actions().getFirst().type());
     }
 
     private static AiControlSettings settings(EnumSet<AiActionType> actions) {

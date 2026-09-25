@@ -379,7 +379,7 @@ final class AiGuiService {
         return switch (type) {
             case SAY -> "Speaks a short response in the NPC's character";
             case PLAY_ANIMATION -> "Performs a wave, jump, sneak, or stand animation";
-            case START_COMBAT -> "Attacks a nearby target or ends the current fight";
+            case START_COMBAT -> "Needs max health above 0 and a living, attackable target";
             case STOP_COMBAT -> "Ends the NPC's current combat encounter";
             case FLEE_FROM -> "Moves away from a selected nearby entity";
             case FOLLOW -> "Follows a nearby player or stops following";

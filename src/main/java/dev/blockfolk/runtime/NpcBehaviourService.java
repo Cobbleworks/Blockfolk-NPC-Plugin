@@ -95,7 +95,7 @@ public final class NpcBehaviourService implements Listener {
     private static final int FOLLOW_REPATH_TICKS = 10;
     private static final int PLAYER_LOOK_INTERVAL_TICKS = 5;
     private static final int ITEM_PICKUP_INTERVAL_TICKS = 5;
-    private static final long OWN_DROP_PICKUP_LOCK_TICKS = 3L * 20L;
+    private static final long OWN_DROP_PICKUP_LOCK_TICKS = 5L * 20L;
     private static final double ITEM_PICKUP_HORIZONTAL_RANGE = 1.5;
     private static final double ITEM_PICKUP_VERTICAL_RANGE = 1.0;
     private static final long CONTAINER_CLOSE_DELAY_TICKS = 20L;
@@ -534,19 +534,17 @@ public final class NpcBehaviourService implements Listener {
     private void handlePlayerChat(Player player, String message, Location chatLocation) {
         List<NpcInstance> nearby = nearbyChatInstances(instances.findActive(), chatLocation);
         List<NpcInstance> aiGroup = new ArrayList<>();
-        String detail = "Player " + player.getName() + " said: \"" + message + "\"";
         for (NpcInstance instance : nearby) {
             NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
             if (definition == null)
                 continue;
             if (aiControlService != null && definition.getAiControlSettings().enabled()
                     && definition.getAiControlSettings().respondToChat()) {
-                aiControlService.rememberPlayerMessage(instance, player, message);
                 aiGroup.add(instance);
             }
         }
         if (aiControlService != null && !aiGroup.isEmpty()) {
-            aiControlService.invokeChatGroup(detail, aiGroup, player,
+            aiControlService.invokeChatGroup(message, aiGroup, player,
                     (instance, result) -> definitions.find(instance.getDefinitionKey())
                             .ifPresent(definition -> applyAiDecision(BehaviourEvent.PLAYER_CHAT, result, instance,
                                     definition, player, false)));
@@ -577,6 +575,8 @@ public final class NpcBehaviourService implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerJoin(PlayerJoinEvent event) {
         playerLocationSnapshots.put(event.getPlayer().getUniqueId(), event.getPlayer().getLocation().clone());
+        if (aiControlService != null)
+            aiControlService.deliverPendingMemoryNotices(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -702,7 +702,13 @@ public final class NpcBehaviourService implements Listener {
                         Entity selected = action.target() == null
                                 ? resolveAiTarget("nearest_attackable", result.targets())
                                 : target;
-                        combatService.startDirectedCombat(instance, selected);
+                        if (!combatService.startDirectedCombat(instance, selected)) {
+                            plugin.getLogger().warning("AI START_COMBAT for " + definition.getKey()
+                                    + " could not engage "
+                                    + (action.target() == null ? "nearest_attackable" : action.target())
+                                    + ". The target must still be a living, attackable entity, and the NPC must have "
+                                    + "maximum health above zero.");
+                        }
                     }
                 }
                 case STOP_COMBAT -> {
@@ -736,10 +742,7 @@ public final class NpcBehaviourService implements Listener {
                     routePaused.add(instance.getId());
                     instances.stopNavigating(instance);
                 }
-                case REMEMBER_FACT -> {
-                    aiControlService.rememberFact(definition, action.text());
-                    announceMemory(instance, definition);
-                }
+                case REMEMBER_FACT -> aiControlService.rememberFact(definition, action.text());
                 case DROP_ITEM -> dropAiInventoryItem(instance, action.target());
                 case DO_NOTHING -> {
                 }
@@ -810,18 +813,6 @@ public final class NpcBehaviourService implements Listener {
             case "sneak" -> instances.pose(instance, Pose.SNEAKING);
             case "stand" -> instances.stand(instance);
             default -> {
-            }
-        }
-    }
-
-    private void announceMemory(NpcInstance instance, NpcDefinition definition) {
-        Component message = Component.text(definition.getDisplayName() + " remembered this...", NamedTextColor.GRAY)
-                .decorate(TextDecoration.ITALIC);
-        Location location = instance.getLocation();
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.getWorld() == location.getWorld()
-                    && player.getLocation().distanceSquared(location) <= DIALOG_RANGE_SQUARED) {
-                player.sendMessage(message);
             }
         }
     }
@@ -1030,7 +1021,9 @@ public final class NpcBehaviourService implements Listener {
 
     private void tickFollow(NpcInstance instance) {
         FollowState state = following.get(instance.getId());
-        if (state == null || isNavigationPaused(instance)
+        // Stopping a route must not prevent a later FOLLOW action from moving.
+        // External pauses still suspend all movement.
+        if (state == null || externallyPaused.contains(instance.getId())
                 || combatService != null && combatService.isEngaged(instance)) {
             return;
         }

@@ -15,7 +15,7 @@ openrouter:
   model: "deepseek/deepseek-v4-flash-0731"
   # Increase this further for slower providers or reasoning-heavy models.
   timeout-seconds: 12
-  # Output allowance for the final JSON decision. Reasoning is disabled for lower latency.
+  # Output allowance for action tool calls and memory JSON. Reasoning is disabled for lower latency.
   max-tokens: 1600
 ai-control:
   # Per-NPC protection in addition to trigger-specific event throttling.

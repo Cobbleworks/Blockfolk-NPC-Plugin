@@ -22,26 +22,52 @@ public final class AiDecisionParser {
     }
 
     public static AiDecision parse(String json, AiControlSettings settings) {
+        return parseDetailed(json, settings).value();
+    }
+
+    public static AiParseResult<AiDecision> parseDetailed(String json, AiControlSettings settings) {
+        return parseDetailed(json, settings, null);
+    }
+
+    public static AiParseResult<AiDecision> parseDetailed(String json, AiControlSettings settings,
+            AiTargetSnapshot targets) {
+        return parseDetailed(json, settings, targets, null);
+    }
+
+    public static AiParseResult<AiDecision> parseDetailed(String json, AiControlSettings settings,
+            AiTargetSnapshot targets, Set<AiActionType> availableActions) {
         List<AiDecision.Action> accepted = new ArrayList<>();
+        int rejected = 0;
         try {
             JsonObject root = JsonParser.parseString(TextUtil.stripCodeFence(json)).getAsJsonObject();
-            JsonArray actions = root.has("actions") && root.get("actions").isJsonArray()
-                    ? root.getAsJsonArray("actions")
-                    : new JsonArray();
+            if (!root.has("actions") || !root.get("actions").isJsonArray())
+                return AiParseResult.invalid(doNothing(), "missing actions array");
+            JsonArray actions = root.getAsJsonArray("actions");
             for (JsonElement element : actions) {
                 if (accepted.size() >= MAX_ACTIONS)
                     break;
-                if (!element.isJsonObject())
+                if (!element.isJsonObject()) {
+                    rejected++;
                     continue;
-                parseAction(element.getAsJsonObject(), settings).ifPresent(accepted::add);
+                }
+                java.util.Optional<AiDecision.Action> action = parseAction(element.getAsJsonObject(), settings,
+                        availableActions);
+                if (action.isPresent() && targetBound(action.get(), targets))
+                    accepted.add(action.get());
+                else
+                    rejected++;
             }
         } catch (RuntimeException ignored) {
-            return doNothing();
+            return AiParseResult.invalid(doNothing(), "malformed JSON object");
         }
-        return accepted.isEmpty() ? doNothing() : new AiDecision(accepted);
+        AiDecision decision = accepted.isEmpty() ? doNothing() : new AiDecision(accepted);
+        if (accepted.isEmpty() && rejected > 0)
+            return AiParseResult.invalid(decision, "all actions were rejected");
+        return new AiParseResult<>(decision, true, rejected == 0 ? "" : rejected + " action(s) rejected");
     }
 
-    private static java.util.Optional<AiDecision.Action> parseAction(JsonObject object, AiControlSettings settings) {
+    private static java.util.Optional<AiDecision.Action> parseAction(JsonObject object, AiControlSettings settings,
+            Set<AiActionType> availableActions) {
         if (!object.has("type") || !object.get("type").isJsonPrimitive())
             return java.util.Optional.empty();
         AiActionType type;
@@ -50,7 +76,11 @@ public final class AiDecisionParser {
         } catch (IllegalArgumentException exception) {
             return java.util.Optional.empty();
         }
-        if (type == AiActionType.REMEMBER_FACT && !settings.memoryEnabled()) {
+        if (availableActions != null && !availableActions.contains(type))
+            return java.util.Optional.empty();
+        // Permanent facts are extracted by the post-action dream request, never by
+        // the gameplay decision that is returned to the NPC action runner.
+        if (type == AiActionType.REMEMBER_FACT) {
             return java.util.Optional.empty();
         }
         if (type != AiActionType.DO_NOTHING && type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM
@@ -62,9 +92,6 @@ public final class AiDecisionParser {
         String animation = string(object, "animation", true);
         if (type == AiActionType.SAY && (text == null || text.isBlank()))
             return java.util.Optional.empty();
-        if (type == AiActionType.REMEMBER_FACT && (text == null || text.isBlank())) {
-            return java.util.Optional.empty();
-        }
         if (target != null && !validTarget(type, target))
             return java.util.Optional.empty();
         if (requiresTarget(type) && target == null)
@@ -89,8 +116,12 @@ public final class AiDecisionParser {
                     || target.matches("(take_from|store_in)_container(?:_[1-9][0-9]*)?");
         }
         if (type == AiActionType.START_COMBAT) {
-            return TARGETS.contains(target) || target.matches("nearby_(player|npc|entity)_[1-9][0-9]*");
+            return TARGETS.contains(target) || target.matches("nearby_(player|entity)_[1-9][0-9]*")
+                    || target.matches("nearby_npc_[a-z0-9_]+");
         }
+        if (type == AiActionType.FLEE_FROM)
+            return TARGETS.contains(target) || target.matches("nearby_(player|entity)_[1-9][0-9]*")
+                    || target.matches("nearby_npc_[a-z0-9_]+");
         if (type == AiActionType.FOLLOW) {
             if (target.equals("triggering_player") || target.equals("nearest_player"))
                 return true;
@@ -100,7 +131,23 @@ public final class AiDecisionParser {
         }
         if (TARGETS.contains(target))
             return true;
-        return type == AiActionType.MOVE_TO && target.matches("nearby_(location|player|npc|entity)_[1-9][0-9]*");
+        return type == AiActionType.MOVE_TO && (target.matches("nearby_(location|player|entity)_[1-9][0-9]*")
+                || target.matches("nearby_npc_[a-z0-9_]+"));
+    }
+
+    private static boolean targetBound(AiDecision.Action action, AiTargetSnapshot targets) {
+        if (targets == null || action.target() == null)
+            return true;
+        String target = action.target();
+        return switch (action.type()) {
+            case START_COMBAT, FLEE_FROM, FOLLOW ->
+                targets.entityId(target).isPresent() || targets.npcInstanceId(target).isPresent();
+            case MOVE_TO -> targets.entityId(target).isPresent() || targets.npcInstanceId(target).isPresent()
+                    || targets.location(target).isPresent();
+            case INTERACT -> target.equals("nearest_switch") || target.equals("take_from_container")
+                    || target.equals("store_in_container") || targets.location(target).isPresent();
+            default -> true;
+        };
     }
 
     private static String string(JsonObject object, String name, boolean normalize) {

@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -54,6 +56,16 @@ class AiDecisionParserTest {
     }
 
     @Test
+    void reportsUnusableResponseSeparatelyFromIntentionalDoNothing() {
+        assertEquals("malformed JSON object",
+                AiDecisionParser.parseDetailed("certainly!", AiControlSettings.defaults()).issue());
+        assertEquals(false, AiDecisionParser
+                .parseDetailed("{\"actions\":[{\"type\":\"RUN_COMMAND\"}]}", AiControlSettings.defaults()).usable());
+        assertEquals(true, AiDecisionParser
+                .parseDetailed("{\"actions\":[{\"type\":\"DO_NOTHING\"}]}", AiControlSettings.defaults()).usable());
+    }
+
+    @Test
     void startCombatMaySelectNearestAttackableImplicitly() {
         AiControlSettings settings = settings("Guard", "", "Defend this place", EnumSet.of(AiActionType.START_COMBAT));
 
@@ -78,6 +90,18 @@ class AiDecisionParserTest {
         assertEquals("nearby_entity_2", entity.actions().getFirst().target());
         assertEquals("nearby_npc_1", npc.actions().getFirst().target());
         assertEquals(AiActionType.DO_NOTHING, arbitrary.actions().getFirst().type());
+    }
+
+    @Test
+    void namedNpcTargetMustBeBoundInThisRequest() {
+        AiControlSettings settings = settings("Guard", "", "Defend this place", EnumSet.of(AiActionType.START_COMBAT));
+        String target = "nearby_npc_mr_mario_1234567890abcdef";
+        AiTargetSnapshot snapshot = new AiTargetSnapshot(Map.of(), Map.of(target, UUID.randomUUID()), Map.of());
+        String response = "{\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"" + target + "\"}]}";
+
+        assertEquals(true, AiDecisionParser.parseDetailed(response, settings, snapshot).usable());
+        assertEquals(false, AiDecisionParser
+                .parseDetailed(response, settings, new AiTargetSnapshot(Map.of(), Map.of(), Map.of())).usable());
     }
 
     @Test
@@ -172,15 +196,14 @@ class AiDecisionParserTest {
     }
 
     @Test
-    void rememberFactRequiresMemoryToBeEnabled() {
+    void permanentFactsAreHandledAfterTheActionResponse() {
         String response = "{\"actions\":[{\"type\":\"REMEMBER_FACT\",\"text\":\"Alex likes apples\"}]}";
 
         AiDecision disabled = AiDecisionParser.parse(response, AiControlSettings.defaults());
         AiDecision enabled = AiDecisionParser.parse(response, AiControlSettings.defaults().withMemoryEnabled(true));
 
         assertEquals(AiActionType.DO_NOTHING, disabled.actions().getFirst().type());
-        assertEquals(AiActionType.REMEMBER_FACT, enabled.actions().getFirst().type());
-        assertEquals("Alex likes apples", enabled.actions().getFirst().text());
+        assertEquals(AiActionType.DO_NOTHING, enabled.actions().getFirst().type());
     }
 
     @Test
