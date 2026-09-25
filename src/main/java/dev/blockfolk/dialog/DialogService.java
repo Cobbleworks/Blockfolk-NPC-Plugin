@@ -19,6 +19,7 @@ import org.bukkit.scheduler.BukkitTask;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 public final class DialogService {
 
@@ -89,7 +90,7 @@ public final class DialogService {
     }
 
     public void showProcessing(NpcInstance instance) {
-        if (!setDescription(instance, Component.text(PROCESSING_PREFIX + ".")))
+        if (!setDescription(instance, processingText(1)))
             return;
         DialogRuntime runtime = dialogs.computeIfAbsent(instance.getId(), ignored -> new DialogRuntime(instance));
         runtime.processing = true;
@@ -138,8 +139,7 @@ public final class DialogService {
                 if (++runtime.processingFrameTicks >= 20) {
                     runtime.processingFrameTicks = 0;
                     runtime.processingFrame = (runtime.processingFrame + 1) % 3;
-                    setDescription(runtime.instance,
-                            Component.text(PROCESSING_PREFIX + ".".repeat(runtime.processingFrame + 1)));
+                    setDescription(runtime.instance, processingText(runtime.processingFrame + 1));
                 }
                 continue;
             }
@@ -148,6 +148,10 @@ public final class DialogService {
                 dialogIterator.remove();
             }
         }
+    }
+
+    private Component processingText(int dots) {
+        return Component.text(PROCESSING_PREFIX + ".".repeat(dots), NamedTextColor.GOLD);
     }
 
     private static final class DialogRuntime {
