@@ -85,13 +85,19 @@ public final class NativeNpcNavigationService {
             state.walkingSpeed = walkingSpeed;
             state.lastLocation = current.clone();
             state.stationaryTicks = 0;
-            requestPath(navigator, target, walkingSpeed);
+            if (!requestPath(navigator, target, walkingSpeed)) {
+                states.remove(instance.getId());
+                return new NavigationUpdate(NavigationStatus.STALLED, current);
+            }
             state.retryTicks = REPATH_TICKS;
         } else {
             updateProgress(state, current);
             if (state.retryTicks <= 0
                     && (!navigator.getPathfinder().hasPath() || state.stationaryTicks >= REPATH_TICKS)) {
-                requestPath(navigator, target, walkingSpeed);
+                if (!requestPath(navigator, target, walkingSpeed)) {
+                    states.remove(instance.getId());
+                    return new NavigationUpdate(NavigationStatus.STALLED, current);
+                }
                 state.retryTicks = REPATH_TICKS;
             }
         }
@@ -99,6 +105,9 @@ public final class NativeNpcNavigationService {
             state.retryTicks--;
         }
         boolean stuck = state.stationaryTicks >= STUCK_TICKS;
+        if (stuck) {
+            stop(instance);
+        }
         return new NavigationUpdate(stuck ? NavigationStatus.STALLED : NavigationStatus.MOVING, current);
     }
 
@@ -132,7 +141,7 @@ public final class NativeNpcNavigationService {
         return entity.getPersistentDataContainer().has(navigatorKey, PersistentDataType.STRING);
     }
 
-    private void requestPath(Pig navigator, Location target, WalkingSpeed walkingSpeed) {
+    private boolean requestPath(Pig navigator, Location target, WalkingSpeed walkingSpeed) {
         configureSpeed(navigator, walkingSpeed);
         AttributeInstance followRange = navigator.getAttribute(Attribute.FOLLOW_RANGE);
         if (followRange != null) {
@@ -141,10 +150,12 @@ public final class NativeNpcNavigationService {
         }
         Pathfinder pathfinder = navigator.getPathfinder();
         Pathfinder.PathResult path = pathfinder.findPath(target);
-        if (path != null) {
+        if (path != null && path.canReachFinalPoint()) {
             pathfinder.moveTo(path, 1.0);
+            return true;
         } else {
             pathfinder.stopPathfinding();
+            return false;
         }
     }
 

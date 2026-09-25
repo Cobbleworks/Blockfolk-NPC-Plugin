@@ -13,7 +13,7 @@ All points in one route must be in the same world. Points remain highlighted whi
 
 ## Point order
 
-Point order is derived from position rather than placement order. An NPC starts at the point nearest to it, repeatedly visits the nearest unvisited point, then closes the loop from the final point back to the first.
+Point order is derived from position rather than placement order. An NPC starts at the point nearest to it, repeatedly visits the nearest unvisited point, then tries to close the loop from the final point back to the first. If a leg cannot be reached, it tries the nearest alternative waypoint from its current position and can reverse through the route. After all alternatives fail, it waits before retrying.
 
 ## Waypoint actions
 

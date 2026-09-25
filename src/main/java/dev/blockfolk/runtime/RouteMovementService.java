@@ -27,7 +27,7 @@ public final class RouteMovementService {
     private final NpcInstanceRegistry instanceRegistry;
     private final NpcCombatService combatService;
     private final NpcBehaviourService behaviourService;
-    private final Map<UUID, Progress> progressByInstance = new HashMap<>();
+    private final Map<UUID, RouteProgress> progressByInstance = new HashMap<>();
     private BukkitTask task;
 
     public RouteMovementService(JavaPlugin plugin, NpcDefinitionRepository definitionRepository,
@@ -104,15 +104,18 @@ public final class RouteMovementService {
             return;
         }
 
-        Progress progress = progressByInstance.get(instance.getId());
+        RouteProgress progress = progressByInstance.get(instance.getId());
         List<RoutePoint> sourcePoints = route.getPoints();
         if (progress == null || !progress.matches(route.getKey(), sourcePoints)) {
             List<RoutePoint> ordered = route.logicallyOrdered(instance.getLocation());
-            progress = new Progress(route.getKey(), sourcePoints, ordered, 0, false);
+            progress = new RouteProgress(route.getKey(), sourcePoints, ordered);
             progressByInstance.put(instance.getId(), progress);
         }
 
-        RoutePoint targetPoint = progress.orderedPoints().get(progress.targetIndex());
+        if (!progress.ready(instance.getLocation())) {
+            return;
+        }
+        RoutePoint targetPoint = progress.targetPoint();
         if (progress.targetHandled()) {
             // A one-point route has no different next index. Keep its action
             // from firing every tick while the NPC remains on the point, but
@@ -120,8 +123,7 @@ public final class RouteMovementService {
             if (targetPoint.distanceSquared(current) <= 1.0) {
                 return;
             }
-            progress = progress.withTargetPending();
-            progressByInstance.put(instance.getId(), progress);
+            progress.setTargetPending();
         }
         Location target = targetPoint.toWalkingLocation();
         if (target == null || !current.getWorld().equals(target.getWorld())) {
@@ -133,14 +135,13 @@ public final class RouteMovementService {
                 movement.walkingSpeed());
         if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED) {
             instanceRegistry.stopNavigating(instance);
-            int nextIndex = (progress.targetIndex() + 1) % progress.orderedPoints().size();
-            progressByInstance.put(instance.getId(), progress.withTargetIndex(nextIndex));
+            progress.arrived();
             behaviourService.triggerWaypointActions(targetPoint.actions(), instance);
             behaviourService.trigger(dev.blockfolk.model.BehaviourEvent.ROUTE_POINT_REACHED, instance, null,
                     "The NPC reached a route waypoint.");
         } else if (status == NativeNpcNavigationService.NavigationStatus.STALLED) {
-            int nextIndex = (progress.targetIndex() + 1) % progress.orderedPoints().size();
-            progressByInstance.put(instance.getId(), progress.withTargetIndex(nextIndex));
+            instanceRegistry.stopNavigating(instance);
+            progress.stalled(instance.getLocation());
         }
     }
 
@@ -150,24 +151,4 @@ public final class RouteMovementService {
         }
     }
 
-    private record Progress(String routeKey, List<RoutePoint> sourcePoints, List<RoutePoint> orderedPoints,
-            int targetIndex, boolean targetHandled) {
-
-        private Progress {
-            sourcePoints = List.copyOf(sourcePoints);
-            orderedPoints = List.copyOf(orderedPoints);
-        }
-
-        boolean matches(String candidateRouteKey, List<RoutePoint> candidatePoints) {
-            return routeKey.equals(candidateRouteKey) && sourcePoints.equals(candidatePoints);
-        }
-
-        Progress withTargetIndex(int targetIndex) {
-            return new Progress(routeKey, sourcePoints, orderedPoints, targetIndex, targetIndex == this.targetIndex);
-        }
-
-        Progress withTargetPending() {
-            return new Progress(routeKey, sourcePoints, orderedPoints, targetIndex, false);
-        }
-    }
 }
