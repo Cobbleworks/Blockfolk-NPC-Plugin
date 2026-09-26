@@ -15,6 +15,14 @@ import com.google.gson.JsonParser;
 class OpenRouterClientTest {
 
     @Test
+    void modelCanBeChangedWithoutRestartingClient() {
+        OpenRouterClient client = new OpenRouterClient("https://example.test/api", "key", "", 5);
+        assertTrue(!client.configured());
+        client.setModel("test/model");
+        assertTrue(client.configured());
+    }
+
+    @Test
     void readsTextContent() {
         assertEquals("{\"actions\":[]}", OpenRouterClient.responseContent("""
                 {"choices":[{"message":{"content":"{\\\"actions\\\":[]}"},"finish_reason":"stop"}]}

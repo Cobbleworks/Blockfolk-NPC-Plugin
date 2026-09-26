@@ -1,13 +1,13 @@
 # Routes
 
-Routes are reusable walking loops built directly in the world. Open the route manager with `/bf routes`.
+Routes are walking loops owned by individual NPC presets. Open the route manager with `/bf routes` to browse and edit them.
 
 ## Create a route
 
-1. Choose **Create Route** and enter a unique name in chat. Route keys may contain `/`, but the browser groups assigned routes by NPC rather than by name segments.
-2. Open the new route. Blockfolk gives you a unique amethyst-shard route editor.
+1. Open an NPC preset, add a **Set Route** action, then choose **Create Route** and enter a name in chat. Names are unique within that NPC.
+2. Blockfolk selects the new route for that action and gives you a unique amethyst-shard route editor.
 3. Left-click blocks to add points and shift-right-click points to remove them.
-4. Drop the editor shard to save and finish.
+4. Drop the editor shard to save and return to that NPC’s **Behaviour** menu.
 
 All points in one route must be in the same world. Points remain highlighted while editing.
 
@@ -28,7 +28,7 @@ Right-click a route point with the editor shard to attach an action sequence. Th
 
 Use these behaviour actions:
 
-- **Set Route** selects the configured route;
+- **Set Route** selects one of that NPC’s routes. Left-click a route to select it, or right-click to edit its points;
 - **Start Navigation** begins or resumes movement;
 - **Stop Navigation** pauses it;
 - **Set Walk Speed** chooses Slouch, Slow, Normal, Fast, or Very Fast.
@@ -37,8 +37,8 @@ AI can also start or pause the configured route when those capabilities are enab
 
 ## Route browser tools
 
-The root route browser groups assigned routes under folders named after the NPC presets that reference them. Click an NPC folder to see all routes used by that preset. A route shared by multiple presets appears in each relevant folder; it is still one route, not a duplicate. Routes that no preset references remain visible directly at the root.
+The root route browser groups routes under folders named after their owning NPC presets, whether or not an action currently uses them. Legacy routes with no owner remain visible at the root. Older shared routes are copied for each NPC that referenced them when the plugin loads.
 
-NPC folders follow the saved NPC preset order. Within those folders—and for unassigned routes at the root—routes follow the saved route order. This grouping can make a route appear to have moved after it is assigned even though its ordering has not changed.
+NPC folders follow the saved NPC preset order. Routes within each folder follow the saved route order. Deleting an NPC preset also deletes its routes.
 
 To customize route order, click **Route Overview** at the bottom of the route browser. In **Reorder Routes**, pick up and drop route icons, then choose **Save Order**. Middle-click a route to use your main-hand item as its browser icon. Deleting a route removes direct and question-branch references and unassigns affected presets.

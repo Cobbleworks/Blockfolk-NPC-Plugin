@@ -314,6 +314,48 @@ public final class NpcDefinition {
         return Set.copyOf(routeKeys);
     }
 
+    /** Repoints direct, movement, and question-branch route references. */
+    public boolean replaceRouteReferences(String oldKey, String newKey) {
+        String oldRoute = NpcRoute.normalizeKey(oldKey);
+        String newRoute = NpcRoute.normalizeKey(newKey);
+        if (!getReferencedRouteKeys().contains(oldRoute))
+            return false;
+        for (BehaviourEvent event : BehaviourEvent.values())
+            setBehaviourActions(event, replaceRoute(getBehaviourActions(event), oldRoute, newRoute));
+        for (String eventName : getCustomEventNames())
+            setCustomEventActions(eventName, replaceRoute(getCustomEventActions(eventName), oldRoute, newRoute));
+        if (oldRoute.equals(movementProfile.routeKey()))
+            movementProfile = new MovementProfile(movementProfile.enabled(), newRoute, movementProfile.walkingSpeed());
+        return true;
+    }
+
+    private static boolean matchesRoute(String value, String key) {
+        try {
+            return NpcRoute.normalizeKey(value).equals(key);
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+    }
+
+    private static List<BehaviourAction> replaceRoute(List<BehaviourAction> actions, String oldKey, String newKey) {
+        List<BehaviourAction> result = new ArrayList<>();
+        for (BehaviourAction action : actions) {
+            if (action.type() == BehaviourActionType.SET_ROUTE && action.value() != null
+                    && matchesRoute(action.value(), oldKey)) {
+                result.add(new BehaviourAction(action.type(), newKey));
+            } else if (action.type() == BehaviourActionType.ASK_QUESTION && action.question() != null) {
+                NpcQuestion question = action.question();
+                List<QuestionOption> options = question.options().stream()
+                        .map(option -> option.withActions(replaceRoute(option.actions(), oldKey, newKey))).toList();
+                result.add(BehaviourAction.ask(new NpcQuestion(question.id(), question.prompt(), options,
+                        replaceRoute(question.cancelActions(), oldKey, newKey))));
+            } else {
+                result.add(action);
+            }
+        }
+        return result;
+    }
+
     /** Removes every direct or question-branch reference to a deleted route. */
     public boolean removeRouteReferences(String routeKey) {
         String normalized = NpcRoute.normalizeKey(routeKey);

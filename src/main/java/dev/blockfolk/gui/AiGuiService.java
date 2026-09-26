@@ -178,7 +178,7 @@ final class AiGuiService {
         return false;
     }
 
-    private void openMemories(Player player, NpcDefinition definition) {
+    void openMemories(Player player, NpcDefinition definition) {
         Inventory inventory = Bukkit.createInventory(new AiMemoryHolder(definition.getKey()), 54,
                 UiText.title("Memory", definition.getDisplayName()));
         List<String> memories = definition.getAiMemories();

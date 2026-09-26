@@ -121,17 +121,28 @@ public final class RouteGuiService implements Listener {
         openRoutes(player, "", requestedPage);
     }
 
-    public void createRoute(Player player, String folder, Consumer<NpcRoute> onCreated) {
+    public void createRoute(Player player, String ownerKey, Consumer<NpcRoute> onCreated,
+            Consumer<Player> onFinished) {
+        if (definitionRepository.find(ownerKey).isEmpty()) {
+            player.sendMessage(UiText.error("That NPC no longer exists."));
+            return;
+        }
         chatInputService.request(player, "Enter the route name:", value -> {
+            if (definitionRepository.find(ownerKey).isEmpty()) {
+                player.sendMessage(UiText.error("That NPC no longer exists."));
+                return;
+            }
             try {
-                NpcRoute route = NpcRoute.create(value);
+                NpcRoute route = new NpcRoute(ownerKey + "/" + NpcRoute.normalizeKey(value));
+                route.setDisplayName(value);
                 if (routeRepository.find(route.getKey()).isPresent()) {
                     player.sendMessage(UiText.error("A route with that key already exists."));
                     return;
                 }
+                route.setOwnerKey(ownerKey);
                 routeRepository.save(route);
                 onCreated.accept(route);
-                beginEditing(player, route);
+                beginEditing(player, route, onFinished);
             } catch (IllegalArgumentException exception) {
                 player.sendMessage(UiText.error(exception.getMessage()));
             }
@@ -152,7 +163,7 @@ public final class RouteGuiService implements Listener {
             if (entry.folder()) {
                 ItemStack folderIcon = item(entry.npcFolder() ? Material.PLAYER_HEAD : Material.CHEST, entry.label(),
                         List.of(LegacyText.GRAY + "" + entry.childCount() + " route(s)",
-                                LegacyText.DARK_GRAY + "Routes used by this NPC", LegacyText.YELLOW + "Click to open"));
+                                LegacyText.DARK_GRAY + "Routes owned by this NPC", LegacyText.YELLOW + "Click to open"));
                 if (entry.npcFolder()) {
                     definitionRepository.find(RouteBrowserModel.npcKey(entry.path()))
                             .ifPresent(definition -> NpcHeadUtil.applySkin(folderIcon, definition));
@@ -186,10 +197,6 @@ public final class RouteGuiService implements Listener {
                                 LegacyText.GRAY + "NPCs start at their nearest point",
                                 LegacyText.GRAY + "then follow nearest unvisited points in a loop",
                                 LegacyText.YELLOW + "Click to reorder routes")));
-        if (!RouteBrowserModel.isNpcFolder(folder)) {
-            inventory.setItem(51, item(Material.EMERALD, "Create Route",
-                    List.of(LegacyText.YELLOW + "Click, then enter the route name")));
-        }
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
@@ -578,13 +585,21 @@ public final class RouteGuiService implements Listener {
                     locationSession.page(), locationSession.returnFolder(), locationSession.returnPage()));
             return;
         }
-        if (validSession(player, event.getItemDrop().getItemStack()) == null) {
+        EditSession session = validSession(player, event.getItemDrop().getItemStack());
+        if (session == null) {
             return;
         }
         event.getItemDrop().remove();
         editSessions.remove(player.getUniqueId());
         player.sendMessage(UiText.success("Finished editing the route."));
-        Bukkit.getScheduler().runTask(plugin, () -> openRoutes(player));
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (player.isOnline()) {
+                if (session.onFinished() == null)
+                    openRoutes(player);
+                else
+                    session.onFinished().accept(player);
+            }
+        });
     }
 
     @EventHandler
@@ -613,27 +628,6 @@ public final class RouteGuiService implements Listener {
         }
         if (event.getRawSlot() == 49) {
             openReorder(player, folder, page);
-            return;
-        }
-        if (event.getRawSlot() == 51) {
-            if (RouteBrowserModel.isNpcFolder(folder)) {
-                return;
-            }
-            chatInputService.request(player, "Enter the route name:", value -> {
-                try {
-                    NpcRoute route = NpcRoute.create(value);
-                    if (routeRepository.find(route.getKey()).isPresent()) {
-                        player.sendMessage(UiText.error("A route with that key already exists."));
-                        openRoutes(player, folder, page);
-                        return;
-                    }
-                    routeRepository.save(route);
-                    beginEditing(player, route);
-                } catch (IllegalArgumentException exception) {
-                    player.sendMessage(UiText.error(exception.getMessage()));
-                    openRoutes(player, folder, page);
-                }
-            });
             return;
         }
         if (event.getRawSlot() == 53) {
@@ -945,10 +939,14 @@ public final class RouteGuiService implements Listener {
         return npcName;
     }
 
-    private void beginEditing(Player player, NpcRoute route) {
+    public void beginEditing(Player player, NpcRoute route) {
+        beginEditing(player, route, null);
+    }
+
+    private void beginEditing(Player player, NpcRoute route, Consumer<Player> onFinished) {
         finishEditing(player, false);
         UUID token = UUID.randomUUID();
-        editSessions.put(player.getUniqueId(), new EditSession(route.getKey(), token));
+        editSessions.put(player.getUniqueId(), new EditSession(route.getKey(), token, onFinished));
 
         ItemStack held = player.getInventory().getItemInMainHand();
         player.getInventory().setItemInMainHand(createWand(route, token));
@@ -1204,7 +1202,7 @@ public final class RouteGuiService implements Listener {
         return result;
     }
 
-    private record EditSession(String routeKey, UUID token) {
+    private record EditSession(String routeKey, UUID token, Consumer<Player> onFinished) {
 
     }
 

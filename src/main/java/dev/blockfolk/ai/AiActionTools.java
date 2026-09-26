@@ -82,7 +82,8 @@ final class AiActionTools {
     private static String targetDescription(AiActionType action) {
         return switch (action) {
             case START_COMBAT -> "Listed entity alias; omit to attack the nearest safe attackable entity.";
-            case INTERACT -> "Listed switch or container alias; omit only when the nearest suitable one is intended.";
+            case INTERACT -> "Listed switch or container alias. Use nearby_lever_N for a lever request and "
+                    + "nearby_button_N for a button request; nearest_switch may select either type.";
             case FLEE_FROM -> "Listed entity alias to flee from.";
             case FOLLOW -> "Listed player alias or Minecraft player name.";
             case MOVE_TO -> "Listed player, NPC, entity, or saved location alias.";

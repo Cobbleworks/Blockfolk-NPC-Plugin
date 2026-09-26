@@ -58,6 +58,20 @@ class NpcDefinitionTest {
     }
 
     @Test
+    void replacesRouteReferencesInsideMovementAndQuestionBranches() {
+        NpcDefinition npc = NpcDefinition.create("Guard");
+        npc.setMovementProfile(MovementProfile.routing("patrol", WalkingSpeed.NORMAL));
+        BehaviourAction useRoute = new BehaviourAction(BehaviourActionType.SET_ROUTE, "Patrol");
+        QuestionOption option = new QuestionOption("Go", List.of(useRoute));
+        NpcQuestion question = new NpcQuestion(UUID.randomUUID(), "Choose", List.of(option), List.of(useRoute));
+        npc.setBehaviourActions(BehaviourEvent.RIGHT_CLICK, List.of(BehaviourAction.ask(question)));
+
+        assertTrue(npc.replaceRouteReferences("patrol", "guard/patrol"));
+        assertEquals(java.util.Set.of("guard/patrol"), npc.getReferencedRouteKeys());
+        assertEquals("guard/patrol", npc.getMovementProfile().routeKey());
+    }
+
+    @Test
     void findsRoutesReferencedByMovementEventsCustomEventsAndQuestions() {
         NpcDefinition definition = NpcDefinition.create("Guard");
         definition.setMovementProfile(MovementProfile.routing("Day Patrol", WalkingSpeed.NORMAL));

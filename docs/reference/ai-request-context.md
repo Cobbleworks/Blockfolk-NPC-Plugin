@@ -15,7 +15,7 @@ Each request contains:
 1. A system message with configured identity, personality and behaviour, likes and dislikes, goal or role, and knowledge or information. Empty sections are omitted.
 2. A user message with the triggering event, NPC state, perceived surroundings, recent memory, and enabled capabilities.
 
-Gameplay turns can continue for up to three model rounds. Each response can call up to three action functions per NPC, and each NPC can take up to eight actions in a turn. After a batch runs, Blockfolk returns tool results and a fresh snapshot of the NPC state so the model can choose a dependent next action or finish. Group chat calls include readable NPC Response IDs derived from display names and persistent NPC instance IDs, such as `npc_mr_mario_1234567890abcdef`.
+Gameplay turns can continue for up to three model rounds. Each response can call up to three action functions per NPC, and each NPC can take up to eight actions and speak once in a turn. Extra `SAY` calls from the same NPC are ignored. After a batch runs, Blockfolk returns tool results and a fresh snapshot of the NPC state so the model can choose a dependent next action or finish. Group chat calls include readable NPC Response IDs derived from display names and persistent NPC instance IDs, such as `npc_mr_mario_1234567890abcdef`.
 
 ### Aliases and real names
 

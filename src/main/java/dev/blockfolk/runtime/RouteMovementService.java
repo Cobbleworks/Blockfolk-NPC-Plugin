@@ -93,7 +93,7 @@ public final class RouteMovementService {
             return;
         }
         NpcRoute route = routeRepository.find(movement.routeKey()).orElse(null);
-        if (route == null || route.getPoints().isEmpty()) {
+        if (route == null || !route.isOwnedBy(definition.getKey()) || route.getPoints().isEmpty()) {
             stop(instance);
             return;
         }
@@ -137,8 +137,6 @@ public final class RouteMovementService {
             instanceRegistry.stopNavigating(instance);
             progress.arrived();
             behaviourService.triggerWaypointActions(targetPoint.actions(), instance);
-            behaviourService.trigger(dev.blockfolk.model.BehaviourEvent.ROUTE_POINT_REACHED, instance, null,
-                    "The NPC reached a route waypoint.");
         } else if (status == NativeNpcNavigationService.NavigationStatus.STALLED) {
             instanceRegistry.stopNavigating(instance);
             progress.stalled(instance.getLocation());

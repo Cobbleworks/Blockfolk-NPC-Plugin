@@ -52,6 +52,9 @@ public final class RouteRepository {
                 continue;
             }
             route.setDisplayName(section.getString("display-name", route.getKey()));
+            if (section.isString("owner")) {
+                route.setOwnerKey(section.getString("owner"));
+            }
             route.setIcon(section.getItemStack("icon"));
             ConfigurationSection points = section.getConfigurationSection("points");
             if (points != null) {
@@ -72,6 +75,92 @@ public final class RouteRepository {
             routes.put(route.getKey(), route);
         }
         loadOrder(configuration);
+    }
+
+    /** Assigns legacy routes to their users, copying routes shared by several NPCs. */
+    public void migrateOwnership(Collection<NpcDefinition> definitions,
+            java.util.function.Consumer<NpcDefinition> saveDefinition) {
+        Map<String, Set<String>> reachable = new LinkedHashMap<>();
+        for (NpcDefinition definition : definitions) {
+            Set<String> keys = new HashSet<>(definition.getReferencedRouteKeys());
+            java.util.ArrayDeque<String> pending = new java.util.ArrayDeque<>(keys);
+            while (!pending.isEmpty()) {
+                find(pending.removeFirst()).ifPresent(route -> {
+                    for (String key : route.getReferencedRouteKeys()) {
+                        if (keys.add(key))
+                            pending.addLast(key);
+                    }
+                });
+            }
+            reachable.put(definition.getKey(), keys);
+        }
+        Map<String, Map<String, String>> replacements = new LinkedHashMap<>();
+        for (NpcRoute route : List.copyOf(findAll())) {
+            if (route.getOwnerKey() != null)
+                continue;
+            List<NpcDefinition> users = definitions.stream()
+                    .filter(definition -> reachable.get(definition.getKey()).contains(route.getKey())).toList();
+            if (users.isEmpty())
+                continue;
+            route.setOwnerKey(users.getFirst().getKey());
+            replacements.computeIfAbsent(users.getFirst().getKey(), ignored -> new LinkedHashMap<>())
+                    .put(route.getKey(), route.getKey());
+            save(route);
+            for (NpcDefinition definition : users.subList(1, users.size())) {
+                String base = route.getKey() + "-" + definition.getKey();
+                String key = base;
+                int suffix = 2;
+                while (find(key).isPresent())
+                    key = base + "-" + suffix++;
+                NpcRoute copy = new NpcRoute(key);
+                copy.setDisplayName(route.getDisplayName());
+                copy.setIcon(route.getIcon());
+                copy.setOwnerKey(definition.getKey());
+                route.getPoints().forEach(copy::addPoint);
+                save(copy);
+                replacements.computeIfAbsent(definition.getKey(), ignored -> new LinkedHashMap<>())
+                        .put(route.getKey(), copy.getKey());
+                definition.replaceRouteReferences(route.getKey(), copy.getKey());
+                saveDefinition.accept(definition);
+            }
+        }
+        for (NpcRoute route : findAll()) {
+            Map<String, String> mapping = replacements.get(route.getOwnerKey());
+            if (mapping == null)
+                continue;
+            mapping.forEach((oldKey, newKey) -> {
+                if (!oldKey.equals(newKey))
+                    route.replaceRouteReferences(oldKey, newKey);
+            });
+            save(route);
+        }
+    }
+
+    public void copyOwnedRoutes(NpcDefinition source, NpcDefinition target) {
+        Map<String, String> replacements = new LinkedHashMap<>();
+        for (NpcRoute route : List.copyOf(findAll())) {
+            if (!route.isOwnedBy(source.getKey()))
+                continue;
+            String base = route.getKey() + "-" + target.getKey();
+            String key = base;
+            int suffix = 2;
+            while (find(key).isPresent())
+                key = base + "-" + suffix++;
+            NpcRoute copy = new NpcRoute(key);
+            copy.setDisplayName(route.getDisplayName());
+            copy.setIcon(route.getIcon());
+            copy.setOwnerKey(target.getKey());
+            route.getPoints().forEach(copy::addPoint);
+            save(copy);
+            replacements.put(route.getKey(), copy.getKey());
+            target.replaceRouteReferences(route.getKey(), copy.getKey());
+        }
+        for (NpcRoute route : findAll()) {
+            if (!route.isOwnedBy(target.getKey()))
+                continue;
+            replacements.forEach(route::replaceRouteReferences);
+            save(route);
+        }
     }
 
     public Optional<NpcRoute> find(String keyOrName) {
@@ -139,6 +228,7 @@ public final class RouteRepository {
         for (NpcRoute route : findAll()) {
             ConfigurationSection section = root.createSection(route.getKey());
             section.set("display-name", route.getDisplayName());
+            section.set("owner", route.getOwnerKey());
             section.set("icon", route.getIcon());
             ConfigurationSection points = section.createSection("points");
             for (int index = 0; index < route.getPoints().size(); index++) {

@@ -8,57 +8,46 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import dev.blockfolk.model.BehaviourAction;
-import dev.blockfolk.model.BehaviourActionType;
-import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcRoute;
 
 class RouteBrowserModelTest {
 
     @Test
-    void groupsUsedRoutesByNpcAndLeavesUnusedRoutesAtTheRoot() {
-        NpcRoute patrol = NpcRoute.create("Patrol");
-        NpcRoute shared = NpcRoute.create("Village/Shared");
-        NpcRoute unused = NpcRoute.create("Unused");
-        NpcRoute groupedUnused = NpcRoute.create("Wilderness/Loop");
-
-        NpcDefinition guard = npcUsing("Guard", "patrol", "village/shared");
-        NpcDefinition merchant = npcUsing("Merchant", "village/shared");
+    void groupsRoutesByOwnerEvenWhenNoActionReferencesThem() {
+        NpcRoute patrol = owned("Patrol", "guard");
+        NpcRoute sharedName = owned("Village/Shared", "merchant");
+        NpcRoute legacy = NpcRoute.create("Unused");
+        NpcDefinition guard = NpcDefinition.create("Guard");
+        NpcDefinition merchant = NpcDefinition.create("Merchant");
         NpcDefinition stationary = NpcDefinition.create("Stationary");
 
-        List<RouteBrowserModel.Entry> root = RouteBrowserModel.entries(List.of(patrol, shared, unused, groupedUnused),
+        List<RouteBrowserModel.Entry> root = RouteBrowserModel.entries(List.of(patrol, sharedName, legacy),
                 List.of(guard, merchant, stationary), "");
-
-        assertEquals(List.of("Guard", "Merchant", "unused", "wilderness/loop"),
+        assertEquals(List.of("Guard", "Merchant", "unused"),
                 root.stream().map(RouteBrowserModel.Entry::label).toList());
         assertTrue(root.get(0).npcFolder());
         assertTrue(root.get(1).npcFolder());
         assertFalse(root.get(2).folder());
-        assertEquals(2, root.get(0).childCount());
+        assertEquals(1, root.get(0).childCount());
         assertEquals(1, root.get(1).childCount());
     }
 
     @Test
-    void showsSharedRoutesDirectlyInEveryNpcFolder() {
-        NpcRoute patrol = NpcRoute.create("Patrol");
-        NpcRoute shared = NpcRoute.create("Village/Shared");
-        NpcDefinition guard = npcUsing("Guard", "patrol", "village/shared");
-        NpcDefinition merchant = npcUsing("Merchant", "village/shared");
+    void eachNpcFolderOnlyContainsItsOwnRoutes() {
+        NpcRoute patrol = owned("Patrol", "guard");
+        NpcRoute market = owned("Market", "merchant");
+        List<NpcDefinition> definitions = List.of(NpcDefinition.create("Guard"), NpcDefinition.create("Merchant"));
 
-        List<RouteBrowserModel.Entry> guardRoutes = RouteBrowserModel.entries(List.of(patrol, shared),
-                List.of(guard, merchant), "npc:guard");
-        List<RouteBrowserModel.Entry> merchantRoutes = RouteBrowserModel.entries(List.of(patrol, shared),
-                List.of(guard, merchant), "npc:merchant");
-        assertEquals(List.of("patrol", "village/shared"),
-                guardRoutes.stream().map(RouteBrowserModel.Entry::label).toList());
-        assertEquals(List.of("village/shared"), merchantRoutes.stream().map(RouteBrowserModel.Entry::label).toList());
+        assertEquals(List.of("patrol"), RouteBrowserModel.entries(List.of(patrol, market), definitions, "npc:guard")
+                .stream().map(RouteBrowserModel.Entry::label).toList());
+        assertEquals(List.of("market"), RouteBrowserModel.entries(List.of(patrol, market), definitions, "npc:merchant")
+                .stream().map(RouteBrowserModel.Entry::label).toList());
     }
 
-    private static NpcDefinition npcUsing(String name, String... routeKeys) {
-        NpcDefinition definition = NpcDefinition.create(name);
-        definition.setBehaviourActions(BehaviourEvent.SPAWN, java.util.Arrays.stream(routeKeys)
-                .map(key -> new BehaviourAction(BehaviourActionType.SET_ROUTE, key)).toList());
-        return definition;
+    private static NpcRoute owned(String name, String owner) {
+        NpcRoute route = NpcRoute.create(name);
+        route.setOwnerKey(owner);
+        return route;
     }
 }

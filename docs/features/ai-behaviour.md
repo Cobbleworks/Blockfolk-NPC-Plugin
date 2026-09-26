@@ -43,6 +43,8 @@ At least one section is required before AI behaviour can be activated.
 
 ## Choose triggers
 
+Players can use `/bf config ai mute-me on` to keep their nearby chat from triggering NPC AI responses, then `/bf config ai mute-me off` to allow responses again. Players start unmuted.
+
 Add **AI Trigger** to any standard event, custom event, waypoint, or question branch. A dialog asks for an optional prompt
 to guide the AI for that specific trigger. Leave it empty to use the surrounding event as the request reason without
 extra guidance.
@@ -82,7 +84,7 @@ Opening a preset's admin editor resets runtime AI state and queued interactions 
 
 ## Request lifecycle
 
-While a request is in flight, a hologram cycles through `Thinking.`, `Thinking..`, and `Thinking...`. The AI can use up to three model rounds in a gameplay turn, receiving tool results and updated NPC state between rounds. Each NPC is limited to eight actions per turn. Requests have a per-NPC cooldown in addition to trigger throttling. Up to eight waiting chat turns per player and eight waiting AI events per NPC are kept in arrival order. Queued chat turns expire after 30 seconds; queued events expire after 15 seconds. Unusable action calls are logged and retried once before the turn is abandoned. Long-term memory review still uses JSON output.
+While a request is in flight, a hologram cycles through `Thinking.`, `Thinking..`, and `Thinking...`. The AI can use up to three model rounds in a gameplay turn, receiving tool results and updated NPC state between rounds. Each NPC is limited to eight actions and one spoken message per turn. Requests have a per-NPC cooldown in addition to trigger throttling. Up to eight waiting chat turns per player and eight waiting AI events per NPC are kept in arrival order. Queued chat turns expire after 30 seconds; queued events expire after 15 seconds. Unusable action calls are logged and retried once before the turn is abandoned. Long-term memory review still uses JSON output.
 
 For the exact prompt structure, perception limits, target aliases, and memory rules, see [AI request context](/reference/ai-request-context).
 

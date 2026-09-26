@@ -16,7 +16,7 @@ A behaviour routine starts with an **event** such as a player approaching, the N
 
 ## Routes and locations
 
-A **route** is a group of blocks in one world forming a repeating walking loop. A **global location** is a named position that movement actions and AI can target. Routes describe a path; locations describe destinations.
+A **route** belongs to one NPC preset and is a group of blocks in one world forming a repeating walking loop. A **global location** is a named position that movement actions and AI can target. Routes describe a path; locations describe destinations.
 
 ## Deterministic and AI behaviour
 

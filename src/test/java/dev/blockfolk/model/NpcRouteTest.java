@@ -14,6 +14,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcRouteTest {
     @Test
+    void ownsRoutesIndependentlyOfActionsAndRepointsWaypointActions() {
+        NpcRoute route = NpcRoute.create("Patrol");
+        route.setOwnerKey("Guard");
+        route.addPoint(new RoutePoint("world", 0, 64, 0,
+                List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "Next"))));
+
+        assertTrue(route.isOwnedBy("guard"));
+        assertEquals(java.util.Set.of("next"), route.getReferencedRouteKeys());
+        route.replaceRouteReferences("next", "guard/next");
+        assertEquals(java.util.Set.of("guard/next"), route.getReferencedRouteKeys());
+    }
+
+    @Test
     void ordersFromNearestPointThenNearestUnvisitedPoint() {
         NpcRoute route = NpcRoute.create("Patrol");
         RoutePoint ten = new RoutePoint("world", 10, 64, 0);

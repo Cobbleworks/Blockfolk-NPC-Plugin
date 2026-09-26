@@ -82,7 +82,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
         customEventGuiService = new CustomEventGuiService(this, customEventRepository, definitionRepository,
                 chatInputService, this::openMainGui);
         guiService = new GuiService(this, definitionRepository, routeRepository, instanceRegistry, chatInputService,
-                skinResolver, routeGuiService::openRoutes, routeGuiService::createRoute, customEventRepository,
+                skinResolver, routeGuiService::openRoutes, routeGuiService::createRoute, routeGuiService::beginEditing,
+                customEventRepository,
                 customEventGuiService::open, customEventGuiService::createEvent, locationRepository);
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
@@ -119,6 +120,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         locationRepository.loadAll();
         customEventRepository.loadAll();
         definitionRepository.loadAll();
+        routeRepository.migrateOwnership(definitionRepository.findAll(), definitionRepository::save);
         instanceRegistry.loadPersistedInstances();
 
         if (getServer().getPluginManager().isPluginEnabled("BeautyQuests")) {
@@ -138,7 +140,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
         }
 
         BlockfolkCommand executor = new BlockfolkCommand(definitionRepository, instanceRegistry, guiService,
-                routeGuiService, customEventGuiService, customEventRepository, behaviourService);
+                routeGuiService, routeRepository, customEventGuiService, customEventRepository, behaviourService,
+                locationRepository, aiControlService, this);
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> event.registrar()
                 .register("blockfolk", "Opens and controls Blockfolk.", java.util.List.of("bf"), executor));
 

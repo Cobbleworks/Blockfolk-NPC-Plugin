@@ -9,7 +9,7 @@ The standard editor provides these triggers:
 - lifecycle: **On Spawn**, **On Idle**, and **On Death**;
 - players: **On Left-Click**, **On Right-Click**, **On Player Approach**, and **On Player Leaves**;
 - combat and health: **On NPC Attacked**, **On Damage Taken**, **On Low Health**, **On Heal**, **On Combat Entered**, and **On Combat Exited**;
-- world: **On Entity Nearby**, **On Route Point Reached**, **On Drop Item**, and **On Receive Item**;
+- world: **On Entity Nearby**, **On Drop Item**, and **On Receive Item**;
 - time: **At Sunrise**, **At Noon**, and **At Sunset**.
 
 Nearby chat is configured from the AI menu rather than shown as a deterministic behaviour row.
@@ -18,11 +18,15 @@ Nearby chat is configured from the AI menu rather than shown as a deterministic 
 
 | Group | Available actions |
 | --- | --- |
-| Dialogue & scripting | Send Dialog, Show Holo Dialog, Ask Question, Emit Custom Event, Run Console Command, AI Trigger, Wait |
+| Dialogue & scripting | Send Dialog, Show Holo Dialog, Ask Question, Emit Custom Event, Console Command, AI Trigger, Wait |
 | Movement | Set Route, Start/Stop Navigation, Set Walk Speed, Move To, Teleport To, Follow, Unfollow |
 | World & inventory | Interact, Mine Blocks, Take Item, Show Inventory, Drop Inventory, Harvest |
 | Combat | Start Combat, Change Fight Options |
 | Animation | Sleeping, Swimming, Fall Flying, Standing, Sneaking, Wave, Jump |
+
+**Move To** pauses the rest of its action sequence until the NPC arrives. If it cannot arrive, the sequence continues after 30 seconds.
+
+**Console Command** uses a command block icon. Selecting it prompts for a command without the leading slash, which runs as the server when the action triggers.
 
 **Harvest** collects mature crops and plants seeds from the NPC's temporary inventory on nearby empty farmland. It also plants nether wart on empty soul sand. Each planting uses one item from that inventory. Melon and pumpkin stems are planted only where an adjacent fruit space can remain open. Harvest collects their fruit and leaves the stems in place.
 
@@ -36,6 +40,8 @@ Left-click an action to replace it and right-click to remove it. Shift-left-clic
 ## Questions
 
 **Ask Question** displays a prompt with up to four distinct answers. Each answer and the cancel/timeout path can have its own action branch. A branch supports up to seven actions and cannot contain another question. The global question timeout is configured in [`config.yml`](/reference/configuration).
+
+To set a **Move To** destination in a question branch, right-click a block with the selector compass or choose a saved location from its chat link.
 
 ## Dialog timing
 

@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import org.bukkit.Bukkit;
@@ -126,6 +127,7 @@ public final class GuiService implements Listener {
     private final SkinResolver skinResolver;
     private final Consumer<Player> routeGuiOpener;
     private final RouteCreator routeCreator;
+    private final BiConsumer<Player, NpcRoute> routeEditor;
     private final CustomEventRepository customEventRepository;
     private final Consumer<Player> customEventGuiOpener;
     private final CustomEventCreator customEventCreator;
@@ -141,11 +143,13 @@ public final class GuiService implements Listener {
     private final Map<String, String> pendingSkinUrls = new HashMap<>();
     private final Map<UUID, WaypointSession> waypointSessions = new HashMap<>();
     private final Map<UUID, RouteActionWaypointSession> routeWaypointSessions = new HashMap<>();
+    private final Map<UUID, QuestionWaypointSession> questionWaypointSessions = new HashMap<>();
     private final Map<UUID, List<BehaviourAction>> behaviourClipboards = new HashMap<>();
 
     public GuiService(Plugin plugin, NpcDefinitionRepository definitionRepository, RouteRepository routeRepository,
             NpcInstanceRegistry instanceRegistry, ChatInputService chatInputService, SkinResolver skinResolver,
-            Consumer<Player> routeGuiOpener, RouteCreator routeCreator, CustomEventRepository customEventRepository,
+            Consumer<Player> routeGuiOpener, RouteCreator routeCreator,
+            BiConsumer<Player, NpcRoute> routeEditor, CustomEventRepository customEventRepository,
             Consumer<Player> customEventGuiOpener, CustomEventCreator customEventCreator,
             LocationRepository locationRepository) {
         this.plugin = plugin;
@@ -156,6 +160,7 @@ public final class GuiService implements Listener {
         this.skinResolver = skinResolver;
         this.routeGuiOpener = routeGuiOpener;
         this.routeCreator = routeCreator;
+        this.routeEditor = routeEditor;
         this.customEventRepository = customEventRepository;
         this.customEventGuiOpener = customEventGuiOpener;
         this.customEventCreator = customEventCreator;
@@ -191,6 +196,12 @@ public final class GuiService implements Listener {
             }
         }
         routeWaypointSessions.clear();
+        for (UUID playerId : List.copyOf(questionWaypointSessions.keySet())) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null)
+                finishQuestionWaypointSelection(player);
+        }
+        questionWaypointSessions.clear();
     }
 
     public void openWaypointActions(Player player, String routeKey, RoutePoint point) {
@@ -257,7 +268,7 @@ public final class GuiService implements Listener {
 
     private void openRoutePointValuePicker(Player player, RoutePointActionPickerHolder action,
             BehaviourValuePickerType pickerType, String folder, int requestedPage) {
-        List<BehaviourPickerOption> options = pickerOptions(pickerType, folder);
+        List<BehaviourPickerOption> options = pickerOptions(pickerType, folder, routeOwner(action.routeKey()));
         int pages = Math.max(1, (options.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new RoutePointValuePickerHolder(action.routeKey(), action.point(),
@@ -267,7 +278,9 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             BehaviourPickerOption option = options.get(index);
             List<String> lore = new ArrayList<>(option.lore());
-            lore.add(LegacyText.YELLOW + (option.folder() ? "Click to open" : "Click to select"));
+            lore.add(LegacyText.YELLOW + (option.folder() ? "Click to open" : "Left-click: select"));
+            if (pickerType == BehaviourValuePickerType.ROUTE && !option.folder())
+                lore.add(LegacyText.AQUA + "Right-click: edit route");
             inventory.setItem(index - from, item(option.icon(), option.label(), lore));
         }
         if (options.isEmpty()) {
@@ -484,6 +497,22 @@ public final class GuiService implements Listener {
                         LegacyText.YELLOW + "Click to configure combat")));
         inventory.setItem(31, item(Material.BARRIER, "Back to Presets", List.of()));
         openInventory(player, inventory);
+    }
+
+    public void openMemories(Player player, NpcDefinition definition) {
+        aiGuiService.openMemories(player, definition);
+    }
+
+    public void deleteDefinition(NpcDefinition definition) {
+        instanceRegistry.deleteInstances(definition);
+        for (NpcRoute route : List.copyOf(routeRepository.findAll())) {
+            if (route.isOwnedBy(definition.getKey())) {
+                if (behaviourService != null)
+                    behaviourService.removeRoute(route.getKey());
+                routeRepository.delete(route);
+            }
+        }
+        definitionRepository.delete(definition);
     }
 
     public void openProperties(Player player, NpcDefinition definition) {
@@ -800,7 +829,7 @@ public final class GuiService implements Listener {
 
     private void openBehaviourValuePicker(Player player, NpcDefinition definition, ActionPickerHolder action,
             BehaviourValuePickerType pickerType, String folder, int requestedValuePage) {
-        List<BehaviourPickerOption> options = pickerOptions(pickerType, folder);
+        List<BehaviourPickerOption> options = pickerOptions(pickerType, folder, definition.getKey());
         int pages = Math.max(1, (options.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int valuePage = Math.max(0, Math.min(requestedValuePage, pages - 1));
         Inventory inventory = Bukkit
@@ -813,7 +842,9 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             BehaviourPickerOption option = options.get(index);
             List<String> lore = new ArrayList<>(option.lore());
-            lore.add(LegacyText.YELLOW + (option.folder() ? "Click to open" : "Click to select"));
+            lore.add(LegacyText.YELLOW + (option.folder() ? "Click to open" : "Left-click: select"));
+            if (pickerType == BehaviourValuePickerType.ROUTE && !option.folder())
+                lore.add(LegacyText.AQUA + "Right-click: edit route");
             inventory.setItem(index - from, item(option.icon(), option.label(), lore));
         }
         if (options.isEmpty()) {
@@ -839,13 +870,18 @@ public final class GuiService implements Listener {
         openInventory(player, inventory);
     }
 
-    private List<BehaviourPickerOption> pickerOptions(BehaviourValuePickerType pickerType) {
-        return pickerOptions(pickerType, "");
+    private String routeOwner(String routeKey) {
+        return routeRepository.find(routeKey).map(NpcRoute::getOwnerKey).orElse(null);
     }
 
-    private List<BehaviourPickerOption> pickerOptions(BehaviourValuePickerType pickerType, String folder) {
+    private String questionOwner(QuestionTarget target) {
+        return target.definitionKey() != null ? target.definitionKey() : routeOwner(target.routeKey());
+    }
+
+    private List<BehaviourPickerOption> pickerOptions(BehaviourValuePickerType pickerType, String folder,
+            String ownerKey) {
         return switch (pickerType) {
-            case ROUTE -> routePickerOptions(folder);
+            case ROUTE -> routePickerOptions(ownerKey);
             case WALK_SPEED -> java.util.Arrays.stream(WalkingSpeed.values())
                     .map(speed -> new BehaviourPickerOption(speed.name().toLowerCase(java.util.Locale.ROOT),
                             speed.displayName(), new ItemStack(Material.FEATHER),
@@ -860,13 +896,11 @@ public final class GuiService implements Listener {
         };
     }
 
-    private List<BehaviourPickerOption> routePickerOptions(String folder) {
-        return routeRepository
-                .findAll().stream().map(
-                        route -> new BehaviourPickerOption(route.getKey(), route.getDisplayName(), routeIcon(route),
-                                List.of(LegacyText.DARK_GRAY + "Key: " + route.getKey(),
-                                        LegacyText.GRAY + "" + route.getPoints().size() + " route point(s)"),
-                                false))
+    private List<BehaviourPickerOption> routePickerOptions(String ownerKey) {
+        return routeRepository.findAll().stream().filter(route -> ownerKey != null && route.isOwnedBy(ownerKey))
+                .map(route -> new BehaviourPickerOption(route.getKey(), route.getDisplayName(), routeIcon(route),
+                        List.of(LegacyText.DARK_GRAY + "Key: " + route.getKey(),
+                                LegacyText.GRAY + "" + route.getPoints().size() + " route point(s)"), false))
                 .toList();
     }
 
@@ -1830,11 +1864,11 @@ public final class GuiService implements Listener {
             return;
         }
         if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.ROUTE) {
-            routeCreator.create(player, "", route -> {
+            routeCreator.create(player, routeOwner(action.routeKey()), route -> {
                 RoutePoint updated = setRoutePointAction(action, BehaviourActionType.SET_ROUTE, route.getKey());
                 if (updated != null)
                     player.sendMessage(UiText.success("Created and selected '" + route.getDisplayName() + "'."));
-            });
+            }, null);
             return;
         }
         if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.CUSTOM_EVENT) {
@@ -1847,7 +1881,8 @@ public final class GuiService implements Listener {
             }, () -> openRoutePointValuePicker(player, action, holder.pickerType(), holder.folder(), holder.page()));
             return;
         }
-        List<BehaviourPickerOption> options = pickerOptions(holder.pickerType(), holder.folder());
+        List<BehaviourPickerOption> options = pickerOptions(holder.pickerType(), holder.folder(),
+                routeOwner(holder.routeKey()));
         int index = holder.page() * PAGE_SIZE + slot;
         if (slot >= PAGE_SIZE || index < 0 || index >= options.size()) {
             return;
@@ -1855,6 +1890,10 @@ public final class GuiService implements Listener {
         BehaviourPickerOption option = options.get(index);
         if (option.folder()) {
             openRoutePointValuePicker(player, action, holder.pickerType(), option.value(), 0);
+            return;
+        }
+        if (holder.pickerType() == BehaviourValuePickerType.ROUTE && event.isRightClick()) {
+            routeRepository.find(option.value()).ifPresent(route -> routeEditor.accept(player, route));
             return;
         }
         RoutePoint updated = setRoutePointAction(action, holder.pickerType().actionType(), option.value());
@@ -2091,6 +2130,7 @@ public final class GuiService implements Listener {
     private void beginWaypointSelection(Player player, ActionPickerHolder holder, BehaviourActionType type) {
         finishWaypointSelection(player);
         finishRouteWaypointSelection(player);
+        finishQuestionWaypointSelection(player);
         UUID token = UUID.randomUUID();
         WaypointSession session = new WaypointSession(holder, type, token);
         waypointSessions.put(player.getUniqueId(), session);
@@ -2143,6 +2183,17 @@ public final class GuiService implements Listener {
         if (session == null) {
             RouteActionWaypointSession routeSession = validRouteWaypointSession(player, event.getItem());
             if (routeSession == null) {
+                QuestionWaypointSession questionSession = validQuestionWaypointSession(player, event.getItem());
+                if (questionSession != null) {
+                    event.setCancelled(true);
+                    ActionLocation location = ActionLocation.above(event.getClickedBlock());
+                    finishQuestionWaypointSelection(player);
+                    setQuestionBranchAction(questionSession.action(),
+                            new BehaviourAction(questionSession.type(), location.serialize()));
+                    player.sendMessage(UiText.success(questionSession.type().displayName() + " set to "
+                            + location.display() + "."));
+                    openAfterQuestionBranchPicker(player, questionSession.action());
+                }
                 return;
             }
             event.setCancelled(true);
@@ -2179,6 +2230,16 @@ public final class GuiService implements Listener {
             RouteActionWaypointSession routeSession = validRouteWaypointSession(player,
                     event.getItemDrop().getItemStack());
             if (routeSession == null) {
+                QuestionWaypointSession questionSession = validQuestionWaypointSession(player,
+                        event.getItemDrop().getItemStack());
+                if (questionSession != null) {
+                    event.getItemDrop().remove();
+                    questionWaypointSessions.remove(player.getUniqueId());
+                    player.sendMessage(UiText.warning("Waypoint selection cancelled."));
+                    Bukkit.getScheduler().runTask(plugin, () -> openQuestionBranchPicker(player,
+                            questionSession.action().target(), questionSession.action().optionIndex(),
+                            questionSession.action().actionIndex()));
+                }
                 return;
             }
             event.getItemDrop().remove();
@@ -2207,6 +2268,7 @@ public final class GuiService implements Listener {
     public void onWaypointPlayerQuit(PlayerQuitEvent event) {
         finishWaypointSelection(event.getPlayer());
         finishRouteWaypointSelection(event.getPlayer());
+        finishQuestionWaypointSelection(event.getPlayer());
         behaviourClipboards.remove(event.getPlayer().getUniqueId());
     }
 
@@ -2274,6 +2336,7 @@ public final class GuiService implements Listener {
             BehaviourActionType type) {
         finishWaypointSelection(player);
         finishRouteWaypointSelection(player);
+        finishQuestionWaypointSelection(player);
         UUID token = UUID.randomUUID();
         RouteActionWaypointSession session = new RouteActionWaypointSession(holder, type, token);
         routeWaypointSessions.put(player.getUniqueId(), session);
@@ -2292,6 +2355,29 @@ public final class GuiService implements Listener {
             return;
         }
         removeWaypointTool(player, session.token());
+    }
+
+    private void beginQuestionWaypointSelection(Player player, QuestionBranchPickerHolder holder,
+            BehaviourActionType type) {
+        finishWaypointSelection(player);
+        finishRouteWaypointSelection(player);
+        finishQuestionWaypointSelection(player);
+        UUID token = UUID.randomUUID();
+        QuestionWaypointSession session = new QuestionWaypointSession(holder, type, token);
+        questionWaypointSessions.put(player.getUniqueId(), session);
+        equipWaypointTool(player, session);
+        player.closeInventory();
+        sendWaypointPrompt(player, type, token);
+    }
+
+    private QuestionWaypointSession validQuestionWaypointSession(Player player, ItemStack item) {
+        return validWaypointSession(player, item, questionWaypointSessions);
+    }
+
+    private void finishQuestionWaypointSelection(Player player) {
+        QuestionWaypointSession session = questionWaypointSessions.remove(player.getUniqueId());
+        if (session != null)
+            removeWaypointTool(player, session.token());
     }
 
     private void equipWaypointTool(Player player, WaypointToolSession session) {
@@ -2366,7 +2452,10 @@ public final class GuiService implements Listener {
         if (direct != null && direct.token().equals(token))
             return direct.type();
         RouteActionWaypointSession route = routeWaypointSessions.get(player.getUniqueId());
-        return route != null && route.token().equals(token) ? route.type() : null;
+        if (route != null && route.token().equals(token))
+            return route.type();
+        QuestionWaypointSession question = questionWaypointSessions.get(player.getUniqueId());
+        return question != null && question.token().equals(token) ? question.type() : null;
     }
 
     private void handleSavedLocationPickerClick(InventoryClickEvent event, Player player,
@@ -2425,8 +2514,17 @@ public final class GuiService implements Listener {
             return;
         }
         RouteActionWaypointSession route = routeWaypointSessions.get(player.getUniqueId());
-        if (route == null || !route.token().equals(token))
+        if (route == null || !route.token().equals(token)) {
+            QuestionWaypointSession question = questionWaypointSessions.get(player.getUniqueId());
+            if (question == null || !question.token().equals(token))
+                return;
+            finishQuestionWaypointSelection(player);
+            setQuestionBranchAction(question.action(),
+                    new BehaviourAction(question.type(), named.location().serialize()));
+            player.sendMessage(UiText.success("Move To set to global location '" + named.displayName() + "'."));
+            openAfterQuestionBranchPicker(player, question.action());
             return;
+        }
         finishRouteWaypointSelection(player);
         RoutePoint updated = setRoutePointAction(route.action(), route.type(), named.location().serialize());
         if (updated == null) {
@@ -2492,10 +2590,12 @@ public final class GuiService implements Listener {
             return;
         }
         if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.ROUTE) {
-            routeCreator.create(player, "", route -> {
+            routeCreator.create(player, definition.getKey(), route -> {
                 setAction(definition, action, BehaviourActionType.SET_ROUTE, route.getKey());
                 player.sendMessage(UiText.success("Created and selected '" + route.getDisplayName() + "'."));
-            });
+            }, returningPlayer -> definitionRepository.find(action.key())
+                    .ifPresentOrElse(current -> openBehaviourHome(returningPlayer, current, action),
+                            () -> openMain(returningPlayer)));
             return;
         }
         if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.CUSTOM_EVENT) {
@@ -2507,7 +2607,7 @@ public final class GuiService implements Listener {
                     holder.valuePage()));
             return;
         }
-        List<BehaviourPickerOption> options = pickerOptions(holder.pickerType(), holder.folder());
+        List<BehaviourPickerOption> options = pickerOptions(holder.pickerType(), holder.folder(), definition.getKey());
         int index = holder.valuePage() * PAGE_SIZE + slot;
         if (slot >= PAGE_SIZE || index < 0 || index >= options.size()) {
             return;
@@ -2515,6 +2615,10 @@ public final class GuiService implements Listener {
         BehaviourPickerOption option = options.get(index);
         if (option.folder()) {
             openBehaviourValuePicker(player, definition, action, holder.pickerType(), option.value(), 0);
+            return;
+        }
+        if (holder.pickerType() == BehaviourValuePickerType.ROUTE && event.isRightClick()) {
+            routeRepository.find(option.value()).ifPresent(route -> routeEditor.accept(player, route));
             return;
         }
         setAction(definition, action, holder.pickerType().actionType(), option.value());
@@ -2730,6 +2834,10 @@ public final class GuiService implements Listener {
             openQuestionBranchRoutePicker(player, holder, "", 0);
             return;
         }
+        if (type == BehaviourActionType.MOVE_TO || type == BehaviourActionType.TELEPORT_TO) {
+            beginQuestionWaypointSelection(player, holder, type);
+            return;
+        }
         if (type == BehaviourActionType.AI_TRIGGER) {
             BehaviourAction question = questionAction(holder.target());
             if (question == null)
@@ -2755,7 +2863,6 @@ public final class GuiService implements Listener {
             case SET_ROUTE -> "Enter an existing route key:";
             case SET_WALK_SPEED -> "Enter walk speed (slouch, slow, normal, fast, very_fast):";
             case EMIT_EVENT -> "Enter an existing custom event name:";
-            case MOVE_TO, TELEPORT_TO -> "Type 'here' to use your current location:";
             default -> "Enter the action value:";
         };
         chatInputService.request(player, prompt, value -> {
@@ -2771,7 +2878,7 @@ public final class GuiService implements Listener {
 
     private void openQuestionBranchRoutePicker(Player player, QuestionBranchPickerHolder action, String folder,
             int requestedPage) {
-        List<BehaviourPickerOption> options = routePickerOptions(folder);
+        List<BehaviourPickerOption> options = routePickerOptions(questionOwner(action.target()));
         int pages = Math.max(1, (options.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new QuestionBranchRoutePickerHolder(action, folder, page), 54,
@@ -2781,7 +2888,8 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             BehaviourPickerOption option = options.get(index);
             List<String> lore = new ArrayList<>(option.lore());
-            lore.add(LegacyText.YELLOW + (option.folder() ? "Click to open" : "Click to select"));
+            lore.add(LegacyText.YELLOW + "Left-click: select");
+            lore.add(LegacyText.AQUA + "Right-click: edit route");
             inventory.setItem(index - from, item(option.icon(), option.label(), lore));
         }
         if (options.isEmpty()) {
@@ -2814,24 +2922,28 @@ public final class GuiService implements Listener {
             return;
         }
         if (slot == 51) {
-            routeCreator.create(player, "", route -> {
+            routeCreator.create(player, questionOwner(holder.action().target()), route -> {
                 setQuestionBranchAction(holder.action(),
                         new BehaviourAction(BehaviourActionType.SET_ROUTE, route.getKey()));
                 player.sendMessage(UiText.success("Created and selected '" + route.getDisplayName() + "'."));
-            });
+            }, null);
             return;
         }
         if (slot == 53) {
             openQuestionBranchRoutePicker(player, holder.action(), holder.folder(), holder.page() + 1);
             return;
         }
-        List<BehaviourPickerOption> options = routePickerOptions(holder.folder());
+        List<BehaviourPickerOption> options = routePickerOptions(questionOwner(holder.action().target()));
         int index = holder.page() * PAGE_SIZE + slot;
         if (slot >= PAGE_SIZE || index < 0 || index >= options.size())
             return;
         BehaviourPickerOption option = options.get(index);
         if (option.folder()) {
             openQuestionBranchRoutePicker(player, holder.action(), option.value(), 0);
+            return;
+        }
+        if (event.isRightClick()) {
+            routeRepository.find(option.value()).ifPresent(route -> routeEditor.accept(player, route));
             return;
         }
         setQuestionBranchAction(holder.action(), new BehaviourAction(BehaviourActionType.SET_ROUTE, option.value()));
@@ -2904,13 +3016,6 @@ public final class GuiService implements Listener {
             }
             if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
                 return FightOptions.fromStored(value.equalsIgnoreCase("none") ? "" : value).storedValue();
-            }
-            if (type == BehaviourActionType.MOVE_TO || type == BehaviourActionType.TELEPORT_TO) {
-                if (!value.equalsIgnoreCase("here"))
-                    throw new IllegalArgumentException();
-                Location location = player.getLocation();
-                return new ActionLocation(location.getWorld().getName(), location.getX(), location.getY(),
-                        location.getZ()).serialize();
             }
             return value;
         } catch (RuntimeException exception) {
@@ -3046,6 +3151,12 @@ public final class GuiService implements Listener {
         }
         int removed = instanceRegistry.deleteInstances(definition);
         if (holder.action() == ConfirmationAction.DELETE_DEFINITION) {
+            for (NpcRoute route : List.copyOf(routeRepository.findAll())) {
+                if (route.isOwnedBy(definition.getKey())) {
+                    behaviourService.removeRoute(route.getKey());
+                    routeRepository.delete(route);
+                }
+            }
             definitionRepository.delete(definition);
             player.sendMessage(UiText.success("Deleted preset and " + removed + " instance(s)."));
             openMain(player);
@@ -3333,7 +3444,6 @@ public final class GuiService implements Listener {
             case PLAYER_CHAT -> Material.WRITABLE_BOOK;
             case NPC_ATTACKED -> Material.IRON_SWORD;
             case ENTITY_NEARBY -> Material.OBSERVER;
-            case ROUTE_POINT_REACHED -> Material.POWERED_RAIL;
         };
     }
 
@@ -3573,6 +3683,11 @@ public final class GuiService implements Listener {
 
     }
 
+    private record QuestionWaypointSession(QuestionBranchPickerHolder action, BehaviourActionType type,
+            UUID token) implements WaypointToolSession {
+
+    }
+
     private record SavedLocationPickerHolder(UUID token, String folder, int page) implements GuiHolder {
     }
 
@@ -3618,7 +3733,7 @@ public final class GuiService implements Listener {
 
     @FunctionalInterface
     public interface RouteCreator {
-        void create(Player player, String folder, Consumer<NpcRoute> onCreated);
+        void create(Player player, String folder, Consumer<NpcRoute> onCreated, Consumer<Player> onFinished);
     }
 
     @FunctionalInterface

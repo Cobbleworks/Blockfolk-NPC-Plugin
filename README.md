@@ -17,7 +17,7 @@ Blockfolk is a GUI-driven NPC system for Paper servers. Administrators create re
 - **Persistent NPC presets:** Reuse one definition across multiple independently stored instances
 - **In-game administration:** Configure skins, equipment, names, dialog, inventories, routes, and behavior without hand-editing YAML
 - **Behavior sequences:** React to interaction, proximity, combat, time, waypoints, custom events, and other supported triggers
-- **Routes and locations:** Build walking routes in the world and reuse named destinations across NPCs
+- **Routes and locations:** Build NPC-owned walking routes in the world and reuse named destinations across NPCs
 - **Configurable combat:** Define attacks, targets, alliances, loot, experience, respawn timing, and nearby boss bars
 - **World interaction:** Mine configured resources, harvest crops, and transfer items to or from containers
 - **Optional AI behavior:** Use OpenRouter for contextual conversation and validated, administrator-approved actions

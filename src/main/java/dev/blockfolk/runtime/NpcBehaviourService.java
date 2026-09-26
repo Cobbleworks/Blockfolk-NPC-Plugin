@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.Tag;
 import org.bukkit.World;
@@ -40,6 +41,7 @@ import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -100,12 +102,15 @@ public final class NpcBehaviourService implements Listener {
     private static final double ITEM_PICKUP_VERTICAL_RANGE = 1.0;
     private static final long CONTAINER_CLOSE_DELAY_TICKS = 20L;
     private static final int AI_INTERACT_RANGE = 12;
+    private static final int AI_SWITCH_RANGE = 16;
     private static final int MAX_QUEUED_AI_INTERACTIONS = 8;
     private static final double SWITCH_USE_RANGE_SQUARED = 2.5 * 2.5;
     private static final long IDLE_REPEAT_TICKS = 1L * 20L;
+    private static final long MOVE_TO_TIMEOUT_TICKS = 30L * 20L;
     private static final List<BlockFace> HORIZONTAL_FACES = List.of(BlockFace.NORTH, BlockFace.EAST, BlockFace.SOUTH,
             BlockFace.WEST);
     private final Plugin plugin;
+    private final NamespacedKey mutedChatKey;
     private final NpcDefinitionRepository definitions;
     private final NpcInstanceRegistry instances;
     private final DialogService dialogService;
@@ -116,6 +121,7 @@ public final class NpcBehaviourService implements Listener {
     private final Set<UUID> routePaused = new HashSet<>();
     private final Set<UUID> externallyPaused = new HashSet<>();
     private final Map<UUID, Location> moveTargets = new HashMap<>();
+    private final Map<UUID, List<PendingMove>> pendingMoves = new HashMap<>();
     private final Map<UUID, FollowState> following = new HashMap<>();
     private final Map<UUID, Object> waypointActionSequences = new HashMap<>();
     private final Map<UUID, AiInteraction> aiInteractions = new HashMap<>();
@@ -143,6 +149,7 @@ public final class NpcBehaviourService implements Listener {
     public NpcBehaviourService(Plugin plugin, NpcDefinitionRepository definitions, NpcInstanceRegistry instances,
             DialogService dialogService, NpcQuestionService questionService, int proximityCooldownSeconds) {
         this.plugin = plugin;
+        this.mutedChatKey = new NamespacedKey(plugin, "ai-chat-muted");
         this.definitions = definitions;
         this.instances = instances;
         this.dialogService = dialogService;
@@ -176,6 +183,7 @@ public final class NpcBehaviourService implements Listener {
         routePaused.clear();
         externallyPaused.clear();
         moveTargets.clear();
+        pendingMoves.clear();
         following.clear();
         waypointActionSequences.clear();
         aiInteractions.clear();
@@ -287,6 +295,7 @@ public final class NpcBehaviourService implements Listener {
         routePaused.remove(instance.getId());
         externallyPaused.remove(instance.getId());
         moveTargets.remove(instance.getId());
+        pendingMoves.remove(instance.getId());
         following.remove(instance.getId());
         waypointActionSequences.remove(instance.getId());
         aiInteractions.remove(instance.getId());
@@ -381,7 +390,19 @@ public final class NpcBehaviourService implements Listener {
             askQuestion(event, actions, index, action, instance, definition, actor, eventDetail, completion);
             return;
         }
+        Location previousMoveTarget = action.type() == BehaviourActionType.MOVE_TO
+                ? moveTargets.get(instance.getId()) : null;
         execute(event, action, instance, definition, actor, eventDetail);
+        if (action.type() == BehaviourActionType.MOVE_TO) {
+            Location target = moveTargets.get(instance.getId());
+            if (target != null && target != previousMoveTarget) {
+                pendingMoves.computeIfAbsent(instance.getId(), ignored -> new ArrayList<>())
+                        .add(new PendingMove(target, currentTick + MOVE_TO_TIMEOUT_TICKS,
+                                () -> executeSequence(event, actions, index + 1, instance, definition, actor,
+                                        eventDetail, completion)));
+                return;
+            }
+        }
         long delayTicks = delayAfter(action);
         if (delayTicks <= 0L) {
             executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail, completion);
@@ -532,6 +553,8 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void handlePlayerChat(Player player, String message, Location chatLocation) {
+        if (isChatMuted(player))
+            return;
         List<NpcInstance> nearby = nearbyChatInstances(instances.findActive(), chatLocation);
         List<NpcInstance> aiGroup = new ArrayList<>();
         for (NpcInstance instance : nearby) {
@@ -549,6 +572,18 @@ public final class NpcBehaviourService implements Listener {
                             .ifPresent(definition -> applyAiDecision(BehaviourEvent.PLAYER_CHAT, result, instance,
                                     definition, player, false)));
         }
+    }
+
+    public boolean isChatMuted(Player player) {
+        return Byte.valueOf((byte) 1).equals(player.getPersistentDataContainer()
+                .get(mutedChatKey, PersistentDataType.BYTE));
+    }
+
+    public void setChatMuted(Player player, boolean muted) {
+        if (muted)
+            player.getPersistentDataContainer().set(mutedChatKey, PersistentDataType.BYTE, (byte) 1);
+        else
+            player.getPersistentDataContainer().remove(mutedChatKey);
     }
 
     static List<NpcInstance> nearbyChatInstances(Collection<NpcInstance> candidates, Location chatLocation) {
@@ -858,10 +893,12 @@ public final class NpcBehaviourService implements Listener {
                 tickMoveTo(instance);
                 tickFollow(instance);
             }
+            tickPendingMoves(instance);
         }
         if (cleanRuntimeState) {
             routePaused.retainAll(active);
             moveTargets.keySet().retainAll(active);
+            pendingMoves.keySet().retainAll(active);
             following.keySet().retainAll(active);
             waypointActionSequences.keySet().retainAll(active);
             aiInteractions.keySet().retainAll(active);
@@ -970,8 +1007,53 @@ public final class NpcBehaviourService implements Listener {
         NativeNpcNavigationService.NavigationStatus status = instances.navigate(instance, target, speed);
         if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED
                 || status == NativeNpcNavigationService.NavigationStatus.STALLED) {
+            if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED) {
+                for (PendingMove pending : pendingMoves.getOrDefault(instance.getId(), List.of())) {
+                    if (pending.target == target)
+                        pending.arrive();
+                }
+            }
             moveTargets.remove(instance.getId());
             instances.stopNavigating(instance);
+        }
+    }
+
+    private void tickPendingMoves(NpcInstance instance) {
+        List<PendingMove> moves = pendingMoves.get(instance.getId());
+        if (moves == null)
+            return;
+        List<PendingMove> ready = moves.stream()
+                .filter(move -> move.isReady(currentTick)).toList();
+        moves.removeAll(ready);
+        if (moves.isEmpty())
+            pendingMoves.remove(instance.getId());
+        for (PendingMove move : ready) {
+            if (!move.arrived && moveTargets.get(instance.getId()) == move.target) {
+                moveTargets.remove(instance.getId());
+                instances.stopNavigating(instance);
+            }
+            move.continuation.run();
+        }
+    }
+
+    static final class PendingMove {
+        private final Location target;
+        private final long deadlineTick;
+        private final Runnable continuation;
+        private boolean arrived;
+
+        PendingMove(Location target, long deadlineTick, Runnable continuation) {
+            this.target = target;
+            this.deadlineTick = deadlineTick;
+            this.continuation = continuation;
+        }
+
+        void arrive() {
+            arrived = true;
+        }
+
+        boolean isReady(long tick) {
+            return arrived || tick >= deadlineTick;
         }
     }
 
@@ -1093,14 +1175,25 @@ public final class NpcBehaviourService implements Listener {
         if (requiresExplicitLocation && explicitLocation == null)
             return;
         AiInteractionRequest request = new AiInteractionRequest(kind, explicitLocation);
-        if (aiInteractions.containsKey(instance.getId())) {
+        AiInteraction active = aiInteractions.get(instance.getId());
+        if (active != null) {
+            if (sameInteraction(active, request))
+                return;
             ArrayDeque<AiInteractionRequest> queue = aiInteractionQueues.computeIfAbsent(instance.getId(),
                     ignored -> new ArrayDeque<>());
-            if (queue.size() < MAX_QUEUED_AI_INTERACTIONS)
+            if (!queue.contains(request) && queue.size() < MAX_QUEUED_AI_INTERACTIONS)
                 queue.addLast(request);
             return;
         }
-        beginAiInteraction(instance, request);
+        if (!beginAiInteraction(instance, request)) {
+            plugin.getLogger().warning("AI INTERACT for " + instance.getDefinitionKey() + " could not start for "
+                    + normalizedTarget + "; no usable target was found.");
+        }
+    }
+
+    private boolean sameInteraction(AiInteraction active, AiInteractionRequest request) {
+        return active.kind() == request.kind()
+                && (request.blockLocation() == null || active.blockLocation().equals(request.blockLocation()));
     }
 
     private boolean beginAiInteraction(NpcInstance instance, AiInteractionRequest request) {
@@ -1117,7 +1210,7 @@ public final class NpcBehaviourService implements Listener {
         instances.stand(instance);
         instances.stopNavigating(instance);
         aiInteractions.put(instance.getId(),
-                new AiInteraction(request.kind(), target.getLocation(), interactionDestination(target, current)));
+                new AiInteraction(request.kind(), target.getLocation(), interactionDestinations(target, current), 0));
         return true;
     }
 
@@ -1149,13 +1242,28 @@ public final class NpcBehaviourService implements Listener {
         NativeNpcNavigationService.NavigationStatus status = instances.navigate(instance,
                 interaction.navigationTarget(), speed);
         if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED) {
-            performAiInteraction(instance, target, interaction.kind());
-            return finishAiInteraction(instance);
+            Location reached = instances.currentLocation(instance);
+            if (reached.distanceSquared(switchCenter) <= SWITCH_USE_RANGE_SQUARED) {
+                performAiInteraction(instance, target, interaction.kind());
+                return finishAiInteraction(instance);
+            }
+            return tryNextInteractionDestination(instance, interaction);
         }
         if (status == NativeNpcNavigationService.NavigationStatus.STALLED) {
-            return finishAiInteraction(instance);
+            return tryNextInteractionDestination(instance, interaction);
         }
         return true;
+    }
+
+    private boolean tryNextInteractionDestination(NpcInstance instance, AiInteraction interaction) {
+        if (interaction.destinationIndex() + 1 < interaction.navigationTargets().size()) {
+            instances.stopNavigating(instance);
+            aiInteractions.put(instance.getId(), interaction.nextDestination());
+            return true;
+        }
+        plugin.getLogger().warning(
+                "AI interaction could not reach " + interaction.blockLocation() + " for NPC " + instance.getId());
+        return finishAiInteraction(instance);
     }
 
     /** Returns true when another queued interaction was started. */
@@ -1194,14 +1302,14 @@ public final class NpcBehaviourService implements Listener {
             return null;
         Block nearest = null;
         double nearestDistance = Double.MAX_VALUE;
-        for (int x = -AI_INTERACT_RANGE; x <= AI_INTERACT_RANGE; x++) {
-            for (int y = -AI_INTERACT_RANGE; y <= AI_INTERACT_RANGE; y++) {
+        for (int x = -AI_SWITCH_RANGE; x <= AI_SWITCH_RANGE; x++) {
+            for (int y = -AI_SWITCH_RANGE; y <= AI_SWITCH_RANGE; y++) {
                 int blockY = center.getBlockY() + y;
                 if (blockY < center.getWorld().getMinHeight() || blockY >= center.getWorld().getMaxHeight())
                     continue;
-                for (int z = -AI_INTERACT_RANGE; z <= AI_INTERACT_RANGE; z++) {
+                for (int z = -AI_SWITCH_RANGE; z <= AI_SWITCH_RANGE; z++) {
                     double distance = x * x + y * y + z * z;
-                    if (distance > AI_INTERACT_RANGE * AI_INTERACT_RANGE || distance >= nearestDistance)
+                    if (distance > AI_SWITCH_RANGE * AI_SWITCH_RANGE || distance >= nearestDistance)
                         continue;
                     Block block = center.getWorld().getBlockAt(center.getBlockX() + x, blockY, center.getBlockZ() + z);
                     if (!isUsableSwitch(block))
@@ -1268,7 +1376,7 @@ public final class NpcBehaviourService implements Listener {
                 && (!Tag.BUTTONS.isTagged(block.getType()) || !powerable.isPowered());
     }
 
-    private Location interactionDestination(Block target, Location origin) {
+    private List<Location> interactionDestinations(Block target, Location origin) {
         List<Location> candidates = new ArrayList<>();
         for (BlockFace face : List.of(BlockFace.NORTH, BlockFace.EAST, BlockFace.SOUTH, BlockFace.WEST)) {
             for (int yOffset : List.of(0, -1)) {
@@ -1279,8 +1387,11 @@ public final class NpcBehaviourService implements Listener {
                 }
             }
         }
-        return candidates.stream().min(Comparator.comparingDouble(origin::distanceSquared))
-                .orElse(target.getLocation().add(0.5, 0, 0.5));
+        candidates.sort(Comparator.comparingDouble(origin::distanceSquared));
+        if (candidates.isEmpty()) {
+            candidates.add(target.getLocation().add(0.5, 0, 0.5));
+        }
+        return List.copyOf(candidates);
     }
 
     private void toggleSwitch(Block block) {
@@ -1326,9 +1437,7 @@ public final class NpcBehaviourService implements Listener {
             case WALL -> switchData.getFacing().getOppositeFace();
         };
         Block support = block.getRelative(supportFace);
-        // Re-apply the support block through Bukkit with physics enabled. This
-        // notifies its redstone neighbours without reaching into versioned NMS.
-        support.getState().update(true, true);
+        SwitchNeighborUpdates.notifyNeighbors(block, support, plugin.getLogger());
     }
 
     private void mineNearbyBlocks(NpcInstance instance, NpcDefinition definition) {
@@ -2031,7 +2140,15 @@ public final class NpcBehaviourService implements Listener {
         SWITCH, TAKE_FROM_CONTAINER, STORE_IN_CONTAINER
     }
 
-    private record AiInteraction(AiInteractionKind kind, Location blockLocation, Location navigationTarget) {
+    private record AiInteraction(AiInteractionKind kind, Location blockLocation, List<Location> navigationTargets,
+            int destinationIndex) {
+        private Location navigationTarget() {
+            return navigationTargets.get(destinationIndex);
+        }
+
+        private AiInteraction nextDestination() {
+            return new AiInteraction(kind, blockLocation, navigationTargets, destinationIndex + 1);
+        }
     }
 
     private record AiInteractionRequest(AiInteractionKind kind, Location blockLocation) {

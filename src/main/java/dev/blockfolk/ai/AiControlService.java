@@ -74,7 +74,9 @@ public final class AiControlService {
             receive their results and updated NPC state.
             Call another function only if the updated state requires it. Otherwise finish with no tool calls.
             Never return Minecraft commands, code, or extra prose. Use only the available functions and target aliases.
-            Use SAY with a text argument to speak.
+            If a player requests an available action, call its function. Do not merely say you will do it.
+            Use SAY with a text argument to speak. Speak at most once per turn: put the whole reply in one
+            concise SAY call, and do not call SAY again after receiving tool results.
             Targeted actions use only target references present in the request.
             START_COMBAT may target triggering_entity, a nearby_player_N, nearby_npc_<name>, or nearby_entity_N,
             regardless of the NPC's normal player, NPC, mob, or animal targeting preferences. It may omit
@@ -86,7 +88,9 @@ public final class AiControlService {
             or the listed player's Minecraft name.
             UNFOLLOW stops following the current player. INTERACT uses a listed nearby_lever_N or nearby_button_N
             target to operate that exact switch; nearest_switch is allowed only when the particular switch does not
-            matter. For multi-switch instructions, call INTERACT once per switch in the requested order.
+            matter. When asked to use a lever, choose a nearby_lever_N alias, not nearest_switch.
+            INTERACT may take time while walking; do not repeat the same target while it is in progress.
+            For multi-switch instructions, call INTERACT once per switch in the requested order.
             INTERACT uses a listed take_from_container_N or
             store_in_container_N target. The unnumbered forms select the nearest suitable container.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
@@ -111,9 +115,10 @@ public final class AiControlService {
             It should answer the player unless silence is clearly more appropriate for its character.
             Add actions from other NPCs only when their participation feels natural;
             do not make every NPC speak merely because it is present. Each NPC may have zero to three actions
-            in one response.
+            in one response. Each NPC may call SAY at most once in the entire turn, including follow-up rounds.
             Call DO_NOTHING for the intended speaker if silence is appropriate. Other NPCs can have no calls.
             Never return Minecraft commands, code, or extra prose.
+            If a player requests an available action, call its function. Do not merely say you will do it.
             Targeted actions use only target references present in that NPC's request context.
             START_COMBAT may target triggering_entity, a nearby_player_N, nearby_npc_<name>, or nearby_entity_N,
             regardless of that NPC's normal player, NPC, mob, or animal targeting preferences. It may omit
@@ -123,7 +128,9 @@ public final class AiControlService {
             or the listed player's Minecraft name.
             UNFOLLOW stops that NPC following its current player. INTERACT uses a listed nearby_lever_N or
             nearby_button_N target to operate that exact switch; nearest_switch is allowed only when identity does
-            not matter. For multi-switch instructions, call INTERACT once per switch in the requested order.
+            not matter. When asked to use a lever, choose a nearby_lever_N alias, not nearest_switch.
+            INTERACT may take time while walking; do not repeat the same target while it is in progress.
+            For multi-switch instructions, call INTERACT once per switch in the requested order.
             For container interaction, use a listed take_from_container_N or store_in_container_N target;
             the unnumbered forms select the nearest suitable container.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
@@ -267,7 +274,8 @@ public final class AiControlService {
                     settings.systemContext() + "\n\n" + RESULT_RULES, context.prompt(),
                     AiActionTools.definitions(available, List.of()), false);
             completeSingleActionChain(session, event, detail, guidance, instance, definition, actor, settings,
-                    available, resultHandler, context, generation, 0, 0, false).whenComplete((ignored, error) -> {
+                    available, resultHandler, context, generation, 0, 0, false, false)
+                    .whenComplete((ignored, error) -> {
                         if (error != null) {
                             logRequestFailure("AI Behaviour request for " + definition.getKey(), error);
                         }
@@ -306,7 +314,7 @@ public final class AiControlService {
             BehaviourEvent event, String detail, String guidance, NpcInstance instance, NpcDefinition definition,
             Entity actor, AiControlSettings settings, Set<AiActionType> available,
             Consumer<AiDecisionResult> resultHandler, RequestContext context, long generation, int round,
-            int actionsUsed, boolean retried) {
+            int actionsUsed, boolean alreadySpoke, boolean retried) {
         return session.complete().thenCompose(turn -> {
             if (turn.calls().isEmpty() && round > 0) {
                 return CompletableFuture.completedFuture(null);
@@ -323,16 +331,17 @@ public final class AiControlService {
                         + " returned unusable output (" + parsed.issue() + "); retrying once.");
                 session.retry(parsed.issue());
                 return completeSingleActionChain(session, event, detail, guidance, instance, definition, actor,
-                        settings, available, resultHandler, context, generation, round, actionsUsed, true);
+                        settings, available, resultHandler, context, generation, round, actionsUsed, alreadySpoke,
+                        true);
             }
             if (!parsed.issue().isEmpty()) {
                 plugin.getLogger().warning("AI Behaviour request for " + definition.getKey() + ": " + parsed.issue());
             }
-            List<AiDecision.Action> actions = parsed.value().actions();
-            if (actionsUsed + actions.size() > MAX_ACTIONS_PER_TURN) {
-                actions = actions.subList(0, MAX_ACTIONS_PER_TURN - actionsUsed);
+            List<AiDecision.Action> accepted = AiTurnActionLimiter.limit(parsed.value().actions(),
+                    MAX_ACTIONS_PER_TURN - actionsUsed, alreadySpoke);
+            if (accepted.isEmpty()) {
+                return CompletableFuture.completedFuture(null);
             }
-            List<AiDecision.Action> accepted = List.copyOf(actions);
             CompletableFuture<RequestContext> applied = new CompletableFuture<>();
             if (!plugin.isEnabled()) {
                 return CompletableFuture.completedFuture(null);
@@ -366,9 +375,11 @@ public final class AiControlService {
                             + (parsed.issue().isEmpty() ? "" : parsed.issue())
                             + " Some actions may still be in progress; use the updated state below.");
                 }
-                session.result(turn, results, updated.prompt());
+                boolean spoke = alreadySpoke || accepted.stream().anyMatch(action -> action.type() == AiActionType.SAY);
+                session.result(turn, results, updated.prompt()
+                        + (spoke ? "\nYou have already spoken this turn. Do not call SAY again." : ""));
                 return completeSingleActionChain(session, event, detail, guidance, instance, definition, actor,
-                        settings, available, resultHandler, updated, generation, round + 1, total, false);
+                        settings, available, resultHandler, updated, generation, round + 1, total, spoke, false);
             });
         });
     }
@@ -377,17 +388,20 @@ public final class AiControlService {
         return client.configured();
     }
 
+    public void setModel(String model) {
+        client.setModel(model);
+    }
+
     /**
-     * Queues a chat turn with its intended speaker fixed when the message
-     * arrives.
+     * Queues a chat turn with its intended speaker fixed when the message arrives.
      */
     public void invokeChatGroup(String message, List<NpcInstance> candidates, Player player,
             BiConsumer<NpcInstance, AiDecisionResult> resultHandler) {
         List<GroupParticipant> eligibleParticipants = candidates.stream()
                 .map(instance -> definitions.find(instance.getDefinitionKey()).map(
-                definition -> new GroupParticipant(instance, definition, definition.getAiControlSettings())))
+                        definition -> new GroupParticipant(instance, definition, definition.getAiControlSettings())))
                 .flatMap(java.util.Optional::stream).filter(participant -> participant.settings().enabled()
-                && participant.settings().hasContext() && participant.settings().respondToChat())
+                        && participant.settings().hasContext() && participant.settings().respondToChat())
                 .toList();
         if (eligibleParticipants.isEmpty()) {
             return;
@@ -403,7 +417,7 @@ public final class AiControlService {
 
         eligibleParticipants.stream().filter(participant -> participant.settings().memoryEnabled())
                 .forEach(participant -> scheduleIdleDream(participant.instance(), player.getUniqueId(),
-                participant.settings().sharedConversation(), DREAM_IDLE_TICKS));
+                        participant.settings().sharedConversation(), DREAM_IDLE_TICKS));
 
         int addressee = ChatAddressee.select(message,
                 eligibleParticipants.stream().map(participant -> participant.definition().getDisplayName()).toList());
@@ -446,9 +460,9 @@ public final class AiControlService {
         List<GroupParticipant> eligibleParticipants = invocation.candidates().stream()
                 .filter(instance -> instances.findById(instance.getId()).isPresent())
                 .map(instance -> definitions.find(instance.getDefinitionKey()).map(
-                definition -> new GroupParticipant(instance, definition, definition.getAiControlSettings())))
+                        definition -> new GroupParticipant(instance, definition, definition.getAiControlSettings())))
                 .flatMap(java.util.Optional::stream).filter(participant -> participant.settings().enabled()
-                && participant.settings().hasContext() && participant.settings().respondToChat())
+                        && participant.settings().hasContext() && participant.settings().respondToChat())
                 .toList();
         GroupParticipant primary = eligibleParticipants.stream()
                 .filter(participant -> participant.instance().getId().equals(invocation.primaryId())).findFirst()
@@ -565,7 +579,7 @@ public final class AiControlService {
                     + "response; finish with no tool calls when done.", context.toString(), groupTools, true);
             completeGroupActionChain(session, aliases, requestGenerations, targetsByInstance, targetsByAlias,
                     settingsByAlias, availableByAlias, primaryResponseId, invocation.player(),
-                    invocation.resultHandler(), eventDetail, 0, new HashMap<>(), false)
+                    invocation.resultHandler(), eventDetail, 0, new HashMap<>(), new HashSet<>(), false)
                     .whenComplete((ignored, error) -> {
                         if (error != null) {
                             logRequestFailure("AI Behaviour group chat request", error);
@@ -640,7 +654,7 @@ public final class AiControlService {
             Map<UUID, AiTargetSnapshot> targetsByInstance, Map<String, AiTargetSnapshot> targetsByAlias,
             Map<String, AiControlSettings> settingsByAlias, Map<String, Set<AiActionType>> availableByAlias,
             String primaryResponseId, Player player, BiConsumer<NpcInstance, AiDecisionResult> resultHandler,
-            String eventDetail, int round, Map<String, Integer> actionsUsed, boolean retried) {
+            String eventDetail, int round, Map<String, Integer> actionsUsed, Set<String> speakers, boolean retried) {
         return session.complete().thenCompose(turn -> {
             if (turn.calls().isEmpty() && round > 0) {
                 return CompletableFuture.completedFuture(null);
@@ -660,7 +674,7 @@ public final class AiControlService {
                 session.retry(issue);
                 return completeGroupActionChain(session, aliases, requestGenerations, targetsByInstance, targetsByAlias,
                         settingsByAlias, availableByAlias, primaryResponseId, player, resultHandler, eventDetail, round,
-                        actionsUsed, true);
+                        actionsUsed, speakers, true);
             }
             if (!parsed.issue().isEmpty()) {
                 plugin.getLogger().warning("AI Behaviour group chat: " + parsed.issue());
@@ -673,12 +687,16 @@ public final class AiControlService {
             parsed.value().forEach((alias, decision) -> {
                 int remaining = MAX_ACTIONS_PER_TURN - actionsUsed.getOrDefault(alias, 0);
                 if (remaining > 0) {
-                    List<AiDecision.Action> actions = decision.actions();
-                    List<AiDecision.Action> limited = List
-                            .copyOf(actions.subList(0, Math.min(remaining, actions.size())));
-                    accepted.put(alias, new AiDecision(limited));
+                    List<AiDecision.Action> limited = AiTurnActionLimiter.limit(decision.actions(), remaining,
+                            speakers.contains(alias));
+                    if (!limited.isEmpty()) {
+                        accepted.put(alias, new AiDecision(limited));
+                    }
                 }
             });
+            if (accepted.isEmpty()) {
+                return CompletableFuture.completedFuture(null);
+            }
             CompletableFuture<String> applied = new CompletableFuture<>();
             if (!plugin.isEnabled()) {
                 return CompletableFuture.completedFuture(null);
@@ -714,10 +732,15 @@ public final class AiControlService {
             return applied.thenCompose(updated -> {
                 accepted.forEach(
                         (alias, decision) -> actionsUsed.merge(alias, decision.actions().size(), Integer::sum));
+                accepted.forEach((alias, decision) -> {
+                    if (decision.actions().stream().anyMatch(action -> action.type() == AiActionType.SAY)) {
+                        speakers.add(alias);
+                    }
+                });
                 boolean moreAvailable = actionsUsed.values().stream().anyMatch(count -> count < MAX_ACTIONS_PER_TURN);
                 if (round + 1 >= MAX_ACTION_ROUNDS || !moreAvailable || accepted.isEmpty()
                         || (!missingPrimary && accepted.values().stream().allMatch(decision -> decision.actions()
-                        .stream().allMatch(action -> action.type() == AiActionType.DO_NOTHING)))) {
+                                .stream().allMatch(action -> action.type() == AiActionType.DO_NOTHING)))) {
                     return CompletableFuture.completedFuture(null);
                 }
                 List<String> results = new ArrayList<>();
@@ -725,20 +748,24 @@ public final class AiControlService {
                     results.add("Validated and dispatched this action batch: "
                             + accepted.entrySet().stream()
                                     .map(entry -> entry.getKey() + "="
-                                    + entry.getValue().actions().stream().map(action -> action.type().name())
-                                            .toList())
+                                            + entry.getValue().actions().stream().map(action -> action.type().name())
+                                                    .toList())
                                     .toList()
                             + ". " + parsed.issue()
                             + " Some actions may still be in progress; use the updated state below.");
                 }
-                session.result(turn, results,
-                        updated + (missingPrimary
+                session.result(turn, results, updated
+                        + (missingPrimary
                                 ? "\nThe intended speaker has not responded. Call an action for Response ID "
-                                + primaryResponseId + ", or DO_NOTHING if silence is appropriate."
-                                : ""));
+                                        + primaryResponseId + ", or DO_NOTHING if silence is appropriate."
+                                : "")
+                        + (speakers.isEmpty()
+                                ? ""
+                                : "\nThese NPCs have already spoken this turn and must not call SAY again: "
+                                        + speakers));
                 return completeGroupActionChain(session, aliases, requestGenerations, targetsByInstance, targetsByAlias,
                         settingsByAlias, availableByAlias, primaryResponseId, player, resultHandler, eventDetail,
-                        round + 1, actionsUsed, false);
+                        round + 1, actionsUsed, speakers, false);
             });
         });
     }
@@ -775,7 +802,7 @@ public final class AiControlService {
                 String line = NpcResponseIds.plainName(speaker.definition().getDisplayName()) + ": " + action.text();
                 validParticipants.values()
                         .forEach(listener -> memory.rememberMessage(listener.instance().getId(), player.getUniqueId(),
-                        listener.settings().sharedConversation(), line, listener.settings().memoryEnabled()));
+                                listener.settings().sharedConversation(), line, listener.settings().memoryEnabled()));
             }
         }
 
@@ -832,7 +859,7 @@ public final class AiControlService {
     public void rememberPlayerMessage(NpcInstance instance, Player player, String text) {
         memory.rememberMessage(instance.getId(), player.getUniqueId(), sharedConversation(instance),
                 player.getName() + ": " + text, definitions.find(instance.getDefinitionKey())
-                .map(definition -> definition.getAiControlSettings().memoryEnabled()).orElse(false));
+                        .map(definition -> definition.getAiControlSettings().memoryEnabled()).orElse(false));
     }
 
     public void rememberNpcSpeech(NpcInstance instance, NpcDefinition definition, Player player, String text) {
@@ -1037,8 +1064,8 @@ public final class AiControlService {
     }
 
     /**
-     * Clears runtime conversation/event memory and invalidates pending
-     * responses for every spawned copy.
+     * Clears runtime conversation/event memory and invalidates pending responses
+     * for every spawned copy.
      */
     public void resetDefinition(NpcDefinition definition) {
         Set<UUID> resetInstanceIds = new HashSet<>();
@@ -1088,8 +1115,8 @@ public final class AiControlService {
     private boolean olderChatTurnWaiting(PendingGroupInvocation current) {
         return pendingGroups.values().stream().map(PendingAiQueue::peek)
                 .anyMatch(invocation -> invocation != null && invocation != current
-                && invocation.primaryId().equals(current.primaryId())
-                && invocation.sequence() < current.sequence());
+                        && invocation.primaryId().equals(current.primaryId())
+                        && invocation.sequence() < current.sequence());
     }
 
     private void schedulePending(UUID instanceId, long delayMillis) {
@@ -1352,7 +1379,7 @@ public final class AiControlService {
         }
         resources.entrySet().stream().sorted(Map.Entry.<Material, Integer>comparingByValue().reversed()).limit(12)
                 .forEach(entry -> out.append("- ").append(entry.getKey().name().toLowerCase(Locale.ROOT)).append(": ")
-                .append(entry.getValue()).append(" blocks\n"));
+                        .append(entry.getValue()).append(" blocks\n"));
     }
 
     private void appendNearbySwitches(StringBuilder out, Location center, AiTargetSnapshot.Builder targets) {
@@ -1462,7 +1489,7 @@ public final class AiControlService {
                 container.contents().entrySet().stream()
                         .sorted(Map.Entry.<Material, Integer>comparingByValue().reversed()).limit(8)
                         .forEach(entry -> out.append(entry.getValue()).append(' ')
-                        .append(readable(entry.getKey().name())).append(", "));
+                                .append(readable(entry.getKey().name())).append(", "));
                 out.setLength(out.length() - 2);
             }
             out.append("; targets: ").append(takeAlias).append(", ").append(storeAlias).append('\n');
@@ -1536,7 +1563,7 @@ public final class AiControlService {
         return locations.findAll().stream().filter(named -> named.location().toLocation() != null)
                 .filter(named -> named.location().toLocation().getWorld() == center.getWorld())
                 .filter(named -> named.location().toLocation().distanceSquared(center) <= LOCATION_PERCEPTION_RADIUS
-                * LOCATION_PERCEPTION_RADIUS)
+                        * LOCATION_PERCEPTION_RADIUS)
                 .sorted(Comparator.comparingDouble(named -> named.location().toLocation().distanceSquared(center)))
                 .limit(MAX_NEARBY_LOCATIONS).toList();
     }
@@ -1580,7 +1607,7 @@ public final class AiControlService {
         out.append("Nearby signs:\n");
         signs.stream().sorted(Comparator.comparingDouble(NearbySign::distance)).limit(5)
                 .forEach(sign -> out.append("- ").append(sign.text()).append(", approximately ")
-                .append(Math.round(sign.distance())).append(" blocks away\n"));
+                        .append(Math.round(sign.distance())).append(" blocks away\n"));
     }
 
     private static String signText(Sign sign, Side side) {

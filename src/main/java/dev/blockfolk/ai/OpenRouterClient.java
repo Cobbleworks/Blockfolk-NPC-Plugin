@@ -23,7 +23,7 @@ public final class OpenRouterClient {
     private final HttpClient client;
     private final URI endpoint;
     private final String apiKey;
-    private final String model;
+    private volatile String model;
     private final Duration timeout;
     private final int maxTokens;
     private final String endpointIssue;
@@ -55,6 +55,10 @@ public final class OpenRouterClient {
 
     public boolean configured() {
         return endpoint != null && !apiKey.isBlank() && !model.isBlank();
+    }
+
+    public void setModel(String model) {
+        this.model = model == null ? "" : model.trim();
     }
 
     public String configurationIssue() {
