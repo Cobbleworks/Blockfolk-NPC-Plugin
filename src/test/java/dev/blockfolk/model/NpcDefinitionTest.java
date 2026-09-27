@@ -58,6 +58,19 @@ class NpcDefinitionTest {
     }
 
     @Test
+    void selectedCustomEventRowSurvivesRemovingItsLastAction() {
+        NpcDefinition definition = NpcDefinition.create("Guard");
+        definition.setCustomEventActions("alarm", List.of(new BehaviourAction(BehaviourActionType.WAVE, null)));
+
+        definition.removeCustomEventAction("alarm", 0);
+
+        assertEquals(List.of("alarm"), definition.getCustomEventNames());
+        assertEquals(List.of(), definition.getCustomEventActions("alarm"));
+        definition.removeCustomEvent("alarm");
+        assertTrue(definition.getCustomEventNames().isEmpty());
+    }
+
+    @Test
     void replacesRouteReferencesInsideMovementAndQuestionBranches() {
         NpcDefinition npc = NpcDefinition.create("Guard");
         npc.setMovementProfile(MovementProfile.routing("patrol", WalkingSpeed.NORMAL));

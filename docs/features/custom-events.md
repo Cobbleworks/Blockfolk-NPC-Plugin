@@ -10,6 +10,8 @@ Choose **Create Event** and enter a unique name. Names accept letters, numbers, 
 
 From the event browser:
 
+Events are grouped by the NPCs whose actions emit them, including waypoint and question actions. An event emitted by several NPCs appears in each NPC group; events with no NPC emitter appear under **Unassigned**. Event name groups created with `/` remain available inside these groups.
+
 - right-click an event to set or clear its description;
 - middle-click to set its icon from your main hand;
 - shift-right-click to delete it and remove NPC reactions referencing it;
@@ -29,7 +31,7 @@ The trigger command works from a player or the server console.
 
 ## React to an event
 
-Open an NPC preset and choose **Custom Event Behaviour**. Select the event and build its ordered action row just like a standard behaviour routine. Every active instance of that preset runs the row when the event is emitted.
+Open an NPC preset and choose **Custom Event Behaviour**. Click **Add Event**, select an existing event or create one from the **Select Custom Event** screen, then build its ordered action row just like a standard behaviour routine. Only selected events appear as rows. Right-click a row's event icon to remove that row. Every active instance of that preset runs the row when the event is emitted.
 
 One event can coordinate many presets. For example, `town/alarm` might make guards start combat, civilians flee, and a gatekeeper close a lever-controlled gate.
 

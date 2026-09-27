@@ -80,7 +80,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         routeGuiService = new RouteGuiService(this, routeRepository, locationRepository, definitionRepository,
                 instanceRegistry, chatInputService, this::openMainGui);
         customEventGuiService = new CustomEventGuiService(this, customEventRepository, definitionRepository,
-                chatInputService, this::openMainGui);
+                routeRepository, chatInputService, this::openMainGui);
         guiService = new GuiService(this, definitionRepository, routeRepository, instanceRegistry, chatInputService,
                 skinResolver, routeGuiService::openRoutes, routeGuiService::openNpcRoutes, routeGuiService::createRoute,
                 routeGuiService::beginEditing, customEventRepository, customEventGuiService::open,

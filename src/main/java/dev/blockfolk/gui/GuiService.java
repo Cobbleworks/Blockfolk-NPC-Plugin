@@ -745,7 +745,7 @@ public final class GuiService implements Listener {
     }
 
     public void openCustomBehaviours(Player player, NpcDefinition definition, int requestedPage) {
-        List<CustomEvent> events = new ArrayList<>(customEventRepository.findAll());
+        List<CustomEvent> events = configuredCustomEvents(definition);
         int pages = Math.max(1, (events.size() + 4) / 5);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new CustomBehaviourHolder(definition.getKey(), page), 54,
@@ -763,7 +763,8 @@ public final class GuiService implements Listener {
                                     : customEvent.getDescription()),
                             LegacyText.GRAY + "Actions run from left to right",
                             LegacyText.YELLOW + "Shift-left-click to copy row",
-                            LegacyText.YELLOW + "Shift-right-click to paste row"), actions)));
+                            LegacyText.YELLOW + "Shift-right-click to paste row",
+                            LegacyText.RED + "Right-click to remove row"), actions)));
             inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action",
                     List.of(LegacyText.YELLOW + "Click to append")));
             for (int column = 0; column < Math.min(7, actions.size()); column++) {
@@ -776,11 +777,48 @@ public final class GuiService implements Listener {
             }
         }
         if (events.isEmpty())
-            inventory.setItem(22, item(Material.GRAY_DYE, "No Custom Events",
-                    List.of(LegacyText.GRAY + "Create one from the Custom Events main menu")));
+            inventory.setItem(22, item(Material.GRAY_DYE, "No Event Rows",
+                    List.of(LegacyText.GRAY + "Choose Add Event to select a custom event")));
         if (page > 0)
             inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(51, item(Material.EMERALD, "Add Event",
+                List.of(LegacyText.YELLOW + "Choose a custom event for a new row")));
+        if (page + 1 < pages)
+            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+        openInventory(player, inventory);
+    }
+
+    private List<CustomEvent> configuredCustomEvents(NpcDefinition definition) {
+        return customEventRepository.findAll().stream()
+                .filter(event -> definition.getCustomEventNames().contains(event.getName())).toList();
+    }
+
+    private void openCustomBehaviourEventPicker(Player player, NpcDefinition definition, int behaviourPage,
+            int requestedPage) {
+        List<CustomEvent> available = customEventRepository.findAll().stream()
+                .filter(event -> !definition.getCustomEventNames().contains(event.getName())).toList();
+        int pages = Math.max(1, (available.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int page = Math.max(0, Math.min(requestedPage, pages - 1));
+        Inventory inventory = Bukkit.createInventory(
+                new CustomBehaviourEventPickerHolder(definition.getKey(), behaviourPage, page), 54,
+                UiText.title("Select Custom Event"));
+        int from = page * PAGE_SIZE;
+        for (int index = from; index < Math.min(from + PAGE_SIZE, available.size()); index++) {
+            CustomEvent event = available.get(index);
+            inventory.setItem(index - from,
+                    item(customEventIcon(event), event.getName(),
+                            List.of(LegacyText.GRAY
+                                    + (event.getDescription().isBlank() ? "No description" : event.getDescription()),
+                                    LegacyText.YELLOW + "Click to add row")));
+        }
+        if (available.isEmpty())
+            inventory.setItem(22, item(Material.GRAY_DYE, "No Events Available", List.of()));
+        if (page > 0)
+            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
+        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(51,
+                item(Material.EMERALD, "Create New Event", List.of(LegacyText.YELLOW + "Create and add an event row")));
         if (page + 1 < pages)
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         openInventory(player, inventory);
@@ -988,6 +1026,8 @@ public final class GuiService implements Listener {
             handleBehaviourClick(event, player, behaviourHolder);
         } else if (holder instanceof CustomBehaviourHolder customBehaviourHolder) {
             handleCustomBehaviourClick(event, player, customBehaviourHolder);
+        } else if (holder instanceof CustomBehaviourEventPickerHolder customEventPicker) {
+            handleCustomBehaviourEventPickerClick(event, player, customEventPicker);
         } else if (holder instanceof ActionPickerHolder pickerHolder) {
             handleActionPickerClick(event, player, pickerHolder);
         } else if (aiGuiService.handles(holder)) {
@@ -1688,8 +1728,12 @@ public final class GuiService implements Listener {
             openCustomBehaviours(player, definition, holder.page() + 1);
             return;
         }
+        if (slot == 51) {
+            openCustomBehaviourEventPicker(player, definition, holder.page(), 0);
+            return;
+        }
         int row = slot / 9;
-        List<CustomEvent> customEvents = new ArrayList<>(customEventRepository.findAll());
+        List<CustomEvent> customEvents = configuredCustomEvents(definition);
         int eventIndex = holder.page() * 5 + row;
         if (row >= 5 || eventIndex < 0 || eventIndex >= customEvents.size())
             return;
@@ -1702,6 +1746,10 @@ public final class GuiService implements Listener {
             openCustomBehaviours(player, definition, holder.page());
         })) {
             return;
+        } else if (slot % 9 == 0 && event.isRightClick()) {
+            definition.removeCustomEvent(eventName);
+            definitionRepository.save(definition);
+            openCustomBehaviours(player, definition, holder.page());
         } else if (slot % 9 == 1) {
             openActionPicker(player, definition, null, eventName, actions.size(), holder.page());
         } else if (column < 0 || column >= 7) {
@@ -1717,6 +1765,44 @@ public final class GuiService implements Listener {
         } else if (column <= actions.size()) {
             openActionPicker(player, definition, null, eventName, column, holder.page());
         }
+    }
+
+    private void handleCustomBehaviourEventPickerClick(InventoryClickEvent click, Player player,
+            CustomBehaviourEventPickerHolder holder) {
+        click.setCancelled(true);
+        if (!isTopInventoryClick(click))
+            return;
+        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
+        if (definition == null) {
+            player.closeInventory();
+            return;
+        }
+        int slot = click.getRawSlot();
+        if (slot == 47 || slot == 53) {
+            openCustomBehaviourEventPicker(player, definition, holder.behaviourPage(),
+                    holder.page() + (slot == 47 ? -1 : 1));
+            return;
+        }
+        if (slot == 49) {
+            openCustomBehaviours(player, definition, holder.behaviourPage());
+            return;
+        }
+        if (slot == 51) {
+            customEventCreator.create(player, "", customEvent -> {
+                definition.setCustomEventActions(customEvent.getName(), List.of());
+                definitionRepository.save(definition);
+                openCustomBehaviours(player, definition, Integer.MAX_VALUE);
+            }, () -> openCustomBehaviourEventPicker(player, definition, holder.behaviourPage(), holder.page()));
+            return;
+        }
+        List<CustomEvent> available = customEventRepository.findAll().stream()
+                .filter(event -> !definition.getCustomEventNames().contains(event.getName())).toList();
+        int index = holder.page() * PAGE_SIZE + slot;
+        if (slot >= PAGE_SIZE || index < 0 || index >= available.size())
+            return;
+        definition.setCustomEventActions(available.get(index).getName(), List.of());
+        definitionRepository.save(definition);
+        openCustomBehaviours(player, definition, Integer.MAX_VALUE);
     }
 
     private void handleRoutePointActionsClick(InventoryClickEvent event, Player player,
@@ -3312,12 +3398,13 @@ public final class GuiService implements Listener {
                 || holder instanceof PropertiesHolder || holder instanceof FightingHolder
                 || holder instanceof TargetsHolder || holder instanceof FightOptionsActionHolder
                 || holder instanceof InstancesHolder || holder instanceof BehaviourHolder
-                || holder instanceof CustomBehaviourHolder || holder instanceof ActionPickerHolder
-                || holder instanceof AnimationPickerHolder || holder instanceof BehaviourValuePickerHolder
-                || holder instanceof RoutePointActionsHolder || holder instanceof RoutePointActionPickerHolder
-                || holder instanceof RoutePointAnimationPickerHolder || holder instanceof RoutePointValuePickerHolder
-                || holder instanceof SavedLocationPickerHolder || holder instanceof QuestionEditorHolder
-                || holder instanceof QuestionBranchPickerHolder || holder instanceof QuestionBranchRoutePickerHolder
+                || holder instanceof CustomBehaviourHolder || holder instanceof CustomBehaviourEventPickerHolder
+                || holder instanceof ActionPickerHolder || holder instanceof AnimationPickerHolder
+                || holder instanceof BehaviourValuePickerHolder || holder instanceof RoutePointActionsHolder
+                || holder instanceof RoutePointActionPickerHolder || holder instanceof RoutePointAnimationPickerHolder
+                || holder instanceof RoutePointValuePickerHolder || holder instanceof SavedLocationPickerHolder
+                || holder instanceof QuestionEditorHolder || holder instanceof QuestionBranchPickerHolder
+                || holder instanceof QuestionBranchRoutePickerHolder
                 || holder instanceof QuestionBranchAnimationPickerHolder || holder instanceof ConfirmationHolder
                 || aiGuiService.handles(holder);
     }
@@ -3651,6 +3738,9 @@ public final class GuiService implements Listener {
     }
 
     private record CustomBehaviourHolder(String key, int page) implements GuiHolder {
+    }
+
+    private record CustomBehaviourEventPickerHolder(String key, int behaviourPage, int page) implements GuiHolder {
     }
 
     private record ActionPickerHolder(String key, BehaviourEvent event, String customEvent, int actionIndex,

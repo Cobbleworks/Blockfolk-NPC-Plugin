@@ -275,7 +275,7 @@ public final class NpcDefinition {
     }
 
     public void setCustomEventActions(String eventName, List<BehaviourAction> actions) {
-        if (actions == null || actions.isEmpty())
+        if (actions == null)
             customEventBehaviours.remove(eventName);
         else
             customEventBehaviours.put(eventName, new ArrayList<>(actions));
@@ -286,8 +286,6 @@ public final class NpcDefinition {
         if (actions == null || index < 0 || index >= actions.size())
             return;
         actions.remove(index);
-        if (actions.isEmpty())
-            customEventBehaviours.remove(eventName);
     }
 
     public void removeCustomEvent(String eventName) {

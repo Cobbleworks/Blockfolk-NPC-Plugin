@@ -1,9 +1,7 @@
 package dev.blockfolk.gui;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 
 import org.bukkit.Bukkit;
@@ -28,6 +26,7 @@ import dev.blockfolk.model.CustomEvent;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.repository.CustomEventRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
+import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.UiText;
 import net.kyori.adventure.text.Component;
@@ -36,14 +35,16 @@ public final class CustomEventGuiService implements Listener {
     private static final int PAGE_SIZE = 45;
     private final CustomEventRepository events;
     private final NpcDefinitionRepository definitions;
+    private final RouteRepository routes;
     private final ChatInputService chatInput;
     private final Consumer<Player> mainGuiOpener;
     private final NamespacedKey reorderEventKey;
 
     public CustomEventGuiService(JavaPlugin plugin, CustomEventRepository events, NpcDefinitionRepository definitions,
-            ChatInputService chatInput, Consumer<Player> mainGuiOpener) {
+            RouteRepository routes, ChatInputService chatInput, Consumer<Player> mainGuiOpener) {
         this.events = events;
         this.definitions = definitions;
+        this.routes = routes;
         this.chatInput = chatInput;
         this.mainGuiOpener = mainGuiOpener;
         this.reorderEventKey = new NamespacedKey(plugin, "reorder-custom-event");
@@ -76,20 +77,23 @@ public final class CustomEventGuiService implements Listener {
     }
 
     private void open(Player player, String folder, int requestedPage) {
-        List<Entry> entries = entries(folder);
+        List<CustomEventBrowserModel.Entry> entries = entries(folder);
         int pages = Math.max(1, (entries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        String title = folder.isEmpty() ? "Custom Events" : "Events: " + folder;
+        String title = folder.isEmpty() ? "Custom Events" : "Events: " + folderLabel(folder);
         Inventory inventory = Bukkit.createInventory(new EventsHolder(folder, page), 54, UiText.title(title));
         int from = page * PAGE_SIZE;
         for (int index = from; index < Math.min(from + PAGE_SIZE, entries.size()); index++) {
-            Entry entry = entries.get(index);
-            inventory.setItem(index - from,
-                    entry.folder()
-                            ? item(Material.CHEST, entry.label(),
-                                    List.of(LegacyText.GRAY + "" + entry.childCount() + " item(s)",
-                                            LegacyText.DARK_GRAY + entry.path(), LegacyText.YELLOW + "Click to open"))
-                            : eventItem(entry.event()));
+            CustomEventBrowserModel.Entry entry = entries.get(index);
+            if (entry.folder()) {
+                ItemStack icon = item(entry.npcFolder() ? Material.PLAYER_HEAD : Material.CHEST, entry.label(), List.of(
+                        LegacyText.GRAY + "" + entry.childCount() + " event(s)", LegacyText.YELLOW + "Click to open"));
+                if (entry.path().startsWith("npc:"))
+                    definitions.find(entry.path().substring(4)).ifPresent(npc -> NpcHeadUtil.applySkin(icon, npc));
+                inventory.setItem(index - from, icon);
+            } else {
+                inventory.setItem(index - from, eventItem(entry.event()));
+            }
         }
         inventory.setItem(45, item(folder.isEmpty() ? Material.PLAYER_HEAD : Material.ARROW,
                 folder.isEmpty() ? "Manage NPCs" : "Up One Group", List.of()));
@@ -98,7 +102,7 @@ public final class CustomEventGuiService implements Listener {
         inventory.setItem(49,
                 item(Material.BELL, "Event Overview",
                         List.of(LegacyText.GRAY + "Defined events: " + LegacyText.WHITE + events.findAll().size(),
-                                LegacyText.GRAY + "Group: " + LegacyText.WHITE + (folder.isEmpty() ? "Root" : folder),
+                                LegacyText.GRAY + "Group: " + LegacyText.WHITE + folderLabel(folder),
                                 LegacyText.YELLOW + "Click to reorder custom events")));
         inventory.setItem(51,
                 item(Material.EMERALD, "Create Event", List.of(LegacyText.GRAY + "Use / in the name to create groups",
@@ -205,7 +209,7 @@ public final class CustomEventGuiService implements Listener {
             if (holder.folder().isEmpty())
                 mainGuiOpener.accept(player);
             else
-                open(player, parent(holder.folder()), 0);
+                open(player, CustomEventBrowserModel.parent(holder.folder()), 0);
             return;
         }
         if (slot == 47) {
@@ -224,11 +228,11 @@ public final class CustomEventGuiService implements Listener {
             open(player, holder.folder(), holder.page() + 1);
             return;
         }
-        List<Entry> entries = entries(holder.folder());
+        List<CustomEventBrowserModel.Entry> entries = entries(holder.folder());
         int index = holder.page() * PAGE_SIZE + slot;
         if (slot >= PAGE_SIZE || index < 0 || index >= entries.size())
             return;
-        Entry entry = entries.get(index);
+        CustomEventBrowserModel.Entry entry = entries.get(index);
         if (entry.folder()) {
             open(player, entry.path(), 0);
             return;
@@ -287,7 +291,7 @@ public final class CustomEventGuiService implements Listener {
     }
 
     private void requestName(Player player, EventsHolder holder) {
-        createEvent(player, "", event -> open(player, parent(event.getName()), 0),
+        createEvent(player, "", event -> open(player, "unassigned:", 0),
                 () -> open(player, holder.folder(), holder.page()));
     }
 
@@ -312,7 +316,7 @@ public final class CustomEventGuiService implements Listener {
         CustomEvent event = events.find(holder.eventName()).orElse(null);
         if (event != null) {
             for (NpcDefinition definition : definitions.findAll()) {
-                if (!definition.getCustomEventActions(event.getName()).isEmpty()) {
+                if (definition.getCustomEventNames().contains(event.getName())) {
                     definition.removeCustomEvent(event.getName());
                     definitions.save(definition);
                 }
@@ -323,23 +327,20 @@ public final class CustomEventGuiService implements Listener {
         open(player, holder.folder(), holder.page());
     }
 
-    private List<Entry> entries(String folder) {
-        String prefix = folder.isEmpty() ? "" : folder + "/";
-        Map<String, Entry> result = new LinkedHashMap<>();
-        for (CustomEvent event : events.findAll()) {
-            if (!event.getName().startsWith(prefix))
-                continue;
-            String rest = event.getName().substring(prefix.length());
-            int slash = rest.indexOf('/');
-            if (slash >= 0) {
-                String label = rest.substring(0, slash);
-                String path = prefix + label;
-                Entry old = result.get(path);
-                result.put(path, new Entry(true, path, label, old == null ? 1 : old.childCount() + 1, null));
-            } else
-                result.put(event.getName(), new Entry(false, event.getName(), rest, 0, event));
-        }
-        return new ArrayList<>(result.values());
+    private List<CustomEventBrowserModel.Entry> entries(String folder) {
+        return CustomEventBrowserModel.entries(events.findAll(), definitions.findAll(), routes.findAll(), folder);
+    }
+
+    private String folderLabel(String folder) {
+        if (folder.isEmpty())
+            return "Root";
+        int separator = folder.indexOf('|');
+        String group = separator < 0 ? folder : folder.substring(0, separator);
+        String eventPath = separator < 0 ? "" : folder.substring(separator + 1);
+        String label = group.equals("unassigned:")
+                ? "Unassigned"
+                : definitions.find(group.substring(4)).map(NpcDefinition::getDisplayName).orElse(group);
+        return eventPath.isEmpty() ? label : label + "/" + eventPath;
     }
 
     private ItemStack eventItem(CustomEvent event) {
@@ -355,10 +356,6 @@ public final class CustomEventGuiService implements Listener {
                         LegacyText.RED + "Shift-right-click: delete"));
     }
 
-    private static String parent(String path) {
-        int slash = path.lastIndexOf('/');
-        return slash < 0 ? "" : path.substring(0, slash);
-    }
     private static boolean top(InventoryClickEvent event) {
         return event.getRawSlot() >= 0 && event.getRawSlot() < event.getView().getTopInventory().getSize();
     }
@@ -373,8 +370,6 @@ public final class CustomEventGuiService implements Listener {
         meta.lore(LegacyText.components(lore));
         item.setItemMeta(meta);
         return item;
-    }
-    private record Entry(boolean folder, String path, String label, int childCount, CustomEvent event) {
     }
     private record EventsHolder(String folder, int page) implements GuiHolder {
     }
