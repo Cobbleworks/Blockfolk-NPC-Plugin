@@ -40,6 +40,7 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import dev.blockfolk.model.AiMemory;
+import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.NamedLocation;
 import dev.blockfolk.model.NpcDefinition;
@@ -99,6 +100,8 @@ public final class AiControlService {
             INTERACT uses a listed take_from_container_N or
             store_in_container_N target. The unnumbered forms select the nearest suitable container.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
+            REMEMBER_LOCATION saves a unique label and x, y, z coordinates in this NPC's current world.
+            Use the NPC's listed coordinates to remember its current position.
             RETURN_HOME walks to this instance's respawn location. START_ROUTE resumes its configured route;
             PAUSE_ROUTE pauses that route.
             DROP_ITEM uses an inventory_slot_N target and drops that stack from the temporary inventory.
@@ -139,6 +142,8 @@ public final class AiControlService {
             For container interaction, use a listed take_from_container_N or store_in_container_N target;
             the unnumbered forms select the nearest suitable container.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
+            REMEMBER_LOCATION saves a unique label and x, y, z coordinates in that NPC's current world.
+            Use that NPC's listed coordinates to remember its current position.
             RETURN_HOME walks to that NPC instance's respawn location. START_ROUTE resumes its configured route;
             PAUSE_ROUTE pauses that route.
             DROP_ITEM uses an inventory_slot_N target and drops that stack from the temporary inventory.
@@ -960,6 +965,38 @@ public final class AiControlService {
         player.sendMessage(Component.text(message, NamedTextColor.GRAY).decorate(TextDecoration.ITALIC));
     }
 
+    public boolean rememberLocation(NpcInstance instance, NpcDefinition definition, String name,
+            Double x, Double y, Double z) {
+        if (locations == null || !definition.getAiControlSettings().allowedActions()
+                .contains(AiActionType.REMEMBER_LOCATION) || name == null || name.length() > 64
+                || x == null || y == null || z == null || !Double.isFinite(x) || !Double.isFinite(y)
+                || !Double.isFinite(z)) {
+            return false;
+        }
+        Location origin = instances.currentLocation(instance);
+        World world = origin.getWorld();
+        if (world == null || y < world.getMinHeight() || y >= world.getMaxHeight()
+                || Math.abs(x) > 29_999_984 || Math.abs(z) > 29_999_984) {
+            return false;
+        }
+        try {
+            NamedLocation named = NamedLocation.create(name, new ActionLocation(world.getName(), x, y, z));
+            if (locations.find(named.key()).isPresent()) {
+                return false;
+            }
+            locations.save(named.withIcon(new ItemStack(Material.DIAMOND)));
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (player.getWorld() == world && player.getLocation().distanceSquared(origin) <= 16 * 16) {
+                    sendMemoryNotice(player, definition.getDisplayName() + " now knows about "
+                            + named.displayName() + "...");
+                }
+            }
+            return true;
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+    }
+
     public boolean rememberFact(NpcDefinition definition, String fact) {
         if (!definition.getAiControlSettings().memoryEnabled() || fact == null || fact.isBlank()) {
             return false;
@@ -1266,6 +1303,10 @@ public final class AiControlService {
         }
         out.append("NPC state:\n").append("Name: ").append(NpcResponseIds.plainName(definition.getDisplayName()))
                 .append('\n').append("World: ").append(world == null ? "unknown" : world.getName()).append('\n');
+        if (settings.allowedActions().contains(AiActionType.REMEMBER_LOCATION) && world != null) {
+            out.append("Coordinates: ").append(location.getX()).append(", ")
+                    .append(location.getY()).append(", ").append(location.getZ()).append('\n');
+        }
         if (npc != null) {
             out.append("Health: ").append(format(npc.getHealth())).append(" / ")
                     .append(format(EntityHealth.maximum(npc))).append('\n');

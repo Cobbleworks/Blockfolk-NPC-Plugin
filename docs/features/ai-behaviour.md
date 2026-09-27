@@ -61,9 +61,11 @@ If a group response omits the intended speaker, Blockfolk asks that NPC separate
 
 Every capability is toggled per preset. **Start/Stop Combat**, **Follow/Unfollow**, and **Start/Pause Route** each use one switch that enables both actions. Other controls include speech, animations, fleeing, interacting, moving, mining, and returning home. **Do Nothing** is always available.
 
+**Remember Location** lets an NPC save a named position in its current world to the global Locations selection. When enabled, its exact coordinates are included in its request so it can remember where it stands. It can also save coordinates a player provides. Saved AI locations use a diamond icon and nearby players receive a chat notice. A name already in use cannot be overwritten.
+
 For an **On Damage Taken** AI Trigger that should retaliate, enable **Start/Stop Combat** in AI Behaviour and set the NPC's maximum health above zero in **Fighting & Survival**. The prompt can ask the NPC to attack its attacker, but cannot enable a disabled capability. When the attacker is known, the request exposes it as `triggering_entity`; a valid combat target must still be alive and attackable when the model responds. For guaranteed retaliation, put the regular **Start Combat** action on the damage event and use AI Trigger for optional speech or other reactions.
 
-The model cannot issue commands, executable code, arbitrary coordinates, or unlisted entity identifiers. A disabled, malformed, or unadvertised function call is rejected.
+The model cannot issue commands, executable code, or unlisted entity identifiers. Only **Remember Location** accepts explicit coordinates in the NPC's current world. A disabled, malformed, or unadvertised function call is rejected.
 
 ## Inventory and world interaction
 

@@ -30,6 +30,8 @@ order.
 
 **Move To** and **Teleport To** behaviour actions can target a saved location. AI perception includes up to 15 nearby locations in the same world within 64 blocks, ordered nearest first and exposed through safe request-local aliases rather than arbitrary coordinates.
 
+Enable **Remember Location** in an NPC preset's **AI Behaviour** menu to let it save a unique label and X, Y, Z coordinates in its current world. The action can use the NPC's own coordinates or coordinates supplied in conversation. AI-created locations appear in the same location browser and action selector, with a diamond icon. Nearby players see an italic "NPC now knows about Location..." notice when one is saved. Existing names are preserved; the AI cannot overwrite a location.
+
 Locations differ from routes: a location is one destination, while a route is a closed sequence of walking points.
 
 ![Blockfolk global locations browser](../screenshots/screenshot-locations-menu.jpeg)

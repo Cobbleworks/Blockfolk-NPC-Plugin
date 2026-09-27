@@ -90,7 +90,14 @@ public final class AiDecisionParser {
         String text = string(object, "text", false);
         String target = string(object, "target", true);
         String animation = string(object, "animation", true);
+        String locationName = string(object, "name", false);
+        Double x = number(object, "x");
+        Double y = number(object, "y");
+        Double z = number(object, "z");
         if (type == AiActionType.SAY && (text == null || text.isBlank()))
+            return java.util.Optional.empty();
+        if (type == AiActionType.REMEMBER_LOCATION && (locationName == null || locationName.isBlank()
+                || locationName.length() > 64 || x == null || y == null || z == null))
             return java.util.Optional.empty();
         if (target != null && !validTarget(type, target))
             return java.util.Optional.empty();
@@ -98,7 +105,7 @@ public final class AiDecisionParser {
             return java.util.Optional.empty();
         if (type == AiActionType.PLAY_ANIMATION && (animation == null || !ANIMATIONS.contains(animation)))
             return java.util.Optional.empty();
-        return java.util.Optional.of(new AiDecision.Action(type, text, target, animation));
+        return java.util.Optional.of(new AiDecision.Action(type, text, target, animation, locationName, x, y, z));
     }
 
     private static boolean requiresTarget(AiActionType type) {
@@ -156,6 +163,18 @@ public final class AiDecisionParser {
                 return null;
             String value = object.get(name).getAsString().trim();
             return normalize ? value.toLowerCase(java.util.Locale.ROOT) : value;
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private static Double number(JsonObject object, String name) {
+        try {
+            if (!object.has(name) || !object.get(name).isJsonPrimitive()
+                    || !object.get(name).getAsJsonPrimitive().isNumber())
+                return null;
+            double value = object.get(name).getAsDouble();
+            return Double.isFinite(value) ? value : null;
         } catch (RuntimeException ignored) {
             return null;
         }

@@ -53,7 +53,7 @@ final class AiGuiService {
     private static final int LIKES_DISLIKES_SLOT = 5;
     private static final int MEMORY_SLOT = 7;
     private static final int CONVERSATION_SLOT = 11;
-    private static final int[] ACTION_SLOTS = {28, 29, 30, 31, 32, 33, 37, 38, 39, 40, 41};
+    private static final int[] ACTION_SLOTS = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41};
     private static final List<AiActionType> ACTION_TYPES = Arrays.stream(AiActionType.values())
             .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM
                     && type != AiActionType.STOP_COMBAT && type != AiActionType.UNFOLLOW
@@ -428,6 +428,7 @@ final class AiGuiService {
             case START_ROUTE -> "Resumes or pauses this instance's configured route";
             case PAUSE_ROUTE -> "Pauses this instance's configured route";
             case REMEMBER_FACT -> "Saves a durable fact for future conversations";
+            case REMEMBER_LOCATION -> "Saves labeled coordinates for all NPCs to use";
             case DROP_ITEM -> "Drops a carried item from Temporary Inventory";
             case DO_NOTHING -> "Takes no action when a response is not needed";
         };

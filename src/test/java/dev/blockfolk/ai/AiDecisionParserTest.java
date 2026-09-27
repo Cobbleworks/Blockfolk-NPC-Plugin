@@ -245,6 +245,25 @@ class AiDecisionParserTest {
         assertEquals(AiActionType.DO_NOTHING, noTarget.actions().getFirst().type());
     }
 
+    @Test
+    void rememberLocationRequiresCapabilityAndFiniteCoordinates() {
+        String valid = """
+                {"actions":[{"type":"REMEMBER_LOCATION","name":"Town/Market","x":12.5,"y":64,"z":-8}]}
+                """;
+        AiControlSettings enabled = AiControlSettings.defaults().toggle(AiActionType.REMEMBER_LOCATION);
+
+        assertEquals(AiActionType.DO_NOTHING,
+                AiDecisionParser.parse(valid, AiControlSettings.defaults()).actions().getFirst().type());
+        assertEquals(AiActionType.REMEMBER_LOCATION,
+                AiDecisionParser.parse(valid, enabled).actions().getFirst().type());
+        assertEquals(AiActionType.DO_NOTHING, AiDecisionParser.parse("""
+                {"actions":[{"type":"REMEMBER_LOCATION","name":"Town/Market","x":"12","y":64,"z":-8}]}
+                """, enabled).actions().getFirst().type());
+        assertEquals(AiActionType.DO_NOTHING, AiDecisionParser.parse("""
+                {"actions":[{"type":"REMEMBER_LOCATION","name":"Town/Market","x":12,"y":64}]}
+                """, enabled).actions().getFirst().type());
+    }
+
     private static AiControlSettings settings(String identity, String behaviour, String goal,
             EnumSet<AiActionType> actions) {
         return new AiControlSettings(identity, behaviour, "", goal, "", actions, true, true, false, false);

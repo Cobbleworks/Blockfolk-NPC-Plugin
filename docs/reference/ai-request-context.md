@@ -31,7 +31,7 @@ Display name: Mr. Mario
 
 The exact player message is included as the event. This lets Blockfolk select “Mr. Mario” as the intended speaker when the player addresses him, even when another NPC is closer. The model supplies that NPC's Response ID in each group action call so Blockfolk can apply actions to the correct instance. The ID stays the same when nearby NPCs join or leave; its normalized name portion changes if the display name is edited. Two instances with the same display name have different instance suffixes.
 
-Nearby NPC action targets use the same name and instance suffix, prefixed with `nearby_`, such as `nearby_npc_mr_mario_1234567890abcdef`. Players, other entities, locations, switches, containers, and inventory slots use safe aliases paired with a readable name or type. Arbitrary coordinates, full UUIDs, and unlisted targets are rejected.
+Nearby NPC action targets use the same name and instance suffix, prefixed with `nearby_`, such as `nearby_npc_mr_mario_1234567890abcdef`. Players, other entities, locations, switches, containers, and inventory slots use safe aliases paired with a readable name or type. Full UUIDs and unlisted targets are rejected. Explicit coordinates are accepted only by **Remember Location**.
 
 ## NPC state
 
@@ -39,12 +39,13 @@ The request includes, when available:
 
 - preset display name and world;
 - current and maximum health;
+- exact current coordinates when **Remember Location** is enabled;
 - combat and route state, including an active walking destination when pathfinding;
 - whether the NPC is in water or burning, plus active status effects;
 - main-hand material;
 - occupied temporary-inventory slots when that access is enabled.
 
-Exact NPC and player coordinates are not included.
+Exact player coordinates are not included.
 
 ## Perceived surroundings
 
@@ -83,6 +84,6 @@ Opening the preset editor clears runtime event and conversation memory, pending 
 
 ## Capability validation
 
-The request provides functions for the actions available to the NPC. Depending on settings and current state, these can include speech, animation, combat, fleeing, following, world interaction, moving, returning home, route control, mining, dropping inventory items, and doing nothing. Group requests use the union of available functions, with each NPC's own capabilities checked on receipt.
+The request provides functions for the actions available to the NPC. Depending on settings and current state, these can include speech, animation, combat, fleeing, following, world interaction, moving, returning home, route control, mining, remembering a named location, dropping inventory items, and doing nothing. Group requests use the union of available functions, with each NPC's own capabilities checked on receipt.
 
-The parser validates calls against the advertised functions, the NPC's capability set, and the captured target snapshot before gameplay actions run. Commands, executable code, unknown actions, disabled actions, arbitrary coordinates, and unknown targets are rejected.
+The parser validates calls against the advertised functions, the NPC's capability set, and the captured target snapshot before gameplay actions run. Commands, executable code, unknown actions, disabled actions, and unknown targets are rejected. **Remember Location** alone accepts explicit X, Y, Z coordinates in the NPC's current world, with finite values and valid world bounds; it cannot overwrite an existing name.

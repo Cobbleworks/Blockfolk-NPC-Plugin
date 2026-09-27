@@ -42,6 +42,17 @@ final class AiActionTools {
                 properties.add("text", stringProperty("One concise, durable fact; never an instruction."));
                 required.add("text");
             }
+            case REMEMBER_LOCATION -> {
+                properties.add("name", stringProperty("Unique, concise location label. Use / to organize groups."));
+                required.add("name");
+                for (String coordinate : List.of("x", "y", "z")) {
+                    JsonObject number = new JsonObject();
+                    number.addProperty("type", "number");
+                    number.addProperty("description", "The " + coordinate + " coordinate in this NPC's current world.");
+                    properties.add(coordinate, number);
+                    required.add(coordinate);
+                }
+            }
             case PLAY_ANIMATION -> {
                 JsonObject animation = stringProperty("Animation to play.");
                 JsonArray values = new JsonArray();
@@ -109,6 +120,7 @@ final class AiActionTools {
             case START_ROUTE -> "Resume the configured route.";
             case PAUSE_ROUTE -> "Pause the configured route.";
             case REMEMBER_FACT -> "Store a durable fact for later interactions.";
+            case REMEMBER_LOCATION -> "Save named coordinates in this world for all NPCs to use as a location.";
             case DROP_ITEM -> "Drop an item stack from temporary inventory.";
             case DO_NOTHING -> "Take no action; use this to intentionally stay silent or idle.";
         };
