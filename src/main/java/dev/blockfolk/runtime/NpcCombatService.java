@@ -98,6 +98,7 @@ public final class NpcCombatService implements Listener {
         for (NpcInstance instance : instanceRegistry.findAll()) {
             if (states.containsKey(instance.getId())) {
                 instanceRegistry.stopNavigating(instance);
+                restoreEquipment(instance);
             }
         }
         pendingRespawns.values().forEach(BukkitTask::cancel);
@@ -310,7 +311,7 @@ public final class NpcCombatService implements Listener {
             if (state.mode == CombatMode.FLEE) {
                 flee(instance, npc, state);
             } else {
-                fight(instance, npc, state);
+                fight(instance, definition, npc, state);
             }
         }
         states.keySet().retainAll(activeInstances);
@@ -374,7 +375,7 @@ public final class NpcCombatService implements Listener {
         instanceRegistry.navigate(instance, state.navigationTarget, WalkingSpeed.VERY_FAST);
     }
 
-    private void fight(NpcInstance instance, LivingEntity npc, CombatState state) {
+    private void fight(NpcInstance instance, NpcDefinition definition, LivingEntity npc, CombatState state) {
         Entity entity = Bukkit.getEntity(state.entityId);
         if (!(entity instanceof LivingEntity target) || !isAttackable(instance, target)
                 || target.getWorld() != npc.getWorld()
@@ -390,8 +391,18 @@ public final class NpcCombatService implements Listener {
             abandonUnreachable(instance, state);
             return;
         }
-        NpcAttack attack = attackSelector.select(npc.getEquipment().getItemInMainHand());
         double distanceSquared = npc.getLocation().distanceSquared(target.getLocation());
+        ItemStack mainHand = definition.getMainHand();
+        ItemStack offHand = definition.getOffHand();
+        boolean swap = attackSelector.useOffHand(mainHand, offHand, distanceSquared);
+        ItemStack selected = equippedItem(swap ? offHand : mainHand);
+        ItemStack other = equippedItem(swap ? mainHand : offHand);
+        if (!java.util.Objects.equals(npc.getEquipment().getItemInMainHand(), selected)
+                || !java.util.Objects.equals(npc.getEquipment().getItemInOffHand(), other)) {
+            npc.getEquipment().setItemInMainHand(selected, true);
+            npc.getEquipment().setItemInOffHand(other, true);
+        }
+        NpcAttack attack = attackSelector.select(selected);
         if (distanceSquared > attack.rangeSquared()) {
             Location currentLocation = npc.getLocation();
             if (state.lastProgressLocation == null
@@ -565,6 +576,7 @@ public final class NpcCombatService implements Listener {
     private void clearState(NpcInstance instance) {
         CombatState removed = states.remove(instance.getId());
         if (removed != null) {
+            restoreEquipment(instance);
             releaseMobTarget(instance, removed);
             instanceRegistry.stopNavigating(instance);
             if (behaviourService != null) {
@@ -572,6 +584,19 @@ public final class NpcCombatService implements Listener {
                         Bukkit.getEntity(removed.entityId));
             }
         }
+    }
+
+    private void restoreEquipment(NpcInstance instance) {
+        NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
+        LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
+        if (definition == null || npc == null)
+            return;
+        npc.getEquipment().setItemInMainHand(equippedItem(definition.getMainHand()), true);
+        npc.getEquipment().setItemInOffHand(equippedItem(definition.getOffHand()), true);
+    }
+
+    private static ItemStack equippedItem(ItemStack item) {
+        return item == null ? ItemStack.empty() : item;
     }
 
     private void abandonUnreachable(NpcInstance instance, CombatState state) {

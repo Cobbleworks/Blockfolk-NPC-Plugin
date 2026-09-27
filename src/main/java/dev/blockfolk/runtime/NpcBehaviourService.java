@@ -87,6 +87,7 @@ public final class NpcBehaviourService implements Listener {
 
     private static final double DIALOG_RANGE_SQUARED = 16.0 * 16.0;
     private static final double CHAT_RANGE_SQUARED = 8.0 * 8.0;
+    private static final double NEARBY_AGGRESSION_RANGE_SQUARED = 8.0 * 8.0;
     private static final double APPROACH_RANGE_SQUARED = 8.0 * 8.0;
     private static final double LEAVE_RANGE_SQUARED = 10.0 * 10.0;
     private static final double HEAL_BURST_THRESHOLD = 4.0;
@@ -494,6 +495,7 @@ public final class NpcBehaviourService implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
+        triggerNearbyAggression(event);
         NpcInstance instance = instances.findByEntityId(event.getEntity().getEntityId()).orElse(null);
         if (instance == null) {
             return;
@@ -513,6 +515,31 @@ public final class NpcBehaviourService implements Listener {
                                 + ".");
         trigger(BehaviourEvent.DAMAGE_TAKEN, instance, actor, detail);
         Bukkit.getScheduler().runTask(plugin, () -> checkLowHealth(instance, actor));
+    }
+
+    private void triggerNearbyAggression(EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof LivingEntity victim)
+                || (event.getFinalDamage() <= 0.0 && !(event instanceof EntityDamageByEntityEvent))
+                || instances.isNavigationEntity(victim)) {
+            return;
+        }
+        Location location = victim.getLocation();
+        Entity attacker = event instanceof EntityDamageByEntityEvent byEntity ? damageActor(byEntity.getDamager()) : null;
+        String detail = victim.getName() + " took "
+                + String.format(java.util.Locale.ROOT, "%.1f", event.getFinalDamage()) + " damage"
+                + (attacker == null ? "." : " from " + attacker.getName() + ".");
+        for (NpcInstance observer : instances.findActive()) {
+            Location observerLocation = instances.currentLocation(observer);
+            if (observer.getEntityId() == victim.getEntityId()
+                    || observerLocation.getWorld() != location.getWorld()
+                    || observerLocation.distanceSquared(location) > NEARBY_AGGRESSION_RANGE_SQUARED) {
+                continue;
+            }
+            NpcDefinition definition = definitions.find(observer.getDefinitionKey()).orElse(null);
+            if (definition != null && !definition.getBehaviourActions(BehaviourEvent.NEARBY_AGGRESSION).isEmpty()) {
+                trigger(BehaviourEvent.NEARBY_AGGRESSION, observer, victim, detail);
+            }
+        }
     }
 
     private Entity damageActor(Entity damager) {

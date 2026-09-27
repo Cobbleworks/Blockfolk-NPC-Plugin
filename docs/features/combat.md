@@ -44,6 +44,8 @@ choose that player as a target nor retaliate against them.
 
 AI combat is separately gated by the preset's enabled AI capabilities. The response still passes validated nearby targets only.
 
+If the main hand and off hand contain a melee weapon and a bow or crossbow, the NPC uses the bow beyond three blocks and switches to melee within three blocks. The equipped hands return to their configured order when combat ends.
+
 ## Loot and experience
 
 Experience is dropped when a vulnerable NPC dies. Items come from the independently rolled loot slots configured in [Customization & equipment](/features/customization).

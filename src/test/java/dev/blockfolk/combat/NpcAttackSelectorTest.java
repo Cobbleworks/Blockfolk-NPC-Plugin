@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.bukkit.util.Vector;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcAttackSelectorTest {
@@ -21,6 +22,16 @@ class NpcAttackSelectorTest {
     void defaultsToMelee() {
         assertInstanceOf(MeleeNpcAttack.class, selector.select(Material.DIAMOND_SWORD));
         assertInstanceOf(MeleeNpcAttack.class, selector.select(Material.AIR));
+    }
+
+    @Test
+    void choosesConfiguredOffHandWeaponForDistance() {
+        assertFalse(selector.useOffHand(Material.IRON_SWORD, Material.BOW, 9.0));
+        assertTrue(selector.useOffHand(Material.IRON_SWORD, Material.BOW, 9.01));
+        assertFalse(selector.useOffHand(Material.BOW, Material.IRON_SWORD, 9.01));
+        assertTrue(selector.useOffHand(Material.CROSSBOW, Material.IRON_SWORD, 9.0));
+        assertFalse(selector.useOffHand(Material.IRON_SWORD, Material.AIR, 100.0));
+        assertFalse(selector.useOffHand(Material.BOW, Material.CROSSBOW, 1.0));
     }
 
     @Test

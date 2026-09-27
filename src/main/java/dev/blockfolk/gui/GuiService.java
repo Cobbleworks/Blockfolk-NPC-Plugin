@@ -3535,6 +3535,7 @@ public final class GuiService implements Listener {
             case SUNSET -> Material.SUNFLOWER;
             case PLAYER_CHAT -> Material.WRITABLE_BOOK;
             case ENTITY_NEARBY -> Material.OBSERVER;
+            case NEARBY_AGGRESSION -> Material.IRON_AXE;
         };
     }
 
