@@ -60,7 +60,10 @@ public final class DialogService {
         if (task != null) {
             task.cancel();
         }
-        dialogs.values().forEach(runtime -> setDescription(runtime.instance, null));
+        dialogs.values().forEach(runtime -> {
+            restoreNameVisibility(runtime);
+            setDescription(runtime.instance, null);
+        });
         dialogs.clear();
     }
 
@@ -71,6 +74,7 @@ public final class DialogService {
     public void detach(UUID instanceId) {
         DialogRuntime runtime = dialogs.remove(instanceId);
         if (runtime != null) {
+            restoreNameVisibility(runtime);
             setDescription(runtime.instance, null);
         }
         removeLegacyDisplays(instanceId);
@@ -98,9 +102,14 @@ public final class DialogService {
     }
 
     public void showProcessing(NpcInstance instance) {
-        if (!setDescription(instance, processingText(1)))
+        Mannequin mannequin = mannequin(instance);
+        if (mannequin == null)
             return;
         DialogRuntime runtime = dialogs.computeIfAbsent(instance.getId(), ignored -> new DialogRuntime(instance));
+        if (!runtime.processing)
+            runtime.previousNameVisibility = mannequin.isCustomNameVisible();
+        mannequin.setCustomNameVisible(true);
+        mannequin.setDescription(processingText(1));
         runtime.processing = true;
         runtime.processingFrame = 0;
         runtime.processingFrameTicks = 0;
@@ -111,6 +120,7 @@ public final class DialogService {
         DialogRuntime runtime = dialogs.get(instance.getId());
         if (runtime == null || !runtime.processing)
             return;
+        restoreNameVisibility(runtime);
         runtime.processing = false;
         if (runtime.pendingLine != null && setDescription(instance, runtime.pendingLine)) {
             runtime.remainingTicks = runtime.pendingLineTicks;
@@ -134,23 +144,39 @@ public final class DialogService {
     }
 
     private boolean setDescription(NpcInstance instance, Component description) {
-        LivingEntity entity = entityProvider.apply(instance).orElse(null);
-        if (!(entity instanceof Mannequin mannequin) || !mannequin.isValid()) {
+        Mannequin mannequin = mannequin(instance);
+        if (mannequin == null) {
             return false;
         }
         mannequin.setDescription(description);
         return true;
     }
 
+    private Mannequin mannequin(NpcInstance instance) {
+        LivingEntity entity = entityProvider.apply(instance).orElse(null);
+        return entity instanceof Mannequin mannequin && mannequin.isValid() ? mannequin : null;
+    }
+
+    private void restoreNameVisibility(DialogRuntime runtime) {
+        if (!runtime.processing)
+            return;
+        Mannequin mannequin = mannequin(runtime.instance);
+        if (mannequin != null)
+            mannequin.setCustomNameVisible(runtime.previousNameVisibility);
+    }
+
     private void tick() {
         Iterator<Map.Entry<UUID, DialogRuntime>> dialogIterator = dialogs.entrySet().iterator();
         while (dialogIterator.hasNext()) {
             DialogRuntime runtime = dialogIterator.next().getValue();
-            if (entityProvider.apply(runtime.instance).filter(Mannequin.class::isInstance).isEmpty()) {
+            Mannequin mannequin = mannequin(runtime.instance);
+            if (mannequin == null) {
                 dialogIterator.remove();
                 continue;
             }
             if (runtime.processing) {
+                if (!mannequin.isCustomNameVisible())
+                    mannequin.setCustomNameVisible(true);
                 if (++runtime.processingFrameTicks >= 20) {
                     runtime.processingFrameTicks = 0;
                     runtime.processingFrame = (runtime.processingFrame + 1) % 3;
@@ -174,6 +200,7 @@ public final class DialogService {
         private final NpcInstance instance;
         private int remainingTicks;
         private boolean processing;
+        private boolean previousNameVisibility;
         private int processingFrame;
         private int processingFrameTicks;
         private Component pendingLine;

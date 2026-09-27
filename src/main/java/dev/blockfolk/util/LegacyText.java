@@ -14,6 +14,7 @@ public final class LegacyText {
     public static final String BLACK = "\u00a70";
     public static final String DARK_GRAY = "\u00a78";
     public static final String RED = "\u00a7c";
+    public static final String BLUE = "\u00a79";
     public static final String GREEN = "\u00a7a";
     public static final String GOLD = "\u00a76";
     public static final String YELLOW = "\u00a7e";

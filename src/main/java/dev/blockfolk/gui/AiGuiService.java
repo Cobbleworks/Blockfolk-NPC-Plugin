@@ -184,9 +184,16 @@ final class AiGuiService {
                 UiText.title("Memory", definition.getDisplayName()));
         List<AiMemory> memories = definition.getAiMemoryEntries();
         for (int index = 0; index < memories.size(); index++) {
+            AiMemory memory = memories.get(index);
+            String classification = switch (memory.importance()) {
+                case CORE -> LegacyText.RED + "Core";
+                case MAJOR -> LegacyText.GOLD + "Major";
+                case MINOR -> LegacyText.BLUE + "Minor";
+            };
             inventory.setItem(index,
-                    item(Material.PAPER, "Memory " + (index + 1) + " · " + memories.get(index).importance(),
-                            List.of(LegacyText.WHITE + TextUtil.abbreviateSingleLine(memories.get(index).fact(), 96),
+                    item(Material.PAPER, "Memory " + (index + 1),
+                            List.of(classification,
+                                    LegacyText.WHITE + TextUtil.abbreviateSingleLine(memory.fact(), 96),
                                     LegacyText.YELLOW + "Left-click to edit",
                                     LegacyText.RED + "Right-click to delete")));
         }
