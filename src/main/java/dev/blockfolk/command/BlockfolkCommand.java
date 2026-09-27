@@ -3,8 +3,10 @@ package dev.blockfolk.command;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import org.bukkit.Location;
 import org.bukkit.command.Command;
@@ -125,6 +127,45 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             sender.sendMessage(UiText.warning("Blockfolk is currently managed in-game."));
             return true;
         }
+        if (args.length >= 4 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("ai")
+                && args[2].equalsIgnoreCase("memory") && args[3].equalsIgnoreCase("forgetnearby")) {
+            if (args.length != 5) {
+                player.sendMessage(UiText.error("Use /bf config ai memory forgetnearby <radius>."));
+                return true;
+            }
+            double radius;
+            try {
+                radius = Double.parseDouble(args[4]);
+                if (!Double.isFinite(radius) || radius < 0)
+                    throw new NumberFormatException();
+            } catch (NumberFormatException error) {
+                player.sendMessage(UiText.error("Radius must be a non-negative number."));
+                return true;
+            }
+            Location center = player.getLocation();
+            double radiusSquared = radius * radius;
+            int npcCount = 0;
+            int entryCount = 0;
+            Set<String> clearedDefinitions = new HashSet<>();
+            for (NpcInstance instance : instanceRegistry.findActive()) {
+                Location location = instanceRegistry.currentLocation(instance);
+                if (location.getWorld() != center.getWorld() || location.distanceSquared(center) > radiusSquared)
+                    continue;
+                NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
+                if (definition == null || !definition.getAiControlSettings().enabled())
+                    continue;
+                npcCount++;
+                if (clearedDefinitions.add(definition.getKey())) {
+                    entryCount += definition.getAiMemoryEntries().size();
+                    definition.clearAiMemories();
+                    definitionRepository.save(definition);
+                    aiControlService.resetDefinition(definition);
+                }
+            }
+            player.sendMessage(UiText.success(npcCount + (npcCount == 1 ? " NPC" : " NPCs") + " forgot "
+                    + entryCount + (entryCount == 1 ? " memory entry." : " memory entries.")));
+            return true;
+        }
         if (args.length == 0) {
             guiService.openMain(player);
             return true;
@@ -185,7 +226,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return true;
         }
         player.sendMessage(UiText.info(
-                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|routes|locations|config ai <model|mute-me>]"));
+                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|routes|locations|config ai <model|mute-me|memory forgetnearby <radius>>]"));
         return true;
     }
 
@@ -407,10 +448,13 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         if (args.length == 2 && args[0].equalsIgnoreCase("config"))
             return filter(List.of("ai"), args[1]);
         if (args.length == 3 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("ai"))
-            return filter(List.of("model", "mute-me"), args[2]);
+            return filter(List.of("model", "mute-me", "memory"), args[2]);
         if (args.length == 4 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("ai")
                 && args[2].equalsIgnoreCase("mute-me"))
             return filter(List.of("on", "off"), args[3]);
+        if (args.length == 4 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("ai")
+                && args[2].equalsIgnoreCase("memory"))
+            return filter(List.of("forgetnearby"), args[3]);
         return List.of();
     }
 
