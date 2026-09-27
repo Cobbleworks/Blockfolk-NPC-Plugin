@@ -501,17 +501,16 @@ public final class NpcBehaviourService implements Listener {
         instances.stand(instance);
         Entity actor = event instanceof EntityDamageByEntityEvent byEntity ? damageActor(byEntity.getDamager()) : null;
         LivingEntity npc = instances.findEntity(instance).orElse(null);
+        String attackerName = actor == null ? null : instances.findByEntityId(actor.getEntityId())
+                .flatMap(attacker -> definitions.find(attacker.getDefinitionKey()))
+                .map(NpcDefinition::getDisplayName).orElse(actor.getName());
         String detail = "The NPC took " + String.format(java.util.Locale.ROOT, "%.1f", event.getFinalDamage())
-                + " damage" + (actor == null ? "." : " from " + actor.getName() + ".")
+                + " damage" + (attackerName == null ? "." : " from " + attackerName + ".")
                 + (npc == null
                         ? ""
                         : " Current health: " + String.format(java.util.Locale.ROOT, "%.1f / %.1f",
                                 Math.max(0, npc.getHealth() - event.getFinalDamage()), EntityHealth.maximum(npc))
                                 + ".");
-        // An attack is more specific and higher-priority than generic damage,
-        // so it gets the first opportunity to invoke a throttled AI action.
-        if (actor != null)
-            trigger(BehaviourEvent.NPC_ATTACKED, instance, actor, actor.getName() + " attacked the NPC. " + detail);
         trigger(BehaviourEvent.DAMAGE_TAKEN, instance, actor, detail);
         Bukkit.getScheduler().runTask(plugin, () -> checkLowHealth(instance, actor));
     }

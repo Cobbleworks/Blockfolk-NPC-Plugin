@@ -3442,7 +3442,6 @@ public final class GuiService implements Listener {
             case NOON -> Material.COOKED_BEEF;
             case SUNSET -> Material.SUNFLOWER;
             case PLAYER_CHAT -> Material.WRITABLE_BOOK;
-            case NPC_ATTACKED -> Material.IRON_SWORD;
             case ENTITY_NEARBY -> Material.OBSERVER;
         };
     }

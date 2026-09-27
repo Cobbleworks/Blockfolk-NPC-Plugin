@@ -3,6 +3,8 @@ package dev.blockfolk.repository;
 import dev.blockfolk.ai.AiActionType;
 import dev.blockfolk.ai.AiControlSettings;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -286,6 +288,26 @@ public final class NpcDefinitionRepository {
             String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);
             definition.setBehaviourActions(event, decodeActions(configuration.getMapList(path), file, "behaviour"));
         }
+        List<BehaviourAction> attackedActions = decodeActions(configuration.getMapList("behaviours.npc_attacked"),
+                file, "behaviour");
+        if (!attackedActions.isEmpty()) {
+            List<BehaviourAction> damageActions = definition.getBehaviourActions(BehaviourEvent.DAMAGE_TAKEN);
+            List<BehaviourAction> merged = mergeDamageActions(attackedActions, damageActions);
+            if (merged.size() < attackedActions.size() + damageActions.size()) {
+                File backup = new File(file.getPath() + ".pre-damage-merge.bak");
+                if (!backup.exists()) {
+                    try {
+                        Files.copy(file.toPath(), backup.toPath());
+                    } catch (IOException exception) {
+                        plugin.getLogger().log(Level.WARNING, "Could not back up " + file.getName()
+                                + " before combining damage actions.", exception);
+                    }
+                }
+                plugin.getLogger().warning("Only the first seven combined damage actions from " + file.getName()
+                        + " fit in On Damage Taken; review the preset and the .pre-damage-merge.bak backup.");
+            }
+            definition.setBehaviourActions(BehaviourEvent.DAMAGE_TAKEN, merged);
+        }
         ConfigurationSection custom = configuration.getConfigurationSection("custom-event-behaviours");
         if (custom != null) {
             for (String encodedName : custom.getKeys(false)) {
@@ -317,6 +339,12 @@ public final class NpcDefinitionRepository {
             }
         }
         return actions;
+    }
+
+    static List<BehaviourAction> mergeDamageActions(List<BehaviourAction> attacked, List<BehaviourAction> damage) {
+        List<BehaviourAction> merged = new ArrayList<>(attacked);
+        merged.addAll(damage);
+        return merged.subList(0, Math.min(7, merged.size()));
     }
 
     private static String encodeEventName(String value) {

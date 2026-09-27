@@ -852,7 +852,7 @@ public final class AiControlService {
 
     private void warnDamageNoAction(BehaviourEvent event, NpcInstance instance, NpcDefinition definition,
             AiControlSettings settings, AiDecision decision) {
-        if (event != BehaviourEvent.DAMAGE_TAKEN && event != BehaviourEvent.NPC_ATTACKED) {
+        if (event != BehaviourEvent.DAMAGE_TAKEN) {
             return;
         }
         if (decision.actions().stream().anyMatch(action -> action.type() != AiActionType.DO_NOTHING)

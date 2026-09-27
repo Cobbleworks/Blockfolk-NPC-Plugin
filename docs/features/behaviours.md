@@ -8,11 +8,13 @@ The standard editor provides these triggers:
 
 - lifecycle: **On Spawn**, **On Idle**, and **On Death**;
 - players: **On Left-Click**, **On Right-Click**, **On Player Approach**, and **On Player Leaves**;
-- combat and health: **On NPC Attacked**, **On Damage Taken**, **On Low Health**, **On Heal**, **On Combat Entered**, and **On Combat Exited**;
+- combat and health: **On Damage Taken**, **On Low Health**, **On Heal**, **On Combat Entered**, and **On Combat Exited**;
 - world: **On Entity Nearby**, **On Drop Item**, and **On Receive Item**;
 - time: **At Sunrise**, **At Noon**, and **At Sunset**.
 
 Nearby chat is configured from the AI menu rather than shown as a deterministic behaviour row.
+
+**On Damage Taken** runs when an NPC takes damage from an entity or the environment. When an attacker is known, actions receive that entity as their trigger, and AI Trigger includes its name and the damage amount in the event context. Saved **On NPC Attacked** actions are moved before existing damage actions when the preset loads. A row holds seven actions; if the combined routines exceed that limit, the server logs a warning and saves a copy of the original preset with a `.pre-damage-merge.bak` suffix.
 
 ## Actions
 
