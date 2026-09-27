@@ -32,6 +32,7 @@ import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.MovementProfile;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcColor;
+import dev.blockfolk.model.StoredLocation;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.util.LocationCodec;
 
@@ -138,9 +139,19 @@ public final class NpcDefinitionRepository {
         configuration.set("ai-control.respond-to-chat", ai.respondToChat());
         configuration.set("ai-control.memory.enabled", ai.memoryEnabled());
         configuration.set("ai-control.conversation.shared", ai.sharedConversation());
-        configuration.set("ai-control.memory.facts",
-                definition.getAiMemoryEntries().stream().map(memory -> Map.of("fact", memory.fact(), "importance",
-                        memory.importance().name().toLowerCase(Locale.ROOT))).toList());
+        configuration.set("ai-control.memory.facts", definition.getAiMemoryEntries().stream().map(memory -> {
+            Map<String, Object> saved = new LinkedHashMap<>();
+            saved.put("fact", memory.fact());
+            saved.put("category", memory.category().name().toLowerCase(Locale.ROOT));
+            saved.put("recorded-at", memory.recordedAt());
+            if (memory.origin() != null) {
+                saved.put("world", memory.origin().worldName());
+                saved.put("x", memory.origin().x());
+                saved.put("y", memory.origin().y());
+                saved.put("z", memory.origin().z());
+            }
+            return saved;
+        }).toList());
         configuration.set("ai-control.allowed-actions",
                 ai.allowedActions().stream()
                         .filter(action -> action != AiActionType.REMEMBER_FACT && action != AiActionType.DROP_ITEM)
@@ -268,18 +279,26 @@ public final class NpcDefinitionRepository {
         List<AiMemory> memories = new ArrayList<>();
         for (Object item : configuration.getList("ai-control.memory.facts", List.of())) {
             if (item instanceof String legacy) {
-                memories.add(new AiMemory(legacy, AiMemory.Importance.MINOR));
+                memories.add(new AiMemory(legacy, AiMemory.Category.PERSONAL));
             } else if (item instanceof Map<?, ?> saved) {
                 Object fact = saved.get("fact");
-                Object importance = saved.get("importance");
                 if (fact instanceof String text) {
-                    AiMemory.Importance level;
+                    AiMemory.Category category;
                     try {
-                        level = AiMemory.Importance.valueOf(String.valueOf(importance).toUpperCase(Locale.ROOT));
+                        category = AiMemory.Category
+                                .valueOf(String.valueOf(saved.get("category")).toUpperCase(Locale.ROOT));
                     } catch (IllegalArgumentException error) {
-                        level = AiMemory.Importance.MINOR;
+                        category = AiMemory.Category.PERSONAL;
                     }
-                    memories.add(new AiMemory(text, level));
+                    StoredLocation origin = null;
+                    if (saved.get("world") instanceof String world && saved.get("x") instanceof Number x
+                            && saved.get("y") instanceof Number y && saved.get("z") instanceof Number z) {
+                        origin = new StoredLocation(world, x.doubleValue(), y.doubleValue(), z.doubleValue(), 0, 0);
+                    }
+                    long recordedAt = saved.get("recorded-at") instanceof Number timestamp
+                            ? timestamp.longValue()
+                            : System.currentTimeMillis();
+                    memories.add(new AiMemory(text, category, origin, recordedAt));
                 }
             }
         }
@@ -288,8 +307,8 @@ public final class NpcDefinitionRepository {
             String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);
             definition.setBehaviourActions(event, decodeActions(configuration.getMapList(path), file, "behaviour"));
         }
-        List<BehaviourAction> attackedActions = decodeActions(configuration.getMapList("behaviours.npc_attacked"),
-                file, "behaviour");
+        List<BehaviourAction> attackedActions = decodeActions(configuration.getMapList("behaviours.npc_attacked"), file,
+                "behaviour");
         if (!attackedActions.isEmpty()) {
             List<BehaviourAction> damageActions = definition.getBehaviourActions(BehaviourEvent.DAMAGE_TAKEN);
             List<BehaviourAction> merged = mergeDamageActions(attackedActions, damageActions);
@@ -299,8 +318,8 @@ public final class NpcDefinitionRepository {
                     try {
                         Files.copy(file.toPath(), backup.toPath());
                     } catch (IOException exception) {
-                        plugin.getLogger().log(Level.WARNING, "Could not back up " + file.getName()
-                                + " before combining damage actions.", exception);
+                        plugin.getLogger().log(Level.WARNING,
+                                "Could not back up " + file.getName() + " before combining damage actions.", exception);
                     }
                 }
                 plugin.getLogger().warning("Only the first seven combined damage actions from " + file.getName()

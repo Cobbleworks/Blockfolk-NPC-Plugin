@@ -25,6 +25,7 @@ import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.AiMemory;
 import dev.blockfolk.model.NpcDefinition;
+import dev.blockfolk.model.StoredLocation;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.TextUtil;
@@ -188,22 +189,30 @@ final class AiGuiService {
         List<AiMemory> memories = definition.getAiMemoryEntries();
         for (int index = 0; index < memories.size(); index++) {
             AiMemory memory = memories.get(index);
-            String classification = switch (memory.importance()) {
-                case CORE -> LegacyText.RED + "Core";
-                case MAJOR -> LegacyText.GOLD + "Major";
-                case MINOR -> LegacyText.BLUE + "Minor";
+            String classification = switch (memory.category()) {
+                case PERSONAL -> LegacyText.RED + "Personal";
+                case REGIONAL -> LegacyText.GREEN + "Regional";
+                case TEMPORAL -> LegacyText.BLUE + "Temporal";
             };
             List<String> lore = new ArrayList<>();
             lore.add(classification);
+            if (memory.category() == AiMemory.Category.REGIONAL && memory.origin() != null) {
+                lore.add(LegacyText.GRAY + "Shared within 50 blocks");
+                lore.add(LegacyText.GRAY + "Origin: " + memory.origin().worldName() + " (" + (int) memory.origin().x()
+                        + ", " + (int) memory.origin().y() + ", " + (int) memory.origin().z() + ")");
+            }
+            if (memory.category() == AiMemory.Category.TEMPORAL)
+                lore.add(LegacyText.GRAY + "Expires after 24 hours");
             TextUtil.wrap(memory.fact(), 44).stream().map(line -> LegacyText.WHITE + line).forEach(lore::add);
             lore.add(LegacyText.YELLOW + "Left-click to edit");
+            lore.add(LegacyText.YELLOW + "Shift-left-click to change category");
             lore.add(LegacyText.RED + "Right-click to delete");
             inventory.setItem(index, item(Material.PAPER, "Memory " + (index + 1), lore));
         }
         inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
         inventory.setItem(49,
                 item(Material.LIME_DYE, "Add Memory",
-                        List.of(LegacyText.GRAY + "At capacity, the oldest Minor memory is replaced",
+                        List.of(LegacyText.GRAY + "At capacity, the oldest Temporal memory is replaced",
                                 LegacyText.YELLOW + "Click to add a fact")));
         openInventory(player, inventory);
     }
@@ -300,7 +309,20 @@ final class AiGuiService {
         }
         if (slot < 0 || slot >= definition.getAiMemories().size())
             return;
-        if (event.isRightClick()) {
+        if (event.isShiftClick() && event.isLeftClick()) {
+            AiMemory previous = definition.getAiMemoryEntries().get(slot);
+            AiMemory.Category next = switch (previous.category()) {
+                case PERSONAL -> AiMemory.Category.REGIONAL;
+                case REGIONAL -> AiMemory.Category.TEMPORAL;
+                case TEMPORAL -> AiMemory.Category.PERSONAL;
+            };
+            StoredLocation origin = next == AiMemory.Category.REGIONAL
+                    ? StoredLocation.from(player.getLocation())
+                    : null;
+            definition.setAiMemoryEntry(slot, new AiMemory(previous.fact(), next, origin, System.currentTimeMillis()));
+            definitions.save(definition);
+            openMemories(player, definition);
+        } else if (event.isRightClick()) {
             definition.removeAiMemory(slot);
             definitions.save(definition);
             openMemories(player, definition);
@@ -314,8 +336,8 @@ final class AiGuiService {
                 : "Edit this memory, or enter 'clear' to delete it:";
         chatInput.request(player, prompt, value -> {
             if (index < 0) {
-                if (!definition.addAiMemory(value, AiMemory.Importance.CORE)) {
-                    player.sendMessage(UiText.info("Memory is full and has no Minor entry to replace."));
+                if (!definition.addAiMemory(value, AiMemory.Category.PERSONAL)) {
+                    player.sendMessage(UiText.info("Memory is full and has no Temporal entry to replace."));
                     openMemories(player, definition);
                     return;
                 }

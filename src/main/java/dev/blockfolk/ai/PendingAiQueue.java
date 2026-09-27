@@ -36,6 +36,10 @@ final class PendingAiQueue<T> {
         return entries.isEmpty();
     }
 
+    boolean anyMatch(Predicate<T> predicate) {
+        return entries.stream().anyMatch(predicate);
+    }
+
     void removeIf(Predicate<T> predicate) {
         entries.removeIf(predicate);
     }

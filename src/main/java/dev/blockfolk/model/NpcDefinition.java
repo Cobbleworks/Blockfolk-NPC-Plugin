@@ -424,10 +424,11 @@ public final class NpcDefinition {
     }
 
     public List<String> getAiMemories() {
-        return aiMemories.stream().map(AiMemory::fact).toList();
+        return getAiMemoryEntries().stream().map(AiMemory::fact).toList();
     }
 
     public List<AiMemory> getAiMemoryEntries() {
+        aiMemories.removeIf(memory -> memory.expired(System.currentTimeMillis()));
         return List.copyOf(aiMemories);
     }
 
@@ -436,35 +437,43 @@ public final class NpcDefinition {
         if (memories == null)
             return;
         memories.stream().filter(java.util.Objects::nonNull).map(String::trim).filter(memory -> !memory.isBlank())
-                .forEach(memory -> addAiMemory(memory, AiMemory.Importance.MINOR));
+                .forEach(memory -> addAiMemory(memory, AiMemory.Category.PERSONAL));
     }
 
     public void setAiMemoryEntries(List<AiMemory> memories) {
         aiMemories.clear();
         if (memories != null)
-            memories.forEach(memory -> addAiMemory(memory.fact(), memory.importance()));
+            memories.forEach(this::addAiMemory);
     }
 
     public void addAiMemory(String memory) {
-        addAiMemory(memory, AiMemory.Importance.CORE);
+        addAiMemory(memory, AiMemory.Category.PERSONAL);
     }
 
-    public boolean addAiMemory(String memory, AiMemory.Importance importance) {
-        if (memory == null || memory.isBlank())
+    public boolean addAiMemory(String memory, AiMemory.Category category) {
+        return addAiMemory(new AiMemory(memory, category));
+    }
+
+    public boolean addAiMemory(AiMemory memory) {
+        if (memory == null)
             return false;
+        String fact = memory.fact();
+        if (fact == null || fact.isBlank())
+            return false;
+        aiMemories.removeIf(entry -> entry.expired(System.currentTimeMillis()));
         if (aiMemories.size() >= MAX_AI_MEMORIES) {
-            int minor = -1;
+            int temporal = -1;
             for (int index = 0; index < aiMemories.size(); index++) {
-                if (aiMemories.get(index).importance() == AiMemory.Importance.MINOR) {
-                    minor = index;
+                if (aiMemories.get(index).category() == AiMemory.Category.TEMPORAL) {
+                    temporal = index;
                     break;
                 }
             }
-            if (minor < 0)
+            if (temporal < 0)
                 return false;
-            aiMemories.remove(minor);
+            aiMemories.remove(temporal);
         }
-        aiMemories.add(new AiMemory(memory.trim(), importance));
+        aiMemories.add(new AiMemory(fact.trim(), memory.category(), memory.origin(), memory.recordedAt()));
         return true;
     }
 
@@ -474,7 +483,14 @@ public final class NpcDefinition {
         if (memory == null || memory.isBlank())
             aiMemories.remove(index);
         else
-            aiMemories.set(index, new AiMemory(memory.trim(), aiMemories.get(index).importance()));
+            aiMemories.set(index, new AiMemory(memory.trim(), aiMemories.get(index).category(),
+                    aiMemories.get(index).origin(), aiMemories.get(index).recordedAt()));
+    }
+
+    public void setAiMemoryEntry(int index, AiMemory memory) {
+        if (index >= 0 && index < aiMemories.size() && memory != null && memory.fact() != null
+                && !memory.fact().isBlank())
+            aiMemories.set(index, memory);
     }
 
     public void removeAiMemory(int index) {

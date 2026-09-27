@@ -90,10 +90,10 @@ class NpcDefinitionTest {
     }
 
     @Test
-    void longTermMemoryReplacesTheOldestMinorFactAtCapacity() {
+    void longTermMemoryReplacesTheOldestTemporalFactAtCapacity() {
         NpcDefinition definition = NpcDefinition.create("Guard");
         for (int index = 0; index <= NpcDefinition.MAX_AI_MEMORIES; index++) {
-            definition.addAiMemory("fact " + index, AiMemory.Importance.MINOR);
+            definition.addAiMemory("fact " + index, AiMemory.Category.TEMPORAL);
         }
 
         assertEquals(NpcDefinition.MAX_AI_MEMORIES, definition.getAiMemories().size());
@@ -102,14 +102,14 @@ class NpcDefinitionTest {
     }
 
     @Test
-    void fullMemoryKeepsCoreAndMajorFacts() {
+    void fullMemoryKeepsPersonalAndRegionalFacts() {
         NpcDefinition definition = NpcDefinition.create("Guard");
-        definition.addAiMemory("identity", AiMemory.Importance.CORE);
-        definition.addAiMemory("agreement", AiMemory.Importance.MAJOR);
+        definition.addAiMemory("identity", AiMemory.Category.PERSONAL);
+        definition.addAiMemory("agreement", AiMemory.Category.REGIONAL);
         for (int index = 0; index < NpcDefinition.MAX_AI_MEMORIES - 2; index++)
-            definition.addAiMemory("minor " + index, AiMemory.Importance.MINOR);
+            definition.addAiMemory("minor " + index, AiMemory.Category.TEMPORAL);
 
-        assertTrue(definition.addAiMemory("new plan", AiMemory.Importance.MAJOR));
+        assertTrue(definition.addAiMemory("new plan", AiMemory.Category.REGIONAL));
         assertEquals("identity", definition.getAiMemories().getFirst());
         assertEquals("agreement", definition.getAiMemories().get(1));
         assertFalse(definition.getAiMemories().contains("minor 0"));
@@ -117,8 +117,31 @@ class NpcDefinitionTest {
 
         definition.clearAiMemories();
         for (int index = 0; index < NpcDefinition.MAX_AI_MEMORIES; index++)
-            definition.addAiMemory("core " + index, AiMemory.Importance.CORE);
-        assertFalse(definition.addAiMemory("overflow", AiMemory.Importance.CORE));
+            definition.addAiMemory("core " + index, AiMemory.Category.PERSONAL);
+        assertFalse(definition.addAiMemory("overflow", AiMemory.Category.PERSONAL));
+    }
+
+    @Test
+    void regionalFactsReachOnlyTheirWorldAndFiftyBlockRadius() {
+        StoredLocation square = new StoredLocation("world", 10, 70, 10, 0, 0);
+        AiMemory regional = new AiMemory("The bridge is unsafe", AiMemory.Category.REGIONAL, square,
+                System.currentTimeMillis());
+
+        assertTrue(regional.reaches(new StoredLocation("world", 40, 70, 50, 0, 0)));
+        assertFalse(regional.reaches(new StoredLocation("world", 41, 70, 50, 0, 0)));
+        assertFalse(regional.reaches(new StoredLocation("nether", 10, 70, 10, 0, 0)));
+        assertFalse(new AiMemory("private", AiMemory.Category.PERSONAL, square, System.currentTimeMillis())
+                .reaches(square));
+    }
+
+    @Test
+    void expiredTemporalFactsLeaveTheAvailableMemorySlots() {
+        NpcDefinition definition = NpcDefinition.create("Guard");
+        definition.addAiMemory(new AiMemory("old weather", AiMemory.Category.TEMPORAL, null,
+                System.currentTimeMillis() - AiMemory.TEMPORAL_LIFETIME_MILLIS - 1));
+        definition.addAiMemory(new AiMemory("identity", AiMemory.Category.PERSONAL, null, 0));
+
+        assertEquals(List.of("identity"), definition.getAiMemories());
     }
 
     @Test

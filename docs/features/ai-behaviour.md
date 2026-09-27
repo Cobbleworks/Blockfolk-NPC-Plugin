@@ -31,13 +31,13 @@ The limit counts stored conversation lines, not complete back-and-forth turns. S
 
 Open an NPC preset and choose **AI Behaviour**. Configure one or more context sections:
 
-| Section | What to write |
-| --- | --- |
-| Identity | Who the NPC is, including its name, history, and role. |
-| Personality & Behaviour | How it speaks, reacts, and treats others. |
-| Goal / Role | What it should accomplish or prioritize. |
-| Knowledge / Information | Lore, facts, rules, and local knowledge it may use. |
-| Likes & Dislikes | Things it enjoys, avoids, values, or strongly dislikes. |
+| Section                 | What to write                                           |
+| ----------------------- | ------------------------------------------------------- |
+| Identity                | Who the NPC is, including its name, history, and role.  |
+| Personality & Behaviour | How it speaks, reacts, and treats others.               |
+| Goal / Role             | What it should accomplish or prioritize.                |
+| Knowledge / Information | Lore, facts, rules, and local knowledge it may use.     |
+| Likes & Dislikes        | Things it enjoys, avoids, values, or strongly dislikes. |
 
 At least one section is required before AI behaviour can be activated.
 
@@ -76,7 +76,7 @@ Conversation can be:
 - **Private** — each player has a separate conversation with that NPC instance;
 - **Shared** — all players contribute to one conversation on that instance.
 
-Long-term memory is separately optional. It stores up to 45 facts on the preset, shared by all its instances and retained across restarts. After each completed player conversation turn, the AI reviews the conversation in a background memory pass about every ten lines, with the previous exchange included for context. It also reviews shorter conversations after 30 seconds without player interaction. It may save durable preferences, plans, promises, agreements, or deals; if there is nothing useful to retain, it saves nothing. Each extracted fact is classified as Core, Major, or Minor. When memory is full, a new fact replaces the oldest Minor fact; if there is no Minor fact, it is not saved. Existing unclassified facts are treated as Minor. When a new fact is saved, the players in that conversation see an "NPC remembered this..." chat notice. Administrators can add, edit, delete, or clear facts in the memory menu. Facts added by an administrator are Core.
+Long-term memory is separately optional. It stores up to 45 facts on the preset, shared by its instances and retained across restarts. The AI reviews up to 20 recent conversation lines after 20 seconds without a new player chat message; each follow-up message resets this timer. It may save up to three useful facts or nothing. Facts are classified as Personal (red, private knowledge and deals), Regional (green, local news shared with every AI NPC within 50 blocks of where it was learned), or Temporal (blue, changing facts that expire after 24 hours). Regional facts are also available to nearby NPCs that have their own memory saving disabled. At capacity, the oldest Temporal fact is replaced; if there is none, the new fact is discarded. Existing facts without a category become Personal. Players see "NPC is telling the others..." when a Regional fact is saved and "NPC remembered this..." for Personal or Temporal facts. Administrators can add, edit, reclassify with shift-left-click, delete, or clear facts in the memory menu. Newly added facts start as Personal; manually reclassified Regional facts are centered on the administrator’s position.
 
 The number of recent conversation lines supplied to the model is set globally with `ai-control.conversation-history-limit`. Its default is `20`; when the limit is exceeded, the oldest lines are discarded first.
 
