@@ -35,17 +35,17 @@ Blockfolk is a GUI-driven NPC system for Paper servers. Administrators create re
 1. [Core Features](#core-features)
 2. [Supported Platforms](#supported-platforms)
 3. [Getting Started](#getting-started)
-    - [Prerequisites](#prerequisites)
-    - [Installation Steps](#installation-steps)
-    - [Verifying Installation](#verifying-installation)
+   - [Prerequisites](#prerequisites)
+   - [Installation Steps](#installation-steps)
+   - [Verifying Installation](#verifying-installation)
 4. [Third-Party Plugins and Services](#third-party-plugins-and-services)
-    - [BeautyQuests](#beautyquests)
-    - [OpenRouter](#openrouter)
+   - [BeautyQuests](#beautyquests)
+   - [OpenRouter](#openrouter)
 5. [Configuration](#configuration)
 6. [How It Works](#how-it-works)
-    - [Presets and Instances](#presets-and-instances)
-    - [Behaviors and Routes](#behaviors-and-routes)
-    - [AI Behavior](#ai-behavior)
+   - [Presets and Instances](#presets-and-instances)
+   - [Behaviors and Routes](#behaviors-and-routes)
+   - [AI Behavior](#ai-behavior)
 7. [Commands](#commands)
 8. [Permissions](#permissions)
 9. [Documentation](#documentation)
@@ -93,16 +93,18 @@ API usage may incur charges under the selected provider's terms. Keep the API ke
 
 The default `config.yml` controls input timeouts, proximity transition cooldowns, MineSkin access, OpenRouter requests, AI throttling, conversation history, perception limits, mining limits, and temporary-inventory capacity.
 
-| Setting | Purpose |
-|---------|---------|
-| `chat-input-timeout-seconds` | Time allowed for administrator text input |
-| `question-timeout-seconds` | Time allowed for a player to answer an NPC question |
-| `proximity-transition-cooldown-seconds` | Debounces rapid approach and leave transitions |
-| `mineskin-api-key` | Optional key for higher MineSkin request limits |
-| `openrouter.*` | Endpoint, key, model, timeout, and response limit for optional AI behavior |
-| `ai-control.*` | AI cooldown, memory, perception, mining, and inventory safeguards |
+| Setting                                 | Purpose                                                                    |
+| --------------------------------------- | -------------------------------------------------------------------------- |
+| `chat-input-timeout-seconds`            | Time allowed for administrator text input                                  |
+| `question-timeout-seconds`              | Time allowed for a player to answer an NPC question                        |
+| `proximity-transition-cooldown-seconds` | Debounces rapid approach and leave transitions                             |
+| `mineskin-api-key`                      | Optional key for higher MineSkin request limits                            |
+| `openrouter.*`                          | Endpoint, key, model, timeout, and response limit for optional AI behavior |
+| `ai-control.*`                          | AI cooldown, memory, perception, mining, and inventory safeguards          |
 
 See the [configuration reference](docs/reference/configuration.md) for every option and its default value.
+
+Btw: If `plugins/Blockfolk/<world-name>.md` exists, its Markdown is appended as world context for NPCs in that world.
 
 ## **How It Works**
 
@@ -126,23 +128,23 @@ Conversation memory can be private per player or shared by everyone speaking to 
 
 ## **Commands**
 
-| Command | Description |
-|---------|-------------|
-| `/bf` or `/blockfolk` | Open the NPC preset browser |
-| `/bf create` | Open the NPC creation dialog for name, HP, respawn time, and basic properties |
-| `/bf create <name>` | Open the creation dialog with the name prefilled |
-| `/bf npc <name>` | Open a preset editor; names are tab-completed |
-| `/bf npc <name> edit` | Open the same preset editor explicitly |
-| `/bf npc <name> spawn` | Spawn a persistent instance of a preset |
-| `/bf npc <name> duplicate` | Duplicate a preset with ` (copy)` appended to its name |
-| `/bf routes` | Open the route manager |
-| `/bf locations` | Open the global-location manager |
+| Command                    | Description                                                                   |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| `/bf` or `/blockfolk`      | Open the NPC preset browser                                                   |
+| `/bf create`               | Open the NPC creation dialog for name, HP, respawn time, and basic properties |
+| `/bf create <name>`        | Open the creation dialog with the name prefilled                              |
+| `/bf npc <name>`           | Open a preset editor; names are tab-completed                                 |
+| `/bf npc <name> edit`      | Open the same preset editor explicitly                                        |
+| `/bf npc <name> spawn`     | Spawn a persistent instance of a preset                                       |
+| `/bf npc <name> duplicate` | Duplicate a preset with ` (copy)` appended to its name                        |
+| `/bf routes`               | Open the route manager                                                        |
+| `/bf locations`            | Open the global-location manager                                              |
 
 ## **Permissions**
 
-| Permission | Description | Default |
-|------------|-------------|---------|
-| `blockfolk.admin` | Create, edit, spawn, and manage Blockfolk NPCs | `op` |
+| Permission        | Description                                    | Default |
+| ----------------- | ---------------------------------------------- | ------- |
+| `blockfolk.admin` | Create, edit, spawn, and manage Blockfolk NPCs | `op`    |
 
 ## **Documentation**
 

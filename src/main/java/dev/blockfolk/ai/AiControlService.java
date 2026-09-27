@@ -171,6 +171,7 @@ public final class AiControlService {
     private final LocationRepository locations;
     private final OpenRouterClient client;
     private final AiMemoryStore memory;
+    private final WorldContextFiles worldContextFiles;
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
     private final Set<UUID> warnedDamageNoAction = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Long> lastInvocation = new ConcurrentHashMap<>();
@@ -208,6 +209,7 @@ public final class AiControlService {
         this.client = client;
         this.cooldownMillis = Math.max(0, cooldownSeconds) * 1000L;
         this.memory = new AiMemoryStore(conversationHistoryLimit);
+        this.worldContextFiles = new WorldContextFiles(plugin.getDataFolder().toPath(), plugin.getLogger());
     }
 
     public void setProcessingHandlers(Consumer<NpcInstance> started, Consumer<NpcInstance> finished) {
@@ -287,8 +289,10 @@ public final class AiControlService {
         }
         try {
             EnumSet<AiActionType> available = availableActions(instance, definition, settings);
-            OpenRouterClient.ActionSession session = client.actionSession(
-                    settings.systemContext() + "\n\n" + RESULT_RULES, context.prompt(),
+            StringBuilder system = new StringBuilder(settings.systemContext());
+            appendWorldContext(system, instances.currentLocation(instance).getWorld());
+            system.append("\n\n").append(RESULT_RULES);
+            OpenRouterClient.ActionSession session = client.actionSession(system.toString(), context.prompt(),
                     AiActionTools.definitions(available, List.of()), false);
             completeSingleActionChain(session, event, detail, guidance, instance, definition, actor, settings,
                     available, resultHandler, context, generation, 0, 0, false, false)
@@ -540,9 +544,14 @@ public final class AiControlService {
                 ? "\n\nNPC responding to the player:\n"
                 : "\n\nNearby NPC group (intended speaker first):\n";
         StringBuilder context = new StringBuilder("Event:\n").append(eventDetail).append(participantHeading);
+        Set<String> participantWorlds = new java.util.LinkedHashSet<>();
         try {
             for (int index = 0; index < participants.size(); index++) {
                 GroupParticipant participant = participants.get(index);
+                World participantWorld = instances.currentLocation(participant.instance()).getWorld();
+                if (participantWorld != null) {
+                    participantWorlds.add(participantWorld.getName());
+                }
                 String alias = responseIds.get(index);
                 aliases.put(alias, participant);
                 requestGenerations.put(participant.instance().getId(),
@@ -561,6 +570,7 @@ public final class AiControlService {
                         .append(index == 0 ? " (intended speaker)" : "").append(" ===\n")
                         .append(participantContext.prompt());
             }
+            participantWorlds.forEach(worldName -> appendWorldContext(system, worldName));
         } catch (RuntimeException error) {
             releaseGroup(groupKey, groupSequence);
             participants.forEach(participant -> inFlight.remove(participant.instance().getId()));
@@ -1217,6 +1227,19 @@ public final class AiControlService {
                 startNextGroup(groupKey);
             }
         }, ticks);
+    }
+
+    private void appendWorldContext(StringBuilder system, World world) {
+        if (world != null) {
+            appendWorldContext(system, world.getName());
+        }
+    }
+
+    private void appendWorldContext(StringBuilder system, String worldName) {
+        String context = worldContextFiles.read(worldName);
+        if (!context.isEmpty()) {
+            system.append("\n\nWorld context (").append(worldName).append("):\n").append(context);
+        }
     }
 
     private RequestContext buildContext(BehaviourEvent event, String detail, String guidance, NpcInstance instance,

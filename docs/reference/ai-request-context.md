@@ -12,10 +12,12 @@ One chat message creates one coordinated request for up to five eligible NPCs. T
 
 Each request contains:
 
-1. A system message with configured identity, personality and behaviour, likes and dislikes, goal or role, and knowledge or information. Empty sections are omitted.
+1. A system message with configured identity, personality and behaviour, likes and dislikes, goal or role, and knowledge or information. Empty sections are omitted. If `plugins/Blockfolk/<world-name>.md` exists, its Markdown is appended as world context for NPCs in that world.
 2. A user message with the triggering event, NPC state, perceived surroundings, recent memory, and enabled capabilities.
 
 Gameplay turns can continue for up to three model rounds. Each response can call up to three action functions per NPC, and each NPC can take up to eight actions and speak once in a turn. Extra `SAY` calls from the same NPC are ignored. After a batch runs, Blockfolk returns tool results and a fresh snapshot of the NPC state so the model can choose a dependent next action or finish. Group chat calls include readable NPC Response IDs derived from display names and persistent NPC instance IDs, such as `npc_mr_mario_1234567890abcdef`.
+
+World context files are optional. For example, `plugins/Blockfolk/world.md`, `plugins/Blockfolk/world_nether.md`, and `plugins/Blockfolk/customworld.md` supply context only to NPCs in the matching worlds. The files are read as UTF-8 when a gameplay request starts, so changes apply to the next request without a server restart. Empty or missing files add no context. In a group chat request, each participating world file is included once.
 
 ### Aliases and real names
 
