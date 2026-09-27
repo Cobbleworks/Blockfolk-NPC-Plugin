@@ -428,7 +428,7 @@ final class AiGuiService {
             case START_ROUTE -> "Resumes or pauses this instance's configured route";
             case PAUSE_ROUTE -> "Pauses this instance's configured route";
             case REMEMBER_FACT -> "Saves a durable fact for future conversations";
-            case REMEMBER_LOCATION -> "Saves labeled coordinates for all NPCs to use";
+            case REMEMBER_LOCATION -> "Saves this NPC's position with a label for all NPCs to use";
             case DROP_ITEM -> "Drops a carried item from Temporary Inventory";
             case DO_NOTHING -> "Takes no action when a response is not needed";
         };

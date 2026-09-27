@@ -100,8 +100,8 @@ public final class AiControlService {
             INTERACT uses a listed take_from_container_N or
             store_in_container_N target. The unnumbered forms select the nearest suitable container.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
-            REMEMBER_LOCATION saves a unique label and x, y, z coordinates in this NPC's current world.
-            Use the NPC's listed coordinates to remember its current position.
+            REMEMBER_LOCATION saves a unique label for this NPC's current position.
+            Use it when a player identifies the place the NPC is standing, such as "this is my home".
             RETURN_HOME walks to this instance's respawn location. START_ROUTE resumes its configured route;
             PAUSE_ROUTE pauses that route.
             DROP_ITEM uses an inventory_slot_N target and drops that stack from the temporary inventory.
@@ -117,7 +117,7 @@ public final class AiControlService {
     private static final String GROUP_RESULT_RULES = """
             You handle one player's chat message for the listed NPCs.
             Call action functions for each NPC that should respond. Every call requires that NPC's listed Response ID.
-            Response IDs identify spawned NPC instances; display names identify their characters.
+            Response IDs identify each NPC in this conversation; display names are what players see.
             Use only listed Response IDs, available functions, and target aliases.
             The first participant is the intended speaker (named by the player, or closest when nobody was named).
             It should answer the player unless silence is clearly more appropriate for its character.
@@ -142,8 +142,8 @@ public final class AiControlService {
             For container interaction, use a listed take_from_container_N or store_in_container_N target;
             the unnumbered forms select the nearest suitable container.
             MOVE_TO walks to a listed nearby location, player, Blockfolk NPC, or entity alias.
-            REMEMBER_LOCATION saves a unique label and x, y, z coordinates in that NPC's current world.
-            Use that NPC's listed coordinates to remember its current position.
+            REMEMBER_LOCATION saves a unique label for that NPC's current position.
+            Use it when a player identifies the place the NPC is standing, such as "this is my home".
             RETURN_HOME walks to that NPC instance's respawn location. START_ROUTE resumes its configured route;
             PAUSE_ROUTE pauses that route.
             DROP_ITEM uses an inventory_slot_N target and drops that stack from the temporary inventory.
@@ -533,8 +533,8 @@ public final class AiControlService {
         Map<UUID, Long> requestGenerations = new HashMap<>();
         Map<UUID, AiTargetSnapshot> targetsByInstance = new HashMap<>();
         StringBuilder system = new StringBuilder(GROUP_RESULT_RULES);
-        List<String> responseIds = participants.stream().map(participant -> NpcResponseIds
-                .forInstance(participant.definition().getDisplayName(), participant.instance().getId())).toList();
+        List<String> responseIds = NpcResponseIds.forNames(participants.stream()
+                .map(participant -> participant.definition().getDisplayName()).toList());
         String primaryResponseId = responseIds.getFirst();
         system.append("\nUse the intended speaker's Response ID in its action calls: ").append(primaryResponseId);
         String eventDetail = "Player " + invocation.player().getName() + " said: \"" + invocation.message() + "\"";
@@ -965,22 +965,19 @@ public final class AiControlService {
         player.sendMessage(Component.text(message, NamedTextColor.GRAY).decorate(TextDecoration.ITALIC));
     }
 
-    public boolean rememberLocation(NpcInstance instance, NpcDefinition definition, String name,
-            Double x, Double y, Double z) {
+    public boolean rememberLocation(NpcInstance instance, NpcDefinition definition, String name) {
         if (locations == null || !definition.getAiControlSettings().allowedActions()
-                .contains(AiActionType.REMEMBER_LOCATION) || name == null || name.length() > 64
-                || x == null || y == null || z == null || !Double.isFinite(x) || !Double.isFinite(y)
-                || !Double.isFinite(z)) {
+                .contains(AiActionType.REMEMBER_LOCATION) || name == null || name.length() > 64) {
             return false;
         }
         Location origin = instances.currentLocation(instance);
         World world = origin.getWorld();
-        if (world == null || y < world.getMinHeight() || y >= world.getMaxHeight()
-                || Math.abs(x) > 29_999_984 || Math.abs(z) > 29_999_984) {
+        if (world == null) {
             return false;
         }
         try {
-            NamedLocation named = NamedLocation.create(name, new ActionLocation(world.getName(), x, y, z));
+            NamedLocation named = NamedLocation.create(name,
+                    new ActionLocation(world.getName(), origin.getX(), origin.getY(), origin.getZ()));
             if (locations.find(named.key()).isPresent()) {
                 return false;
             }
@@ -1303,10 +1300,6 @@ public final class AiControlService {
         }
         out.append("NPC state:\n").append("Name: ").append(NpcResponseIds.plainName(definition.getDisplayName()))
                 .append('\n').append("World: ").append(world == null ? "unknown" : world.getName()).append('\n');
-        if (settings.allowedActions().contains(AiActionType.REMEMBER_LOCATION) && world != null) {
-            out.append("Coordinates: ").append(location.getX()).append(", ")
-                    .append(location.getY()).append(", ").append(location.getZ()).append('\n');
-        }
         if (npc != null) {
             out.append("Health: ").append(format(npc.getHealth())).append(" / ")
                     .append(format(EntityHealth.maximum(npc))).append('\n');
@@ -1428,9 +1421,10 @@ public final class AiControlService {
         List<String> nearbyNpcNames = nearbyNpcs.stream().map(other -> definitions.find(other.getDefinitionKey())
                 .map(NpcDefinition::getDisplayName).map(NpcResponseIds::plainName).orElse(other.getDefinitionKey()))
                 .toList();
+        List<String> nearbyNpcIds = NpcResponseIds.forNames(nearbyNpcNames);
         for (int index = 0; index < nearbyNpcs.size(); index++) {
             NpcInstance other = nearbyNpcs.get(index);
-            String targetId = "nearby_" + NpcResponseIds.forInstance(nearbyNpcNames.get(index), other.getId());
+            String targetId = "nearby_" + nearbyNpcIds.get(index);
             targets.bindNpc(targetId, other);
             out.append("- ").append(targetId).append(": ").append(nearbyNpcNames.get(index)).append(", ")
                     .append(distance(other.getLocation(), center)).append(" blocks, ")

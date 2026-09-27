@@ -286,7 +286,7 @@ public final class OpenRouterClient {
                                 ? "INVALID_TOOL_CALL"
                                 : name);
                 if (argumentsObject != null) {
-                    for (String field : new String[]{"text", "target", "animation", "name", "x", "y", "z"}) {
+                    for (String field : new String[]{"text", "target", "animation", "name"}) {
                         if (argumentsObject.has(field))
                             action.add(field, argumentsObject.get(field));
                     }

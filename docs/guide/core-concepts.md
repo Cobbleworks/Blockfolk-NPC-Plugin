@@ -6,7 +6,7 @@ Blockfolk separates reusable configuration from the NPCs placed in the world.
 
 An **NPC preset** stores the display name, skin, equipment, properties, combat profile, movement configuration, event routines, and AI settings. An **instance** is one persistent spawned copy with its own UUID and position.
 
-One preset can have multiple instances. Integrations refer to the persistent instance UUID, including after a server restart or combat respawn.
+Spawning a preset creates one NPC by default. Additional copies are created explicitly through **Manage Instances** or the spawn command. Integrations refer to each copy's persistent UUID, including after a server restart or combat respawn.
 
 ## Events and actions
 

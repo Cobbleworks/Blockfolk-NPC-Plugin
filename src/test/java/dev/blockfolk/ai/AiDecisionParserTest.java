@@ -95,7 +95,7 @@ class AiDecisionParserTest {
     @Test
     void namedNpcTargetMustBeBoundInThisRequest() {
         AiControlSettings settings = settings("Guard", "", "Defend this place", EnumSet.of(AiActionType.START_COMBAT));
-        String target = "nearby_npc_mr_mario_1234567890abcdef";
+        String target = "nearby_npc_mr_mario_01";
         AiTargetSnapshot snapshot = new AiTargetSnapshot(Map.of(), Map.of(target, UUID.randomUUID()), Map.of());
         String response = "{\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"" + target + "\"}]}";
 
@@ -246,9 +246,9 @@ class AiDecisionParserTest {
     }
 
     @Test
-    void rememberLocationRequiresCapabilityAndFiniteCoordinates() {
+    void rememberLocationRequiresCapabilityAndName() {
         String valid = """
-                {"actions":[{"type":"REMEMBER_LOCATION","name":"Town/Market","x":12.5,"y":64,"z":-8}]}
+                {"actions":[{"type":"REMEMBER_LOCATION","name":"Town/Market"}]}
                 """;
         AiControlSettings enabled = AiControlSettings.defaults().toggle(AiActionType.REMEMBER_LOCATION);
 
@@ -256,11 +256,12 @@ class AiDecisionParserTest {
                 AiDecisionParser.parse(valid, AiControlSettings.defaults()).actions().getFirst().type());
         assertEquals(AiActionType.REMEMBER_LOCATION,
                 AiDecisionParser.parse(valid, enabled).actions().getFirst().type());
+        assertEquals("Town/Market", AiDecisionParser.parse(valid, enabled).actions().getFirst().locationName());
         assertEquals(AiActionType.DO_NOTHING, AiDecisionParser.parse("""
-                {"actions":[{"type":"REMEMBER_LOCATION","name":"Town/Market","x":"12","y":64,"z":-8}]}
+                {"actions":[{"type":"REMEMBER_LOCATION","name":""}]}
                 """, enabled).actions().getFirst().type());
         assertEquals(AiActionType.DO_NOTHING, AiDecisionParser.parse("""
-                {"actions":[{"type":"REMEMBER_LOCATION","name":"Town/Market","x":12,"y":64}]}
+                {"actions":[{"type":"REMEMBER_LOCATION"}]}
                 """, enabled).actions().getFirst().type());
     }
 

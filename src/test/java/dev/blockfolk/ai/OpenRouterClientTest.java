@@ -93,21 +93,18 @@ class OpenRouterClientTest {
     }
 
     @Test
-    void preservesRememberLocationCoordinatesFromNativeCall() {
+    void preservesRememberLocationNameFromNativeCall() {
         AiControlSettings settings = AiControlSettings.defaults().toggle(AiActionType.REMEMBER_LOCATION);
         JsonArray tools = AiActionTools.definitions(settings.allowedActions(), List.of());
         String normalized = OpenRouterClient.responseActions("""
                 {"choices":[{"message":{"tool_calls":[
-                  {"function":{"name":"remember_location","arguments":"{\\"name\\":\\"Town/Market\\",\\"x\\":12.5,\\"y\\":64,\\"z\\":-8}"}}
+                  {"function":{"name":"remember_location","arguments":"{\\"name\\":\\"Town/Market\\"}"}}
                 ]},"finish_reason":"tool_calls"}]}
                 """, false, tools);
 
         AiDecision.Action action = AiDecisionParser.parse(normalized, settings).actions().getFirst();
         assertEquals(AiActionType.REMEMBER_LOCATION, action.type());
         assertEquals("Town/Market", action.locationName());
-        assertEquals(12.5, action.x());
-        assertEquals(64.0, action.y());
-        assertEquals(-8.0, action.z());
     }
 
     @Test

@@ -78,8 +78,8 @@ class AiGroupDecisionParserTest {
 
     @Test
     void validatesTargetsAgainstTheRespondingNpcSnapshot() {
-        String npcId = "npc_guard_1234567890abcdef";
-        String target = "nearby_npc_mr_mario_fedcba9876543210";
+        String npcId = "npc_guard";
+        String target = "nearby_npc_mr_mario_01";
         Map<String, AiControlSettings> participants = Map.of(npcId, settings(EnumSet.of(AiActionType.START_COMBAT)));
         String response = "{\"responses\":[{\"npc\":\"" + npcId
                 + "\",\"actions\":[{\"type\":\"START_COMBAT\",\"target\":\"" + target + "\"}]}]}";

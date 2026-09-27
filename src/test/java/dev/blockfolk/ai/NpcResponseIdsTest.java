@@ -1,31 +1,28 @@
 package dev.blockfolk.ai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-
-import java.util.UUID;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
 class NpcResponseIdsTest {
 
     @Test
-    void makesReadableIdsStablePerInstanceAndDisambiguatesDuplicateNames() {
-        UUID first = UUID.fromString("12345678-90ab-cdef-1111-222222222222");
-        UUID second = UUID.fromString("fedcba98-7654-3210-3333-444444444444");
-
-        assertEquals("npc_mr_mario_1234567890abcdef", NpcResponseIds.forInstance("Mr. Mario", first));
-        assertEquals("npc_mr_mario_1234567890abcdef", NpcResponseIds.forInstance("Mr. Mario", first));
-        assertNotEquals(NpcResponseIds.forInstance("Mr. Mario", first), NpcResponseIds.forInstance("Mr Mario", second));
+    void usesBareNameForSingleNpcAndNumbersDuplicateNames() {
+        assertEquals(List.of("npc_mr_mario"), NpcResponseIds.forNames(List.of("Mr. Mario")));
+        assertEquals(List.of("npc_mr_mario_01", "npc_mr_mario_02", "npc_mira"),
+                NpcResponseIds.forNames(List.of("Mr. Mario", "Mr Mario", "Mira")));
     }
 
     @Test
     void handlesColorsAccentsAndNamesWithoutLatinLetters() {
-        UUID first = UUID.fromString("12345678-90ab-cdef-1111-222222222222");
-        UUID second = UUID.fromString("fedcba98-7654-3210-3333-444444444444");
+        assertEquals(List.of("npc_eloise", "npc_unnamed_01", "npc_unnamed_02"),
+                NpcResponseIds.forNames(List.of("§aÉloïse", "李雷", "莉莉")));
+    }
 
-        assertEquals("npc_eloise_1234567890abcdef", NpcResponseIds.forInstance("§aÉloïse", first));
-        assertEquals("npc_unnamed_1234567890abcdef", NpcResponseIds.forInstance("李雷", first));
-        assertEquals("npc_unnamed_fedcba9876543210", NpcResponseIds.forInstance("莉莉", second));
+    @Test
+    void avoidsNumberedAliasCollidingWithAnotherNpcName() {
+        assertEquals(List.of("npc_mario_02", "npc_mario_03", "npc_mario_01"),
+                NpcResponseIds.forNames(List.of("Mario", "Mario", "Mario 01")));
     }
 }

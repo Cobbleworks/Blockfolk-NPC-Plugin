@@ -15,7 +15,7 @@ Each request contains:
 1. A system message with configured identity, personality and behaviour, likes and dislikes, goal or role, and knowledge or information. Empty sections are omitted. If `plugins/Blockfolk/<world-name>.md` exists, its Markdown is appended as world context for NPCs in that world.
 2. A user message with the triggering event, NPC state, perceived surroundings, recent memory, and enabled capabilities.
 
-Gameplay turns can continue for up to three model rounds. Each response can call up to three action functions per NPC, and each NPC can take up to eight actions and speak once in a turn. Extra `SAY` calls from the same NPC are ignored. After a batch runs, Blockfolk returns tool results and a fresh snapshot of the NPC state so the model can choose a dependent next action or finish. Group chat calls include readable NPC Response IDs derived from display names and persistent NPC instance IDs, such as `npc_mr_mario_1234567890abcdef`.
+Gameplay turns can continue for up to three model rounds. Each response can call up to three action functions per NPC, and each NPC can take up to eight actions and speak once in a turn. Extra `SAY` calls from the same NPC are ignored. After a batch runs, Blockfolk returns tool results and a fresh snapshot of the NPC state so the model can choose a dependent next action or finish. Group chat calls include readable NPC Response IDs derived from display names, such as `npc_mr_mario`.
 
 World context files are optional. For example, `plugins/Blockfolk/world.md`, `plugins/Blockfolk/world_nether.md`, and `plugins/Blockfolk/customworld.md` supply context only to NPCs in the matching worlds. The files are read as UTF-8 when a gameplay request starts, so changes apply to the next request without a server restart. Empty or missing files add no context. In a group chat request, each participating world file is included once.
 
@@ -24,14 +24,14 @@ World context files are optional. For example, `plugins/Blockfolk/world.md`, `pl
 Response IDs do not replace NPC names in the model context. Blockfolk sends an explicit mapping for every participant, for example:
 
 ```text
-Response ID: npc_mr_mario_1234567890abcdef
+Response ID: npc_mr_mario
 Display name: Mr. Mario
-=== Mr. Mario [Response ID: npc_mr_mario_1234567890abcdef] (intended speaker) ===
+=== Mr. Mario [Response ID: npc_mr_mario] (intended speaker) ===
 ```
 
-The exact player message is included as the event. This lets Blockfolk select “Mr. Mario” as the intended speaker when the player addresses him, even when another NPC is closer. The model supplies that NPC's Response ID in each group action call so Blockfolk can apply actions to the correct instance. The ID stays the same when nearby NPCs join or leave; its normalized name portion changes if the display name is edited. Two instances with the same display name have different instance suffixes.
+The exact player message is included as the event. This lets Blockfolk select “Mr. Mario” as the intended speaker when the player addresses him, even when another NPC is closer. The model supplies that NPC's Response ID in each group action call so Blockfolk can apply actions to the correct NPC. When names repeat within one request, IDs get `_01`, `_02`, and so on. These aliases are unique within the request and may change when the participant list changes.
 
-Nearby NPC action targets use the same name and instance suffix, prefixed with `nearby_`, such as `nearby_npc_mr_mario_1234567890abcdef`. Players, other entities, locations, switches, containers, and inventory slots use safe aliases paired with a readable name or type. Full UUIDs and unlisted targets are rejected. Explicit coordinates are accepted only by **Remember Location**.
+Nearby NPC action targets use the same naming pattern, prefixed with `nearby_`, such as `nearby_npc_mr_mario`. Duplicate names in a request receive numbered aliases such as `nearby_npc_mr_mario_01`. Players, other entities, locations, switches, containers, and inventory slots use safe aliases paired with a readable name or type. Arbitrary coordinates, full UUIDs, and unlisted targets are rejected.
 
 ## NPC state
 
@@ -39,13 +39,12 @@ The request includes, when available:
 
 - preset display name and world;
 - current and maximum health;
-- exact current coordinates when **Remember Location** is enabled;
 - combat and route state, including an active walking destination when pathfinding;
 - whether the NPC is in water or burning, plus active status effects;
 - main-hand material;
 - occupied temporary-inventory slots when that access is enabled.
 
-Exact player coordinates are not included.
+Exact NPC and player coordinates are not included.
 
 ## Perceived surroundings
 
@@ -86,4 +85,4 @@ Opening the preset editor clears runtime event and conversation memory, pending 
 
 The request provides functions for the actions available to the NPC. Depending on settings and current state, these can include speech, animation, combat, fleeing, following, world interaction, moving, returning home, route control, mining, remembering a named location, dropping inventory items, and doing nothing. Group requests use the union of available functions, with each NPC's own capabilities checked on receipt.
 
-The parser validates calls against the advertised functions, the NPC's capability set, and the captured target snapshot before gameplay actions run. Commands, executable code, unknown actions, disabled actions, and unknown targets are rejected. **Remember Location** alone accepts explicit X, Y, Z coordinates in the NPC's current world, with finite values and valid world bounds; it cannot overwrite an existing name.
+The parser validates calls against the advertised functions, the NPC's capability set, and the captured target snapshot before gameplay actions run. Commands, executable code, unknown actions, disabled actions, arbitrary coordinates, and unknown targets are rejected. **Remember Location** takes a label only; Blockfolk saves the NPC's current position when that action runs and cannot overwrite an existing name.

@@ -777,8 +777,7 @@ public final class NpcBehaviourService implements Listener {
                     instances.stopNavigating(instance);
                 }
                 case REMEMBER_FACT -> aiControlService.rememberFact(definition, action.text());
-                case REMEMBER_LOCATION -> aiControlService.rememberLocation(instance, definition,
-                        action.locationName(), action.x(), action.y(), action.z());
+                case REMEMBER_LOCATION -> aiControlService.rememberLocation(instance, definition, action.locationName());
                 case DROP_ITEM -> dropAiInventoryItem(instance, action.target());
                 case DO_NOTHING -> {
                 }
