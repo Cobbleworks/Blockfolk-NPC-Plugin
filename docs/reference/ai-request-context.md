@@ -59,7 +59,7 @@ General perception uses a 16-block radius and includes:
 - up to five non-empty signs with front/back text;
 - reachable ores, logs, and pickaxe-mineable blocks when **Mine Blocks** is enabled.
 
-Up to 15 named global locations in the same world are included within 64 blocks, ordered nearest first. Mineable resources are scanned within eight blocks.
+Up to 16 named global locations in the same world are included within 64 blocks, ordered nearest first. Mineable resources are scanned within eight blocks.
 
 ## Environment
 

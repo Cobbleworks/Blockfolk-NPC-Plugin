@@ -65,7 +65,7 @@ public final class AiControlService {
 
     private static final double PERCEPTION_RADIUS = 16.0;
     private static final double LOCATION_PERCEPTION_RADIUS = 64.0;
-    private static final int MAX_NEARBY_LOCATIONS = 15;
+    private static final int MAX_NEARBY_LOCATIONS = 16;
     private static final int MAX_CHAT_GROUP_SIZE = 5;
     private static final int MAX_PENDING_INTERACTIONS = 8;
     private static final int MAX_ACTION_ROUNDS = 3;
