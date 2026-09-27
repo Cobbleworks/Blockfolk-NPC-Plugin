@@ -36,6 +36,10 @@ public final class ChatInputService implements Listener {
     }
 
     public void request(Player player, String prompt, Consumer<String> consumer) {
+        request(player, prompt, consumer, null);
+    }
+
+    public void request(Player player, String prompt, Consumer<String> consumer, Runnable onCancel) {
         UUID playerId = player.getUniqueId();
         requestingInputs.add(playerId);
         try {
@@ -47,9 +51,11 @@ public final class ChatInputService implements Listener {
             BukkitTask timeout = Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (pendingInputs.remove(playerId) != null && player.isOnline()) {
                     player.sendMessage(UiText.warning("Input timed out."));
+                    if (onCancel != null)
+                        onCancel.run();
                 }
             }, timeoutSeconds * 20L);
-            pendingInputs.put(playerId, new PendingInput(consumer, timeout));
+            pendingInputs.put(playerId, new PendingInput(consumer, onCancel, timeout));
         } finally {
             requestingInputs.remove(playerId);
         }
@@ -86,8 +92,11 @@ public final class ChatInputService implements Listener {
         input.timeout.cancel();
         String message = PLAIN_TEXT.serialize(event.message());
         if (message.equalsIgnoreCase("cancel")) {
-            Bukkit.getScheduler().runTask(plugin,
-                    () -> event.getPlayer().sendMessage(UiText.warning("Input cancelled.")));
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                event.getPlayer().sendMessage(UiText.warning("Input cancelled."));
+                if (input.onCancel != null)
+                    input.onCancel.run();
+            });
             return;
         }
         Bukkit.getScheduler().runTask(plugin, () -> input.consumer.accept(message));
@@ -105,7 +114,7 @@ public final class ChatInputService implements Listener {
         }
     }
 
-    private record PendingInput(Consumer<String> consumer, BukkitTask timeout) {
+    private record PendingInput(Consumer<String> consumer, Runnable onCancel, BukkitTask timeout) {
 
     }
 }

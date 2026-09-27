@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
@@ -71,13 +72,13 @@ public final class RouteGuiService implements Listener {
     private final Consumer<Player> mainGuiOpener;
     private final NamespacedKey wandRouteKey;
     private final NamespacedKey wandTokenKey;
-    private final NamespacedKey reorderRouteKey;
     private final NamespacedKey reorderLocationKey;
     private final NamespacedKey locationWandTokenKey;
     private final Map<UUID, EditSession> editSessions = new HashMap<>();
     private final Map<UUID, LocationEditSession> locationEditSessions = new HashMap<>();
     private final Map<UUID, Map<String, TextDisplay>> locationLabels = new HashMap<>();
     private WaypointActionOpener waypointActionOpener;
+    private BiConsumer<Player, NpcDefinition> npcMenuOpener;
     private BukkitTask markerTask;
     private NpcBehaviourService behaviourService;
 
@@ -93,7 +94,6 @@ public final class RouteGuiService implements Listener {
         this.mainGuiOpener = mainGuiOpener;
         this.wandRouteKey = new NamespacedKey(plugin, "route-editor-route");
         this.wandTokenKey = new NamespacedKey(plugin, "route-editor-token");
-        this.reorderRouteKey = new NamespacedKey(plugin, "reorder-route");
         this.reorderLocationKey = new NamespacedKey(plugin, "reorder-location");
         this.locationWandTokenKey = new NamespacedKey(plugin, "location-editor-token");
     }
@@ -106,8 +106,20 @@ public final class RouteGuiService implements Listener {
         this.behaviourService = behaviourService;
     }
 
+    public void setNpcMenuOpener(BiConsumer<Player, NpcDefinition> npcMenuOpener) {
+        this.npcMenuOpener = npcMenuOpener;
+    }
+
     public void openRoutes(Player player) {
-        openRoutes(player, "", 0);
+        openRoutes(player, "", 0, null);
+    }
+
+    public void openNpcRoutes(Player player, String npcKey) {
+        if (definitionRepository.find(npcKey).isEmpty()) {
+            player.sendMessage(UiText.error("That NPC no longer exists."));
+            return;
+        }
+        openRoutes(player, "npc:" + npcKey, 0, npcKey);
     }
 
     public void start() {
@@ -118,11 +130,10 @@ public final class RouteGuiService implements Listener {
     }
 
     public void openRoutes(Player player, int requestedPage) {
-        openRoutes(player, "", requestedPage);
+        openRoutes(player, "", requestedPage, null);
     }
 
-    public void createRoute(Player player, String ownerKey, Consumer<NpcRoute> onCreated,
-            Consumer<Player> onFinished) {
+    public void createRoute(Player player, String ownerKey, Consumer<NpcRoute> onCreated, Consumer<Player> onFinished) {
         if (definitionRepository.find(ownerKey).isEmpty()) {
             player.sendMessage(UiText.error("That NPC no longer exists."));
             return;
@@ -149,13 +160,14 @@ public final class RouteGuiService implements Listener {
         });
     }
 
-    private void openRoutes(Player player, String folder, int requestedPage) {
+    private void openRoutes(Player player, String folder, int requestedPage, String returnNpcKey) {
         finishEditing(player, false);
         List<RouteBrowserModel.Entry> entries = routeEntries(folder);
         int pages = Math.max(1, (entries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         String title = routeBrowserTitle(folder);
-        Inventory inventory = Bukkit.createInventory(new RoutesHolder(folder, page), 54, UiText.title(title));
+        Inventory inventory = Bukkit.createInventory(new RoutesHolder(folder, page, returnNpcKey), 54,
+                UiText.title(title));
         int from = page * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, entries.size());
         for (int index = from; index < to; index++) {
@@ -163,7 +175,8 @@ public final class RouteGuiService implements Listener {
             if (entry.folder()) {
                 ItemStack folderIcon = item(entry.npcFolder() ? Material.PLAYER_HEAD : Material.CHEST, entry.label(),
                         List.of(LegacyText.GRAY + "" + entry.childCount() + " route(s)",
-                                LegacyText.DARK_GRAY + "Routes owned by this NPC", LegacyText.YELLOW + "Click to open"));
+                                LegacyText.DARK_GRAY + "Routes owned by this NPC",
+                                LegacyText.YELLOW + "Click to open"));
                 if (entry.npcFolder()) {
                     definitionRepository.find(RouteBrowserModel.npcKey(entry.path()))
                             .ifPresent(definition -> NpcHeadUtil.applySkin(folderIcon, definition));
@@ -172,16 +185,15 @@ public final class RouteGuiService implements Listener {
                 continue;
             }
             NpcRoute route = entry.route();
-            inventory.setItem(index - from,
-                    routeItem(route,
-                            List.of(LegacyText.DARK_GRAY + "Key: " + route.getKey(),
-                                    LegacyText.GRAY + "Key points: " + LegacyText.WHITE + route.getPoints().size(),
-                                    LegacyText.AQUA + "Middle-click: set icon from main hand",
-                                    LegacyText.YELLOW + "Left-click: edit points",
-                                    LegacyText.RED + "Shift-right-click: remove route")));
+            inventory.setItem(index - from, routeItem(route, List.of(LegacyText.DARK_GRAY + "Key: " + route.getKey(),
+                    LegacyText.GRAY + "Key points: " + LegacyText.WHITE + route.getPoints().size(),
+                    LegacyText.YELLOW + "Left-click: edit points", LegacyText.AQUA + "Middle-click: rename route",
+                    LegacyText.RED + "Shift-right-click: remove route")));
         }
-        inventory.setItem(45, item(folder.isEmpty() ? Material.PLAYER_HEAD : Material.ARROW,
-                folder.isEmpty() ? "Manage NPCs" : "Back to Routes", List.of()));
+        inventory.setItem(45,
+                item(folder.isEmpty() ? Material.PLAYER_HEAD : Material.ARROW,
+                        returnNpcKey != null ? "Back to NPC Menu" : folder.isEmpty() ? "Manage NPCs" : "Back to Routes",
+                        List.of()));
         inventory.setItem(46,
                 item(Material.LODESTONE, "Manage Locations",
                         List.of(LegacyText.GRAY + "Define global positions for NPC actions",
@@ -195,8 +207,7 @@ public final class RouteGuiService implements Listener {
                         List.of(LegacyText.GRAY + "Routes: " + LegacyText.WHITE + routeRepository.findAll().size(),
                                 LegacyText.GRAY + "View: " + LegacyText.WHITE + routeBrowserLabel(folder),
                                 LegacyText.GRAY + "NPCs start at their nearest point",
-                                LegacyText.GRAY + "then follow nearest unvisited points in a loop",
-                                LegacyText.YELLOW + "Click to reorder routes")));
+                                LegacyText.GRAY + "then follow nearest unvisited points in a loop")));
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
@@ -205,18 +216,19 @@ public final class RouteGuiService implements Listener {
     }
 
     public void openLocations(Player player) {
-        openLocations(player, "", 0, "", 0);
+        openLocations(player, "", 0, "", 0, null);
     }
 
-    private void openLocations(Player player, String folder, int requestedPage, String returnFolder, int returnPage) {
+    private void openLocations(Player player, String folder, int requestedPage, String returnFolder, int returnPage,
+            String returnNpcKey) {
         finishEditing(player, false);
         finishLocationEditing(player);
         List<LocationBrowserModel.Entry> entries = locationEntries(folder);
         int pages = Math.max(1, (entries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         String title = folder.isEmpty() ? "Global Locations" : "Locations: " + locationFolderLabel(folder);
-        Inventory inventory = Bukkit.createInventory(new LocationsHolder(folder, page, returnFolder, returnPage), 54,
-                UiText.title(title));
+        Inventory inventory = Bukkit.createInventory(
+                new LocationsHolder(folder, page, returnFolder, returnPage, returnNpcKey), 54, UiText.title(title));
         int from = page * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, entries.size());
         for (int index = from; index < to; index++) {
@@ -307,59 +319,6 @@ public final class RouteGuiService implements Listener {
         return locationRepository.find(key).map(location -> reorderLocationItem(location, index)).orElse(null);
     }
 
-    private void openReorder(Player player, String returnFolder, int returnPage) {
-        List<String> keys = routeRepository.findAll().stream().map(NpcRoute::getKey).toList();
-        openReorder(player, new ReorderRoutesHolder(new ArrayList<>(keys), returnFolder, returnPage), 0);
-    }
-
-    private void openReorder(Player player, ReorderRoutesHolder holder, int requestedPage) {
-        int pages = Math.max(1, (holder.keys.size() + PAGE_SIZE - 1) / PAGE_SIZE);
-        holder.page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Reorder Routes"));
-        renderReorder(inventory, holder);
-        player.openInventory(inventory);
-        ReorderSupport.restoreCursor(player, holder, this::reorderItem);
-    }
-
-    private void renderReorder(Inventory inventory, ReorderRoutesHolder holder) {
-        inventory.clear();
-        int pages = Math.max(1, (holder.keys.size() + PAGE_SIZE - 1) / PAGE_SIZE);
-        int from = holder.page * PAGE_SIZE;
-        int to = Math.min(from + PAGE_SIZE, holder.keys.size());
-        for (int index = from; index < to; index++) {
-            String key = holder.keys.get(index);
-            if (key.equals(holder.selectedKey))
-                continue;
-            NpcRoute route = routeRepository.find(key).orElse(null);
-            if (route != null)
-                inventory.setItem(index - from, reorderItem(route, index));
-        }
-        if (holder.page > 0)
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
-        inventory.setItem(48, item(Material.LIME_CONCRETE, "Save Order",
-                List.of(LegacyText.GRAY + "Apply this order to the routes browser")));
-        inventory.setItem(50,
-                item(Material.RED_CONCRETE, "Cancel", List.of(LegacyText.GRAY + "Discard all ordering changes")));
-        if (holder.page + 1 < pages)
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
-        GuiLayout.fillMainBar(inventory);
-    }
-
-    private ItemStack reorderItem(NpcRoute route, int index) {
-        ItemStack icon = routeItem(route,
-                List.of(LegacyText.DARK_GRAY + route.getKey(),
-                        LegacyText.GRAY + "Position: " + LegacyText.WHITE + (index + 1),
-                        LegacyText.YELLOW + "Pick up and drop to move"));
-        ItemMeta meta = icon.getItemMeta();
-        meta.getPersistentDataContainer().set(reorderRouteKey, PersistentDataType.STRING, route.getKey());
-        icon.setItemMeta(meta);
-        return icon;
-    }
-
-    private ItemStack reorderItem(String key, int index) {
-        return routeRepository.find(key).map(route -> reorderItem(route, index)).orElse(null);
-    }
-
     public void stop() {
         if (markerTask != null) {
             markerTask.cancel();
@@ -395,9 +354,6 @@ public final class RouteGuiService implements Listener {
                 return;
             }
             handleRoutesClick(event, player, routesHolder);
-        } else if (holder instanceof ReorderRoutesHolder reorderHolder) {
-            event.setCancelled(true);
-            handleReorderClick(event, player, reorderHolder);
         } else if (holder instanceof ReorderLocationsHolder reorderHolder) {
             event.setCancelled(true);
             handleLocationReorderClick(event, player, reorderHolder);
@@ -417,18 +373,15 @@ public final class RouteGuiService implements Listener {
     @EventHandler
     public void onInventoryDrag(InventoryDragEvent event) {
         InventoryHolder holder = event.getView().getTopInventory().getHolder();
-        if (holder instanceof RoutesHolder || holder instanceof ReorderRoutesHolder
-                || holder instanceof ReorderLocationsHolder || holder instanceof DeleteRouteHolder
-                || holder instanceof LocationsHolder) {
+        if (holder instanceof RoutesHolder || holder instanceof ReorderLocationsHolder
+                || holder instanceof DeleteRouteHolder || holder instanceof LocationsHolder) {
             event.setCancelled(true);
         }
     }
 
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
-        if (event.getInventory().getHolder() instanceof ReorderRoutesHolder) {
-            ReorderSupport.clearCursor(event.getPlayer(), reorderRouteKey);
-        } else if (event.getInventory().getHolder() instanceof ReorderLocationsHolder) {
+        if (event.getInventory().getHolder() instanceof ReorderLocationsHolder) {
             ReorderSupport.clearCursor(event.getPlayer(), reorderLocationKey);
         }
     }
@@ -581,8 +534,10 @@ public final class RouteGuiService implements Listener {
             removeLocationLabels(player.getUniqueId());
             chatInputService.cancel(player);
             player.sendMessage(UiText.success("Finished editing global locations."));
-            Bukkit.getScheduler().runTask(plugin, () -> openLocations(player, locationSession.folder(),
-                    locationSession.page(), locationSession.returnFolder(), locationSession.returnPage()));
+            Bukkit.getScheduler().runTask(plugin,
+                    () -> openLocations(player, locationSession.folder(), locationSession.page(),
+                            locationSession.returnFolder(), locationSession.returnPage(),
+                            locationSession.returnNpcKey()));
             return;
         }
         EditSession session = validSession(player, event.getItemDrop().getItemStack());
@@ -611,27 +566,27 @@ public final class RouteGuiService implements Listener {
     private void handleRoutesClick(InventoryClickEvent event, Player player, RoutesHolder holder) {
         String folder = holder.folder();
         int page = holder.page();
+        String returnNpcKey = holder.returnNpcKey();
         if (event.getRawSlot() == 45) {
-            if (folder.isEmpty())
+            if (returnNpcKey != null) {
+                definitionRepository.find(returnNpcKey).ifPresentOrElse(
+                        definition -> npcMenuOpener.accept(player, definition), () -> mainGuiOpener.accept(player));
+            } else if (folder.isEmpty())
                 mainGuiOpener.accept(player);
             else
-                openRoutes(player, "", 0);
+                openRoutes(player, "", 0, null);
             return;
         }
         if (event.getRawSlot() == 46) {
-            openLocations(player, "", 0, folder, page);
+            openLocations(player, "", 0, folder, page, returnNpcKey);
             return;
         }
         if (event.getRawSlot() == 47) {
-            openRoutes(player, folder, page - 1);
-            return;
-        }
-        if (event.getRawSlot() == 49) {
-            openReorder(player, folder, page);
+            openRoutes(player, folder, page - 1, returnNpcKey);
             return;
         }
         if (event.getRawSlot() == 53) {
-            openRoutes(player, folder, page + 1);
+            openRoutes(player, folder, page + 1, returnNpcKey);
             return;
         }
         List<RouteBrowserModel.Entry> entries = routeEntries(folder);
@@ -641,19 +596,29 @@ public final class RouteGuiService implements Listener {
         }
         RouteBrowserModel.Entry entry = entries.get(index);
         if (entry.folder()) {
-            openRoutes(player, entry.path(), 0);
+            openRoutes(player, entry.path(), 0, returnNpcKey);
             return;
         }
         NpcRoute route = entry.route();
         if (event.getClick() == ClickType.MIDDLE) {
-            route.setIcon(player.getInventory().getItemInMainHand());
-            routeRepository.save(route);
-            player.sendMessage(UiText.info(route.getIcon() == null ? "Route icon cleared." : "Route icon updated."));
-            openRoutes(player, folder, page);
+            String routeKey = route.getKey();
+            chatInputService.request(player, "Enter a new route name:", value -> {
+                NpcRoute current = routeRepository.find(routeKey).orElse(null);
+                if (current == null) {
+                    player.sendMessage(UiText.error("That route no longer exists."));
+                } else if (value.isBlank()) {
+                    player.sendMessage(UiText.error("Route names cannot be blank."));
+                } else {
+                    current.setDisplayName(value);
+                    routeRepository.save(current);
+                    player.sendMessage(UiText.success("Route renamed to '" + current.getDisplayName() + "'."));
+                }
+                openRoutes(player, folder, page, returnNpcKey);
+            }, () -> openRoutes(player, folder, page, returnNpcKey));
         } else if (event.isRightClick() && event.isShiftClick()) {
-            openDeleteConfirmation(player, route, folder, page);
-        } else {
-            beginEditing(player, route);
+            openDeleteConfirmation(player, route, folder, page, returnNpcKey);
+        } else if (event.isLeftClick()) {
+            beginEditing(player, route, p -> openRoutes(p, folder, page, returnNpcKey));
         }
     }
 
@@ -661,14 +626,15 @@ public final class RouteGuiService implements Listener {
         int slot = event.getRawSlot();
         if (slot == 45) {
             if (holder.folder().isEmpty())
-                openRoutes(player, holder.returnFolder(), holder.returnPage());
+                openRoutes(player, holder.returnFolder(), holder.returnPage(), holder.returnNpcKey());
             else
                 openLocations(player, LocationBrowserModel.parent(holder.folder()), 0, holder.returnFolder(),
-                        holder.returnPage());
+                        holder.returnPage(), holder.returnNpcKey());
             return;
         }
         if (slot == 47) {
-            openLocations(player, holder.folder(), holder.page() - 1, holder.returnFolder(), holder.returnPage());
+            openLocations(player, holder.folder(), holder.page() - 1, holder.returnFolder(), holder.returnPage(),
+                    holder.returnNpcKey());
             return;
         }
         if (slot == 49) {
@@ -680,7 +646,8 @@ public final class RouteGuiService implements Listener {
             return;
         }
         if (slot == 53) {
-            openLocations(player, holder.folder(), holder.page() + 1, holder.returnFolder(), holder.returnPage());
+            openLocations(player, holder.folder(), holder.page() + 1, holder.returnFolder(), holder.returnPage(),
+                    holder.returnNpcKey());
             return;
         }
         List<LocationBrowserModel.Entry> entries = locationEntries(holder.folder());
@@ -689,7 +656,7 @@ public final class RouteGuiService implements Listener {
             return;
         LocationBrowserModel.Entry entry = entries.get(index);
         if (entry.folder()) {
-            openLocations(player, entry.path(), 0, holder.returnFolder(), holder.returnPage());
+            openLocations(player, entry.path(), 0, holder.returnFolder(), holder.returnPage(), holder.returnNpcKey());
             return;
         }
         NamedLocation named = entry.location();
@@ -697,11 +664,13 @@ public final class RouteGuiService implements Listener {
             named = named.withIcon(player.getInventory().getItemInMainHand());
             locationRepository.save(named);
             player.sendMessage(UiText.info(named.icon() == null ? "Location icon cleared." : "Location icon updated."));
-            openLocations(player, holder.folder(), holder.page(), holder.returnFolder(), holder.returnPage());
+            openLocations(player, holder.folder(), holder.page(), holder.returnFolder(), holder.returnPage(),
+                    holder.returnNpcKey());
         } else if (event.isRightClick() && event.isShiftClick()) {
             locationRepository.delete(named);
             player.sendMessage(UiText.success("Deleted global location '" + named.displayName() + "'."));
-            openLocations(player, holder.folder(), holder.page(), holder.returnFolder(), holder.returnPage());
+            openLocations(player, holder.folder(), holder.page(), holder.returnFolder(), holder.returnPage(),
+                    holder.returnNpcKey());
         } else if (event.isLeftClick()) {
             Location destination = named.location().toLocation();
             if (destination == null) {
@@ -720,7 +689,7 @@ public final class RouteGuiService implements Listener {
         finishLocationEditing(player);
         UUID token = UUID.randomUUID();
         LocationEditSession session = new LocationEditSession(token, back.folder(), back.page(), back.returnFolder(),
-                back.returnPage());
+                back.returnPage(), back.returnNpcKey());
         locationEditSessions.put(player.getUniqueId(), session);
         ItemStack held = player.getInventory().getItemInMainHand();
         player.getInventory().setItemInMainHand(createLocationWand(session));
@@ -783,41 +752,6 @@ public final class RouteGuiService implements Listener {
         }
     }
 
-    private void handleReorderClick(InventoryClickEvent event, Player player, ReorderRoutesHolder holder) {
-        event.setCancelled(true);
-        if (!isTopInventoryClick(event))
-            return;
-        int slot = event.getRawSlot();
-        if (slot == 45 && holder.page > 0) {
-            openReorder(player, holder, holder.page - 1);
-            return;
-        }
-        if (slot == 53 && (holder.page + 1) * PAGE_SIZE < holder.keys.size()) {
-            openReorder(player, holder, holder.page + 1);
-            return;
-        }
-        if (slot == 48) {
-            ReorderSupport.clearSelection(player, holder, reorderRouteKey);
-            try {
-                routeRepository.reorder(holder.keys);
-                player.sendMessage(UiText.success("Route order saved."));
-                openRoutes(player, holder.returnFolder, holder.returnPage);
-            } catch (IllegalArgumentException exception) {
-                player.sendMessage(
-                        UiText.info("The route list changed while you were editing. Please reorder it again."));
-                openReorder(player, holder.returnFolder, holder.returnPage);
-            }
-            return;
-        }
-        if (slot == 50) {
-            ReorderSupport.clearSelection(player, holder, reorderRouteKey);
-            openRoutes(player, holder.returnFolder, holder.returnPage);
-            return;
-        }
-        ReorderSupport.selectOrMove(event, player, holder, PAGE_SIZE, reorderRouteKey, this::reorderItem,
-                inventory -> renderReorder(inventory, holder));
-    }
-
     private void handleLocationReorderClick(InventoryClickEvent event, Player player, ReorderLocationsHolder holder) {
         event.setCancelled(true);
         if (!isTopInventoryClick(event))
@@ -837,7 +771,7 @@ public final class RouteGuiService implements Listener {
                 locationRepository.reorder(holder.keys);
                 player.sendMessage(UiText.success("Location order saved."));
                 openLocations(player, holder.back.folder(), holder.back.page(), holder.back.returnFolder(),
-                        holder.back.returnPage());
+                        holder.back.returnPage(), holder.back.returnNpcKey());
             } catch (IllegalArgumentException exception) {
                 player.sendMessage(
                         UiText.info("The location list changed while you were editing. Please reorder it again."));
@@ -848,7 +782,7 @@ public final class RouteGuiService implements Listener {
         if (slot == 50) {
             ReorderSupport.clearSelection(player, holder, reorderLocationKey);
             openLocations(player, holder.back.folder(), holder.back.page(), holder.back.returnFolder(),
-                    holder.back.returnPage());
+                    holder.back.returnPage(), holder.back.returnNpcKey());
             return;
         }
         ReorderSupport.selectOrMove(event, player, holder, PAGE_SIZE, reorderLocationKey, this::reorderLocationItem,
@@ -857,7 +791,7 @@ public final class RouteGuiService implements Listener {
 
     private void handleDeleteClick(InventoryClickEvent event, Player player, DeleteRouteHolder holder) {
         if (event.getRawSlot() == 15) {
-            openRoutes(player, holder.folder(), holder.page());
+            openRoutes(player, holder.folder(), holder.page(), holder.returnNpcKey());
             return;
         }
         if (event.getRawSlot() != 11) {
@@ -865,7 +799,7 @@ public final class RouteGuiService implements Listener {
         }
         NpcRoute route = routeRepository.find(holder.routeKey()).orElse(null);
         if (route == null) {
-            openRoutes(player, holder.folder(), holder.page());
+            openRoutes(player, holder.folder(), holder.page(), holder.returnNpcKey());
             return;
         }
         int affected = 0;
@@ -880,12 +814,12 @@ public final class RouteGuiService implements Listener {
         routeRepository.delete(route);
         player.sendMessage(UiText
                 .success("Deleted route '" + route.getDisplayName() + "' and unassigned " + affected + " preset(s)."));
-        openRoutes(player, holder.folder(), holder.page());
+        openRoutes(player, holder.folder(), holder.page(), holder.returnNpcKey());
     }
 
-    private void openDeleteConfirmation(Player player, NpcRoute route, String folder, int page) {
-        Inventory inventory = Bukkit.createInventory(new DeleteRouteHolder(route.getKey(), folder, page), 27,
-                UiText.title("Delete Route", route.getDisplayName()));
+    private void openDeleteConfirmation(Player player, NpcRoute route, String folder, int page, String returnNpcKey) {
+        Inventory inventory = Bukkit.createInventory(new DeleteRouteHolder(route.getKey(), folder, page, returnNpcKey),
+                27, UiText.title("Delete Route", route.getDisplayName()));
         inventory.setItem(11,
                 item(Material.LIME_CONCRETE, "Confirm", List.of(LegacyText.RED + "Permanently delete this route",
                         LegacyText.GRAY + "NPC presets using it will be unassigned")));
@@ -1181,9 +1115,7 @@ public final class RouteGuiService implements Listener {
     }
 
     private ItemStack routeItem(NpcRoute route, List<String> lore) {
-        ItemStack icon = route.getIcon();
-        ItemStack result = icon == null ? new ItemStack(Material.RAIL) : icon;
-        result.setAmount(1);
+        ItemStack result = new ItemStack(Material.RAIL);
         ItemMeta meta = result.getItemMeta();
         meta.displayName(LegacyText.component(LegacyText.GOLD + route.getDisplayName()));
         meta.lore(LegacyText.components(lore));
@@ -1206,7 +1138,8 @@ public final class RouteGuiService implements Listener {
 
     }
 
-    private record LocationEditSession(UUID token, String folder, int page, String returnFolder, int returnPage) {
+    private record LocationEditSession(UUID token, String folder, int page, String returnFolder, int returnPage,
+            String returnNpcKey) {
     }
 
     @FunctionalInterface
@@ -1215,21 +1148,11 @@ public final class RouteGuiService implements Listener {
         void open(Player player, String routeKey, RoutePoint point);
     }
 
-    private record RoutesHolder(String folder, int page) implements GuiHolder {
+    private record RoutesHolder(String folder, int page, String returnNpcKey) implements GuiHolder {
     }
 
-    private record LocationsHolder(String folder, int page, String returnFolder, int returnPage) implements GuiHolder {
-    }
-
-    private static final class ReorderRoutesHolder extends ReorderSupport.ReorderState {
-        private final String returnFolder;
-        private final int returnPage;
-
-        private ReorderRoutesHolder(List<String> keys, String returnFolder, int returnPage) {
-            super(keys);
-            this.returnFolder = returnFolder;
-            this.returnPage = returnPage;
-        }
+    private record LocationsHolder(String folder, int page, String returnFolder, int returnPage,
+            String returnNpcKey) implements GuiHolder {
     }
 
     private static final class ReorderLocationsHolder extends ReorderSupport.ReorderState {
@@ -1241,6 +1164,7 @@ public final class RouteGuiService implements Listener {
         }
     }
 
-    private record DeleteRouteHolder(String routeKey, String folder, int page) implements GuiHolder {
+    private record DeleteRouteHolder(String routeKey, String folder, int page,
+            String returnNpcKey) implements GuiHolder {
     }
 }

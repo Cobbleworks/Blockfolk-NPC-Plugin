@@ -8,7 +8,7 @@ Blockfolk stores its runtime configuration under `plugins/Blockfolk/`.
 | `definitions/*.yml` | One file per NPC preset, including behaviour, combat, equipment, and AI settings. |
 | `definition-order.yml` | Preset browser ordering. |
 | `instances.yml` | Persistent spawned instances and their UUIDs. |
-| `routes.yml` | Routes, route icons, point actions, and route ordering. |
+| `routes.yml` | NPC-owned routes and their point actions. |
 | `locations.yml` | Named global locations and icons. |
 | `custom-events.yml` | Global custom-event definitions and ordering. |
 

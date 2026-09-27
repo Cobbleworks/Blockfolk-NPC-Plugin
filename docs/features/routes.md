@@ -1,6 +1,6 @@
 # Routes
 
-Routes are walking loops owned by individual NPC presets. Open the route manager with `/bf routes` to browse and edit them.
+Routes are walking loops owned by individual NPC presets. Open **Routes** in an NPC's menu to manage its routes, or use `/bf routes` to browse routes across NPCs.
 
 ## Create a route
 
@@ -39,6 +39,6 @@ AI can also start or pause the configured route when those capabilities are enab
 
 The root route browser groups routes under folders named after their owning NPC presets, whether or not an action currently uses them. Legacy routes with no owner remain visible at the root. Older shared routes are copied for each NPC that referenced them when the plugin loads.
 
-NPC folders follow the saved NPC preset order. Routes within each folder follow the saved route order. Deleting an NPC preset also deletes its routes.
+NPC folders follow the saved NPC preset order. Deleting an NPC preset also deletes its routes.
 
-To customize route order, click **Route Overview** at the bottom of the route browser. In **Reorder Routes**, pick up and drop route icons, then choose **Save Order**. Middle-click a route to use your main-hand item as its browser icon. Deleting a route removes direct and question-branch references and unassigns affected presets.
+Left-click a route to edit its points, middle-click to rename it in chat, or shift-right-click to remove it. Type `cancel` to stop a rename. Deleting a route removes direct and question-branch references and unassigns affected presets. The back button in an NPC's Routes menu returns to that NPC's menu.

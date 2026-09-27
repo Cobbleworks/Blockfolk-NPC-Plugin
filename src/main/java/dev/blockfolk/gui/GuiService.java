@@ -126,6 +126,7 @@ public final class GuiService implements Listener {
     private final ChatInputService chatInputService;
     private final SkinResolver skinResolver;
     private final Consumer<Player> routeGuiOpener;
+    private final BiConsumer<Player, String> npcRoutesOpener;
     private final RouteCreator routeCreator;
     private final BiConsumer<Player, NpcRoute> routeEditor;
     private final CustomEventRepository customEventRepository;
@@ -148,7 +149,7 @@ public final class GuiService implements Listener {
 
     public GuiService(Plugin plugin, NpcDefinitionRepository definitionRepository, RouteRepository routeRepository,
             NpcInstanceRegistry instanceRegistry, ChatInputService chatInputService, SkinResolver skinResolver,
-            Consumer<Player> routeGuiOpener, RouteCreator routeCreator,
+            Consumer<Player> routeGuiOpener, BiConsumer<Player, String> npcRoutesOpener, RouteCreator routeCreator,
             BiConsumer<Player, NpcRoute> routeEditor, CustomEventRepository customEventRepository,
             Consumer<Player> customEventGuiOpener, CustomEventCreator customEventCreator,
             LocationRepository locationRepository) {
@@ -159,6 +160,7 @@ public final class GuiService implements Listener {
         this.chatInputService = chatInputService;
         this.skinResolver = skinResolver;
         this.routeGuiOpener = routeGuiOpener;
+        this.npcRoutesOpener = npcRoutesOpener;
         this.routeCreator = routeCreator;
         this.routeEditor = routeEditor;
         this.customEventRepository = customEventRepository;
@@ -470,6 +472,12 @@ public final class GuiService implements Listener {
                         List.of(LegacyText.GRAY + "" + definition.customEventActionCount() + " configured action(s)",
                                 LegacyText.GRAY + "React to globally emitted custom events",
                                 LegacyText.YELLOW + "Click to configure")));
+        long routeCount = routeRepository.findAll().stream().filter(route -> route.isOwnedBy(definition.getKey()))
+                .count();
+        inventory.setItem(21,
+                item(Material.ACTIVATOR_RAIL, "Routes",
+                        List.of(LegacyText.GRAY + "" + routeCount + " route(s) owned by this NPC",
+                                LegacyText.YELLOW + "Click to manage routes")));
         AiControlSettings ai = definition.getAiControlSettings();
         String aiStatus = !ai.enabled()
                 ? "Paused"
@@ -897,10 +905,12 @@ public final class GuiService implements Listener {
     }
 
     private List<BehaviourPickerOption> routePickerOptions(String ownerKey) {
-        return routeRepository.findAll().stream().filter(route -> ownerKey != null && route.isOwnedBy(ownerKey))
-                .map(route -> new BehaviourPickerOption(route.getKey(), route.getDisplayName(), routeIcon(route),
-                        List.of(LegacyText.DARK_GRAY + "Key: " + route.getKey(),
-                                LegacyText.GRAY + "" + route.getPoints().size() + " route point(s)"), false))
+        return routeRepository
+                .findAll().stream().filter(route -> ownerKey != null && route.isOwnedBy(ownerKey)).map(
+                        route -> new BehaviourPickerOption(route.getKey(), route.getDisplayName(), routeIcon(route),
+                                List.of(LegacyText.DARK_GRAY + "Key: " + route.getKey(),
+                                        LegacyText.GRAY + "" + route.getPoints().size() + " route point(s)"),
+                                false))
                 .toList();
     }
 
@@ -1255,6 +1265,7 @@ public final class GuiService implements Listener {
             case 13 -> openBehaviours(player, definition, 0);
             case 23 -> openAiControl(player, definition);
             case 22 -> openCustomBehaviours(player, definition, 0);
+            case 21 -> npcRoutesOpener.accept(player, definition.getKey());
             case 15 -> openFightingEditor(player, definition);
             case 31 -> openMain(player);
             default -> {
@@ -2190,8 +2201,8 @@ public final class GuiService implements Listener {
                     finishQuestionWaypointSelection(player);
                     setQuestionBranchAction(questionSession.action(),
                             new BehaviourAction(questionSession.type(), location.serialize()));
-                    player.sendMessage(UiText.success(questionSession.type().displayName() + " set to "
-                            + location.display() + "."));
+                    player.sendMessage(UiText
+                            .success(questionSession.type().displayName() + " set to " + location.display() + "."));
                     openAfterQuestionBranchPicker(player, questionSession.action());
                 }
                 return;
@@ -2236,9 +2247,9 @@ public final class GuiService implements Listener {
                     event.getItemDrop().remove();
                     questionWaypointSessions.remove(player.getUniqueId());
                     player.sendMessage(UiText.warning("Waypoint selection cancelled."));
-                    Bukkit.getScheduler().runTask(plugin, () -> openQuestionBranchPicker(player,
-                            questionSession.action().target(), questionSession.action().optionIndex(),
-                            questionSession.action().actionIndex()));
+                    Bukkit.getScheduler().runTask(plugin,
+                            () -> openQuestionBranchPicker(player, questionSession.action().target(),
+                                    questionSession.action().optionIndex(), questionSession.action().actionIndex()));
                 }
                 return;
             }
@@ -2593,9 +2604,8 @@ public final class GuiService implements Listener {
             routeCreator.create(player, definition.getKey(), route -> {
                 setAction(definition, action, BehaviourActionType.SET_ROUTE, route.getKey());
                 player.sendMessage(UiText.success("Created and selected '" + route.getDisplayName() + "'."));
-            }, returningPlayer -> definitionRepository.find(action.key())
-                    .ifPresentOrElse(current -> openBehaviourHome(returningPlayer, current, action),
-                            () -> openMain(returningPlayer)));
+            }, returningPlayer -> definitionRepository.find(action.key()).ifPresentOrElse(
+                    current -> openBehaviourHome(returningPlayer, current, action), () -> openMain(returningPlayer)));
             return;
         }
         if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.CUSTOM_EVENT) {
@@ -3318,12 +3328,7 @@ public final class GuiService implements Listener {
     }
 
     private ItemStack routeIcon(NpcRoute route) {
-        ItemStack icon = route.getIcon();
-        if (icon == null || icon.getType().isAir()) {
-            return new ItemStack(Material.RAIL);
-        }
-        icon.setAmount(1);
-        return icon;
+        return new ItemStack(Material.RAIL);
     }
 
     private ItemStack customEventIcon(CustomEvent event) {

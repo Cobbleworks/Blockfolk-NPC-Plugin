@@ -82,10 +82,11 @@ public final class BlockfolkPlugin extends JavaPlugin {
         customEventGuiService = new CustomEventGuiService(this, customEventRepository, definitionRepository,
                 chatInputService, this::openMainGui);
         guiService = new GuiService(this, definitionRepository, routeRepository, instanceRegistry, chatInputService,
-                skinResolver, routeGuiService::openRoutes, routeGuiService::createRoute, routeGuiService::beginEditing,
-                customEventRepository,
-                customEventGuiService::open, customEventGuiService::createEvent, locationRepository);
+                skinResolver, routeGuiService::openRoutes, routeGuiService::openNpcRoutes, routeGuiService::createRoute,
+                routeGuiService::beginEditing, customEventRepository, customEventGuiService::open,
+                customEventGuiService::createEvent, locationRepository);
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
+        routeGuiService.setNpcMenuOpener(guiService::openEditor);
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
         questionService = new NpcQuestionService(this, instanceRegistry, chatInputService,
                 getConfig().getInt("question-timeout-seconds", 30));
