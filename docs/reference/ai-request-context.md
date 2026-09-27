@@ -37,7 +37,8 @@ The request includes, when available:
 
 - preset display name and world;
 - current and maximum health;
-- combat and route state;
+- combat and route state, including an active walking destination when pathfinding;
+- whether the NPC is in water or burning, plus active status effects;
 - main-hand material;
 - occupied temporary-inventory slots when that access is enabled.
 
@@ -51,6 +52,7 @@ General perception uses a 16-block radius and includes:
 - up to three nearest Blockfolk NPCs, including display name, distance, and combat state;
 - up to five other nearby entities, excluding visible Blockfolk entities and their navigation helpers;
 - up to eight nearest buttons and levers when **Interact** is enabled;
+- up to eight nearest doors, including whether each is open or closed;
 - up to five containers with bounded content summaries when **Interact** and **Temporary Inventory** are enabled;
 - up to five non-empty signs with front/back text;
 - reachable ores, logs, and pickaxe-mineable blocks when **Mine Blocks** is enabled.

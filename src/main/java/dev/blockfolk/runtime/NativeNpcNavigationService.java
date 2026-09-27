@@ -3,6 +3,7 @@ package dev.blockfolk.runtime;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -117,6 +118,12 @@ public final class NativeNpcNavigationService {
             navigator.getPathfinder().stopPathfinding();
         }
         states.remove(instance.getId());
+    }
+
+    /** The destination currently owned by the native pathfinder, if any. */
+    public Optional<Location> activeTarget(NpcInstance instance) {
+        NavigationState state = states.get(instance.getId());
+        return state == null || state.target == null ? Optional.empty() : Optional.of(state.target.clone());
     }
 
     public void destroy(NpcInstance instance) {

@@ -283,6 +283,10 @@ public final class NpcInstanceRegistry implements Listener {
         navigationService.stop(instance);
     }
 
+    public Optional<Location> activeNavigationTarget(NpcInstance instance) {
+        return navigationService.activeTarget(instance);
+    }
+
     public Optional<NpcInstance> findByEntityId(int entityId) {
         UUID instanceId = instancesByEntityId.get(entityId);
         return instanceId == null ? Optional.empty() : Optional.ofNullable(instances.get(instanceId));

@@ -14,6 +14,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -28,6 +29,8 @@ import org.bukkit.block.Block;
 import org.bukkit.block.Container;
 import org.bukkit.block.Sign;
 import org.bukkit.block.data.Powerable;
+import org.bukkit.block.data.Bisected;
+import org.bukkit.block.data.type.Door;
 import org.bukkit.block.sign.Side;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -185,6 +188,7 @@ public final class AiControlService {
     private volatile boolean warnedNotConfigured;
     private BiPredicate<NpcInstance, NpcDefinition> routeState = (instance, definition) -> definition
             .getMovementProfile().enabled();
+    private BiFunction<NpcInstance, NpcDefinition, String> navigationPurpose = (instance, definition) -> "a destination";
 
     public AiControlService(Plugin plugin, NpcDefinitionRepository definitions, NpcInstanceRegistry instances,
             NpcCombatService combat, LocationRepository locations, OpenRouterClient client, int cooldownSeconds,
@@ -210,6 +214,10 @@ public final class AiControlService {
         this.routeState = routeState == null
                 ? (instance, definition) -> definition.getMovementProfile().enabled()
                 : routeState;
+    }
+
+    public void setNavigationPurpose(BiFunction<NpcInstance, NpcDefinition, String> navigationPurpose) {
+        this.navigationPurpose = navigationPurpose == null ? (instance, definition) -> "a destination" : navigationPurpose;
     }
 
     public void invoke(BehaviourEvent event, String eventDetail, String guidance, NpcInstance instance,
@@ -1201,7 +1209,24 @@ public final class AiControlService {
         if (npc != null) {
             out.append("Health: ").append(format(npc.getHealth())).append(" / ")
                     .append(format(EntityHealth.maximum(npc))).append('\n');
+            out.append("In water: ").append(npc.isInWater() ? "yes" : "no").append('\n');
+            out.append("Burning: ").append(npc.getFireTicks() > 0 ? "yes" : "no").append('\n');
+            List<String> effects = npc.getActivePotionEffects().stream()
+                    .sorted(Comparator.comparing(effect -> effect.getType().getKey().toString()))
+                    .map(effect -> readable(effect.getType().getKey().getKey()) + " " + (effect.getAmplifier() + 1))
+                    .toList();
+            out.append("Status effects: ").append(effects.isEmpty() ? "none" : String.join(", ", effects)).append('\n');
         }
+        out.append("Navigation: ");
+        Location destination = instances.activeNavigationTarget(instance).orElse(null);
+        if (destination != null && destination.getWorld() == world) {
+            out.append("walking toward ").append(navigationPurpose.apply(instance, definition)).append(" at ")
+                    .append(relativeOffset(destination, location)).append(", about ")
+                    .append(distance(destination, location)).append(" blocks away");
+        } else {
+            out.append("not walking to a destination");
+        }
+        out.append('\n');
         out.append("Combat: ").append(combat != null && combat.isEngaged(instance) ? "active" : "not active")
                 .append('\n').append("Route: ")
                 .append(routeState.test(instance, definition) ? "configured" : "not configured").append('\n')
@@ -1327,6 +1352,7 @@ public final class AiControlService {
             appendNearbySwitches(out, center, targets);
             appendNearbyContainers(out, center, targets);
         }
+        appendNearbyDoors(out, center);
         if (settings.allowedActions().contains(AiActionType.MINE_BLOCKS)) {
             appendNearbyMineableResources(out, center);
         }
@@ -1380,6 +1406,43 @@ public final class AiControlService {
         resources.entrySet().stream().sorted(Map.Entry.<Material, Integer>comparingByValue().reversed()).limit(12)
                 .forEach(entry -> out.append("- ").append(entry.getKey().name().toLowerCase(Locale.ROOT)).append(": ")
                         .append(entry.getValue()).append(" blocks\n"));
+    }
+
+    private void appendNearbyDoors(StringBuilder out, Location center) {
+        World world = center.getWorld();
+        if (world == null) {
+            return;
+        }
+        int radius = (int) PERCEPTION_RADIUS;
+        List<NearbyDoor> doors = new ArrayList<>();
+        for (int x = -radius; x <= radius; x++) {
+            for (int y = -radius; y <= radius; y++) {
+                int blockY = center.getBlockY() + y;
+                if (blockY < world.getMinHeight() || blockY >= world.getMaxHeight()) {
+                    continue;
+                }
+                for (int z = -radius; z <= radius; z++) {
+                    if (x * x + y * y + z * z > radius * radius) {
+                        continue;
+                    }
+                    Block block = world.getBlockAt(center.getBlockX() + x, blockY, center.getBlockZ() + z);
+                    if (!(block.getBlockData() instanceof Door door) || door.getHalf() != Bisected.Half.BOTTOM) {
+                        continue;
+                    }
+                    doors.add(new NearbyDoor(block.getType(), block.getLocation(), block.getLocation().distance(center),
+                            door.isOpen()));
+                }
+            }
+        }
+        if (doors.isEmpty()) {
+            return;
+        }
+        out.append("Nearby doors:\n");
+        doors.stream().sorted(Comparator.comparingDouble(NearbyDoor::distance)).limit(8)
+                .forEach(door -> out.append("- ").append(readable(door.material().name())).append(", ")
+                        .append(Math.round(door.distance())).append(" blocks, ")
+                        .append(relativeOffset(door.location(), center)).append(", ")
+                        .append(door.open() ? "open" : "closed").append('\n'));
     }
 
     private void appendNearbySwitches(StringBuilder out, Location center, AiTargetSnapshot.Builder targets) {
@@ -1627,8 +1690,11 @@ public final class AiControlService {
         if (time < 1000 || time >= 23000) {
             return "dawn";
         }
+        if (time < 6000) {
+            return "morning";
+        }
         if (time < 12000) {
-            return "day";
+            return "afternoon";
         }
         if (time < 13000) {
             return "sunset";
@@ -1665,6 +1731,10 @@ public final class AiControlService {
     }
 
     private record NearbySwitch(Material material, Location location, double distance, boolean powered) {
+
+    }
+
+    private record NearbyDoor(Material material, Location location, double distance, boolean open) {
 
     }
 

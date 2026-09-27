@@ -104,6 +104,18 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 getConfig().getInt("ai-control.conversation-history-limit", AiMemoryStore.DEFAULT_MAX_MESSAGES));
         behaviourService.setAiControlService(aiControlService);
         aiControlService.setRouteState(behaviourService::hasRoute);
+        aiControlService.setNavigationPurpose((instance, definition) -> {
+            if (combatService.isEngaged(instance)) {
+                return "a combat destination";
+            }
+            if (behaviourService.isFollowing(instance)) {
+                return "the player it is following";
+            }
+            if (behaviourService.isMovingTo(instance)) {
+                return "a chosen destination";
+            }
+            return behaviourService.hasRoute(instance, definition) ? "the next route waypoint" : "a destination";
+        });
         guiService.setAiControlService(aiControlService);
         combatService.setBehaviourService(behaviourService);
         guiService.setBehaviourService(behaviourService);
