@@ -22,6 +22,7 @@ import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
+import dev.blockfolk.model.AiMemory;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.util.LegacyText;
@@ -181,18 +182,18 @@ final class AiGuiService {
     void openMemories(Player player, NpcDefinition definition) {
         Inventory inventory = Bukkit.createInventory(new AiMemoryHolder(definition.getKey()), 54,
                 UiText.title("Memory", definition.getDisplayName()));
-        List<String> memories = definition.getAiMemories();
+        List<AiMemory> memories = definition.getAiMemoryEntries();
         for (int index = 0; index < memories.size(); index++) {
             inventory.setItem(index,
-                    item(Material.PAPER, "Memory " + (index + 1),
-                            List.of(LegacyText.WHITE + TextUtil.abbreviateSingleLine(memories.get(index), 96),
+                    item(Material.PAPER, "Memory " + (index + 1) + " · " + memories.get(index).importance(),
+                            List.of(LegacyText.WHITE + TextUtil.abbreviateSingleLine(memories.get(index).fact(), 96),
                                     LegacyText.YELLOW + "Left-click to edit",
                                     LegacyText.RED + "Right-click to delete")));
         }
         inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
         inventory.setItem(49,
                 item(Material.LIME_DYE, "Add Memory",
-                        List.of(LegacyText.GRAY + "The oldest memory is discarded when all 45 slots are full",
+                        List.of(LegacyText.GRAY + "At capacity, the oldest Minor memory is replaced",
                                 LegacyText.YELLOW + "Click to add a fact")));
         openInventory(player, inventory);
     }
@@ -302,9 +303,13 @@ final class AiGuiService {
                 ? "Enter a fact for the NPC to remember:"
                 : "Edit this memory, or enter 'clear' to delete it:";
         chatInput.request(player, prompt, value -> {
-            if (index < 0)
-                definition.addAiMemory(value);
-            else
+            if (index < 0) {
+                if (!definition.addAiMemory(value, AiMemory.Importance.CORE)) {
+                    player.sendMessage(UiText.info("Memory is full and has no Minor entry to replace."));
+                    openMemories(player, definition);
+                    return;
+                }
+            } else
                 definition.setAiMemory(index, value.equalsIgnoreCase("clear") ? "" : value);
             definitions.save(definition);
             openMemories(player, definition);

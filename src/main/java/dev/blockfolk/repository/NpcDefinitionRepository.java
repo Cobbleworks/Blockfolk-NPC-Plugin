@@ -22,6 +22,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import dev.blockfolk.model.AttackReaction;
+import dev.blockfolk.model.AiMemory;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
@@ -135,7 +136,9 @@ public final class NpcDefinitionRepository {
         configuration.set("ai-control.respond-to-chat", ai.respondToChat());
         configuration.set("ai-control.memory.enabled", ai.memoryEnabled());
         configuration.set("ai-control.conversation.shared", ai.sharedConversation());
-        configuration.set("ai-control.memory.facts", definition.getAiMemories());
+        configuration.set("ai-control.memory.facts",
+                definition.getAiMemoryEntries().stream().map(memory -> Map.of("fact", memory.fact(), "importance",
+                        memory.importance().name().toLowerCase(Locale.ROOT))).toList());
         configuration.set("ai-control.allowed-actions",
                 ai.allowedActions().stream()
                         .filter(action -> action != AiActionType.REMEMBER_FACT && action != AiActionType.DROP_ITEM)
@@ -260,7 +263,25 @@ public final class NpcDefinitionRepository {
                 configuration.getBoolean("ai-control.respond-to-chat", true),
                 configuration.getBoolean("ai-control.memory.enabled", false),
                 configuration.getBoolean("ai-control.conversation.shared", false)));
-        definition.setAiMemories(configuration.getStringList("ai-control.memory.facts"));
+        List<AiMemory> memories = new ArrayList<>();
+        for (Object item : configuration.getList("ai-control.memory.facts", List.of())) {
+            if (item instanceof String legacy) {
+                memories.add(new AiMemory(legacy, AiMemory.Importance.MINOR));
+            } else if (item instanceof Map<?, ?> saved) {
+                Object fact = saved.get("fact");
+                Object importance = saved.get("importance");
+                if (fact instanceof String text) {
+                    AiMemory.Importance level;
+                    try {
+                        level = AiMemory.Importance.valueOf(String.valueOf(importance).toUpperCase(Locale.ROOT));
+                    } catch (IllegalArgumentException error) {
+                        level = AiMemory.Importance.MINOR;
+                    }
+                    memories.add(new AiMemory(text, level));
+                }
+            }
+        }
+        definition.setAiMemoryEntries(memories);
         for (BehaviourEvent event : BehaviourEvent.values()) {
             String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);
             definition.setBehaviourActions(event, decodeActions(configuration.getMapList(path), file, "behaviour"));

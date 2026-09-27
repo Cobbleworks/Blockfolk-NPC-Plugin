@@ -71,7 +71,7 @@ Blockfolk keeps:
 - recent conversation lines up to `ai-control.conversation-history-limit`, which defaults to `20`;
 - up to 45 optional long-term preset facts when memory is enabled.
 
-After a completed player conversation turn, enabled long-term memory reviews batches of about ten new conversation lines. It also reviews shorter conversations after 30 seconds without player interaction. The previous exchange is included as overlap context. The review can save durable preferences, plans, promises, agreements, deals, and similar details; empty reviews do not add a fact. When a new fact is saved, the players who contributed to that batch receive a chat notice. This review happens after the gameplay response and is not a gameplay action.
+After a completed player conversation turn, enabled long-term memory reviews batches of about ten new conversation lines. It also reviews shorter conversations after 30 seconds without player interaction. The previous exchange is included as overlap context. The review can save durable preferences, plans, promises, agreements, deals, and similar details; empty reviews do not add a fact. Each saved fact has a Core, Major, or Minor classification. At the 45-fact limit, the oldest Minor fact is replaced by a new fact. If no Minor fact exists, the new fact is discarded. When a new fact is saved, the players who contributed to that batch receive a chat notice. This review happens after the gameplay response and is not a gameplay action.
 
 Private conversation is scoped to one player and one spawned NPC. Shared conversation is scoped to one spawned NPC and is visible to every player speaking with that instance. Conversations are not shared between separate spawned copies of the preset.
 

@@ -39,7 +39,7 @@ public final class NpcDefinition {
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
     private Map<String, List<BehaviourAction>> customEventBehaviours;
     private AiControlSettings aiControlSettings;
-    private List<String> aiMemories;
+    private List<AiMemory> aiMemories;
 
     public NpcDefinition(String key) {
         this.key = key;
@@ -82,7 +82,7 @@ public final class NpcDefinition {
         copy.setPushable(pushable);
         copy.setColor(color);
         copy.setAiControlSettings(aiControlSettings);
-        copy.setAiMemories(aiMemories);
+        copy.setAiMemoryEntries(aiMemories);
         behaviours.forEach(copy::setBehaviourActions);
         customEventBehaviours.forEach(copy::setCustomEventActions);
         return copy;
@@ -424,6 +424,10 @@ public final class NpcDefinition {
     }
 
     public List<String> getAiMemories() {
+        return aiMemories.stream().map(AiMemory::fact).toList();
+    }
+
+    public List<AiMemory> getAiMemoryEntries() {
         return List.copyOf(aiMemories);
     }
 
@@ -432,15 +436,36 @@ public final class NpcDefinition {
         if (memories == null)
             return;
         memories.stream().filter(java.util.Objects::nonNull).map(String::trim).filter(memory -> !memory.isBlank())
-                .forEach(this::addAiMemory);
+                .forEach(memory -> addAiMemory(memory, AiMemory.Importance.MINOR));
+    }
+
+    public void setAiMemoryEntries(List<AiMemory> memories) {
+        aiMemories.clear();
+        if (memories != null)
+            memories.forEach(memory -> addAiMemory(memory.fact(), memory.importance()));
     }
 
     public void addAiMemory(String memory) {
+        addAiMemory(memory, AiMemory.Importance.CORE);
+    }
+
+    public boolean addAiMemory(String memory, AiMemory.Importance importance) {
         if (memory == null || memory.isBlank())
-            return;
-        aiMemories.add(memory.trim());
-        while (aiMemories.size() > MAX_AI_MEMORIES)
-            aiMemories.removeFirst();
+            return false;
+        if (aiMemories.size() >= MAX_AI_MEMORIES) {
+            int minor = -1;
+            for (int index = 0; index < aiMemories.size(); index++) {
+                if (aiMemories.get(index).importance() == AiMemory.Importance.MINOR) {
+                    minor = index;
+                    break;
+                }
+            }
+            if (minor < 0)
+                return false;
+            aiMemories.remove(minor);
+        }
+        aiMemories.add(new AiMemory(memory.trim(), importance));
+        return true;
     }
 
     public void setAiMemory(int index, String memory) {
@@ -449,7 +474,7 @@ public final class NpcDefinition {
         if (memory == null || memory.isBlank())
             aiMemories.remove(index);
         else
-            aiMemories.set(index, memory.trim());
+            aiMemories.set(index, new AiMemory(memory.trim(), aiMemories.get(index).importance()));
     }
 
     public void removeAiMemory(int index) {

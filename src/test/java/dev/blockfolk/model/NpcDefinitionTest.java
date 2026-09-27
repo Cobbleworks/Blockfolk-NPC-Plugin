@@ -90,15 +90,35 @@ class NpcDefinitionTest {
     }
 
     @Test
-    void longTermMemoryDiscardsTheOldestFactAtCapacity() {
+    void longTermMemoryReplacesTheOldestMinorFactAtCapacity() {
         NpcDefinition definition = NpcDefinition.create("Guard");
         for (int index = 0; index <= NpcDefinition.MAX_AI_MEMORIES; index++) {
-            definition.addAiMemory("fact " + index);
+            definition.addAiMemory("fact " + index, AiMemory.Importance.MINOR);
         }
 
         assertEquals(NpcDefinition.MAX_AI_MEMORIES, definition.getAiMemories().size());
         assertEquals("fact 1", definition.getAiMemories().getFirst());
         assertEquals("fact " + NpcDefinition.MAX_AI_MEMORIES, definition.getAiMemories().getLast());
+    }
+
+    @Test
+    void fullMemoryKeepsCoreAndMajorFacts() {
+        NpcDefinition definition = NpcDefinition.create("Guard");
+        definition.addAiMemory("identity", AiMemory.Importance.CORE);
+        definition.addAiMemory("agreement", AiMemory.Importance.MAJOR);
+        for (int index = 0; index < NpcDefinition.MAX_AI_MEMORIES - 2; index++)
+            definition.addAiMemory("minor " + index, AiMemory.Importance.MINOR);
+
+        assertTrue(definition.addAiMemory("new plan", AiMemory.Importance.MAJOR));
+        assertEquals("identity", definition.getAiMemories().getFirst());
+        assertEquals("agreement", definition.getAiMemories().get(1));
+        assertFalse(definition.getAiMemories().contains("minor 0"));
+        assertEquals("new plan", definition.getAiMemories().getLast());
+
+        definition.clearAiMemories();
+        for (int index = 0; index < NpcDefinition.MAX_AI_MEMORIES; index++)
+            definition.addAiMemory("core " + index, AiMemory.Importance.CORE);
+        assertFalse(definition.addAiMemory("overflow", AiMemory.Importance.CORE));
     }
 
     @Test
