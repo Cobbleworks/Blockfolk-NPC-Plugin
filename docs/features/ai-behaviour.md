@@ -11,7 +11,7 @@ openrouter:
   endpoint: "https://openrouter.ai/api/v1/chat/completions"
   api-key: "your-api-key"
   model: "deepseek/deepseek-v4-flash-0731"
-  timeout-seconds: 12
+  timeout-seconds: 17
   max-tokens: 1600
 ```
 

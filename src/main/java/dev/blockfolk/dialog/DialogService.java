@@ -81,11 +81,19 @@ public final class DialogService {
      * length.
      */
     public void showHologram(NpcInstance instance, NpcDefinition definition, String line) {
-        if (line == null || line.isBlank() || !setDescription(instance, Component.text(line))) {
+        if (line == null || line.isBlank()) {
+            return;
+        }
+        DialogRuntime active = dialogs.get(instance.getId());
+        if (active != null && active.processing) {
+            active.pendingLine = Component.text(line);
+            active.pendingLineTicks = lineDurationSeconds(line) * 20;
+            return;
+        }
+        if (!setDescription(instance, Component.text(line))) {
             return;
         }
         DialogRuntime runtime = dialogs.computeIfAbsent(instance.getId(), ignored -> new DialogRuntime(instance));
-        runtime.processing = false;
         runtime.remainingTicks = lineDurationSeconds(line) * 20;
     }
 
@@ -96,14 +104,21 @@ public final class DialogService {
         runtime.processing = true;
         runtime.processingFrame = 0;
         runtime.processingFrameTicks = 0;
+        runtime.pendingLine = null;
     }
 
     public void hideProcessing(NpcInstance instance) {
         DialogRuntime runtime = dialogs.get(instance.getId());
         if (runtime == null || !runtime.processing)
             return;
-        setDescription(instance, null);
-        dialogs.remove(instance.getId());
+        runtime.processing = false;
+        if (runtime.pendingLine != null && setDescription(instance, runtime.pendingLine)) {
+            runtime.remainingTicks = runtime.pendingLineTicks;
+            runtime.pendingLine = null;
+        } else {
+            setDescription(instance, null);
+            dialogs.remove(instance.getId());
+        }
     }
 
     private void removeLegacyDisplays(UUID instanceId) {
@@ -161,6 +176,8 @@ public final class DialogService {
         private boolean processing;
         private int processingFrame;
         private int processingFrameTicks;
+        private Component pendingLine;
+        private int pendingLineTicks;
 
         private DialogRuntime(NpcInstance instance) {
             this.instance = instance;

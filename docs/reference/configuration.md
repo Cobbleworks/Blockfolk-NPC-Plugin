@@ -18,7 +18,7 @@ Global settings are created at `plugins/Blockfolk/config.yml`. Restart the serve
 | `openrouter.endpoint` | `https://openrouter.ai/api/v1/chat/completions` | Chat-completions endpoint. HTTPS is required. |
 | `openrouter.api-key` | empty | OpenRouter API key. Leave empty to keep AI unavailable. |
 | `openrouter.model` | `deepseek/deepseek-v4-flash-0731` | OpenRouter model identifier. |
-| `openrouter.timeout-seconds` | `12` | Network request timeout. Increase it for slower providers. |
+| `openrouter.timeout-seconds` | `17` | Network request timeout. Increase it for slower providers. |
 | `openrouter.max-tokens` | `1600` | Maximum output allowance for the final JSON decision. |
 
 The plugin requests JSON output with temperature `0.4` and disables model reasoning for lower gameplay latency.
@@ -44,7 +44,7 @@ openrouter:
   endpoint: "https://openrouter.ai/api/v1/chat/completions"
   api-key: ""
   model: "deepseek/deepseek-v4-flash-0731"
-  timeout-seconds: 12
+  timeout-seconds: 17
   max-tokens: 1600
 
 ai-control:

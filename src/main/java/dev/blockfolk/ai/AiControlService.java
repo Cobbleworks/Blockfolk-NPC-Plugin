@@ -110,7 +110,7 @@ public final class AiControlService {
             React naturally to the event that invoked you. When a nearby player speaks, answer using SAY.
             """;
     private static final String GROUP_RESULT_RULES = """
-            You coordinate a group of nearby NPCs reacting to one player's chat message.
+            You handle one player's chat message for the listed NPCs.
             Call action functions for each NPC that should respond. Every call requires that NPC's listed Response ID.
             Response IDs identify spawned NPC instances; display names identify their characters.
             Use only listed Response IDs, available functions, and target aliases.
@@ -527,8 +527,9 @@ public final class AiControlService {
         String primaryResponseId = responseIds.getFirst();
         system.append("\nUse the intended speaker's Response ID in its action calls: ").append(primaryResponseId);
         String eventDetail = "Player " + invocation.player().getName() + " said: \"" + invocation.message() + "\"";
-        StringBuilder context = new StringBuilder("Event:\n").append(eventDetail)
-                .append("\n\nNearby NPC group (intended speaker first):\n");
+        String participantHeading = participants.size() == 1 ? "\n\nNPC responding to the player:\n"
+                : "\n\nNearby NPC group (intended speaker first):\n";
+        StringBuilder context = new StringBuilder("Event:\n").append(eventDetail).append(participantHeading);
         try {
             for (int index = 0; index < participants.size(); index++) {
                 GroupParticipant participant = participants.get(index);
@@ -590,7 +591,7 @@ public final class AiControlService {
                     invocation.resultHandler(), eventDetail, 0, new HashMap<>(), new HashSet<>(), false)
                     .whenComplete((ignored, error) -> {
                         if (error != null) {
-                            logRequestFailure("AI Behaviour group chat request", error);
+                            logRequestFailure("AI Behaviour chat request", error);
                         }
                         if (plugin.isEnabled()) {
                             Bukkit.getScheduler().runTask(plugin, () -> {
@@ -673,22 +674,22 @@ public final class AiControlService {
             if (turn.truncated() || !parsed.usable()) {
                 if (retried) {
                     plugin.getLogger()
-                            .warning("AI Behaviour group chat returned unusable output again; " + "ending this turn.");
+                            .warning("AI Behaviour chat returned unusable output again; ending this turn.");
                     return CompletableFuture.completedFuture(null);
                 }
                 String issue = parsed.issue();
                 plugin.getLogger()
-                        .warning("AI Behaviour group chat returned unusable output (" + issue + "); retrying once.");
+                        .warning("AI Behaviour chat returned unusable output (" + issue + "); retrying once.");
                 session.retry(issue);
                 return completeGroupActionChain(session, aliases, requestGenerations, targetsByInstance, targetsByAlias,
                         settingsByAlias, availableByAlias, primaryResponseId, player, resultHandler, eventDetail, round,
                         actionsUsed, speakers, true);
             }
             if (!parsed.issue().isEmpty()) {
-                plugin.getLogger().warning("AI Behaviour group chat: " + parsed.issue());
+                plugin.getLogger().warning("AI Behaviour chat: " + parsed.issue());
             }
             if (missingPrimary) {
-                plugin.getLogger().warning("AI Behaviour group chat omitted the intended speaker; "
+                plugin.getLogger().warning("AI Behaviour chat omitted the intended speaker; "
                         + "requesting its response in the next round.");
             }
             Map<String, AiDecision> accepted = new java.util.LinkedHashMap<>();
@@ -714,7 +715,8 @@ public final class AiControlService {
                     applyGroupDecisions(aliases, accepted, requestGenerations, targetsByInstance, player,
                             resultHandler);
                     StringBuilder updated = new StringBuilder("Event:\n").append(eventDetail)
-                            .append("\n\nNearby NPC group (intended speaker first):\n");
+                            .append(aliases.size() == 1 ? "\n\nNPC responding to the player:\n"
+                                    : "\n\nNearby NPC group (intended speaker first):\n");
                     for (Map.Entry<String, GroupParticipant> entry : aliases.entrySet()) {
                         GroupParticipant participant = entry.getValue();
                         UUID id = participant.instance().getId();

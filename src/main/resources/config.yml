@@ -14,7 +14,7 @@ openrouter:
   api-key: ""
   model: "deepseek/deepseek-v4-flash-0731"
   # Increase this further for slower providers or reasoning-heavy models.
-  timeout-seconds: 12
+  timeout-seconds: 17
   # Output allowance for action tool calls and memory JSON. Reasoning is disabled for lower latency.
   max-tokens: 1600
 ai-control:
