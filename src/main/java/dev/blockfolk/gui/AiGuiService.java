@@ -1,5 +1,6 @@
 package dev.blockfolk.gui;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -102,14 +103,16 @@ final class AiGuiService {
                 settings.information(), "Facts, lore, rules, and local knowledge it may use"));
         inventory.setItem(LIKES_DISLIKES_SLOT, contextItem(Material.CAKE, "Likes & Dislikes", settings.likesDislikes(),
                 "Things it enjoys, avoids, values, or strongly dislikes"));
+        List<String> memoryLore = new ArrayList<>();
+        memoryLore.add(LegacyText.GRAY + "Long-term facts: " + LegacyText.WHITE + definition.getAiMemories().size()
+                + LegacyText.GRAY + " / " + NpcDefinition.MAX_AI_MEMORIES);
+        TextUtil.wrap("Enabled memories provide context and let the AI remember facts", 44).stream()
+                .map(line -> LegacyText.GRAY + line).forEach(memoryLore::add);
+        memoryLore.add(LegacyText.YELLOW + "Left-click to view and edit");
+        memoryLore.add(LegacyText.YELLOW + "Right-click to " + (settings.memoryEnabled() ? "disable" : "enable"));
+        memoryLore.add(LegacyText.RED + "Shift-right-click to clear all memories");
         inventory.setItem(MEMORY_SLOT, item(settings.memoryEnabled() ? Material.ENDER_CHEST : Material.CHEST,
-                "Memory: " + (settings.memoryEnabled() ? "Enabled" : "Disabled"),
-                List.of(LegacyText.GRAY + "Long-term facts: " + LegacyText.WHITE + definition.getAiMemories().size()
-                        + LegacyText.GRAY + " / " + NpcDefinition.MAX_AI_MEMORIES,
-                        LegacyText.GRAY + "Enabled memories provide context and let the AI remember facts",
-                        LegacyText.YELLOW + "Left-click to " + (settings.memoryEnabled() ? "disable" : "enable"),
-                        LegacyText.YELLOW + "Right-click to view and edit",
-                        LegacyText.RED + "Shift-right-click to clear all memories")));
+                "Memory: " + (settings.memoryEnabled() ? "Enabled" : "Disabled"), memoryLore));
         inventory.setItem(CONVERSATION_SLOT,
                 toggleItem(Material.ENDER_EYE,
                         "Conversation: " + (settings.sharedConversation() ? "Shared" : "Private"),
@@ -190,12 +193,12 @@ final class AiGuiService {
                 case MAJOR -> LegacyText.GOLD + "Major";
                 case MINOR -> LegacyText.BLUE + "Minor";
             };
-            inventory.setItem(index,
-                    item(Material.PAPER, "Memory " + (index + 1),
-                            List.of(classification,
-                                    LegacyText.WHITE + TextUtil.abbreviateSingleLine(memory.fact(), 96),
-                                    LegacyText.YELLOW + "Left-click to edit",
-                                    LegacyText.RED + "Right-click to delete")));
+            List<String> lore = new ArrayList<>();
+            lore.add(classification);
+            TextUtil.wrap(memory.fact(), 44).stream().map(line -> LegacyText.WHITE + line).forEach(lore::add);
+            lore.add(LegacyText.YELLOW + "Left-click to edit");
+            lore.add(LegacyText.RED + "Right-click to delete");
+            inventory.setItem(index, item(Material.PAPER, "Memory " + (index + 1), lore));
         }
         inventory.setItem(45, item(Material.ARROW, "Back", List.of()));
         inventory.setItem(49,
@@ -225,9 +228,9 @@ final class AiGuiService {
                 definitions.save(definition);
                 player.sendMessage(UiText.info("Cleared all memories for " + definition.getDisplayName() + "."));
                 open(player, definition);
-            } else if (event.isRightClick()) {
-                openMemories(player, definition);
             } else if (event.isLeftClick()) {
+                openMemories(player, definition);
+            } else if (event.isRightClick()) {
                 AiControlSettings settings = definition.getAiControlSettings();
                 definition.setAiControlSettings(settings.withMemoryEnabled(!settings.memoryEnabled()));
                 definitions.save(definition);
