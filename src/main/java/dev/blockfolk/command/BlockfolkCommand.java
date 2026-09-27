@@ -72,7 +72,8 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
 
     @Override
     public Collection<String> suggest(CommandSourceStack commandSourceStack, String[] args) {
-        return onTabComplete(commandSourceStack.getSender(), null, "blockfolk", args);
+        return onTabComplete(commandSourceStack.getSender(), null, "blockfolk",
+                args.length == 0 ? new String[] { "" } : args);
     }
 
     @Override
