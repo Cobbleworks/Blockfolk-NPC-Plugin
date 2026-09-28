@@ -213,6 +213,7 @@ final class AiGuiService {
         inventory.setItem(49,
                 item(Material.LIME_DYE, "Add Memory",
                         List.of(LegacyText.GRAY + "At capacity, the oldest Temporal memory is replaced",
+                                LegacyText.GRAY + "or the oldest memory if there is no Temporal one",
                                 LegacyText.YELLOW + "Click to add a fact")));
         openInventory(player, inventory);
     }
@@ -337,7 +338,7 @@ final class AiGuiService {
         chatInput.request(player, prompt, value -> {
             if (index < 0) {
                 if (!definition.addAiMemory(value, AiMemory.Category.PERSONAL)) {
-                    player.sendMessage(UiText.info("Memory is full and has no Temporal entry to replace."));
+                    player.sendMessage(UiText.info("Enter a non-empty fact to remember."));
                     openMemories(player, definition);
                     return;
                 }

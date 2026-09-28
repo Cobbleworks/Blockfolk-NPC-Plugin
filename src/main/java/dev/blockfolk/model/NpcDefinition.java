@@ -460,16 +460,19 @@ public final class NpcDefinition {
             return false;
         aiMemories.removeIf(entry -> entry.expired(System.currentTimeMillis()));
         if (aiMemories.size() >= MAX_AI_MEMORIES) {
-            int temporal = -1;
-            for (int index = 0; index < aiMemories.size(); index++) {
-                if (aiMemories.get(index).category() == AiMemory.Category.TEMPORAL) {
-                    temporal = index;
-                    break;
-                }
+            int oldest = 0;
+            int oldestTemporal = -1;
+            for (int index = 1; index < aiMemories.size(); index++) {
+                if (aiMemories.get(index).recordedAt() < aiMemories.get(oldest).recordedAt())
+                    oldest = index;
             }
-            if (temporal < 0)
-                return false;
-            aiMemories.remove(temporal);
+            for (int index = 0; index < aiMemories.size(); index++) {
+                AiMemory entry = aiMemories.get(index);
+                if (entry.category() == AiMemory.Category.TEMPORAL && (oldestTemporal < 0
+                        || entry.recordedAt() < aiMemories.get(oldestTemporal).recordedAt()))
+                    oldestTemporal = index;
+            }
+            aiMemories.remove(oldestTemporal >= 0 ? oldestTemporal : oldest);
         }
         aiMemories.add(new AiMemory(fact.trim(), memory.category(), memory.origin(), memory.recordedAt()));
         return true;

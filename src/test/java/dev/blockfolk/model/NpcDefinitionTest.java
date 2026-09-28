@@ -115,12 +115,14 @@ class NpcDefinitionTest {
     }
 
     @Test
-    void fullMemoryKeepsPersonalAndRegionalFacts() {
+    void fullMemoryPrefersTemporalThenFallsBackToOldestFact() {
         NpcDefinition definition = NpcDefinition.create("Guard");
-        definition.addAiMemory("identity", AiMemory.Category.PERSONAL);
-        definition.addAiMemory("agreement", AiMemory.Category.REGIONAL);
+        long now = System.currentTimeMillis();
+        definition.addAiMemory(new AiMemory("identity", AiMemory.Category.PERSONAL, null, now - 100_000));
+        definition.addAiMemory(new AiMemory("agreement", AiMemory.Category.REGIONAL, null, now - 90_000));
         for (int index = 0; index < NpcDefinition.MAX_AI_MEMORIES - 2; index++)
-            definition.addAiMemory("minor " + index, AiMemory.Category.TEMPORAL);
+            definition.addAiMemory(new AiMemory("minor " + index, AiMemory.Category.TEMPORAL, null,
+                    now - 80_000 + index));
 
         assertTrue(definition.addAiMemory("new plan", AiMemory.Category.REGIONAL));
         assertEquals("identity", definition.getAiMemories().getFirst());
@@ -131,7 +133,10 @@ class NpcDefinitionTest {
         definition.clearAiMemories();
         for (int index = 0; index < NpcDefinition.MAX_AI_MEMORIES; index++)
             definition.addAiMemory("core " + index, AiMemory.Category.PERSONAL);
-        assertFalse(definition.addAiMemory("overflow", AiMemory.Category.PERSONAL));
+        assertTrue(definition.addAiMemory("overflow", AiMemory.Category.PERSONAL));
+        assertEquals(NpcDefinition.MAX_AI_MEMORIES, definition.getAiMemories().size());
+        assertFalse(definition.getAiMemories().contains("core 0"));
+        assertEquals("overflow", definition.getAiMemories().getLast());
     }
 
     @Test
