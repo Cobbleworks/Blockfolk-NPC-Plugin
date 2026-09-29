@@ -50,6 +50,12 @@ public final class NativeNpcNavigationService {
     }
 
     public NavigationUpdate navigate(NpcInstance instance, Location target, WalkingSpeed walkingSpeed) {
+        return navigate(instance, target, walkingSpeed.blocksPerSecond());
+    }
+
+    public NavigationUpdate navigate(NpcInstance instance, Location target, double blocksPerSecond) {
+        if (!Double.isFinite(blocksPerSecond) || blocksPerSecond <= 0)
+            throw new IllegalArgumentException("Positive finite speed required.");
         Pig navigator = findOrSpawn(instance);
         if (navigator == null) {
             return new NavigationUpdate(NavigationStatus.STALLED, instance.getLocation());
@@ -80,13 +86,13 @@ public final class NativeNpcNavigationService {
         }
 
         NavigationState state = states.computeIfAbsent(instance.getId(), ignored -> new NavigationState());
-        boolean changed = !sameTarget(state.target, target) || state.walkingSpeed != walkingSpeed;
+        boolean changed = !sameTarget(state.target, target) || state.blocksPerSecond != blocksPerSecond;
         if (changed) {
             state.target = target.clone();
-            state.walkingSpeed = walkingSpeed;
+            state.blocksPerSecond = blocksPerSecond;
             state.lastLocation = current.clone();
             state.stationaryTicks = 0;
-            if (!requestPath(navigator, target, walkingSpeed)) {
+            if (!requestPath(navigator, target, blocksPerSecond)) {
                 states.remove(instance.getId());
                 return new NavigationUpdate(NavigationStatus.STALLED, current);
             }
@@ -95,7 +101,7 @@ public final class NativeNpcNavigationService {
             updateProgress(state, current);
             if (state.retryTicks <= 0
                     && (!navigator.getPathfinder().hasPath() || state.stationaryTicks >= REPATH_TICKS)) {
-                if (!requestPath(navigator, target, walkingSpeed)) {
+                if (!requestPath(navigator, target, blocksPerSecond)) {
                     states.remove(instance.getId());
                     return new NavigationUpdate(NavigationStatus.STALLED, current);
                 }
@@ -148,8 +154,14 @@ public final class NativeNpcNavigationService {
         return entity.getPersistentDataContainer().has(navigatorKey, PersistentDataType.STRING);
     }
 
-    private boolean requestPath(Pig navigator, Location target, WalkingSpeed walkingSpeed) {
-        configureSpeed(navigator, walkingSpeed);
+    public void setPersistent(NpcInstance instance, boolean persistent) {
+        Pig navigator = findNavigator(instance);
+        if (navigator != null)
+            navigator.setPersistent(persistent);
+    }
+
+    private boolean requestPath(Pig navigator, Location target, double blocksPerSecond) {
+        configureSpeed(navigator, blocksPerSecond);
         AttributeInstance followRange = navigator.getAttribute(Attribute.FOLLOW_RANGE);
         if (followRange != null) {
             double requiredRange = Math.sqrt(navigator.getLocation().distanceSquared(target)) + 16.0;
@@ -269,10 +281,11 @@ public final class NativeNpcNavigationService {
         pathfinder.setCanFloat(true);
     }
 
-    private void configureSpeed(Pig navigator, WalkingSpeed walkingSpeed) {
+    private void configureSpeed(Pig navigator, double blocksPerSecond) {
         AttributeInstance movementSpeed = navigator.getAttribute(Attribute.MOVEMENT_SPEED);
         if (movementSpeed != null) {
-            movementSpeed.setBaseValue(navigatorMovementSpeed(walkingSpeed));
+            movementSpeed.setBaseValue(
+                    NORMAL_NAVIGATOR_MOVEMENT_SPEED * blocksPerSecond / WalkingSpeed.NORMAL.blocksPerSecond());
         }
     }
 
@@ -306,7 +319,7 @@ public final class NativeNpcNavigationService {
 
         private Location target;
         private Location lastLocation;
-        private WalkingSpeed walkingSpeed;
+        private double blocksPerSecond;
         private int stationaryTicks;
         private int retryTicks;
     }

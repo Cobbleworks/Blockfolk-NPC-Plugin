@@ -22,12 +22,13 @@ final class RouteBrowserModel {
             for (NpcDefinition definition : orderedDefinitions) {
                 long count = orderedRoutes.stream().filter(route -> route.isOwnedBy(definition.getKey())).count();
                 if (count > 0) {
-                    result.add(Entry.npcFolder(npcFolder(definition.getKey()), definition.getDisplayName(),
-                            (int) count));
+                    result.add(
+                            Entry.npcFolder(npcFolder(definition.getKey()), definition.getDisplayName(), (int) count));
                 }
             }
-            orderedRoutes.stream().filter(route -> route.getOwnerKey() == null || orderedDefinitions.stream()
-                    .noneMatch(definition -> route.isOwnedBy(definition.getKey())))
+            orderedRoutes.stream()
+                    .filter(route -> route.getOwnerKey() == null || orderedDefinitions.stream()
+                            .noneMatch(definition -> route.isOwnedBy(definition.getKey())))
                     .map(Entry::route).forEach(result::add);
             return result;
         }

@@ -37,6 +37,11 @@ import dev.blockfolk.ai.OpenRouterClient;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 
 public final class BlockfolkPlugin extends JavaPlugin {
+    private dev.blockfolk.api.TransientNpcService transientNpcService;
+
+    public dev.blockfolk.api.TransientNpcService getTransientNpcService() {
+        return transientNpcService;
+    }
 
     private NpcDefinitionRepository definitionRepository;
     private NpcInstanceRepository instanceRepository;
@@ -70,6 +75,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         customEventRepository = new CustomEventRepository(this);
         npcRenderer = new PaperMannequinNpcRenderer(this);
         navigationService = new NativeNpcNavigationService(this);
+        transientNpcService = new dev.blockfolk.api.TransientNpcService(this, npcRenderer, navigationService);
         dialogService = new DialogService(this);
         instanceRegistry = new NpcInstanceRegistry(this, definitionRepository, instanceRepository, npcRenderer,
                 navigationService, dialogService);
@@ -181,6 +187,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (transientNpcService != null)
+            transientNpcService.shutdown();
         if (guiService != null) {
             guiService.stop();
         }

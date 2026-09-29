@@ -43,7 +43,8 @@ final class AiActionTools {
                 required.add("text");
             }
             case REMEMBER_LOCATION -> {
-                properties.add("name", stringProperty("Unique label for the NPC's current position. Use / to organize groups."));
+                properties.add("name",
+                        stringProperty("Unique label for the NPC's current position. Use / to organize groups."));
                 required.add("name");
             }
             case PLAY_ANIMATION -> {

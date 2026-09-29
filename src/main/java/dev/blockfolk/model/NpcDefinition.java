@@ -468,8 +468,8 @@ public final class NpcDefinition {
             }
             for (int index = 0; index < aiMemories.size(); index++) {
                 AiMemory entry = aiMemories.get(index);
-                if (entry.category() == AiMemory.Category.TEMPORAL && (oldestTemporal < 0
-                        || entry.recordedAt() < aiMemories.get(oldestTemporal).recordedAt()))
+                if (entry.category() == AiMemory.Category.TEMPORAL
+                        && (oldestTemporal < 0 || entry.recordedAt() < aiMemories.get(oldestTemporal).recordedAt()))
                     oldestTemporal = index;
             }
             aiMemories.remove(oldestTemporal >= 0 ? oldestTemporal : oldest);

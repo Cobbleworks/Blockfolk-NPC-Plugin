@@ -18,14 +18,16 @@ class NpcBehaviourServiceTest {
 
     @Test
     void moveToWaitsForArrivalButTimesOutAfterThirtySeconds() {
-        NpcBehaviourService.PendingMove arrived = new NpcBehaviourService.PendingMove(
-                new Location(null, 1, 2, 3), 600, () -> {});
+        NpcBehaviourService.PendingMove arrived = new NpcBehaviourService.PendingMove(new Location(null, 1, 2, 3), 600,
+                () -> {
+                });
         assertFalse(arrived.isReady(599));
         arrived.arrive();
         assertTrue(arrived.isReady(1));
 
-        NpcBehaviourService.PendingMove stalled = new NpcBehaviourService.PendingMove(
-                new Location(null, 1, 2, 3), 600, () -> {});
+        NpcBehaviourService.PendingMove stalled = new NpcBehaviourService.PendingMove(new Location(null, 1, 2, 3), 600,
+                () -> {
+                });
         assertFalse(stalled.isReady(599));
         assertTrue(stalled.isReady(600));
     }

@@ -79,6 +79,20 @@ BeautyQuests and OpenRouter are optional. Blockfolk's deterministic NPC system w
 
 ## **Third-Party Plugins and Services**
 
+### Plugin-owned encounter NPCs
+
+Blockfolk 1.3.0 exposes `BlockfolkPlugin.getTransientNpcService()` for plugins that manage their own encounters, including BloodMoon 2.0. Temporary NPCs use Blockfolk's mannequin rendering, skins, native navigation, and hand/item animations. They have no saved administrator preset and are removed when their owning plugin disables. The owner handles Bukkit damage/death events and controls attacks, loot, and respawning.
+
+```java
+TransientNpc npc = blockfolk.getTransientNpcService().create(myPlugin, "Encounter NPC");
+npc.spawn(location);
+npc.navigate(destination, 4.317); // Blocks per second.
+npc.animate("ARM_SWING");
+npc.destroy();
+```
+
+Call this API on the server thread. `TransientNpc` also supports `despawn`, `teleport`, `lookAt`, and `setSkin(name, texture, signature)`. Supported animations are `ARM_SWING`, `ARM_SWING_OFFHAND`, `START_USE_MAINHAND_ITEM`, `START_USE_OFFHAND_ITEM`, and `STOP_USE_ITEM`. Neither Citizens nor Sentinel is required.
+
 ### BeautyQuests
 
 [BeautyQuests](https://github.com/SkytAsul/BeautyQuests) is an optional soft dependency. When installed, spawned Blockfolk NPCs appear in BeautyQuests' NPC selector. Quest starters, stages, markers, and navigation pauses refer to the NPC's persistent instance UUID, so assignments survive restarts and combat respawns.

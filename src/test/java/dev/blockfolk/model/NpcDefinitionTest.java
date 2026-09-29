@@ -121,8 +121,8 @@ class NpcDefinitionTest {
         definition.addAiMemory(new AiMemory("identity", AiMemory.Category.PERSONAL, null, now - 100_000));
         definition.addAiMemory(new AiMemory("agreement", AiMemory.Category.REGIONAL, null, now - 90_000));
         for (int index = 0; index < NpcDefinition.MAX_AI_MEMORIES - 2; index++)
-            definition.addAiMemory(new AiMemory("minor " + index, AiMemory.Category.TEMPORAL, null,
-                    now - 80_000 + index));
+            definition.addAiMemory(
+                    new AiMemory("minor " + index, AiMemory.Category.TEMPORAL, null, now - 80_000 + index));
 
         assertTrue(definition.addAiMemory("new plan", AiMemory.Category.REGIONAL));
         assertEquals("identity", definition.getAiMemories().getFirst());

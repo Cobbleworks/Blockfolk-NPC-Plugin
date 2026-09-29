@@ -17,8 +17,8 @@ class NpcRouteTest {
     void ownsRoutesIndependentlyOfActionsAndRepointsWaypointActions() {
         NpcRoute route = NpcRoute.create("Patrol");
         route.setOwnerKey("Guard");
-        route.addPoint(new RoutePoint("world", 0, 64, 0,
-                List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "Next"))));
+        route.addPoint(
+                new RoutePoint("world", 0, 64, 0, List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "Next"))));
 
         assertTrue(route.isOwnedBy("guard"));
         assertEquals(java.util.Set.of("next"), route.getReferencedRouteKeys());

@@ -50,10 +50,10 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
     private final JavaPlugin plugin;
 
     public BlockfolkCommand(NpcDefinitionRepository definitionRepository, NpcInstanceRegistry instanceRegistry,
-            GuiService guiService, RouteGuiService routeGuiService,
-            RouteRepository routeRepository, CustomEventGuiService customEventGuiService,
-            CustomEventRepository customEventRepository, NpcBehaviourService behaviourService,
-            LocationRepository locationRepository, AiControlService aiControlService, JavaPlugin plugin) {
+            GuiService guiService, RouteGuiService routeGuiService, RouteRepository routeRepository,
+            CustomEventGuiService customEventGuiService, CustomEventRepository customEventRepository,
+            NpcBehaviourService behaviourService, LocationRepository locationRepository,
+            AiControlService aiControlService, JavaPlugin plugin) {
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.guiService = guiService;
@@ -75,7 +75,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
     @Override
     public Collection<String> suggest(CommandSourceStack commandSourceStack, String[] args) {
         return onTabComplete(commandSourceStack.getSender(), null, "blockfolk",
-                args.length == 0 ? new String[] { "" } : args);
+                args.length == 0 ? new String[]{""} : args);
     }
 
     @Override
@@ -162,8 +162,8 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
                     aiControlService.resetDefinition(definition);
                 }
             }
-            player.sendMessage(UiText.success(npcCount + (npcCount == 1 ? " NPC" : " NPCs") + " forgot "
-                    + entryCount + (entryCount == 1 ? " memory entry." : " memory entries.")));
+            player.sendMessage(UiText.success(npcCount + (npcCount == 1 ? " NPC" : " NPCs") + " forgot " + entryCount
+                    + (entryCount == 1 ? " memory entry." : " memory entries.")));
             return true;
         }
         if (args.length == 0) {
@@ -234,43 +234,52 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         String action = args[2].toLowerCase(Locale.ROOT);
         switch (action) {
             case "events" -> {
-                if (args.length != 3) return false;
+                if (args.length != 3)
+                    return false;
                 guiService.openBehaviours(player, definition, 0);
             }
             case "combat" -> {
-                if (args.length != 3) return false;
+                if (args.length != 3)
+                    return false;
                 guiService.openFightingEditor(player, definition);
             }
             case "equipment" -> {
-                if (args.length != 3) return false;
+                if (args.length != 3)
+                    return false;
                 guiService.openInventoryEditor(player, definition);
             }
             case "inventory" -> {
-                if (args.length != 3) return false;
+                if (args.length != 3)
+                    return false;
                 guiService.openTemporaryInventoryEditor(player, definition);
             }
             case "delete" -> {
-                if (args.length != 3) return false;
+                if (args.length != 3)
+                    return false;
                 int count = instanceRegistry.findByDefinition(definition).size();
                 guiService.deleteDefinition(definition);
-                player.sendMessage(UiText.success("Deleted '" + definition.getDisplayName() + "' and " + count
-                        + " instance(s)."));
+                player.sendMessage(
+                        UiText.success("Deleted '" + definition.getDisplayName() + "' and " + count + " instance(s)."));
             }
             case "spawn" -> {
-                if (args.length > 4) return false;
+                if (args.length > 4)
+                    return false;
                 Location target = args.length == 4 ? resolveLocation(player, args[3]) : player.getLocation();
-                if (target == null) return true;
+                if (target == null)
+                    return true;
                 if (instanceRegistry.spawnPersistent(definition, target) == null)
                     player.sendMessage(UiText.error("Could not spawn the NPC instance."));
                 else
                     player.sendMessage(UiText.success("Spawned '" + definition.getDisplayName() + "'."));
             }
             case "set" -> {
-                if (args.length < 4) return false;
+                if (args.length < 4)
+                    return false;
                 return setNpcProperty(player, definition, args);
             }
             case "tp" -> {
-                if (args.length < 4 || args.length > 5) return false;
+                if (args.length < 4 || args.length > 5)
+                    return false;
                 String direction = args[3].toLowerCase(Locale.ROOT);
                 NpcInstance instance = instanceRegistry.findByDefinition(definition).stream().findFirst().orElse(null);
                 if (instance == null) {
@@ -284,22 +293,27 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
                         player.sendMessage(UiText.error("Could not teleport to the NPC."));
                 } else if (direction.equals("here") && args.length == 4
                         || direction.equals("toloc") && args.length == 5) {
-                    Location target = direction.equals("here") ? player.getLocation() : resolveLocation(player, args[4]);
+                    Location target = direction.equals("here")
+                            ? player.getLocation()
+                            : resolveLocation(player, args[4]);
                     if (target != null)
                         player.sendMessage(instanceRegistry.relocate(instance, target)
                                 ? UiText.success("Teleported the NPC.")
                                 : UiText.error("Could not teleport the NPC."));
-                } else return false;
+                } else
+                    return false;
             }
             case "memory" -> {
-                if (args.length != 4) return false;
+                if (args.length != 4)
+                    return false;
                 switch (args[3].toLowerCase(Locale.ROOT)) {
                     case "open" -> guiService.openMemories(player, definition);
                     case "clear" -> {
                         definition.clearAiMemories();
                         definitionRepository.save(definition);
                         aiControlService.resetDefinition(definition);
-                        player.sendMessage(UiText.success("Cleared memories for '" + definition.getDisplayName() + "'."));
+                        player.sendMessage(
+                                UiText.success("Cleared memories for '" + definition.getDisplayName() + "'."));
                     }
                     case "on", "off" -> {
                         boolean enabled = args[3].equalsIgnoreCase("on");
@@ -307,10 +321,14 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
                         definitionRepository.save(definition);
                         player.sendMessage(UiText.success("AI memory " + (enabled ? "enabled" : "disabled") + "."));
                     }
-                    default -> { return false; }
+                    default -> {
+                        return false;
+                    }
                 }
             }
-            default -> { return false; }
+            default -> {
+                return false;
+            }
         }
         return true;
     }
@@ -319,19 +337,24 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         String property = args[3].toLowerCase(Locale.ROOT);
         switch (property) {
             case "spawnpoint" -> {
-                if (args.length > 5) return false;
+                if (args.length > 5)
+                    return false;
                 Location location = args.length == 5 ? resolveLocation(player, args[4]) : player.getLocation();
-                if (location == null) return true;
+                if (location == null)
+                    return true;
                 definition.setSpawnpoint(location);
             }
             case "name" -> {
-                if (args.length < 5) return false;
+                if (args.length < 5)
+                    return false;
                 String name = String.join(" ", Arrays.copyOfRange(args, 4, args.length)).trim();
-                if (name.isBlank()) return false;
+                if (name.isBlank())
+                    return false;
                 definition.setDisplayName(name);
             }
             case "color" -> {
-                if (args.length != 5) return false;
+                if (args.length != 5)
+                    return false;
                 try {
                     definition.setColor(NpcColor.valueOf(args[4].toUpperCase(Locale.ROOT).replace('-', '_')));
                 } catch (IllegalArgumentException error) {
@@ -340,25 +363,30 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
                 }
             }
             case "pickupitems" -> {
-                if (args.length != 5) return false;
+                if (args.length != 5)
+                    return false;
                 Boolean value = parseToggle(args[4]);
-                if (value == null) return false;
+                if (value == null)
+                    return false;
                 definition.setItemPickup(value);
             }
             case "health" -> {
-                if (args.length != 5) return false;
+                if (args.length != 5)
+                    return false;
                 try {
                     int health = Integer.parseInt(args[4]);
                     if (health < 0 || health > dev.blockfolk.model.CombatProfile.MAX_HEALTH)
                         throw new NumberFormatException();
                     definition.setCombatProfile(definition.getCombatProfile().withMaxHealth(health));
                 } catch (NumberFormatException error) {
-                    player.sendMessage(UiText.error("Health must be between 0 and "
-                            + dev.blockfolk.model.CombatProfile.MAX_HEALTH + "."));
+                    player.sendMessage(UiText.error(
+                            "Health must be between 0 and " + dev.blockfolk.model.CombatProfile.MAX_HEALTH + "."));
                     return true;
                 }
             }
-            default -> { return false; }
+            default -> {
+                return false;
+            }
         }
         definitionRepository.save(definition);
         instanceRegistry.refreshDefinition(definition);
@@ -367,7 +395,8 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
     }
 
     private Location resolveLocation(Player player, String name) {
-        if (name.equalsIgnoreCase("here")) return player.getLocation();
+        if (name.equalsIgnoreCase("here"))
+            return player.getLocation();
         NamedLocation saved = locationRepository.find(name).orElse(null);
         if (saved == null) {
             player.sendMessage(UiText.error("Unknown saved location: " + name));
@@ -390,8 +419,10 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (!sender.hasPermission("blockfolk.admin")) {
-            if (!(sender instanceof Player)) return List.of();
-            if (args.length == 1) return filter(List.of("config"), args[0]);
+            if (!(sender instanceof Player))
+                return List.of();
+            if (args.length == 1)
+                return filter(List.of("config"), args[0]);
             if (args.length == 2 && args[0].equalsIgnoreCase("config"))
                 return filter(List.of("ai"), args[1]);
             if (args.length == 3 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("ai"))
@@ -421,8 +452,8 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return filter(customEventRepository.findAll().stream().map(CustomEvent::getName).toList(), args[2]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("npc")) {
-            return filter(List.of("edit", "set", "tp", "inventory", "memory", "events", "combat", "equipment",
-                    "delete", "spawn", "duplicate"), args[2]);
+            return filter(List.of("edit", "set", "tp", "inventory", "memory", "events", "combat", "equipment", "delete",
+                    "spawn", "duplicate"), args[2]);
         }
         if (args.length == 4 && args[0].equalsIgnoreCase("npc")) {
             return switch (args[2].toLowerCase(Locale.ROOT)) {

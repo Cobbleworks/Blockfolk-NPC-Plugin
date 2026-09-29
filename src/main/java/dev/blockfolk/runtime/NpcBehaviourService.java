@@ -392,15 +392,15 @@ public final class NpcBehaviourService implements Listener {
             return;
         }
         Location previousMoveTarget = action.type() == BehaviourActionType.MOVE_TO
-                ? moveTargets.get(instance.getId()) : null;
+                ? moveTargets.get(instance.getId())
+                : null;
         execute(event, action, instance, definition, actor, eventDetail);
         if (action.type() == BehaviourActionType.MOVE_TO) {
             Location target = moveTargets.get(instance.getId());
             if (target != null && target != previousMoveTarget) {
                 pendingMoves.computeIfAbsent(instance.getId(), ignored -> new ArrayList<>())
-                        .add(new PendingMove(target, currentTick + MOVE_TO_TIMEOUT_TICKS,
-                                () -> executeSequence(event, actions, index + 1, instance, definition, actor,
-                                        eventDetail, completion)));
+                        .add(new PendingMove(target, currentTick + MOVE_TO_TIMEOUT_TICKS, () -> executeSequence(event,
+                                actions, index + 1, instance, definition, actor, eventDetail, completion)));
                 return;
             }
         }
@@ -503,9 +503,11 @@ public final class NpcBehaviourService implements Listener {
         instances.stand(instance);
         Entity actor = event instanceof EntityDamageByEntityEvent byEntity ? damageActor(byEntity.getDamager()) : null;
         LivingEntity npc = instances.findEntity(instance).orElse(null);
-        String attackerName = actor == null ? null : instances.findByEntityId(actor.getEntityId())
-                .flatMap(attacker -> definitions.find(attacker.getDefinitionKey()))
-                .map(NpcDefinition::getDisplayName).orElse(actor.getName());
+        String attackerName = actor == null
+                ? null
+                : instances.findByEntityId(actor.getEntityId())
+                        .flatMap(attacker -> definitions.find(attacker.getDefinitionKey()))
+                        .map(NpcDefinition::getDisplayName).orElse(actor.getName());
         String detail = "The NPC took " + String.format(java.util.Locale.ROOT, "%.1f", event.getFinalDamage())
                 + " damage" + (attackerName == null ? "." : " from " + attackerName + ".")
                 + (npc == null
@@ -524,14 +526,15 @@ public final class NpcBehaviourService implements Listener {
             return;
         }
         Location location = victim.getLocation();
-        Entity attacker = event instanceof EntityDamageByEntityEvent byEntity ? damageActor(byEntity.getDamager()) : null;
+        Entity attacker = event instanceof EntityDamageByEntityEvent byEntity
+                ? damageActor(byEntity.getDamager())
+                : null;
         String detail = victim.getName() + " took "
                 + String.format(java.util.Locale.ROOT, "%.1f", event.getFinalDamage()) + " damage"
                 + (attacker == null ? "." : " from " + attacker.getName() + ".");
         for (NpcInstance observer : instances.findActive()) {
             Location observerLocation = instances.currentLocation(observer);
-            if (observer.getEntityId() == victim.getEntityId()
-                    || observerLocation.getWorld() != location.getWorld()
+            if (observer.getEntityId() == victim.getEntityId() || observerLocation.getWorld() != location.getWorld()
                     || observerLocation.distanceSquared(location) > NEARBY_AGGRESSION_RANGE_SQUARED) {
                 continue;
             }
@@ -601,8 +604,8 @@ public final class NpcBehaviourService implements Listener {
     }
 
     public boolean isChatMuted(Player player) {
-        return Byte.valueOf((byte) 1).equals(player.getPersistentDataContainer()
-                .get(mutedChatKey, PersistentDataType.BYTE));
+        return Byte.valueOf((byte) 1)
+                .equals(player.getPersistentDataContainer().get(mutedChatKey, PersistentDataType.BYTE));
     }
 
     public void setChatMuted(Player player, boolean muted) {
@@ -804,7 +807,8 @@ public final class NpcBehaviourService implements Listener {
                     instances.stopNavigating(instance);
                 }
                 case REMEMBER_FACT -> aiControlService.rememberFact(definition, action.text());
-                case REMEMBER_LOCATION -> aiControlService.rememberLocation(instance, definition, action.locationName());
+                case REMEMBER_LOCATION ->
+                    aiControlService.rememberLocation(instance, definition, action.locationName());
                 case DROP_ITEM -> dropAiInventoryItem(instance, action.target());
                 case DO_NOTHING -> {
                 }
@@ -1049,8 +1053,7 @@ public final class NpcBehaviourService implements Listener {
         List<PendingMove> moves = pendingMoves.get(instance.getId());
         if (moves == null)
             return;
-        List<PendingMove> ready = moves.stream()
-                .filter(move -> move.isReady(currentTick)).toList();
+        List<PendingMove> ready = moves.stream().filter(move -> move.isReady(currentTick)).toList();
         moves.removeAll(ready);
         if (moves.isEmpty())
             pendingMoves.remove(instance.getId());

@@ -93,8 +93,8 @@ public final class AiDecisionParser {
         String locationName = string(object, "name", false);
         if (type == AiActionType.SAY && (text == null || text.isBlank()))
             return java.util.Optional.empty();
-        if (type == AiActionType.REMEMBER_LOCATION && (locationName == null || locationName.isBlank()
-                || locationName.length() > 64))
+        if (type == AiActionType.REMEMBER_LOCATION
+                && (locationName == null || locationName.isBlank() || locationName.length() > 64))
             return java.util.Optional.empty();
         if (target != null && !validTarget(type, target))
             return java.util.Optional.empty();
