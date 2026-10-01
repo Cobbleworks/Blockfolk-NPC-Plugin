@@ -4,6 +4,8 @@ import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 
 final class MeleeNpcAttack implements NpcAttack {
 
@@ -22,7 +24,15 @@ final class MeleeNpcAttack implements NpcAttack {
     @Override
     public void execute(LivingEntity attacker, LivingEntity target) {
         attacker.swingMainHand();
-        target.damage(damage(attacker.getEquipment().getItemInMainHand()), attacker);
+        PotionEffect weakness = attacker.getPotionEffect(PotionEffectType.WEAKNESS);
+        double damage = weakenedDamage(damage(attacker.getEquipment().getItemInMainHand()),
+                weakness == null ? -1 : weakness.getAmplifier());
+        if (damage > 0)
+            target.damage(damage, attacker);
+    }
+
+    static double weakenedDamage(double damage, int weaknessAmplifier) {
+        return weaknessAmplifier < 0 ? damage : Math.max(0.0, damage - 4.0 * (weaknessAmplifier + 1.0));
     }
 
     static double damage(ItemStack weapon) {

@@ -37,6 +37,7 @@ import org.bukkit.util.Vector;
 
 import dev.blockfolk.combat.NpcAttack;
 import dev.blockfolk.combat.NpcAttackSelector;
+import dev.blockfolk.combat.NpcSpecialAttackService;
 import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.FightOptions;
@@ -64,6 +65,7 @@ public final class NpcCombatService implements Listener {
     private final NpcInstanceRegistry instanceRegistry;
     private final NativeNpcNavigationService navigationService;
     private final NpcAttackSelector attackSelector = new NpcAttackSelector();
+    private final NpcSpecialAttackService specialAttackService = new NpcSpecialAttackService();
     private final Map<UUID, CombatState> states = new HashMap<>();
     private final Map<UUID, BukkitTask> pendingRespawns = new HashMap<>();
     private final Map<UUID, BossBar> bossBars = new HashMap<>();
@@ -104,6 +106,7 @@ public final class NpcCombatService implements Listener {
         pendingRespawns.values().forEach(BukkitTask::cancel);
         pendingRespawns.clear();
         states.clear();
+        specialAttackService.clear();
         bossBars.values().forEach(BossBar::removeAll);
         bossBars.clear();
         fightOptionsOverrides.clear();
@@ -285,6 +288,7 @@ public final class NpcCombatService implements Listener {
             LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
             if (definition == null || npc == null || !npc.isValid() || npc.isDead()) {
                 states.remove(instance.getId());
+                specialAttackService.cancelCast(instance.getId());
                 fightOptionsOverrides.remove(instance.getId());
                 continue;
             }
@@ -315,6 +319,7 @@ public final class NpcCombatService implements Listener {
             }
         }
         states.keySet().retainAll(activeInstances);
+        specialAttackService.retainInstances(activeInstances);
         fightOptionsOverrides.keySet().retainAll(activeInstances);
         bossBars.entrySet().removeIf(entry -> {
             if (activeBossBars.contains(entry.getKey()))
@@ -392,6 +397,20 @@ public final class NpcCombatService implements Listener {
             return;
         }
         double distanceSquared = npc.getLocation().distanceSquared(target.getLocation());
+        FightOptions options = fightOptions(instance, definition.getCombatProfile());
+        if (specialAttackService.tick(instance.getId(), npc, target, options.specialAttacks(),
+                victim -> isAttackable(instance, victim)
+                        && (victim.getUniqueId().equals(target.getUniqueId()) || isSelectedTarget(victim, options)),
+                currentTick)) {
+            instanceRegistry.stopNavigating(instance);
+            state.navigationTarget = null;
+            state.retreating = false;
+            state.lastProgressLocation = npc.getLocation();
+            state.lastProgressAt = currentTick;
+            state.nextAttackAt = Math.max(state.nextAttackAt, currentTick + 10);
+            face(npc, target);
+            return;
+        }
         ItemStack mainHand = definition.getMainHand();
         ItemStack offHand = definition.getOffHand();
         boolean swap = attackSelector.useOffHand(mainHand, offHand, distanceSquared);
@@ -467,6 +486,12 @@ public final class NpcCombatService implements Listener {
                 && (mode != CombatMode.FIGHT || !previous.entityId.equals(entity.getUniqueId()))) {
             releaseMobTarget(instance, previous);
         }
+        if (!enteringCombat && mode == CombatMode.FIGHT) {
+            // Incoming hits must not restart attacks, pursuit timers, or pending casts.
+            instanceRegistry.findEntity(instance).ifPresent(npc -> makeMobFightBack(entity, npc));
+            return;
+        }
+        specialAttackService.cancelCast(instance.getId());
         states.put(instance.getId(), new CombatState(mode, entity.getUniqueId(), entity.getLocation(),
                 currentTick + (mode == CombatMode.FLEE ? FLEE_TICKS : Long.MAX_VALUE), currentTick));
         if (mode == CombatMode.FIGHT) {
@@ -574,6 +599,7 @@ public final class NpcCombatService implements Listener {
     }
 
     private void clearState(NpcInstance instance) {
+        specialAttackService.cancelCast(instance.getId());
         CombatState removed = states.remove(instance.getId());
         if (removed != null) {
             restoreEquipment(instance);

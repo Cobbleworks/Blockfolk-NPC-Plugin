@@ -7,6 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class MeleeNpcAttackTest {
     @Test
+    void fearWeaknessReducesNpcMeleeDamageWithoutMakingItNegative() {
+        assertEquals(4.0, MeleeNpcAttack.weakenedDamage(8.0, 0));
+        assertEquals(0.0, MeleeNpcAttack.weakenedDamage(2.0, 0));
+        assertEquals(0.0, MeleeNpcAttack.weakenedDamage(8.0, 1));
+        assertEquals(8.0, MeleeNpcAttack.weakenedDamage(8.0, -1));
+    }
+
+    @Test
     void usesVanillaMeleeDamageForCommonWeapons() {
         assertEquals(4.0, MeleeNpcAttack.baseDamage(Material.WOODEN_SWORD));
         assertEquals(6.0, MeleeNpcAttack.baseDamage(Material.IRON_SWORD));

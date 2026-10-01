@@ -29,6 +29,7 @@ import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
+import dev.blockfolk.model.SpecialAttackOptions;
 import dev.blockfolk.model.MovementProfile;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcColor;
@@ -110,17 +111,7 @@ public final class NpcDefinitionRepository {
         configuration.set("inventory.armor", Arrays.asList(definition.getArmorContents()));
         configuration.set("inventory.main-hand", definition.getMainHand());
         configuration.set("inventory.off-hand", definition.getOffHand());
-        configuration.set("combat.max-health", definition.getCombatProfile().maxHealth());
-        configuration.set("combat.respawn-seconds", definition.getCombatProfile().respawnSeconds());
-        configuration.set("combat.aggression-level",
-                definition.getCombatProfile().attackReaction().name().toLowerCase(Locale.ROOT));
-        configuration.set("combat.targets.mobs", definition.getCombatProfile().targetMobs());
-        configuration.set("combat.targets.animals", definition.getCombatProfile().targetAnimals());
-        configuration.set("combat.targets.players", definition.getCombatProfile().targetPlayers());
-        configuration.set("combat.targets.npcs", definition.getCombatProfile().targetNpcs());
-        configuration.set("combat.alliance", definition.getCombatProfile().alliance());
-        configuration.set("combat.show-boss-bar", definition.getCombatProfile().showBossBar());
-        configuration.set("combat.dropped-experience", definition.getCombatProfile().droppedExperience());
+        writeCombatProfile(configuration, definition.getCombatProfile());
         configuration.set("movement.speed",
                 definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
         configuration.set("movement.enabled", definition.getMovementProfile().enabled());
@@ -220,6 +211,36 @@ public final class NpcDefinitionRepository {
         writer.flush();
     }
 
+    static void writeCombatProfile(YamlConfiguration configuration, CombatProfile profile) {
+        configuration.set("combat.max-health", profile.maxHealth());
+        configuration.set("combat.respawn-seconds", profile.respawnSeconds());
+        configuration.set("combat.aggression-level", profile.attackReaction().name().toLowerCase(Locale.ROOT));
+        configuration.set("combat.targets.mobs", profile.targetMobs());
+        configuration.set("combat.targets.animals", profile.targetAnimals());
+        configuration.set("combat.targets.players", profile.targetPlayers());
+        configuration.set("combat.targets.npcs", profile.targetNpcs());
+        configuration.set("combat.alliance", profile.alliance());
+        configuration.set("combat.show-boss-bar", profile.showBossBar());
+        configuration.set("combat.dropped-experience", profile.droppedExperience());
+        configuration.set("combat.special-attacks.enabled", profile.specialAttacks().storedAttacks());
+        configuration.set("combat.special-attacks.interval-seconds", profile.specialAttacks().intervalSeconds());
+    }
+
+    static CombatProfile readCombatProfile(YamlConfiguration configuration) {
+        return new CombatProfile(configuration.getInt("combat.max-health", 0),
+                configuration.getInt("combat.respawn-seconds", 0),
+                AttackReaction.fromStored(configuration.getString("combat.aggression-level")),
+                configuration.getBoolean("combat.targets.mobs", false),
+                configuration.getBoolean("combat.targets.animals", false),
+                configuration.getBoolean("combat.targets.players", false),
+                configuration.getBoolean("combat.targets.npcs", false), configuration.getString("combat.alliance"),
+                configuration.getBoolean("combat.show-boss-bar", false),
+                configuration.getInt("combat.dropped-experience", 0),
+                SpecialAttackOptions.fromStored(configuration.getStringList("combat.special-attacks.enabled"),
+                        configuration.getInt("combat.special-attacks.interval-seconds",
+                                SpecialAttackOptions.DEFAULT_INTERVAL_SECONDS)));
+    }
+
     private NpcDefinition load(File file) {
         YamlConfiguration configuration = YamlConfiguration.loadConfiguration(file);
         String key = configuration.getString("key", file.getName().replaceFirst("\\.yml$", ""));
@@ -234,15 +255,7 @@ public final class NpcDefinitionRepository {
         definition.setArmorContents(readItemArray(configuration, "inventory.armor", 4));
         definition.setMainHand(configuration.getItemStack("inventory.main-hand"));
         definition.setOffHand(configuration.getItemStack("inventory.off-hand"));
-        definition.setCombatProfile(new CombatProfile(configuration.getInt("combat.max-health", 0),
-                configuration.getInt("combat.respawn-seconds", 0),
-                AttackReaction.fromStored(configuration.getString("combat.aggression-level")),
-                configuration.getBoolean("combat.targets.mobs", false),
-                configuration.getBoolean("combat.targets.animals", false),
-                configuration.getBoolean("combat.targets.players", false),
-                configuration.getBoolean("combat.targets.npcs", false), configuration.getString("combat.alliance"),
-                configuration.getBoolean("combat.show-boss-bar", false),
-                configuration.getInt("combat.dropped-experience", 0)));
+        definition.setCombatProfile(readCombatProfile(configuration));
         WalkingSpeed storedSpeed = WalkingSpeed.fromStored(configuration.getString("movement.speed"));
         String storedRoute = configuration.getString("movement.route");
         try {
