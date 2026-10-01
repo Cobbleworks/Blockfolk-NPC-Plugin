@@ -14,6 +14,20 @@ class FighterAttackRepositoryTest {
     java.nio.file.Path folder;
 
     @Test
+    void chargedCastAndNewVisualThemesRoundTripAndOldTimingStillLoads() throws Exception {
+        var charge = FighterTemplates.defaults().get(8).withCastMode(FighterAttack.CastMode.NEXT_ATTACK)
+                .withVisual(FighterAttack.Visual.SPORES);
+        YamlConfiguration yaml = new YamlConfiguration();
+        yaml.loadFromString(FighterAttackRepository.encode(List.of(charge)).saveToString());
+        assertEquals(List.of(charge), FighterAttackRepository.decode(yaml));
+        yaml.loadFromString("attacks:\n  instant:\n    delay-ticks: 0\n  delayed:\n    delay-ticks: 45\n");
+        var old = FighterAttackRepository.decode(yaml);
+        assertEquals(FighterAttack.CastMode.INSTANT, old.get(0).castMode());
+        assertEquals(FighterAttack.CastMode.DELAYED, old.get(1).castMode());
+        assertEquals(45, old.get(1).delayTicks());
+    }
+
+    @Test
     void prefersTheNewAbilityFileAndLoadsLegacyFightersWhenItIsMissing() throws Exception {
         var canonical = folder.resolve("abilities.yml");
         var legacy = folder.resolve("fighters.yml");

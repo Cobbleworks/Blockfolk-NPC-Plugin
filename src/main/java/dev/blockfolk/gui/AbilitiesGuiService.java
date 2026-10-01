@@ -21,6 +21,7 @@ import org.bukkit.inventory.ItemStack;
 
 import dev.blockfolk.combat.NpcSpecialAttackService;
 import dev.blockfolk.fighters.FighterAttack;
+import dev.blockfolk.fighters.AbilityVisuals;
 import dev.blockfolk.fighters.FighterAttack.*;
 import dev.blockfolk.fighters.FighterTemplates;
 import dev.blockfolk.input.ChatInputService;
@@ -46,6 +47,8 @@ public final class AbilitiesGuiService implements Listener {
     }
     private record LibraryHolder(int page, Consumer<Player> back) implements Holder {
     }
+    private record SelectHolder(int page, Consumer<String> select, Consumer<Player> back) implements Holder {
+    }
     private record TemplateHolder(Consumer<Player> back) implements Holder {
     }
     private record EditHolder(String key, Tab tab, Consumer<Player> back) implements Holder {
@@ -67,6 +70,31 @@ public final class AbilitiesGuiService implements Listener {
     public void openAssignments(Player player, SpecialAttackOptions options, Consumer<SpecialAttackOptions> save,
             Consumer<Player> back) {
         assignments(player, new AssignHolder(options, save, back, 0));
+    }
+
+    public void selectAbility(Player player, Consumer<String> select, Consumer<Player> back) {
+        selector(player, new SelectHolder(0, select, back));
+    }
+    public String abilityName(String key) {
+        return repository.find(key).map(FighterAttack::name).orElse(key + " (missing)");
+    }
+
+    private void selector(Player player, SelectHolder holder) {
+        List<FighterAttack> attacks = repository.findAll();
+        int page = page(holder.page(), attacks.size());
+        Inventory inventory = menu(new SelectHolder(page, holder.select(), holder.back()),
+                "Use Ability · Choose Ability");
+        for (int i = page * PAGE_SIZE; i < Math.min(attacks.size(), (page + 1) * PAGE_SIZE); i++) {
+            FighterAttack attack = attacks.get(i);
+            List<String> lore = summary(attack);
+            lore.add(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Use this ability in the action");
+            inventory.setItem(i % PAGE_SIZE, abilityItem(attack, attack.name(), lore));
+        }
+        if (attacks.isEmpty())
+            inventory.setItem(22,
+                    item(Material.BARRIER, "No Abilities", List.of("Create an ability in /bf abilities first")));
+        footer(inventory, page, attacks.size());
+        show(player, inventory);
     }
 
     private void library(Player player, int requestedPage, Consumer<Player> back) {
@@ -150,7 +178,7 @@ public final class AbilitiesGuiService implements Listener {
         Inventory inventory = menu(holder, "Abilities · " + attack.name());
         inventory.setItem(0,
                 item(Material.COMPASS, "Shape & Origin", List.of("Choose where and how the attack is cast")));
-        inventory.setItem(1, item(Material.CLOCK, "Timing", List.of("Instant or delayed cast; individual cooldown")));
+        inventory.setItem(1, item(Material.CLOCK, "Timing", List.of("Instant, delayed, or charged for the next hit")));
         inventory.setItem(2, item(Material.IRON_SWORD, "Damage & Effects",
                 List.of("Combine damage, debuffs, healing, and knockback")));
         inventory.setItem(3,
@@ -172,8 +200,9 @@ public final class AbilitiesGuiService implements Listener {
                 inventory.setItem(53, item(Material.TNT, "Delete Ability", List.of("Requires confirmation")));
             }
             case GEOMETRY -> {
-                inventory.setItem(10, abilityItem(attack, "Shape: " + label(attack.shape()), List
-                        .of(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Cycle sphere, cone, beam, teleport")));
+                inventory.setItem(10, item(shapeIcon(attack.shape()), "Shape: " + label(attack.shape()), List.of(
+                        shapeDescription(attack.shape()),
+                        LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Cycle sphere, cone, beam, teleport")));
                 inventory.setItem(11,
                         item(Material.COMPASS, "Origin: " + label(attack.origin()), List.of(
                                 attack.shape() == Shape.SPHERE
@@ -202,12 +231,17 @@ public final class AbilitiesGuiService implements Listener {
                                         "Teleport chooses a nearby safe landing spot")));
             }
             case TIMING -> {
-                number(inventory, 11, Material.CLOCK, "Cast Delay", attack.delayTicks() / 20.0, "seconds",
-                        "0 fires instantly; movement pauses while casting");
+                if (attack.castMode() != CastMode.NEXT_ATTACK)
+                    number(inventory, 11, Material.CLOCK, "Cast Delay", attack.delayTicks() / 20.0, "seconds",
+                            "Changing this selects instant (0) or delayed casting");
                 number(inventory, 13, Material.REPEATER, "Cooldown", attack.cooldownTicks() / 20.0, "seconds",
-                        "Starts after the cast delay; tracked per NPC");
-                inventory.setItem(15, item(Material.LIGHTNING_ROD, "Make Instant",
-                        List.of(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Set cast delay to zero")));
+                        "For charges, starts again when the charge is released");
+                inventory.setItem(15,
+                        item(modeIcon(attack.castMode()), "Cast Mode: " + modeLabel(attack.castMode()),
+                                List.of(modeDescription(attack.castMode()),
+                                        LegacyText.YELLOW + "Click: " + LegacyText.GRAY
+                                                + "Cycle Instant / Delayed / On Next Attack",
+                                        "Delayed defaults to 1 second; charges expire after 30 seconds")));
             }
             case EFFECTS -> {
                 number(inventory, 10, Material.IRON_SWORD, "Damage", attack.damage(), "HP",
@@ -231,9 +265,10 @@ public final class AbilitiesGuiService implements Listener {
                                 "Cancelled damage also prevents secondary effects")));
             }
             case VISUALS -> inventory.setItem(13,
-                    item(Material.FIREWORK_STAR, "Theme: " + label(attack.visual()),
+                    item(AbilityVisuals.icon(attack.visual()), "Particles: " + label(attack.visual()),
                             List.of(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Cycle particle themes",
-                                    "Sonic uses the Warden blast sound and particles")));
+                                    AbilityVisuals.description(attack.visual()),
+                                    "Visuals only; damage and effects are set separately")));
         }
         inventory.setItem(45, item(Material.BOOK, "Overview", List.of()));
         inventory.setItem(49, item(Material.BARRIER, "Back to Library", List.of()));
@@ -256,7 +291,17 @@ public final class AbilitiesGuiService implements Listener {
         int slot = event.getRawSlot();
         if (slot < 0 || slot >= event.getView().getTopInventory().getSize())
             return;
-        if (holder instanceof LibraryHolder library) {
+        if (holder instanceof SelectHolder select) {
+            List<FighterAttack> attacks = repository.findAll();
+            int index = select.page() * PAGE_SIZE + slot;
+            if (slot < PAGE_SIZE && index < attacks.size() && event.isLeftClick())
+                select.select().accept(attacks.get(index).key());
+            else if (slot == 49)
+                select.back().accept(player);
+            else if (slot == 45 || slot == 53)
+                selector(player,
+                        new SelectHolder(select.page() + (slot == 45 ? -1 : 1), select.select(), select.back()));
+        } else if (holder instanceof LibraryHolder library) {
             List<FighterAttack> attacks = repository.findAll();
             if (slot < PAGE_SIZE && library.page() * PAGE_SIZE + slot < attacks.size()) {
                 FighterAttack attack = attacks.get(library.page() * PAGE_SIZE + slot);
@@ -365,14 +410,14 @@ public final class AbilitiesGuiService implements Listener {
             else if (slot == 15 && attack.shape() == Shape.CONE)
                 numeric(event, player, holder, attack.coneLength(), 1, value -> a -> a.withConeLength(value));
         } else if (holder.tab() == Tab.TIMING) {
-            if (slot == 11)
+            if (slot == 11 && attack.castMode() != CastMode.NEXT_ATTACK)
                 numeric(event, player, holder, attack.delayTicks() / 20.0, 0.25,
                         value -> a -> a.withTiming((int) Math.round(value * 20), a.cooldownTicks()));
             else if (slot == 13)
-                numeric(event, player, holder, attack.cooldownTicks() / 20.0, 1,
-                        value -> a -> a.withTiming(a.delayTicks(), (int) Math.round(value * 20)));
+                numeric(event, player, holder, attack.cooldownTicks() / 20.0, 1, value -> a -> a
+                        .withTiming(a.delayTicks(), (int) Math.round(value * 20)).withCastMode(a.castMode()));
             else if (slot == 15)
-                change(player, holder, a -> a.withTiming(0, a.cooldownTicks()));
+                change(player, holder, a -> a.withCastMode(a.castMode().next()));
         } else if (holder.tab() == Tab.EFFECTS) {
             if (slot >= 19 && slot < 19 + Effect.values().length) {
                 Effect effect = Effect.values()[slot - 19];
@@ -473,16 +518,17 @@ public final class AbilitiesGuiService implements Listener {
                 item(icon, label + ": " + String.format(java.util.Locale.ROOT, "%.2f", value) + " " + unit, lore));
     }
     private static List<String> summary(FighterAttack attack) {
-        List<String> lore = new ArrayList<>(
-                List.of(LegacyText.GRAY + label(attack.shape()) + " · from " + label(attack.origin()),
-                        LegacyText.GRAY + "Range: " + attack.range() + " blocks · Damage: " + attack.damage() + " HP",
-                        LegacyText.GRAY + "Delay: " + attack.delayTicks() / 20.0 + "s · Cooldown: "
-                                + attack.cooldownTicks() / 20.0 + "s",
-                        LegacyText.GRAY + "Effects: "
-                                + (attack.effects().isEmpty()
-                                        ? "None"
-                                        : attack.effects().stream().sorted().map(AbilitiesGuiService::label)
-                                                .collect(java.util.stream.Collectors.joining(", ")))));
+        List<String> lore = new ArrayList<>(List.of(
+                LegacyText.GRAY + label(attack.shape()) + " · from " + label(attack.origin()),
+                LegacyText.GRAY + "Range: " + attack.range() + " blocks · Damage: " + attack.damage() + " HP",
+                LegacyText.GRAY + "Cast: " + modeLabel(attack.castMode())
+                        + (attack.castMode() == CastMode.DELAYED ? " (" + attack.delayTicks() / 20.0 + "s)" : "")
+                        + " · Cooldown: " + attack.cooldownTicks() / 20.0 + "s",
+                LegacyText.GRAY + "Effects: "
+                        + (attack.effects().isEmpty()
+                                ? "None"
+                                : attack.effects().stream().sorted().map(AbilitiesGuiService::label)
+                                        .collect(java.util.stream.Collectors.joining(", ")))));
         if (attack.shape() == Shape.CONE)
             lore.add(1, LegacyText.GRAY + "Cone: " + attack.coneLength() + " blocks · " + attack.angle() + " degrees");
         return lore;
@@ -517,18 +563,46 @@ public final class AbilitiesGuiService implements Listener {
     private static Material icon(FighterAttack attack) {
         if (attack.shape() == Shape.TELEPORT)
             return Material.ENDER_PEARL;
-        return switch (attack.visual()) {
-            case FLAME -> Material.BLAZE_POWDER;
-            case SONIC -> Material.SCULK_SHRIEKER;
-            case ICE -> Material.PACKED_ICE;
-            case POISON -> Material.SPIDER_EYE;
-            case CLOUD -> Material.FEATHER;
-            case BLOOD -> Material.REDSTONE;
-            case LIGHTNING -> Material.LIGHTNING_ROD;
-            case ENDER -> Material.ENDER_PEARL;
-            case SOUL -> Material.SOUL_LANTERN;
+        return AbilityVisuals.icon(attack.visual());
+    }
+    private static Material shapeIcon(Shape shape) {
+        return switch (shape) {
+            case SPHERE -> Material.SLIME_BALL;
+            case CONE -> Material.HOPPER;
+            case BEAM -> Material.END_ROD;
+            case TELEPORT -> Material.ENDER_PEARL;
         };
     }
+    private static String shapeDescription(Shape shape) {
+        return switch (shape) {
+            case SPHERE -> "A round area around the NPC or a marked target position";
+            case CONE -> "A widening cone aimed forwards from the NPC";
+            case BEAM -> "A narrow beam from the NPC that stops at blocks";
+            case TELEPORT -> "Move the NPC to a nearby safe landing spot";
+        };
+    }
+    private static String modeLabel(CastMode mode) {
+        return switch (mode) {
+            case INSTANT -> "Instant";
+            case DELAYED -> "Delayed";
+            case NEXT_ATTACK -> "On Next Attack";
+        };
+    }
+    private static Material modeIcon(CastMode mode) {
+        return switch (mode) {
+            case INSTANT -> Material.LIGHTNING_ROD;
+            case DELAYED -> Material.CLOCK;
+            case NEXT_ATTACK -> Material.ENCHANTED_BOOK;
+        };
+    }
+    private static String modeDescription(CastMode mode) {
+        return switch (mode) {
+            case INSTANT -> "Release the ability immediately";
+            case DELAYED -> "Pause and show casting particles before releasing";
+            case NEXT_ATTACK -> "Charge up; release after a valid weapon hit deals damage";
+        };
+    }
+
     private static ItemStack item(Material material, String name, List<String> lore) {
         return decorate(new ItemStack(material), name, lore);
     }

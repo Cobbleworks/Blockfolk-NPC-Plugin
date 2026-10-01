@@ -27,6 +27,7 @@ class NpcSpecialAttackServiceTest {
     private final UUID instanceId = UUID.randomUUID();
     private List<LivingEntity> nearby = List.of();
     private int lightningEffects;
+    private final List<Location> particlePositions = new java.util.ArrayList<>();
     private Vector beamObstacle;
     private boolean safeLanding = true;
     private boolean chunkLoaded = true;
@@ -39,7 +40,11 @@ class NpcSpecialAttackServiceTest {
             });
     private final World world = (World) Proxy.newProxyInstance(World.class.getClassLoader(),
             new Class<?>[]{World.class}, (proxy, method, args) -> switch (method.getName()) {
-                case "spawnParticle", "playSound" -> null;
+                case "spawnParticle" -> {
+                    particlePositions.add(((Location) args[1]).clone());
+                    yield null;
+                }
+                case "playSound" -> null;
                 case "strikeLightningEffect" -> {
                     lightningEffects++;
                     yield null;
@@ -236,6 +241,149 @@ class NpcSpecialAttackServiceTest {
         assertFalse(NpcSpecialAttackService.safeBlinkDestination(to));
     }
 
+    @Test
+    void scriptedDelayedAbilityWorksWithoutAnAssignmentOrCombatOpponent() {
+        var options = SpecialAttackOptions.disabled();
+        assertEquals(20, service.useAbility(instanceId, npc.entity, target.entity, "lightning_mark", options,
+                victim -> true, 0));
+        assertTrue(service.isCasting(instanceId));
+        assertTrue(service.tick(instanceId, npc.entity, null, options, victim -> true, 4));
+        assertEquals(20, target.health);
+        assertTrue(particlePositions.stream().anyMatch(location -> location.getX() < 1 && location.getY() > 0.5));
+        assertTrue(service.tick(instanceId, npc.entity, null, options, victim -> true, 20));
+        assertEquals(14, target.health);
+        assertFalse(service.isCasting(instanceId));
+        assertEquals(-1, service.useAbility(instanceId, npc.entity, target.entity, "lightning_mark", options,
+                victim -> true, 21));
+    }
+
+    @Test
+    void scriptedNpcSphereNeedsNoTargetButAimedAndTargetOriginAbilitiesDo() {
+        var options = SpecialAttackOptions.disabled();
+        assertEquals(-1, service.useAbility(instanceId, npc.entity, null, "sonic_blast", options, victim -> true, 0));
+        assertEquals(-1,
+                service.useAbility(instanceId, npc.entity, null, "lightning_mark", options, victim -> true, 0));
+        nearby = List.of(target.entity);
+        assertEquals(10, service.useAbility(instanceId, npc.entity, null, "shockwave", options, victim -> true, 0));
+        assertTrue(service.tick(instanceId, npc.entity, null, options, victim -> true, 10));
+        assertEquals(16, target.health);
+    }
+
+    @Test
+    void chargeAllowsWeaponCombatAndReleasesOnlyOnceAtTheActualHitPosition() {
+        FighterAttack charge = FighterTemplates.defaults().stream().filter(a -> a.key().equals("lightning_mark"))
+                .findFirst().orElseThrow().withCastMode(FighterAttack.CastMode.NEXT_ATTACK)
+                .withEffects(4, Set.of(), 3, 1, 0);
+        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(charge), (id, to) -> false,
+                victim -> {
+                });
+        var options = SpecialAttackOptions.disabled().toggle(charge.key()).withIntervalSeconds(3);
+        assertFalse(local.tick(instanceId, npc.entity, target.entity, options, victim -> true, 0));
+        assertFalse(local.tick(instanceId, npc.entity, target.entity, options, victim -> true, 60));
+        UUID token = local.chargeId(instanceId);
+        assertNotNull(token);
+        assertFalse(local.isCasting(instanceId));
+        assertFalse(local.tick(instanceId, npc.entity, target.entity, options, victim -> true, 64));
+        assertEquals(20, target.health);
+        assertFalse(local.onSuccessfulWeaponHit(instanceId, token, npc.entity, target.entity, options, victim -> false,
+                65));
+        assertEquals(token, local.chargeId(instanceId));
+        target.x = 6; // Target moved after charging: impact must follow the hit, not the old marker.
+        assertTrue(
+                local.onSuccessfulWeaponHit(instanceId, token, npc.entity, target.entity, options, victim -> true, 66));
+        assertEquals(16, target.health);
+        assertNull(local.chargeId(instanceId));
+        assertFalse(
+                local.onSuccessfulWeaponHit(instanceId, token, npc.entity, target.entity, options, victim -> true, 67));
+        assertEquals(16, target.health);
+        long readyAt = 66 + charge.cooldownTicks();
+        assertEquals(-1, local.useAbility(instanceId, npc.entity, target.entity, charge.key(), options, victim -> true,
+                readyAt - 1));
+        assertEquals(0, local.useAbility(instanceId, npc.entity, target.entity, charge.key(), options, victim -> true,
+                readyAt));
+    }
+
+    @Test
+    void cancelledBonusDamageConsumesTheChargeWithoutApplyingSecondaryEffects() {
+        FighterAttack charge = FighterTemplates.defaults().get(8).withCastMode(FighterAttack.CastMode.NEXT_ATTACK);
+        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(charge), (id, to) -> false,
+                victim -> {
+                });
+        var options = SpecialAttackOptions.disabled();
+        local.useAbility(instanceId, npc.entity, null, charge.key(), options, victim -> true, 0);
+        UUID token = local.chargeId(instanceId);
+        target.cancelDamage = true;
+        target.noDamageTicks = 10;
+        assertTrue(
+                local.onSuccessfulWeaponHit(instanceId, token, npc.entity, target.entity, options, victim -> true, 1));
+        assertNull(local.chargeId(instanceId));
+        assertEquals(20, target.health);
+        assertEquals(0, target.fireTicks);
+        assertEquals(10, target.noDamageTicks);
+    }
+
+    @Test
+    void staleHitTokensCannotReleaseAReplacedChargeAndChargesExpire() {
+        FighterAttack charge = FighterTemplates.defaults().get(8).withCastMode(FighterAttack.CastMode.NEXT_ATTACK);
+        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(charge), (id, to) -> false,
+                victim -> {
+                });
+        var options = SpecialAttackOptions.disabled();
+        assertEquals(0, local.useAbility(instanceId, npc.entity, null, charge.key(), options, victim -> true, 0));
+        UUID stale = local.chargeId(instanceId);
+        local.cancelCast(instanceId);
+        assertEquals(0, local.useAbility(instanceId, npc.entity, null, charge.key(), options, victim -> true, 300));
+        UUID fresh = local.chargeId(instanceId);
+        assertNotEquals(stale, fresh);
+        assertFalse(local.onSuccessfulWeaponHit(instanceId, stale, npc.entity, target.entity, options, victim -> true,
+                301));
+        assertEquals(fresh, local.chargeId(instanceId));
+        assertFalse(local.tick(instanceId, npc.entity, null, options, victim -> true, 900));
+        assertNull(local.chargeId(instanceId));
+        assertEquals(20, target.health);
+    }
+
+    @Test
+    void editingDeletingOrUnassigningAnAbilityPreventsAQueuedHitFromReleasingIt() {
+        FighterAttack charge = FighterTemplates.defaults().get(8).withCastMode(FighterAttack.CastMode.NEXT_ATTACK);
+        List<FighterAttack> library = new java.util.ArrayList<>(List.of(charge));
+        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> library, (id, to) -> false, victim -> {
+        });
+        var options = SpecialAttackOptions.disabled().toggle(charge.key()).withIntervalSeconds(3);
+        local.tick(instanceId, npc.entity, target.entity, options, victim -> true, 0);
+        local.tick(instanceId, npc.entity, target.entity, options, victim -> true, 60);
+        UUID token = local.chargeId(instanceId);
+        assertFalse(local.onSuccessfulWeaponHit(instanceId, token, npc.entity, target.entity,
+                SpecialAttackOptions.disabled(), victim -> true, 61));
+        library.set(0, charge.withName("Changed"));
+        assertFalse(
+                local.onSuccessfulWeaponHit(instanceId, token, npc.entity, target.entity, options, victim -> true, 61));
+        library.clear();
+        assertFalse(
+                local.onSuccessfulWeaponHit(instanceId, token, npc.entity, target.entity, options, victim -> true, 61));
+        assertEquals(20, target.health);
+    }
+
+    @Test
+    void scriptedChargesSurviveEnteringCombatWithoutAutomaticAssignment() {
+        FighterAttack charge = FighterTemplates.defaults().get(8).withCastMode(FighterAttack.CastMode.NEXT_ATTACK);
+        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(charge), (id, to) -> false,
+                victim -> {
+                });
+        var options = SpecialAttackOptions.disabled();
+        assertEquals(0, local.useAbility(instanceId, npc.entity, null, charge.key(), options, victim -> true, 0));
+        UUID token = local.chargeId(instanceId);
+        local.cancelAutomaticCast(instanceId);
+        assertFalse(local.tick(instanceId, npc.entity, target.entity, options, victim -> true, 4));
+        assertEquals(token, local.chargeId(instanceId));
+        target.noDamageTicks = 10;
+        assertTrue(
+                local.onSuccessfulWeaponHit(instanceId, token, npc.entity, target.entity, options, victim -> true, 5));
+        assertEquals(10, target.noDamageTicks);
+        assertEquals(16, target.health);
+        assertEquals(60, target.fireTicks);
+    }
+
     private Block block(boolean floor) {
         return (Block) Proxy.newProxyInstance(Block.class.getClassLoader(), new Class<?>[]{Block.class},
                 (proxy, method, args) -> switch (method.getName()) {
@@ -261,6 +409,7 @@ class NpcSpecialAttackServiceTest {
         private double x;
         private double z;
         private int fireTicks;
+        private int noDamageTicks;
         private double health = 20;
         private boolean lineOfSight = true;
         private boolean cancelDamage;
@@ -277,6 +426,11 @@ class NpcSpecialAttackServiceTest {
                         case "getWorld" -> world;
                         case "getHealth" -> health;
                         case "getFireTicks" -> fireTicks;
+                        case "getNoDamageTicks" -> noDamageTicks;
+                        case "setNoDamageTicks" -> {
+                            noDamageTicks = (Integer) args[0];
+                            yield null;
+                        }
                         case "setFireTicks" -> {
                             fireTicks = (Integer) args[0];
                             yield null;
@@ -292,7 +446,7 @@ class NpcSpecialAttackServiceTest {
                         }
                         case "damage" -> {
                             damager = args[1];
-                            if (!cancelDamage)
+                            if (!cancelDamage && noDamageTicks == 0)
                                 health = Math.max(0, health - (Double) args[0]);
                             yield null;
                         }

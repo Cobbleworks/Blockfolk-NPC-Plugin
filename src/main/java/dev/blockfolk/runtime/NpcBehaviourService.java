@@ -391,6 +391,16 @@ public final class NpcBehaviourService implements Listener {
             askQuestion(event, actions, index, action, instance, definition, actor, eventDetail, completion);
             return;
         }
+        if (action.type() == BehaviourActionType.USE_ABILITY) {
+            int delay = combatService == null ? -1 : combatService.useAbility(instance, action.value(), actor);
+            Runnable next = () -> executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail,
+                    completion);
+            if (delay > 0)
+                Bukkit.getScheduler().runTaskLater(plugin, next, delay + 1L);
+            else
+                next.run();
+            return;
+        }
         Location previousMoveTarget = action.type() == BehaviourActionType.MOVE_TO
                 ? moveTargets.get(instance.getId())
                 : null;
@@ -690,6 +700,10 @@ public final class NpcBehaviourService implements Listener {
                 if (combatService != null) {
                     combatService.startCombat(instance, actor);
                 }
+            }
+            case USE_ABILITY -> {
+                if (combatService != null)
+                    combatService.useAbility(instance, action.value(), actor);
             }
             case CHANGE_FIGHT_OPTIONS -> {
                 if (combatService != null) {

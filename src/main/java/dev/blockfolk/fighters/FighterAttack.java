@@ -11,7 +11,7 @@ import org.bukkit.inventory.ItemStack;
  */
 public record FighterAttack(String key, String name, Origin origin, Shape shape, double range, double size,
         double angle, int delayTicks, int cooldownTicks, double damage, Set<Effect> effects, int effectSeconds,
-        int effectLevel, double knockback, Visual visual, double coneLength, ItemStack icon) {
+        int effectLevel, double knockback, Visual visual, double coneLength, ItemStack icon, CastMode castMode) {
     public enum Origin {
         NPC, TARGET;
         public Origin next() {
@@ -24,11 +24,17 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
             return values()[(ordinal() + 1) % values().length];
         }
     }
+    public enum CastMode {
+        INSTANT, DELAYED, NEXT_ATTACK;
+        public CastMode next() {
+            return values()[(ordinal() + 1) % values().length];
+        }
+    }
     public enum Effect {
         FIRE, POISON, SLOWNESS, WITHER, BLINDNESS, WEAKNESS, LIFE_DRAIN, KNOCKBACK
     }
     public enum Visual {
-        FLAME, SONIC, SOUL, ICE, POISON, CLOUD, BLOOD, LIGHTNING, ENDER;
+        FLAME, SONIC, SOUL, ICE, POISON, CLOUD, BLOOD, LIGHTNING, ENDER, ENCHANT, HEARTS, SMOKE, SOUL_FLAME, BUBBLES, SPORES, TOTEM;
         public Visual next() {
             return values()[(ordinal() + 1) % values().length];
         }
@@ -51,6 +57,8 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
         size = bounded(size, shape == Shape.TELEPORT ? 1 : 0.25, 8, 2);
         angle = bounded(angle, 10, 160, 60);
         delayTicks = Math.clamp(delayTicks, 0, 200);
+        castMode = castMode == null ? (delayTicks == 0 ? CastMode.INSTANT : CastMode.DELAYED) : castMode;
+        delayTicks = castMode == CastMode.DELAYED ? Math.max(1, delayTicks) : 0;
         cooldownTicks = Math.clamp(cooldownTicks, 20, 2400);
         damage = bounded(damage, 0, 100, 4);
         effects = effects == null ? Set.of() : Set.copyOf(effects);
@@ -64,7 +72,20 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
             int delayTicks, int cooldownTicks, double damage, Set<Effect> effects, int effectSeconds, int effectLevel,
             double knockback, Visual visual) {
         this(key, name, origin, shape, range, size, angle, delayTicks, cooldownTicks, damage, effects, effectSeconds,
-                effectLevel, knockback, visual, range, null);
+                effectLevel, knockback, visual, range, null, null);
+    }
+
+    public FighterAttack(String key, String name, Origin origin, Shape shape, double range, double size, double angle,
+            int delayTicks, int cooldownTicks, double damage, Set<Effect> effects, int effectSeconds, int effectLevel,
+            double knockback, Visual visual, double coneLength, ItemStack icon) {
+        this(key, name, origin, shape, range, size, angle, delayTicks, cooldownTicks, damage, effects, effectSeconds,
+                effectLevel, knockback, visual, coneLength, icon, null);
+    }
+
+    public FighterAttack withCastMode(CastMode mode) {
+        int delay = mode == CastMode.DELAYED ? (delayTicks > 0 ? delayTicks : 20) : 0;
+        return new FighterAttack(key, name, origin, shape, range, size, angle, delay, cooldownTicks, damage, effects,
+                effectSeconds, effectLevel, knockback, visual, coneLength, icon, mode);
     }
 
     @Override
@@ -78,12 +99,12 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
 
     public FighterAttack withConeLength(double length) {
         return new FighterAttack(key, name, origin, shape, range, size, angle, delayTicks, cooldownTicks, damage,
-                effects, effectSeconds, effectLevel, knockback, visual, length, icon);
+                effects, effectSeconds, effectLevel, knockback, visual, length, icon, castMode);
     }
 
     public FighterAttack withIcon(ItemStack item) {
         return new FighterAttack(key, name, origin, shape, range, size, angle, delayTicks, cooldownTicks, damage,
-                effects, effectSeconds, effectLevel, knockback, visual, coneLength, item);
+                effects, effectSeconds, effectLevel, knockback, visual, coneLength, item, castMode);
     }
 
     public static String normalizeKey(String value) {
@@ -97,26 +118,27 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
     }
     public FighterAttack withName(String value) {
         return new FighterAttack(key, value, origin, shape, range, size, angle, delayTicks, cooldownTicks, damage,
-                effects, effectSeconds, effectLevel, knockback, visual, coneLength, icon);
+                effects, effectSeconds, effectLevel, knockback, visual, coneLength, icon, castMode);
     }
     public FighterAttack copy(String newKey, String newName) {
         return new FighterAttack(newKey, newName, origin, shape, range, size, angle, delayTicks, cooldownTicks, damage,
-                effects, effectSeconds, effectLevel, knockback, visual, coneLength, icon);
+                effects, effectSeconds, effectLevel, knockback, visual, coneLength, icon, castMode);
     }
     public FighterAttack withGeometry(Origin origin, Shape shape, double range, double size, double angle) {
         return new FighterAttack(key, name, origin, shape, range, size, angle, delayTicks, cooldownTicks, damage,
-                effects, effectSeconds, effectLevel, knockback, visual, coneLength, icon);
+                effects, effectSeconds, effectLevel, knockback, visual, coneLength, icon, castMode);
     }
     public FighterAttack withTiming(int delay, int cooldown) {
         return new FighterAttack(key, name, origin, shape, range, size, angle, delay, cooldown, damage, effects,
-                effectSeconds, effectLevel, knockback, visual, coneLength, icon);
+                effectSeconds, effectLevel, knockback, visual, coneLength, icon,
+                castMode == CastMode.NEXT_ATTACK ? castMode : null);
     }
     public FighterAttack withEffects(double damage, Set<Effect> effects, int duration, int level, double knockback) {
         return new FighterAttack(key, name, origin, shape, range, size, angle, delayTicks, cooldownTicks, damage,
-                effects, duration, level, knockback, visual, coneLength, icon);
+                effects, duration, level, knockback, visual, coneLength, icon, castMode);
     }
     public FighterAttack withVisual(Visual visual) {
         return new FighterAttack(key, name, origin, shape, range, size, angle, delayTicks, cooldownTicks, damage,
-                effects, effectSeconds, effectLevel, knockback, visual, coneLength, icon);
+                effects, effectSeconds, effectLevel, knockback, visual, coneLength, icon, castMode);
     }
 }

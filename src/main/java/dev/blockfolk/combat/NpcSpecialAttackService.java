@@ -28,13 +28,14 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.Vector;
 
 import dev.blockfolk.fighters.AttackGeometry;
+import dev.blockfolk.fighters.AbilityVisuals;
 import dev.blockfolk.fighters.FighterAttack;
 import dev.blockfolk.fighters.FighterAttack.*;
 import dev.blockfolk.fighters.FighterTemplates;
 import dev.blockfolk.model.SpecialAttackOptions;
 
 /**
- * Executes shared Fighter definitions on the combat tick, with per-instance
+ * Executes shared ability definitions on the combat tick, with per-instance
  * casting state.
  */
 public final class NpcSpecialAttackService {
@@ -55,29 +56,49 @@ public final class NpcSpecialAttackService {
         this.beforeKnockback = beforeKnockback;
     }
 
-    /** True while casting or firing, to pause weapon attacks and navigation. */
+    private int executionDepth;
+    private static final int CHARGE_TIMEOUT_TICKS = 30 * 20;
+
+    /**
+     * True while a delayed cast or impact pauses weapon combat. Charges never pause
+     * it.
+     */
     public boolean tick(UUID instanceId, LivingEntity npc, LivingEntity target, SpecialAttackOptions options,
             Predicate<LivingEntity> canHit, long tick) {
-        List<FighterAttack> library = definitions.get();
         Cast cast = casts.get(instanceId);
-        if (cast != null && (!options.assignedAttackKeys().contains(cast.attack().key())
-                || !cast.targetId().equals(target.getUniqueId()) || cast.center().getWorld() != npc.getWorld()
-                || !library.contains(cast.attack()))) {
+        if (cast == null && target == null)
+            return false;
+        List<FighterAttack> library = definitions.get();
+        LivingEntity castTarget = cast != null && cast.scripted() ? cast.target() : target;
+        if (cast != null && (!library.contains(cast.attack()) || cast.center().getWorld() != npc.getWorld()
+                || (!cast.scripted() && (!options.assignedAttackKeys().contains(cast.attack().key()) || target == null
+                        || cast.target() == null || !cast.target().getUniqueId().equals(target.getUniqueId())))
+                || (cast.attack().castMode() != CastMode.NEXT_ATTACK && castTarget != null && (!castTarget.isValid()
+                        || castTarget.isDead() || castTarget.getWorld() != npc.getWorld())))) {
             casts.remove(instanceId);
             cast = null;
         }
         if (cast != null) {
+            if (cast.attack().castMode() == CastMode.NEXT_ATTACK) {
+                if (tick >= cast.impactAt())
+                    casts.remove(instanceId);
+                else if (tick % 4 == 0)
+                    casterParticles(npc, cast.attack(), tick, true);
+                return false;
+            }
             if (tick < cast.impactAt()) {
-                if (tick % 4 == 0)
+                if (tick % 4 == 0) {
                     visualize(cast.attack(), source(npc, cast), cast.direction(), false);
+                    casterParticles(npc, cast.attack(), tick, false);
+                }
             } else {
                 casts.remove(instanceId);
-                if (canHit.test(target) && npc.hasLineOfSight(target))
-                    execute(instanceId, npc, target, cast, canHit);
+                if (castTarget == null || (canHit.test(castTarget) && npc.hasLineOfSight(castTarget)))
+                    execute(instanceId, npc, castTarget, cast, canHit);
             }
             return true;
         }
-        if (options.assignedAttackKeys().isEmpty() || !npc.hasLineOfSight(target))
+        if (target == null || options.assignedAttackKeys().isEmpty() || !npc.hasLineOfSight(target))
             return false;
         SpecialAttackScheduler scheduler = schedulers.computeIfAbsent(instanceId,
                 ignored -> new SpecialAttackScheduler(tick, options));
@@ -85,22 +106,123 @@ public final class NpcSpecialAttackService {
                 npc.getLocation().distanceSquared(target.getLocation()), ThreadLocalRandom.current());
         if (attack == null)
             return false;
-        Vector direction = target.getEyeLocation().toVector().subtract(npc.getEyeLocation().toVector());
+        begin(instanceId, npc, target, attack, canHit, tick, false);
+        return attack.castMode() != CastMode.NEXT_ATTACK;
+    }
+
+    /**
+     * Explicit casts do not require random assignment or active combat. Returns
+     * delay, or -1 if unavailable.
+     */
+    public int useAbility(UUID instanceId, LivingEntity npc, LivingEntity target, String key,
+            SpecialAttackOptions options, Predicate<LivingEntity> canHit, long tick) {
+        FighterAttack attack = definitions.get().stream().filter(a -> a.key().equals(key)).findFirst().orElse(null);
+        if (attack == null || casts.containsKey(instanceId))
+            return -1;
+        boolean needsTarget = attack.castMode() != CastMode.NEXT_ATTACK
+                && (attack.origin() == Origin.TARGET || attack.shape() == Shape.CONE || attack.shape() == Shape.BEAM);
+        if (target != null
+                && (!canHit.test(target) || target.getWorld() != npc.getWorld() || !npc.hasLineOfSight(target)
+                        || npc.getLocation().distanceSquared(target.getLocation()) > attack.range() * attack.range()))
+            target = null;
+        if (needsTarget && target == null)
+            return -1;
+        SpecialAttackScheduler scheduler = schedulers.computeIfAbsent(instanceId,
+                ignored -> new SpecialAttackScheduler(tick, options));
+        if (!scheduler.isReady(key, tick))
+            return -1;
+        scheduler.markUsed(attack, tick);
+        begin(instanceId, npc, target, attack, canHit, tick, true);
+        return attack.delayTicks();
+    }
+
+    private void begin(UUID id, LivingEntity npc, LivingEntity target, FighterAttack attack,
+            Predicate<LivingEntity> canHit, long tick, boolean scripted) {
+        Cast cast = createCast(npc, target, attack, tick, scripted);
+        if (attack.castMode() == CastMode.INSTANT)
+            execute(id, npc, target, cast, canHit);
+        else {
+            casts.put(id, cast);
+            boolean charged = attack.castMode() == CastMode.NEXT_ATTACK;
+            casterParticles(npc, attack, tick, charged);
+            if (!charged)
+                visualize(attack, cast.center(), cast.direction(), false);
+            npc.getWorld().playSound(npc.getLocation(), "minecraft:entity.evoker.prepare_attack", 0.7f, 1.3f);
+        }
+    }
+
+    private static Cast createCast(LivingEntity npc, LivingEntity target, FighterAttack attack, long tick,
+            boolean scripted) {
+        Vector direction = target == null
+                ? npc.getEyeLocation().getDirection()
+                : target.getEyeLocation().toVector().subtract(npc.getEyeLocation().toVector());
         if (direction.lengthSquared() < 0.01)
             direction = npc.getLocation().getDirection();
         direction.normalize();
-        Location center = attack.origin() == Origin.TARGET ? target.getLocation().clone() : origin(npc, attack);
-        cast = new Cast(attack, target.getUniqueId(), center, direction, tick + attack.delayTicks());
-        if (attack.delayTicks() == 0)
-            execute(instanceId, npc, target, cast, canHit);
-        else {
-            casts.put(instanceId, cast);
-            visualize(attack, center, direction, false);
-            npc.getWorld().playSound(npc.getLocation(), "minecraft:entity.evoker.prepare_attack", 0.7f, 1.3f);
-        }
+        Location center = attack.origin() == Origin.TARGET && target != null
+                ? target.getLocation().clone()
+                : origin(npc, attack);
+        return new Cast(attack, target, center, direction,
+                tick + (attack.castMode() == CastMode.NEXT_ATTACK ? CHARGE_TIMEOUT_TICKS : attack.delayTicks()),
+                scripted, UUID.randomUUID());
+    }
+
+    public LivingEntity scriptedTarget(UUID id) {
+        Cast cast = casts.get(id);
+        return cast != null && cast.scripted() ? cast.target() : null;
+    }
+
+    public UUID chargeId(UUID id) {
+        Cast cast = casts.get(id);
+        return cast != null && cast.attack().castMode() == CastMode.NEXT_ATTACK ? cast.id() : null;
+    }
+
+    public boolean isExecutingAbility() {
+        return executionDepth > 0;
+    }
+
+    /**
+     * Called only after a non-cancelled weapon hit actually removed health or
+     * absorption.
+     */
+    public boolean onSuccessfulWeaponHit(UUID id, UUID chargeId, LivingEntity npc, LivingEntity victim,
+            SpecialAttackOptions options, Predicate<LivingEntity> canHit, long tick) {
+        Cast cast = casts.get(id);
+        if (cast == null || !cast.id().equals(chargeId) || cast.attack().castMode() != CastMode.NEXT_ATTACK
+                || tick >= cast.impactAt() || !definitions.get().contains(cast.attack())
+                || !cast.scripted() && !options.assignedAttackKeys().contains(cast.attack().key()) || !npc.isValid()
+                || npc.isDead() || victim.getWorld() != npc.getWorld() || !canHit.test(victim))
+            return false;
+        casts.remove(id); // Consume before damage events so the effect cannot recursively trigger itself.
+        schedulers.get(id).markUsed(cast.attack(), tick);
+        execute(id, npc, victim, createCast(npc, victim, cast.attack(), tick, cast.scripted()), canHit);
         return true;
     }
 
+    private static void casterParticles(LivingEntity npc, FighterAttack attack, long tick, boolean charged) {
+        Particle particle = attack.visual() == Visual.SONIC
+                ? Particle.ELECTRIC_SPARK
+                : AbilityVisuals.particle(attack.visual());
+        Location center = npc.getLocation().add(0, 1, 0);
+        for (int i = 0; i < 6; i++) {
+            double angle = tick * 0.16 + i * Math.PI / 3;
+            npc.getWorld().spawnParticle(particle,
+                    center.clone().add(Math.cos(angle) * 0.6, Math.sin(angle * 2) * 0.35, Math.sin(angle) * 0.6), 1, 0,
+                    0, 0, 0);
+        }
+        if (charged)
+            npc.getWorld().spawnParticle(Particle.ENCHANT, npc.getEyeLocation(), 4, 0.25, 0.25, 0.25, 0);
+    }
+
+    public boolean isCasting(UUID id) {
+        Cast cast = casts.get(id);
+        return cast != null && cast.attack().castMode() == CastMode.DELAYED;
+    }
+    public void cancelAutomaticCast(UUID id) {
+        Cast cast = casts.get(id);
+        if (cast != null && !cast.scripted())
+            casts.remove(id);
+    }
     public void cancelCast(UUID id) {
         casts.remove(id);
     }
@@ -121,6 +243,16 @@ public final class NpcSpecialAttackService {
     }
     private void execute(UUID instanceId, LivingEntity npc, LivingEntity target, Cast cast,
             Predicate<LivingEntity> canHit) {
+        executionDepth++;
+        try {
+            executeImpact(instanceId, npc, target, cast, canHit);
+        } finally {
+            executionDepth--;
+        }
+    }
+
+    private void executeImpact(UUID instanceId, LivingEntity npc, LivingEntity target, Cast cast,
+            Predicate<LivingEntity> canHit) {
         FighterAttack attack = cast.attack();
         Location center = source(npc, cast);
         if (attack.shape() == Shape.TELEPORT) {
@@ -134,7 +266,8 @@ public final class NpcSpecialAttackService {
             return;
         Set<LivingEntity> victims = new LinkedHashSet<>(center.getNearbyLivingEntities(
                 attack.shape() == Shape.SPHERE ? attack.size() : attack.reach() + attack.size()));
-        victims.add(target);
+        if (target != null)
+            victims.add(target);
         double drained = 0;
         for (LivingEntity victim : victims) {
             if (!npc.isValid() || npc.isDead())
@@ -145,7 +278,9 @@ public final class NpcSpecialAttackService {
             if (!AttackGeometry.contains(attack, hitPoint.toVector().subtract(center.toVector()), cast.direction(),
                     range))
                 continue;
-            Hit hit = hit(npc, victim, attack.damage());
+            Hit hit = attack.castMode() == CastMode.NEXT_ATTACK && victim.equals(target)
+                    ? chargedHit(npc, victim, attack.damage())
+                    : hit(npc, victim, attack.damage());
             if (!hit.allowed())
                 continue;
             if (attack.effects().contains(Effect.LIFE_DRAIN))
@@ -181,6 +316,21 @@ public final class NpcSpecialAttackService {
             var maxHealth = npc.getAttribute(Attribute.MAX_HEALTH);
             if (maxHealth != null)
                 npc.setHealth(Math.min(maxHealth.getValue(), npc.getHealth() + drained));
+        }
+    }
+
+    private Hit chargedHit(LivingEntity npc, LivingEntity target, double amount) {
+        if (amount == 0)
+            return hit(npc, target, 0);
+        // The weapon hit just opened vanilla's hurt-immunity window. Permit this
+        // bonus hit, then restore the window; normal damage/protection events still
+        // run.
+        int previous = target.getNoDamageTicks();
+        target.setNoDamageTicks(0);
+        try {
+            return hit(npc, target, amount);
+        } finally {
+            target.setNoDamageTicks(Math.max(previous, target.getNoDamageTicks()));
         }
     }
 
@@ -268,7 +418,7 @@ public final class NpcSpecialAttackService {
     private static void visualize(FighterAttack attack, Location center, Vector direction, boolean impact) {
         Particle particle = !impact && attack.visual() == Visual.SONIC
                 ? Particle.ELECTRIC_SPARK
-                : particle(attack.visual());
+                : AbilityVisuals.particle(attack.visual());
         if (attack.shape() == Shape.SPHERE || attack.shape() == Shape.TELEPORT) {
             for (int i = 0; i < 24; i++) {
                 double angle = i * Math.PI / 12;
@@ -309,21 +459,9 @@ public final class NpcSpecialAttackService {
                             : "minecraft:entity.evoker.cast_spell",
                     0.7f, 1.1f);
     }
-    private static Particle particle(Visual visual) {
-        return switch (visual) {
-            case FLAME -> Particle.FLAME;
-            case SONIC -> Particle.SONIC_BOOM;
-            case SOUL -> Particle.SOUL;
-            case ICE -> Particle.SNOWFLAKE;
-            case POISON -> Particle.WITCH;
-            case CLOUD -> Particle.CLOUD;
-            case BLOOD -> Particle.DAMAGE_INDICATOR;
-            case LIGHTNING -> Particle.ELECTRIC_SPARK;
-            case ENDER -> Particle.PORTAL;
-        };
-    }
     private record Hit(boolean allowed, double damage) {
     }
-    private record Cast(FighterAttack attack, UUID targetId, Location center, Vector direction, long impactAt) {
+    private record Cast(FighterAttack attack, LivingEntity target, Location center, Vector direction, long impactAt,
+            boolean scripted, UUID id) {
     }
 }

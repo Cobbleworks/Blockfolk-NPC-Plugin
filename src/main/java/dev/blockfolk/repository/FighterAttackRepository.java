@@ -63,7 +63,7 @@ public final class FighterAttackRepository {
 
     static YamlConfiguration encode(List<FighterAttack> attacks) {
         YamlConfiguration yaml = new YamlConfiguration();
-        yaml.set("version", 2);
+        yaml.set("version", 3);
         ConfigurationSection root = yaml.createSection("attacks");
         for (FighterAttack attack : attacks) {
             ConfigurationSection section = root.createSection(attack.key());
@@ -76,6 +76,7 @@ public final class FighterAttackRepository {
             section.set("size", attack.size());
             section.set("angle", attack.angle());
             section.set("delay-ticks", attack.delayTicks());
+            section.set("cast-mode", attack.castMode().name());
             section.set("cooldown-ticks", attack.cooldownTicks());
             section.set("damage", attack.damage());
             section.set("effects", attack.effects().stream().sorted().map(Enum::name).toList());
@@ -106,7 +107,8 @@ public final class FighterAttackRepository {
                     section.getInt("effect-seconds", 3), section.getInt("effect-level", 1),
                     section.getDouble("knockback", 0.8),
                     enumValue(Visual.class, section.getString("visual"), Visual.SOUL),
-                    section.getDouble("cone-length", section.getDouble("range", 8)), section.getItemStack("icon")));
+                    section.getDouble("cone-length", section.getDouble("range", 8)), section.getItemStack("icon"),
+                    enumValue(CastMode.class, section.getString("cast-mode"), null)));
         }
         return attacks;
     }

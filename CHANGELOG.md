@@ -6,6 +6,9 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Added
 
+- Use Ability behaviour action with a shared-library selector for event routines, waypoint actions, and question branches.
+- Instant, Delayed, and On Next Attack cast modes, with successful-hit charge triggers, caster particles, charge indicators, and saved timing modes.
+- Enchant, Hearts, Smoke, Soul Flame, Bubbles, Spores, and Totem visual themes, plus changing icons and descriptions for particle and shape selectors.
 - Custom ability icons copied from a held item with Q / Drop, and separately configurable cone length.
 - Dedicated Abilities library and template editor, available through `/bf abilities` and the main menu, with per-NPC attack assignments and previews.
 - Custom attack origins, spherical areas, aimed cones, beams that stop at blocks, safe short-range teleports, instant or delayed casts, cooldowns, damage, combined effects, and visual themes.

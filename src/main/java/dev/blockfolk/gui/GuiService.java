@@ -113,7 +113,8 @@ public final class GuiService implements Listener {
             Map.entry(21, BehaviourActionType.TAKE_ITEM), Map.entry(22, BehaviourActionType.SHOW_INVENTORY),
             Map.entry(23, BehaviourActionType.DROP_INVENTORY), Map.entry(24, BehaviourActionType.HARVEST),
             // Combat
-            Map.entry(28, BehaviourActionType.START_COMBAT), Map.entry(29, BehaviourActionType.CHANGE_FIGHT_OPTIONS));
+            Map.entry(28, BehaviourActionType.START_COMBAT), Map.entry(29, BehaviourActionType.CHANGE_FIGHT_OPTIONS),
+            Map.entry(30, BehaviourActionType.USE_ABILITY));
     private static final int ACTION_PICKER_ANIMATIONS_SLOT = 32;
     private static final int ACTION_PICKER_BACK_SLOT = 49;
     private static final String AI_TRIGGER_PROMPT_INPUT = "ai_trigger_prompt";
@@ -1988,6 +1989,12 @@ public final class GuiService implements Listener {
             beginRouteWaypointSelection(player, action, type);
         } else if (type == BehaviourActionType.WAIT) {
             requestRouteWaitAction(player, action);
+        } else if (type == BehaviourActionType.USE_ABILITY) {
+            abilitiesGuiService.selectAbility(player, key -> {
+                RoutePoint updated = setRoutePointAction(action, type, key);
+                if (updated != null)
+                    openWaypointActions(player, action.routeKey(), updated);
+            }, p -> openRoutePointActionPicker(p, action));
         } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             requestRouteFightOptionsAction(player, action);
         } else if (!type.requiresValue()) {
@@ -2207,6 +2214,13 @@ public final class GuiService implements Listener {
             beginWaypointSelection(player, holder, type);
         } else if (type == BehaviourActionType.WAIT) {
             requestWaitAction(player, definition, holder);
+        } else if (type == BehaviourActionType.USE_ABILITY) {
+            abilitiesGuiService.selectAbility(player,
+                    key -> definitionRepository.find(holder.key()).ifPresent(current -> {
+                        setAction(current, holder, type, key);
+                        openBehaviourHome(player, current, holder);
+                    }), p -> definitionRepository.find(holder.key()).ifPresent(current -> openActionPicker(p, current,
+                            holder.event(), holder.customEvent(), holder.actionIndex(), holder.page())));
         } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             requestFightOptionsAction(player, definition, holder);
         } else if (!type.requiresValue()) {
@@ -3021,6 +3035,13 @@ public final class GuiService implements Listener {
             return;
         if (type == null)
             return;
+        if (type == BehaviourActionType.USE_ABILITY) {
+            abilitiesGuiService.selectAbility(player, key -> {
+                setQuestionBranchAction(holder, new BehaviourAction(type, key));
+                openAfterQuestionBranchPicker(player, holder);
+            }, p -> openQuestionBranchPicker(p, holder.target(), holder.optionIndex(), holder.actionIndex()));
+            return;
+        }
         if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             List<BehaviourAction> branch = questionBranch(questionAction(holder.target()).question(),
                     holder.optionIndex());
@@ -3652,6 +3673,7 @@ public final class GuiService implements Listener {
             case SET_ROUTE -> Material.RAIL;
             case RUN_CONSOLE_COMMAND -> Material.COMMAND_BLOCK;
             case START_COMBAT -> Material.DIAMOND_SWORD;
+            case USE_ABILITY -> Material.ENCHANTED_BOOK;
             case CHANGE_FIGHT_OPTIONS -> Material.TARGET;
             case START_NAVIGATION -> Material.COMPASS;
             case STOP_NAVIGATION -> Material.BARRIER;
@@ -3692,6 +3714,7 @@ public final class GuiService implements Listener {
             case SET_ROUTE -> "Assigns a route and starts following it";
             case RUN_CONSOLE_COMMAND -> "Runs a configured command as the server";
             case START_COMBAT -> "Starts combat with the triggering entity";
+            case USE_ABILITY -> "Casts a selected ability or charges it for the next hit";
             case CHANGE_FIGHT_OPTIONS -> "Changes aggression and target settings";
             case START_NAVIGATION -> "Starts or resumes route navigation";
             case STOP_NAVIGATION -> "Pauses the current route navigation";
@@ -3732,6 +3755,9 @@ public final class GuiService implements Listener {
         }
         if (action.type() == BehaviourActionType.MOVE_TO || action.type() == BehaviourActionType.TELEPORT_TO) {
             return ActionLocation.parse(action.value()).map(ActionLocation::display).orElse("Invalid waypoint");
+        }
+        if (action.type() == BehaviourActionType.USE_ABILITY) {
+            return abilitiesGuiService.abilityName(action.value());
         }
         if (action.type() == BehaviourActionType.WAIT) {
             return action.value() + " seconds";

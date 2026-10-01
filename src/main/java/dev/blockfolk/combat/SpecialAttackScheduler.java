@@ -19,6 +19,14 @@ public final class SpecialAttackScheduler {
         intervalSeconds = options.intervalSeconds();
         nextAttemptAt = tick + intervalSeconds * 20L;
     }
+    public boolean isReady(String key, long tick) {
+        return tick >= readyAt.getOrDefault(key, 0L);
+    }
+
+    public void markUsed(FighterAttack attack, long tick) {
+        readyAt.put(attack.key(), tick + attack.delayTicks() + attack.cooldownTicks());
+    }
+
     public SpecialAttack select(long tick, SpecialAttackOptions options, double distanceSquared,
             RandomGenerator random) {
         FighterAttack selected = select(tick, options, FighterTemplates.defaults(), distanceSquared, random);
@@ -43,7 +51,7 @@ public final class SpecialAttackScheduler {
             return null;
         }
         FighterAttack selected = available.get(random.nextInt(available.size()));
-        readyAt.put(selected.key(), tick + selected.delayTicks() + selected.cooldownTicks());
+        markUsed(selected, tick);
         int intervalTicks = intervalSeconds * 20;
         nextAttemptAt = tick + selected.delayTicks() + Math.max(SpecialAttackOptions.MIN_INTERVAL_SECONDS * 20,
                 intervalTicks + random.nextInt(intervalTicks / 2 + 1) - intervalTicks / 4);

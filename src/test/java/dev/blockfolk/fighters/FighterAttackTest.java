@@ -8,6 +8,21 @@ import dev.blockfolk.fighters.FighterAttack.*;
 
 class FighterAttackTest {
     @Test
+    void castModesHaveSafeDefaultsAndSurviveCopiesAndOtherEdits() {
+        FighterAttack delayed = FighterTemplates.defaults().get(8);
+        assertEquals(CastMode.DELAYED, delayed.castMode());
+        FighterAttack instant = delayed.withCastMode(CastMode.INSTANT);
+        assertEquals(0, instant.delayTicks());
+        assertEquals(20, instant.withCastMode(CastMode.DELAYED).delayTicks());
+        FighterAttack charge = delayed.withCastMode(CastMode.NEXT_ATTACK);
+        assertEquals(0, charge.delayTicks());
+        assertEquals(CastMode.NEXT_ATTACK, charge.copy("copied", "Copy").withName("New name").withVisual(Visual.ENCHANT)
+                .withTiming(0, 300).withConeLength(12).withIcon(null).castMode());
+        assertEquals(CastMode.INSTANT, delayed.withTiming(0, 100).castMode());
+        assertEquals(CastMode.DELAYED, instant.withTiming(40, 100).castMode());
+    }
+
+    @Test
     void clampsUntrustedNumbersAndOwnsItsEffects() {
         Set<Effect> effects = new HashSet<>(Set.of(Effect.FIRE));
         FighterAttack attack = new FighterAttack(" Test Laser! ", "Laser", Origin.TARGET, Shape.BEAM, Double.NaN,

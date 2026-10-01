@@ -27,21 +27,23 @@ Hold the desired item in your main hand, then hover an ability in the library, t
 
 **Activation Range** controls how close the opponent must be before the NPC chooses that attack. For beams, it also controls the length of the attack. **Cone Length** is a separate setting from 1–24 blocks; changing it does not change activation range. Sphere radius is separate, so a four-block defensive area can have a different activation range.
 
-NPC spheres follow the caster throughout the delay. Target spheres keep the marked position. Cones and beams lock their aim when casting begins, so moving sideways can avoid them. A sphere hits eligible entities inside its radius, a cone hits eligible entities in front, and a beam hits eligible entities along its width. All offensive shapes check line of sight and alliance/target rules.
+NPC spheres follow the caster throughout the delay. Target spheres keep the marked position. Delayed cones and beams lock their aim when casting begins, so moving sideways can avoid them. Charged abilities aim when the successful weapon hit releases them. The shape selector uses distinct icons for spheres, cones, beams, and teleport. A sphere hits eligible entities inside its radius, a cone hits eligible entities in front, and a beam hits eligible entities along its width. All offensive shapes check line of sight and alliance/target rules.
 
 Teleport checks loaded chunks, world bounds, the world border, clear space for the NPC, solid ground, and common landing hazards. It searches nearby positions with limited vertical changes. If no safe destination exists, the NPC stays in place. Teleport preserves the NPC's preset spawnpoint and rebuilds its navigator from the new position. Teleport does not apply damage or effects to other entities.
 
 ## Timing
 
-- **Cast Delay:** `0` fires instantly. Delays up to 10 seconds pause movement and weapon combat and show a shape-specific warning.
-- **Cooldown:** 1–120 seconds, counted after the cast delay. Each instance maintains its own cooldown for each attack, including across opponent changes.
+- **Cast Mode:** click to cycle **Instant → Delayed → On Next Attack**. Instant releases immediately. Switching to Delayed applies a one-second default delay.
+- **Cast Delay:** adjustable in instant/delayed mode, up to 10 seconds. Setting it to `0` selects Instant. A delayed cast pauses movement and weapon combat, shows the affected shape, and surrounds the caster with particles.
+- **On Next Attack:** surrounds the NPC with themed particles and enchantment glyphs while letting it move and use weapons. The next valid melee or projectile hit that removes health or absorption consumes the charge and releases the ability towards that victim's current position. Missed, cancelled, and fully blocked hits leave the charge armed. Charges expire after 30 seconds and are cleared when combat ends, the opponent changes, or the NPC disappears.
+- **Cooldown:** 1–120 seconds, counted after the cast delay. Charged abilities restart their cooldown when released. Each instance maintains its own cooldown for each ability, including across opponent changes.
 - **Usage Interval:** configured on the NPC assignment screen, from 3–60 seconds, defaulting to about 8 seconds. It varies by up to 25%, with a three-second minimum. Ready attacks are chosen randomly; weapon combat continues between casts.
 
 Changing or deleting a definition during a cast interrupts that cast. Leaving combat, changing opponents, losing a valid target, or unassigning the attack also prevents its pending impact.
 
 ## Damage and effects
 
-Damage uses health points: **2 HP = 1 heart**. Configure damage from 0 to 100 HP. A zero-damage attack can still apply effects. Armour, resistance, immunity, and cancelled damage events affect normal damaging hits.
+Damage uses health points: **2 HP = 1 heart**. Configure damage from 0 to 100 HP. A zero-damage attack can still apply effects. Armour, resistance, immunity, and cancelled damage events affect normal damaging hits. A charged ability permits its bonus damage through the triggering hit’s brief hurt-immunity window, then restores that window; damage protection and resistance still apply.
 
 Toggle any combination of these effects:
 
@@ -60,11 +62,15 @@ All victims must be attackable. The current opponent is eligible; collateral vic
 
 The library initially contains **11 editable templates**: Life Drain, Freezing Spell, Poison Spit, Wither Curse, Flame Burst, Lightning Mark, Defensive Shockwave, Fear, Fire Breath, Sonic Blast, and Reposition Blink.
 
-Choose Flame, Sonic, Soul, Ice, Poison, Cloud, Blood, Lightning, or Ender particles. Sonic uses the Warden's sonic boom particles and sound; its damage and shape are configured by the attack definition. Lightning is a visual strike; the NPC owns the configured damage.
+The **Particles** selector changes its icon and description for the selected theme. Choose Flame, Sonic, Soul, Ice, Poison, Cloud, Blood, Lightning, Ender, Enchant, Hearts, Smoke, Soul Flame, Bubbles, Spores, or Totem particles. These themes change the visuals; configure damage and gameplay effects separately. Sonic uses the Warden's sonic boom particles and sound; its damage and shape are configured by the attack definition. Lightning is a visual strike; the NPC owns the configured damage.
 
 Numeric controls use **left-click to increase**, **right-click to decrease**, **shift-click for five steps**, and **middle-click to enter a number**. Values are bounded to the supported ranges. Edits save immediately.
 
 ## Behaviours and storage
+
+**Use Ability** is available in ordinary and custom event routines, waypoint actions, and question branches. It opens an ability selector and stores the chosen ability's stable key. The NPC can cast it without assigning it for random combat use. Cooldowns are shared with automatic casts, and an NPC can have one delayed cast or charge at a time.
+
+Targeted abilities use the current combat opponent, otherwise a valid triggering actor, otherwise the nearest selected target in sight. They require a target within activation range. NPC-centred spheres, teleport, and charging can run without an opponent, including on invulnerable NPCs. Collateral targets still follow alliance and target-category rules. Missing definitions or unavailable casts are skipped. A delayed action waits for its cast before the sequence continues; an instant or charge action continues immediately. For example, **Use Ability (On Next Attack) → Start Combat** arms the NPC before engaging the triggering actor.
 
 **Change Fight Options → Abilities** uses the same assignment screen for behaviour routines, waypoint actions, and question branches. It temporarily replaces the NPC's assigned attacks and usage interval.
 
