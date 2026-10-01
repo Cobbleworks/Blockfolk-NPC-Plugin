@@ -46,7 +46,6 @@ import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.FightOptions;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
-import dev.blockfolk.model.SpecialAttack;
 import dev.blockfolk.model.SpecialAttackOptions;
 import dev.blockfolk.model.CustomEvent;
 import dev.blockfolk.model.LootTier;
@@ -143,6 +142,7 @@ public final class GuiService implements Listener {
     private final NpcCreationDialog creationDialog;
     private NpcBehaviourService behaviourService;
     private AiControlService aiControlService;
+    private FightersGuiService fightersGuiService;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
     private final Map<String, String> pendingSkinUrls = new HashMap<>();
     private final Map<UUID, WaypointSession> waypointSessions = new HashMap<>();
@@ -175,6 +175,14 @@ public final class GuiService implements Listener {
         this.reorderIconKey = new NamespacedKey(plugin, "reorder-definition");
         this.aiGuiService = new AiGuiService(plugin, definitionRepository, chatInputService, this::openEditor);
         this.creationDialog = new NpcCreationDialog(plugin, definitionRepository, instanceRegistry, this::openEditor);
+    }
+
+    public void setFightersGuiService(FightersGuiService service) {
+        fightersGuiService = service;
+    }
+
+    public void openFighters(Player player) {
+        fightersGuiService.open(player);
     }
 
     public void setBehaviourService(NpcBehaviourService behaviourService) {
@@ -343,6 +351,10 @@ public final class GuiService implements Listener {
                 item(Material.POWERED_RAIL, "Manage Routes",
                         List.of(LegacyText.GRAY + "Create and edit NPC walking routes",
                                 LegacyText.YELLOW + "Click to open route setup")));
+        inventory.setItem(48,
+                item(Material.IRON_SWORD, "Fighters",
+                        List.of(LegacyText.GRAY + "Build shared attacks and assign them to NPCs",
+                                LegacyText.YELLOW + "Click to open")));
         inventory.setItem(46,
                 item(Material.BELL, "Custom Events",
                         List.of(LegacyText.GRAY + "Define events NPCs can emit and react to",
@@ -729,109 +741,34 @@ public final class GuiService implements Listener {
     }
 
     private ItemStack specialAttacksItem(SpecialAttackOptions options) {
-        return item(Material.BLAZE_POWDER, "Special Attacks",
-                List.of(LegacyText.GRAY + "Enabled: " + LegacyText.WHITE + options.enabled().size() + "/"
-                        + SpecialAttack.values().length,
+        return item(Material.BLAZE_POWDER, "Fighter Attacks",
+                List.of(LegacyText.GRAY + "Assigned: " + LegacyText.WHITE + options.assignedAttackKeys().size(),
                         LegacyText.GRAY + "Interval: about " + options.intervalSeconds() + " seconds",
                         LegacyText.YELLOW + "Click to configure"));
     }
 
-    private void openSpecialAttacks(Player player, SpecialAttacksHolder holder) {
-        NpcDefinition definition = holder.key() == null ? null : definitionRepository.find(holder.key()).orElse(null);
-        if (holder.key() != null && definition == null) {
-            player.closeInventory();
-            return;
-        }
-        SpecialAttackOptions options = definition == null
-                ? holder.action().options().specialAttacks()
-                : definition.getCombatProfile().specialAttacks();
-        Inventory inventory = Bukkit.createInventory(holder, 36, UiText.title("Special Attacks"));
-        for (SpecialAttack attack : SpecialAttack.values()) {
-            boolean enabled = options.enabled().contains(attack);
-            inventory.setItem(10 + attack.ordinal(),
-                    item(specialAttackMaterial(attack), attack.displayName(),
-                            List.of(enabled ? LegacyText.GREEN + "Enabled" : LegacyText.RED + "Disabled",
-                                    LegacyText.GRAY + attack.description(),
-                                    LegacyText.GRAY + "Range: " + (int) Math.sqrt(attack.rangeSquared()) + " blocks",
-                                    LegacyText.GRAY + "Cooldown: " + attack.cooldownTicks() / 20 + " seconds",
-                                    LegacyText.YELLOW + "Click to toggle")));
-        }
-        inventory.setItem(22,
-                item(Material.BOOK, "How Special Attacks Work",
-                        List.of(LegacyText.GRAY + "Randomly mixes enabled attacks with weapon combat",
-                                LegacyText.GRAY + "Each attack has its own cooldown",
-                                LegacyText.GRAY + "A particle ring warns of impact for 1 second",
-                                LegacyText.GRAY + "Move out of the ring to dodge",
-                                LegacyText.GRAY + "Requires Max Health above 0 and active combat")));
-        inventory.setItem(28,
-                item(Material.RED_DYE, "Use More Often",
-                        List.of(LegacyText.YELLOW + "Click to decrease interval by 1 second",
-                                LegacyText.DARK_GRAY + "Shift-click for 5 seconds")));
-        inventory.setItem(29,
-                item(Material.CLOCK, "Interval: about " + options.intervalSeconds() + " Seconds",
-                        List.of(LegacyText.GRAY + "Varies by up to 25% between uses",
-                                LegacyText.GRAY + "Adjustable from 3 to 60 seconds",
-                                LegacyText.GRAY + "Individual cooldowns still apply")));
-        inventory.setItem(30,
-                item(Material.LIME_DYE, "Use Less Often",
-                        List.of(LegacyText.YELLOW + "Click to increase interval by 1 second",
-                                LegacyText.DARK_GRAY + "Shift-click for 5 seconds")));
-        inventory.setItem(31, item(Material.BARRIER, "Back", List.of()));
-        openInventory(player, inventory);
-    }
-
-    private Material specialAttackMaterial(SpecialAttack attack) {
-        return switch (attack) {
-            case LIFE_DRAIN -> Material.REDSTONE;
-            case FREEZING_SPELL -> Material.PACKED_ICE;
-            case POISON_SPIT -> Material.SPIDER_EYE;
-            case WITHER_CURSE -> Material.WITHER_ROSE;
-            case FLAME_BURST -> Material.BLAZE_POWDER;
-            case LIGHTNING_MARK -> Material.LIGHTNING_ROD;
-            case SHOCKWAVE -> Material.ANVIL;
-            case FEAR -> Material.CARVED_PUMPKIN;
-        };
-    }
-
-    private void handleSpecialAttacksClick(InventoryClickEvent event, Player player, SpecialAttacksHolder holder) {
-        event.setCancelled(true);
-        if (!isTopInventoryClick(event))
-            return;
-        NpcDefinition definition = holder.key() == null ? null : definitionRepository.find(holder.key()).orElse(null);
-        if (holder.key() != null && definition == null) {
-            player.closeInventory();
-            return;
-        }
-        if (event.getRawSlot() == 31) {
-            if (definition != null)
-                openFightingEditor(player, definition);
-            else
-                openFightOptionsAction(player, holder.action());
-            return;
-        }
-        SpecialAttackOptions current = definition == null
-                ? holder.action().options().specialAttacks()
-                : definition.getCombatProfile().specialAttacks();
-        SpecialAttackOptions updated;
-        int attackIndex = event.getRawSlot() - 10;
-        if (attackIndex >= 0 && attackIndex < SpecialAttack.values().length) {
-            updated = current.toggle(SpecialAttack.values()[attackIndex]);
-        } else if (event.getRawSlot() == 28 || event.getRawSlot() == 30) {
-            int change = (event.isShiftClick() ? 5 : 1) * (event.getRawSlot() == 28 ? -1 : 1);
-            updated = current.withIntervalSeconds(current.intervalSeconds() + change);
-        } else
-            return;
-        if (definition != null) {
-            definition.setCombatProfile(definition.getCombatProfile().withSpecialAttacks(updated));
-            definitionRepository.save(definition);
-            openSpecialAttacks(player, holder);
-        } else {
-            FightOptionsActionHolder action = saveFightOptionsAction(holder.action(),
-                    holder.action().options().withSpecialAttacks(updated));
-            if (action == null)
+    private void openSpecialAttacks(Player player, SpecialAttacksHolder context) {
+        if (context.key() != null) {
+            NpcDefinition definition = definitionRepository.find(context.key()).orElse(null);
+            if (definition == null) {
                 player.closeInventory();
-            else
-                openSpecialAttacks(player, new SpecialAttacksHolder(null, action));
+                return;
+            }
+            fightersGuiService.openAssignments(player, definition.getCombatProfile().specialAttacks(), options -> {
+                definitionRepository.find(context.key()).ifPresent(current -> {
+                    current.setCombatProfile(current.getCombatProfile().withSpecialAttacks(options));
+                    definitionRepository.save(current);
+                });
+            }, p -> definitionRepository.find(context.key()).ifPresentOrElse(current -> openFightingEditor(p, current),
+                    p::closeInventory));
+        } else {
+            FightOptionsActionHolder[] current = {context.action()};
+            fightersGuiService.openAssignments(player, current[0].options().specialAttacks(), options -> {
+                FightOptionsActionHolder saved = saveFightOptionsAction(current[0],
+                        current[0].options().withSpecialAttacks(options));
+                if (saved != null)
+                    current[0] = saved;
+            }, p -> openFightOptionsAction(p, current[0]));
         }
     }
 
@@ -1164,8 +1101,7 @@ public final class GuiService implements Listener {
             handlePropertiesClick(event, player, propertiesHolder.key());
         } else if (holder instanceof FightingHolder fightingHolder) {
             handleFightingClick(event, player, fightingHolder.key());
-        } else if (holder instanceof SpecialAttacksHolder specialHolder) {
-            handleSpecialAttacksClick(event, player, specialHolder);
+
         } else if (holder instanceof TargetsHolder targetsHolder) {
             handleTargetsClick(event, player, targetsHolder.key());
         } else if (holder instanceof FightOptionsActionHolder fightOptionsHolder) {
@@ -1317,6 +1253,10 @@ public final class GuiService implements Listener {
         }
         if (event.getRawSlot() == 46) {
             customEventGuiOpener.accept(player);
+            return;
+        }
+        if (event.getRawSlot() == 48) {
+            openFighters(player);
             return;
         }
         if (event.getRawSlot() == 47) {
@@ -3564,15 +3504,15 @@ public final class GuiService implements Listener {
         return holder instanceof MainHolder || holder instanceof ReorderHolder || holder instanceof EditorHolder
                 || holder instanceof PropertiesHolder || holder instanceof PoseHolder
                 || holder instanceof FightingHolder || holder instanceof TargetsHolder
-                || holder instanceof SpecialAttacksHolder
-                || holder instanceof FightOptionsActionHolder || holder instanceof InstancesHolder
-                || holder instanceof BehaviourHolder || holder instanceof CustomBehaviourHolder
-                || holder instanceof CustomBehaviourEventPickerHolder || holder instanceof ActionPickerHolder
-                || holder instanceof AnimationPickerHolder || holder instanceof BehaviourValuePickerHolder
-                || holder instanceof RoutePointActionsHolder || holder instanceof RoutePointActionPickerHolder
-                || holder instanceof RoutePointAnimationPickerHolder || holder instanceof RoutePointValuePickerHolder
-                || holder instanceof SavedLocationPickerHolder || holder instanceof QuestionEditorHolder
-                || holder instanceof QuestionBranchPickerHolder || holder instanceof QuestionBranchRoutePickerHolder
+                || holder instanceof SpecialAttacksHolder || holder instanceof FightOptionsActionHolder
+                || holder instanceof InstancesHolder || holder instanceof BehaviourHolder
+                || holder instanceof CustomBehaviourHolder || holder instanceof CustomBehaviourEventPickerHolder
+                || holder instanceof ActionPickerHolder || holder instanceof AnimationPickerHolder
+                || holder instanceof BehaviourValuePickerHolder || holder instanceof RoutePointActionsHolder
+                || holder instanceof RoutePointActionPickerHolder || holder instanceof RoutePointAnimationPickerHolder
+                || holder instanceof RoutePointValuePickerHolder || holder instanceof SavedLocationPickerHolder
+                || holder instanceof QuestionEditorHolder || holder instanceof QuestionBranchPickerHolder
+                || holder instanceof QuestionBranchRoutePickerHolder
                 || holder instanceof QuestionBranchAnimationPickerHolder || holder instanceof ConfirmationHolder
                 || aiGuiService.handles(holder);
     }
@@ -3871,7 +3811,7 @@ public final class GuiService implements Listener {
     private record PropertiesHolder(String key) implements GuiHolder {
     }
 
-    private record SpecialAttacksHolder(String key, FightOptionsActionHolder action) implements GuiHolder {
+    private record SpecialAttacksHolder(String key, FightOptionsActionHolder action) {
     }
 
     private record FightingHolder(String key) implements GuiHolder {

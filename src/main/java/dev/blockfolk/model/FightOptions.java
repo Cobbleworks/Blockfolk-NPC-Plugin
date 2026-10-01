@@ -46,7 +46,8 @@ public record FightOptions(AttackReaction attackReaction, boolean mobs, boolean 
             // Invalid values in manually edited action data use the default interval.
         }
         SpecialAttackOptions special = SpecialAttackOptions
-                .fromStored(Arrays.asList(sections.getOrDefault("special-attacks", "").split(",")), interval);
+                .fromStored(Arrays.asList(sections.getOrDefault("special-attacks", "").split(",")), interval)
+                .withFighterAttacks(Arrays.asList(sections.getOrDefault("fighter-attacks", "").split(",")));
         return new FightOptions(reaction, targets.contains("mobs"), targets.contains("animals"),
                 targets.contains("players"), targets.contains("npcs"), special);
     }
@@ -56,6 +57,10 @@ public record FightOptions(AttackReaction attackReaction, boolean mobs, boolean 
         if (!specialAttacks.equals(SpecialAttackOptions.disabled())) {
             stored += ";special-attacks=" + String.join(",", specialAttacks.storedAttacks()) + ";special-interval="
                     + specialAttacks.intervalSeconds();
+        }
+        if (!specialAttacks.fighterAttacks().isEmpty()) {
+            stored += ";fighter-attacks="
+                    + String.join(",", specialAttacks.fighterAttacks().stream().sorted().toList());
         }
         return stored;
     }
@@ -72,9 +77,9 @@ public record FightOptions(AttackReaction attackReaction, boolean mobs, boolean 
     public String displayName() {
         String targets = targetValue().isEmpty() ? "No targets" : targetValue();
         return attackReaction.displayName() + "; " + targets
-                + (specialAttacks.enabled().isEmpty()
+                + (specialAttacks.assignedAttackKeys().isEmpty()
                         ? ""
-                        : "; " + specialAttacks.enabled().size() + " special attacks");
+                        : "; " + specialAttacks.assignedAttackKeys().size() + " special attacks");
     }
 
     public FightOptions withAttackReaction(AttackReaction reaction) {

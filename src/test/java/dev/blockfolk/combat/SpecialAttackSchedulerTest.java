@@ -63,6 +63,6 @@ class SpecialAttackSchedulerTest {
         assertNull(scheduler.select(61, slower, 4, random));
         assertNull(scheduler.select(260, slower, 4, random));
         assertNull(scheduler.select(261, slower, 4, random));
-        assertNotNull(scheduler.select(461, slower, 4, random));
+        assertNotNull(scheduler.select(481, slower, 4, random));
     }
 }

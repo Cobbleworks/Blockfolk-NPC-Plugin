@@ -48,6 +48,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private RouteRepository routeRepository;
     private LocationRepository locationRepository;
     private CustomEventRepository customEventRepository;
+    private dev.blockfolk.repository.FighterAttackRepository fighterAttackRepository;
+    private dev.blockfolk.gui.FightersGuiService fightersGuiService;
     private NpcInstanceRegistry instanceRegistry;
     private NpcRenderer npcRenderer;
     private NativeNpcNavigationService navigationService;
@@ -73,6 +75,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         routeRepository = new RouteRepository(this);
         locationRepository = new LocationRepository(this);
         customEventRepository = new CustomEventRepository(this);
+        fighterAttackRepository = new dev.blockfolk.repository.FighterAttackRepository(this);
         npcRenderer = new PaperMannequinNpcRenderer(this);
         navigationService = new NativeNpcNavigationService(this);
         transientNpcService = new dev.blockfolk.api.TransientNpcService(this, npcRenderer, navigationService);
@@ -91,9 +94,13 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 skinResolver, routeGuiService::openRoutes, routeGuiService::openNpcRoutes, routeGuiService::createRoute,
                 routeGuiService::beginEditing, customEventRepository, customEventGuiService::open,
                 customEventGuiService::createEvent, locationRepository);
+        fightersGuiService = new dev.blockfolk.gui.FightersGuiService(fighterAttackRepository, chatInputService,
+                this::openMainGui);
+        guiService.setFightersGuiService(fightersGuiService);
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         routeGuiService.setNpcMenuOpener(guiService::openEditor);
-        combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService);
+        combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService,
+                fighterAttackRepository);
         questionService = new NpcQuestionService(this, instanceRegistry, chatInputService,
                 getConfig().getInt("question-timeout-seconds", 30));
         chatInputService.setBeforeRequest(questionService::cancelForAdminInput);
@@ -138,6 +145,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         routeRepository.loadAll();
         locationRepository.loadAll();
         customEventRepository.loadAll();
+        fighterAttackRepository.loadAll();
         definitionRepository.loadAll();
         routeRepository.migrateOwnership(definitionRepository.findAll(), definitionRepository::save);
         instanceRegistry.loadPersistedInstances();
@@ -165,6 +173,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 .register("blockfolk", "Opens and controls Blockfolk.", java.util.List.of("bf"), executor));
 
         getServer().getPluginManager().registerEvents(guiService, this);
+        getServer().getPluginManager().registerEvents(fightersGuiService, this);
         getServer().getPluginManager().registerEvents(routeGuiService, this);
         getServer().getPluginManager().registerEvents(customEventGuiService, this);
         getServer().getPluginManager().registerEvents(chatInputService, this);
@@ -227,6 +236,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
             locationRepository.flush();
         if (customEventRepository != null)
             customEventRepository.flush();
+        if (fighterAttackRepository != null)
+            fighterAttackRepository.flush();
         if (dialogService != null) {
             dialogService.stop();
         }

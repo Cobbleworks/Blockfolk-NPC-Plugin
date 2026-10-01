@@ -10,6 +10,18 @@ import org.junit.jupiter.api.Test;
 
 class SpecialAttackOptionsTest {
     @Test
+    void customAssignmentsRoundTripInBehaviourActionsAndPreserveLegacyAttacks() {
+        SpecialAttackOptions options = SpecialAttackOptions.disabled().toggle(SpecialAttack.FEAR)
+                .toggle("dragon_breath").toggle("sonic_blast").withIntervalSeconds(5);
+        FightOptions action = new FightOptions(AttackReaction.HUNTING, false, false, true, false, options);
+        assertEquals(action, FightOptions.fromStored(action.storedValue()));
+        assertEquals(Set.of("fear", "dragon_breath", "sonic_blast"), options.assignedAttackKeys());
+        assertEquals(Set.of("fear", "sonic_blast"), options.toggle("dragon_breath").assignedAttackKeys());
+        SpecialAttackOptions duplicatedLegacy = options.withFighterAttacks(List.of("fear", "sonic_blast"));
+        assertFalse(duplicatedLegacy.toggle("fear").assignedAttackKeys().contains("fear"));
+    }
+
+    @Test
     void readsStableNamesAndSkipsUnknownOrDuplicateAttacks() {
         SpecialAttackOptions options = SpecialAttackOptions
                 .fromStored(List.of(" LIFE_DRAIN ", "life_drain", "missing", "freezing_spell"), 8);

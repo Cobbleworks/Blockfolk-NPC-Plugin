@@ -20,7 +20,7 @@ Blockfolk is a GUI-driven NPC system for Paper servers. Administrators create re
 - **Behavior sequences:** React to interaction, proximity, combat, time, waypoints, custom events, and other supported triggers
 - **Routes and locations:** Build NPC-owned walking routes in the world and reuse named destinations across NPCs
 - **Configurable combat:** Define attacks, targets, alliances, loot, experience, respawn timing, and nearby boss bars
-- **Special attacks:** Toggle eight native abilities, adjust their cadence, and mix spells with weapon combat through Fighting & Survival
+- **Fighters:** Build shared custom attacks with origins, spheres, cones, beams, teleport, timing, combined effects, and previews; assign them to NPCs through Fighting & Survival
 - **World interaction:** Mine configured resources, harvest crops, and transfer items to or from containers
 - **Optional AI behavior:** Use OpenRouter for contextual conversation and validated, administrator-approved actions
 - **Quest integration:** Expose persistent Blockfolk NPCs directly to BeautyQuests
@@ -153,6 +153,7 @@ Conversation memory can be private per player or shared by everyone speaking to 
 | `/bf npc <name> edit`      | Open the same preset editor explicitly                                        |
 | `/bf npc <name> spawn`     | Spawn a persistent instance of a preset                                       |
 | `/bf npc <name> duplicate` | Duplicate a preset with ` (copy)` appended to its name                        |
+| `/bf fighters`           | Open the shared attack library and editor                                     |
 | `/bf routes`               | Open the route manager                                                        |
 | `/bf locations`            | Open the global-location manager                                              |
 

@@ -20,7 +20,8 @@ class NpcDefinitionRepositoryTest {
         CombatProfile profile = CombatProfile.disabled().withMaxHealth(40).withAlliance("guards")
                 .withAttackReaction(AttackReaction.HUNTING).withTargetPlayers(true)
                 .withSpecialAttacks(SpecialAttackOptions.disabled().toggle(SpecialAttack.LIFE_DRAIN)
-                        .toggle(SpecialAttack.FREEZING_SPELL).withIntervalSeconds(15));
+                        .toggle(SpecialAttack.FREEZING_SPELL).toggle("fire_breath").toggle("custom_laser")
+                        .withIntervalSeconds(15));
         YamlConfiguration saved = new YamlConfiguration();
         NpcDefinitionRepository.writeCombatProfile(saved, profile);
         YamlConfiguration loaded = new YamlConfiguration();

@@ -224,6 +224,8 @@ public final class NpcDefinitionRepository {
         configuration.set("combat.dropped-experience", profile.droppedExperience());
         configuration.set("combat.special-attacks.enabled", profile.specialAttacks().storedAttacks());
         configuration.set("combat.special-attacks.interval-seconds", profile.specialAttacks().intervalSeconds());
+        configuration.set("combat.special-attacks.fighter-attacks",
+                profile.specialAttacks().fighterAttacks().stream().sorted().toList());
     }
 
     static CombatProfile readCombatProfile(YamlConfiguration configuration) {
@@ -236,9 +238,11 @@ public final class NpcDefinitionRepository {
                 configuration.getBoolean("combat.targets.npcs", false), configuration.getString("combat.alliance"),
                 configuration.getBoolean("combat.show-boss-bar", false),
                 configuration.getInt("combat.dropped-experience", 0),
-                SpecialAttackOptions.fromStored(configuration.getStringList("combat.special-attacks.enabled"),
-                        configuration.getInt("combat.special-attacks.interval-seconds",
-                                SpecialAttackOptions.DEFAULT_INTERVAL_SECONDS)));
+                SpecialAttackOptions
+                        .fromStored(configuration.getStringList("combat.special-attacks.enabled"),
+                                configuration.getInt("combat.special-attacks.interval-seconds",
+                                        SpecialAttackOptions.DEFAULT_INTERVAL_SECONDS))
+                        .withFighterAttacks(configuration.getStringList("combat.special-attacks.fighter-attacks")));
     }
 
     private NpcDefinition load(File file) {

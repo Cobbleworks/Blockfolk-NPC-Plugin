@@ -46,6 +46,8 @@ import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
+import dev.blockfolk.repository.FighterAttackRepository;
+import dev.blockfolk.fighters.FighterTemplates;
 import dev.blockfolk.util.LegacyText;
 import net.kyori.adventure.text.Component;
 
@@ -65,7 +67,7 @@ public final class NpcCombatService implements Listener {
     private final NpcInstanceRegistry instanceRegistry;
     private final NativeNpcNavigationService navigationService;
     private final NpcAttackSelector attackSelector = new NpcAttackSelector();
-    private final NpcSpecialAttackService specialAttackService = new NpcSpecialAttackService();
+    private final NpcSpecialAttackService specialAttackService;
     private final Map<UUID, CombatState> states = new HashMap<>();
     private final Map<UUID, BukkitTask> pendingRespawns = new HashMap<>();
     private final Map<UUID, BossBar> bossBars = new HashMap<>();
@@ -77,10 +79,22 @@ public final class NpcCombatService implements Listener {
 
     public NpcCombatService(Plugin plugin, NpcDefinitionRepository definitionRepository,
             NpcInstanceRegistry instanceRegistry, NativeNpcNavigationService navigationService) {
+        this(plugin, definitionRepository, instanceRegistry, navigationService, null);
+    }
+
+    public NpcCombatService(Plugin plugin, NpcDefinitionRepository definitionRepository,
+            NpcInstanceRegistry instanceRegistry, NativeNpcNavigationService navigationService,
+            FighterAttackRepository fighters) {
         this.plugin = plugin;
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.navigationService = navigationService;
+        this.specialAttackService = new NpcSpecialAttackService(
+                fighters == null ? FighterTemplates::defaults : fighters::findAll,
+                (id, location) -> instanceRegistry.findById(id)
+                        .map(instance -> instanceRegistry.move(instance, location)).orElse(false),
+                victim -> instanceRegistry.findByEntityId(victim.getEntityId())
+                        .ifPresent(instanceRegistry::stopNavigating));
     }
 
     public void start() {
