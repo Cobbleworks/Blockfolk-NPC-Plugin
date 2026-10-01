@@ -36,6 +36,7 @@ public final class NpcDefinition {
     private boolean itemPickup;
     private boolean pushable;
     private NpcColor color;
+    private NpcPose pose = NpcPose.STANDING;
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
     private Map<String, List<BehaviourAction>> customEventBehaviours;
     private AiControlSettings aiControlSettings;
@@ -81,6 +82,7 @@ public final class NpcDefinition {
         copy.setItemPickup(itemPickup);
         copy.setPushable(pushable);
         copy.setColor(color);
+        copy.setPose(pose);
         copy.setAiControlSettings(aiControlSettings);
         copy.setAiMemoryEntries(aiMemories);
         behaviours.forEach(copy::setBehaviourActions);
@@ -229,6 +231,14 @@ public final class NpcDefinition {
 
     public void setItemPickup(boolean itemPickup) {
         this.itemPickup = itemPickup;
+    }
+
+    public NpcPose getPose() {
+        return pose;
+    }
+
+    public void setPose(NpcPose pose) {
+        this.pose = Objects.requireNonNullElse(pose, NpcPose.STANDING);
     }
 
     public boolean isPushable() {

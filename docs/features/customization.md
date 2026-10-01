@@ -13,6 +13,9 @@ Under **NPC Properties**, you can configure:
 | Look at Player | Turns toward the nearest player with a subtle body turn. |
 | Item Pickup | Collects nearby item entities into that instance's temporary inventory. |
 | Name Color | Cycles the color used for the visible NPC name. |
+| Pose | Opens a selector for Standing, Crouching, Sleeping, Sitting, Swimming / Crawling, and Fall Flying. |
+
+The selected pose is saved in the preset, applies to all its instances, and survives respawns and restarts. Sitting bends the legs using an invisible seat; changing poses or deleting the NPC removes that seat. Swimming / Crawling uses the same horizontal player pose, while Fall Flying supplies the elytra-style pose without initiating flight. These options cover all five native poses accepted by Paper's mannequin entity plus mounted sitting. Wave and Jump remain available under behavior **Animations**, which now also includes Sitting.
 
 ## Equipment & Loot
 

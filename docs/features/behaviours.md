@@ -26,7 +26,7 @@ Nearby chat is configured from the AI menu rather than shown as a deterministic 
 | Movement | Set Route, Start/Stop Navigation, Set Walk Speed, Move To, Teleport To, Follow, Unfollow |
 | World & inventory | Interact, Mine Blocks, Take Item, Show Inventory, Drop Inventory, Harvest |
 | Combat | Start Combat, Change Fight Options |
-| Animation | Sleeping, Swimming, Fall Flying, Standing, Sneaking, Wave, Jump |
+| Animation | Sleeping, Swimming, Fall Flying, Standing, Sneaking, Sitting, Wave, Jump |
 
 **Move To** pauses the rest of its action sequence until the NPC arrives. If it cannot arrive, the sequence continues after 30 seconds.
 

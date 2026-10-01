@@ -51,6 +51,7 @@ import dev.blockfolk.model.LootTier;
 import dev.blockfolk.model.NamedLocation;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcColor;
+import dev.blockfolk.model.NpcPose;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.NpcQuestion;
 import dev.blockfolk.model.NpcRoute;
@@ -94,7 +95,7 @@ public final class GuiService implements Listener {
             .filter(event -> event != BehaviourEvent.PLAYER_CHAT).toList();
     private static final List<BehaviourActionType> ANIMATION_ACTIONS = List.of(BehaviourActionType.SLEEP,
             BehaviourActionType.SWIM, BehaviourActionType.FALL_FLY, BehaviourActionType.STAND,
-            BehaviourActionType.SNEAK, BehaviourActionType.WAVE, BehaviourActionType.JUMP);
+            BehaviourActionType.SNEAK, BehaviourActionType.SIT, BehaviourActionType.WAVE, BehaviourActionType.JUMP);
     private static final Map<Integer, BehaviourActionType> ACTION_PICKER_ACTIONS = Map.ofEntries(
             // Dialogue and scripting
             Map.entry(1, BehaviourActionType.SEND_DIALOG), Map.entry(2, BehaviourActionType.SHOW_HOLO_DIALOG),
@@ -253,7 +254,7 @@ public final class GuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(
                 new RoutePointAnimationPickerHolder(action.routeKey(), action.point(), action.actionIndex()), 27,
                 UiText.title("Choose Animation"));
-        int[] slots = {10, 11, 12, 13, 14, 15, 16};
+        int[] slots = {9, 10, 11, 12, 13, 14, 15, 16};
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
             BehaviourActionType type = ANIMATION_ACTIONS.get(index);
             inventory.setItem(slots[index],
@@ -538,11 +539,32 @@ public final class GuiService implements Listener {
                 toggleItem(Material.HOPPER, "Item Pickup", definition.isItemPickup(),
                         List.of(LegacyText.GRAY + "Pick up nearby dropped item entities",
                                 LegacyText.GRAY + "into this instance's temporary inventory")));
+        inventory.setItem(4,
+                item(definition.getPose().material(), "Pose",
+                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + definition.getPose().displayName(),
+                                LegacyText.YELLOW + "Click to choose a saved pose")));
         NpcColor color = definition.getColor();
         inventory.setItem(17,
                 item(color.material(), "Name Color",
                         List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + color.displayName(),
                                 LegacyText.YELLOW + "Click to cycle through concrete colors")));
+        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
+        openInventory(player, inventory);
+    }
+
+    private void openPosePicker(Player player, NpcDefinition definition) {
+        Inventory inventory = Bukkit.createInventory(new PoseHolder(definition.getKey()), 27,
+                UiText.title("Choose NPC Pose", definition.getDisplayName()));
+        NpcPose[] poses = NpcPose.values();
+        for (int index = 0; index < poses.length; index++) {
+            NpcPose pose = poses[index];
+            inventory.setItem(10 + index,
+                    item(pose.material(), pose.displayName(),
+                            List.of(LegacyText.GRAY + "Saved across respawns and restarts",
+                                    definition.getPose() == pose
+                                            ? LegacyText.GREEN + "Selected"
+                                            : LegacyText.YELLOW + "Click to select")));
+        }
         inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
         openInventory(player, inventory);
     }
@@ -854,7 +876,7 @@ public final class GuiService implements Listener {
     private void openAnimationPicker(Player player, ActionPickerHolder action) {
         Inventory inventory = Bukkit.createInventory(new AnimationPickerHolder(action.key(), action.event(),
                 action.customEvent(), action.actionIndex(), action.page()), 27, UiText.title("Choose Animation"));
-        int[] slots = {10, 11, 12, 13, 14, 15, 16};
+        int[] slots = {9, 10, 11, 12, 13, 14, 15, 16};
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
             BehaviourActionType type = ANIMATION_ACTIONS.get(index);
             inventory.setItem(slots[index],
@@ -1008,6 +1030,25 @@ public final class GuiService implements Listener {
             handleReorderClick(event, player, reorderHolder);
         } else if (holder instanceof EditorHolder editorHolder) {
             handleEditorClick(event, player, editorHolder.key());
+        } else if (holder instanceof PoseHolder poseHolder) {
+            event.setCancelled(true);
+            if (!isTopInventoryClick(event))
+                return;
+            NpcDefinition definition = definitionRepository.find(poseHolder.key()).orElse(null);
+            if (definition == null) {
+                player.closeInventory();
+                return;
+            }
+            if (event.getRawSlot() == 22) {
+                openProperties(player, definition);
+                return;
+            }
+            int index = event.getRawSlot() - 10;
+            if (index < 0 || index >= NpcPose.values().length)
+                return;
+            definition.setPose(NpcPose.values()[index]);
+            saveRefresh(definition);
+            openPosePicker(player, definition);
         } else if (holder instanceof PropertiesHolder propertiesHolder) {
             handlePropertiesClick(event, player, propertiesHolder.key());
         } else if (holder instanceof FightingHolder fightingHolder) {
@@ -1323,6 +1364,10 @@ public final class GuiService implements Listener {
             return;
         }
         switch (event.getRawSlot()) {
+            case 4 -> {
+                openPosePicker(player, definition);
+                return;
+            }
             case 9 -> definition.setPushable(!definition.isPushable());
             case 11 -> definition.setShowName(!definition.isShowName());
             case 13 -> definition.setLookAtPlayer(!definition.isLookAtPlayer());
@@ -1924,7 +1969,7 @@ public final class GuiService implements Listener {
             openRoutePointActionPicker(player, action);
             return;
         }
-        int index = event.getRawSlot() - 10;
+        int index = event.getRawSlot() - 9;
         if (index < 0 || index >= ANIMATION_ACTIONS.size()) {
             return;
         }
@@ -2649,7 +2694,7 @@ public final class GuiService implements Listener {
                     holder.page());
             return;
         }
-        int animationIndex = event.getRawSlot() - 10;
+        int animationIndex = event.getRawSlot() - 9;
         if (animationIndex < 0 || animationIndex >= ANIMATION_ACTIONS.size()) {
             return;
         }
@@ -3064,7 +3109,7 @@ public final class GuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(
                 new QuestionBranchAnimationPickerHolder(action.target(), action.optionIndex(), action.actionIndex()),
                 27, UiText.title("Choose Animation"));
-        int[] slots = {10, 11, 12, 13, 14, 15, 16};
+        int[] slots = {9, 10, 11, 12, 13, 14, 15, 16};
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
             BehaviourActionType type = ANIMATION_ACTIONS.get(index);
             inventory.setItem(slots[index],
@@ -3085,7 +3130,7 @@ public final class GuiService implements Listener {
             openQuestionBranchPicker(player, action.target(), action.optionIndex(), action.actionIndex());
             return;
         }
-        int index = event.getRawSlot() - 10;
+        int index = event.getRawSlot() - 9;
         if (index < 0 || index >= ANIMATION_ACTIONS.size())
             return;
         setQuestionBranchAction(action, new BehaviourAction(ANIMATION_ACTIONS.get(index), null));
@@ -3395,16 +3440,16 @@ public final class GuiService implements Listener {
 
     private boolean isManagedHolder(InventoryHolder holder) {
         return holder instanceof MainHolder || holder instanceof ReorderHolder || holder instanceof EditorHolder
-                || holder instanceof PropertiesHolder || holder instanceof FightingHolder
-                || holder instanceof TargetsHolder || holder instanceof FightOptionsActionHolder
-                || holder instanceof InstancesHolder || holder instanceof BehaviourHolder
-                || holder instanceof CustomBehaviourHolder || holder instanceof CustomBehaviourEventPickerHolder
-                || holder instanceof ActionPickerHolder || holder instanceof AnimationPickerHolder
-                || holder instanceof BehaviourValuePickerHolder || holder instanceof RoutePointActionsHolder
-                || holder instanceof RoutePointActionPickerHolder || holder instanceof RoutePointAnimationPickerHolder
-                || holder instanceof RoutePointValuePickerHolder || holder instanceof SavedLocationPickerHolder
-                || holder instanceof QuestionEditorHolder || holder instanceof QuestionBranchPickerHolder
-                || holder instanceof QuestionBranchRoutePickerHolder
+                || holder instanceof PropertiesHolder || holder instanceof PoseHolder
+                || holder instanceof FightingHolder || holder instanceof TargetsHolder
+                || holder instanceof FightOptionsActionHolder || holder instanceof InstancesHolder
+                || holder instanceof BehaviourHolder || holder instanceof CustomBehaviourHolder
+                || holder instanceof CustomBehaviourEventPickerHolder || holder instanceof ActionPickerHolder
+                || holder instanceof AnimationPickerHolder || holder instanceof BehaviourValuePickerHolder
+                || holder instanceof RoutePointActionsHolder || holder instanceof RoutePointActionPickerHolder
+                || holder instanceof RoutePointAnimationPickerHolder || holder instanceof RoutePointValuePickerHolder
+                || holder instanceof SavedLocationPickerHolder || holder instanceof QuestionEditorHolder
+                || holder instanceof QuestionBranchPickerHolder || holder instanceof QuestionBranchRoutePickerHolder
                 || holder instanceof QuestionBranchAnimationPickerHolder || holder instanceof ConfirmationHolder
                 || aiGuiService.handles(holder);
     }
@@ -3562,6 +3607,7 @@ public final class GuiService implements Listener {
             case DROP_INVENTORY -> Material.DROPPER;
             case HARVEST -> Material.IRON_HOE;
             case EMIT_EVENT -> Material.SCULK_SENSOR;
+            case SIT -> Material.OAK_STAIRS;
             case SLEEP -> Material.RED_BED;
             case SWIM -> Material.WATER_BUCKET;
             case FALL_FLY -> Material.ELYTRA;
@@ -3601,6 +3647,7 @@ public final class GuiService implements Listener {
             case DROP_INVENTORY -> "Drops every item in the NPC's inventory";
             case HARVEST -> "Harvests crops and plants carried seeds on nearby soil";
             case EMIT_EVENT -> "Triggers a custom event for listening NPCs";
+            case SIT -> "Seats the NPC with bent legs";
             case SLEEP -> "Puts the NPC into its sleeping pose";
             case SWIM -> "Puts the NPC into its swimming pose";
             case FALL_FLY -> "Puts the NPC into its fall-flying pose";
@@ -3693,6 +3740,9 @@ public final class GuiService implements Listener {
     }
 
     private record EditorHolder(String key) implements GuiHolder {
+    }
+
+    private record PoseHolder(String key) implements GuiHolder {
     }
 
     private record PropertiesHolder(String key) implements GuiHolder {

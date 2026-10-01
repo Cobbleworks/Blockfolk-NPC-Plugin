@@ -11,6 +11,7 @@ import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Pose;
@@ -24,6 +25,8 @@ import com.destroystokyo.paper.profile.ProfileProperty;
 
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
+import dev.blockfolk.model.NpcPose;
+import io.papermc.paper.entity.TeleportFlag;
 import dev.blockfolk.util.SkinTextureUtil;
 import io.papermc.paper.datacomponent.item.ResolvableProfile;
 import net.kyori.adventure.text.Component;
@@ -37,6 +40,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
 
     private final Plugin plugin;
     private final NamespacedKey instanceKey;
+    private final NamespacedKey seatKey;
     private final Map<UUID, UUID> entityIdsByInstance = new HashMap<>();
     private final Map<UUID, Integer> jumpTicksByInstance = new HashMap<>();
     private BukkitTask animationTask;
@@ -47,6 +51,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     public PaperMannequinNpcRenderer(Plugin plugin) {
         this.plugin = plugin;
         this.instanceKey = new NamespacedKey(plugin, "instance-id");
+        this.seatKey = new NamespacedKey(plugin, "seat-instance-id");
     }
 
     @Override
@@ -94,10 +99,10 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
                 spawned.setInvulnerable(true);
                 spawned.setSilent(true);
                 spawned.setRemoveWhenFarAway(false);
-                applyDefinition(spawned, instance, definition, true);
             });
             entityIdsByInstance.put(instance.getId(), mannequin.getUniqueId());
             instance.setEntityId(mannequin.getEntityId());
+            applyDefinition(mannequin, instance, definition, true);
             return true;
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Could not render NPC " + definition.getKey(), exception);
@@ -117,6 +122,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
 
     private void destroy(NpcInstance instance, boolean loadChunk) {
         Mannequin mannequin = findEntity(instance, loadChunk);
+        removeSeats(instance, mannequin);
         if (mannequin != null) {
             mannequin.remove();
         }
@@ -139,9 +145,15 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     public boolean move(NpcInstance instance, Location location) {
         Mannequin mannequin = findEntity(instance);
         Location renderedLocation = location.clone().add(0.0, jumpOffset(instance.getId()), 0.0);
-        if (mannequin == null || !mannequin.teleport(renderedLocation)) {
+        if (mannequin == null) {
             return false;
         }
+        ArmorStand seat = seat(mannequin);
+        boolean moved = seat == null
+                ? mannequin.teleport(renderedLocation)
+                : seat.teleport(renderedLocation, TeleportFlag.EntityState.RETAIN_PASSENGERS);
+        if (!moved)
+            return false;
         mannequin.setRotation(location.getYaw(), location.getPitch());
         mannequin.setBodyYaw(location.getYaw());
         instance.setLocation(location);
@@ -154,7 +166,11 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         if (mannequin == null) {
             return Optional.empty();
         }
-        return Optional.of(mannequin.getLocation().subtract(0.0, jumpOffset(instance.getId()), 0.0));
+        ArmorStand seat = seat(mannequin);
+        Location location = seat == null ? mannequin.getLocation() : seat.getLocation();
+        location.setYaw(mannequin.getLocation().getYaw());
+        location.setPitch(mannequin.getLocation().getPitch());
+        return Optional.of(location.subtract(0.0, jumpOffset(instance.getId()), 0.0));
     }
 
     @Override
@@ -166,15 +182,69 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     public void pose(NpcInstance instance, Pose pose) {
         Mannequin mannequin = findEntity(instance);
         if (mannequin != null && Mannequin.validPoses().contains(pose)) {
+            removeSeats(instance, mannequin);
             mannequin.setPose(pose, pose != Pose.STANDING);
         }
     }
 
     @Override
-    public void stand(NpcInstance instance) {
+    public void sit(NpcInstance instance) {
         Mannequin mannequin = findEntity(instance);
-        if (mannequin != null) {
-            mannequin.setPose(Pose.STANDING, false);
+        if (mannequin != null)
+            applyPose(mannequin, instance, NpcPose.SITTING);
+    }
+
+    @Override
+    public void stand(NpcInstance instance) {
+        pose(instance, Pose.STANDING);
+    }
+
+    private ArmorStand seat(Mannequin mannequin) {
+        return mannequin.getVehicle() instanceof ArmorStand stand
+                && stand.getPersistentDataContainer().has(seatKey, PersistentDataType.STRING) ? stand : null;
+    }
+
+    private void removeSeats(NpcInstance instance, Mannequin mannequin) {
+        ArmorStand mounted = mannequin == null ? null : seat(mannequin);
+        Location base = mounted == null ? null : mounted.getLocation();
+        if (mounted != null) {
+            mannequin.leaveVehicle();
+            mounted.remove();
+            mannequin.teleport(base);
+        }
+        // Also removes a saved seat whose passenger died or was removed externally.
+        if (instance.getLocation().getWorld() != null) {
+            String id = instance.getId().toString();
+            for (ArmorStand stand : instance.getLocation().getWorld().getEntitiesByClass(ArmorStand.class)) {
+                if (id.equals(stand.getPersistentDataContainer().get(seatKey, PersistentDataType.STRING)))
+                    stand.remove();
+            }
+        }
+    }
+
+    private void applyPose(Mannequin mannequin, NpcInstance instance, NpcPose pose) {
+        if (pose != NpcPose.SITTING) {
+            removeSeats(instance, mannequin);
+            mannequin.setPose(pose.nativePose(), pose != NpcPose.STANDING);
+            return;
+        }
+        mannequin.setPose(Pose.STANDING, true);
+        if (seat(mannequin) != null)
+            return;
+        removeSeats(instance, mannequin);
+        ArmorStand stand = mannequin.getWorld().spawn(instance.getLocation(), ArmorStand.class, spawned -> {
+            spawned.setVisible(false);
+            spawned.setMarker(true);
+            spawned.setSmall(true);
+            spawned.setGravity(false);
+            spawned.setInvulnerable(true);
+            spawned.setSilent(true);
+            spawned.setPersistent(mannequin.isPersistent());
+            spawned.getPersistentDataContainer().set(seatKey, PersistentDataType.STRING, instance.getId().toString());
+        });
+        if (!stand.addPassenger(mannequin)) {
+            stand.remove();
+            throw new IllegalStateException("Could not seat NPC " + instance.getId());
         }
     }
 
@@ -193,7 +263,8 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     @Override
     public void jump(NpcInstance instance) {
         Mannequin mannequin = findEntity(instance);
-        if (mannequin != null && mannequin.isOnGround() && !jumpTicksByInstance.containsKey(instance.getId())) {
+        if (mannequin != null && seat(mannequin) == null && mannequin.isOnGround()
+                && !jumpTicksByInstance.containsKey(instance.getId())) {
             jumpTicksByInstance.putIfAbsent(instance.getId(), 0);
             // The scripted jump supplies its own vertical motion for 12 ticks.
             mannequin.setGravity(false);
@@ -299,6 +370,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
 
     private void applyDefinition(Mannequin mannequin, NpcInstance instance, NpcDefinition definition,
             boolean healToFull) {
+        removeSeats(instance, mannequin);
         mannequin.teleport(instance.getLocation());
         mannequin.setPersistent(true);
         mannequin.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
@@ -318,6 +390,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         }
         applyEquipment(mannequin.getEquipment(), definition);
         applyCombatProfile(mannequin, definition, healToFull);
+        applyPose(mannequin, instance, definition.getPose());
     }
 
     private void applyCombatProfile(Mannequin mannequin, NpcDefinition definition, boolean healToFull) {

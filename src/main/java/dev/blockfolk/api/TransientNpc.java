@@ -45,7 +45,8 @@ public final class TransientNpc {
         definition = new NpcDefinition("transient_" + id);
         definition.setDisplayName(name == null ? "" : name);
         definition.setShowName(false);
-        definition.setPushable(false);
+        // Immovable mannequins do not fall or process velocity in Minecraft.
+        definition.setPushable(true);
         definition.setCombatProfile(definition.getCombatProfile().withMaxHealth(20));
     }
 
@@ -86,6 +87,7 @@ public final class TransientNpc {
         LivingEntity entity = getEntity();
         if (entity != null) {
             entity.setPersistent(false);
+            entity.setCollidable(false);
             entity.setGravity(true);
             entity.setInvulnerable(false);
             if (entity instanceof Mannequin mannequin && profile != null)
@@ -203,10 +205,13 @@ public final class TransientNpc {
         NativeNpcNavigationService.NavigationUpdate update = navigation.navigate(instance, target, speed);
         navigation.setPersistent(instance, false);
         if (update.status() == NativeNpcNavigationService.NavigationStatus.ARRIVED) {
+            if (update.location() != null)
+                renderer.move(instance, update.location());
             stopNavigating();
             return;
         }
-        if (update.location() != null && renderer.move(instance, update.location())) {
+        if (update.status() == NativeNpcNavigationService.NavigationStatus.MOVING && update.location() != null
+                && renderer.move(instance, update.location())) {
             instance.setLocation(update.location());
             LivingEntity moved = getEntity();
             if (moved != null)

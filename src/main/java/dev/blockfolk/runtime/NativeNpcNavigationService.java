@@ -35,6 +35,7 @@ public final class NativeNpcNavigationService {
     private static final double ARRIVAL_HORIZONTAL_SQUARED = 0.8 * 0.8;
     private static final double ARRIVAL_VERTICAL = 1.5;
     private static final int REPATH_TICKS = 40;
+    private static final int TARGET_REPATH_TICKS = 10;
     private static final int STUCK_TICKS = 5 * 20;
     private static final double NORMAL_NAVIGATOR_MOVEMENT_SPEED = 0.25;
 
@@ -87,35 +88,28 @@ public final class NativeNpcNavigationService {
 
         NavigationState state = states.computeIfAbsent(instance.getId(), ignored -> new NavigationState());
         boolean changed = !sameTarget(state.target, target) || state.blocksPerSecond != blocksPerSecond;
-        if (changed) {
+        updateProgress(state, current);
+        if (state.targetCooldown > 0)
+            state.targetCooldown--;
+        if ((changed && state.targetCooldown <= 0) || (state.retryTicks <= 0
+                && (!navigator.getPathfinder().hasPath() || state.stationaryTicks >= REPATH_TICKS))) {
             state.target = target.clone();
             state.blocksPerSecond = blocksPerSecond;
-            state.lastLocation = current.clone();
-            state.stationaryTicks = 0;
-            if (!requestPath(navigator, target, blocksPerSecond)) {
-                states.remove(instance.getId());
-                return new NavigationUpdate(NavigationStatus.STALLED, current);
-            }
-            state.retryTicks = REPATH_TICKS;
-        } else {
-            updateProgress(state, current);
-            if (state.retryTicks <= 0
-                    && (!navigator.getPathfinder().hasPath() || state.stationaryTicks >= REPATH_TICKS)) {
-                if (!requestPath(navigator, target, blocksPerSecond)) {
-                    states.remove(instance.getId());
-                    return new NavigationUpdate(NavigationStatus.STALLED, current);
-                }
-                state.retryTicks = REPATH_TICKS;
-            }
+            state.pathFailed = !requestPath(navigator, target, blocksPerSecond);
+            state.targetCooldown = TARGET_REPATH_TICKS;
+            state.retryTicks = state.pathFailed ? TARGET_REPATH_TICKS : REPATH_TICKS;
         }
         if (state.retryTicks > 0) {
             state.retryTicks--;
         }
         boolean stuck = state.stationaryTicks >= STUCK_TICKS;
         if (stuck) {
-            stop(instance);
+            navigator.getPathfinder().stopPathfinding();
+            state.pathFailed = true;
+            state.stationaryTicks = 0;
+            state.retryTicks = REPATH_TICKS;
         }
-        return new NavigationUpdate(stuck ? NavigationStatus.STALLED : NavigationStatus.MOVING, current);
+        return new NavigationUpdate(state.pathFailed ? NavigationStatus.STALLED : NavigationStatus.MOVING, current);
     }
 
     public void stop(NpcInstance instance) {
@@ -170,8 +164,7 @@ public final class NativeNpcNavigationService {
         Pathfinder pathfinder = navigator.getPathfinder();
         Pathfinder.PathResult path = pathfinder.findPath(target);
         if (path != null && path.canReachFinalPoint()) {
-            pathfinder.moveTo(path, 1.0);
-            return true;
+            return pathfinder.moveTo(path, 1.0);
         } else {
             pathfinder.stopPathfinding();
             return false;
@@ -304,7 +297,7 @@ public final class NativeNpcNavigationService {
     }
 
     private boolean sameTarget(Location first, Location second) {
-        return first != null && first.getWorld() == second.getWorld() && first.distanceSquared(second) < 0.0001;
+        return first != null && first.getWorld() == second.getWorld() && first.distanceSquared(second) < 0.25;
     }
 
     public enum NavigationStatus {
@@ -322,5 +315,7 @@ public final class NativeNpcNavigationService {
         private double blocksPerSecond;
         private int stationaryTicks;
         private int retryTicks;
+        private int targetCooldown;
+        private boolean pathFailed;
     }
 }

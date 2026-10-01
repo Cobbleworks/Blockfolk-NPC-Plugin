@@ -321,6 +321,10 @@ public final class NpcInstanceRegistry implements Listener {
         renderer.pose(instance, pose);
     }
 
+    public void sit(NpcInstance instance) {
+        renderer.sit(instance);
+    }
+
     public void stand(NpcInstance instance) {
         renderer.stand(instance);
     }

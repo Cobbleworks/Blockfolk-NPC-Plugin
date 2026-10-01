@@ -733,6 +733,7 @@ public final class NpcBehaviourService implements Listener {
             case HARVEST -> harvestNearbyCrops(instance);
             case EMIT_EVENT ->
                 emitCustomEvent(action.value(), actor != null ? actor : instances.findEntity(instance).orElse(null));
+            case SIT -> instances.sit(instance);
             case SLEEP -> instances.pose(instance, Pose.SLEEPING);
             case SWIM -> instances.pose(instance, Pose.SWIMMING);
             case FALL_FLY -> instances.pose(instance, Pose.FALL_FLYING);

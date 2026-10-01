@@ -32,6 +32,7 @@ import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.MovementProfile;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcColor;
+import dev.blockfolk.model.NpcPose;
 import dev.blockfolk.model.StoredLocation;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.util.LocationCodec;
@@ -128,6 +129,7 @@ public final class NpcDefinitionRepository {
         configuration.set("properties.look-at-player", definition.isLookAtPlayer());
         configuration.set("properties.item-pickup", definition.isItemPickup());
         configuration.set("properties.pushable", definition.isPushable());
+        configuration.set("properties.pose", definition.getPose().name());
         configuration.set("properties.color", definition.getColor().name().toLowerCase(Locale.ROOT));
         AiControlSettings ai = definition.getAiControlSettings();
         configuration.set("ai-control.enabled", ai.enabled());
@@ -255,6 +257,7 @@ public final class NpcDefinitionRepository {
         definition.setLookAtPlayer(configuration.getBoolean("properties.look-at-player", true));
         definition.setItemPickup(configuration.getBoolean("properties.item-pickup", false));
         definition.setPushable(configuration.getBoolean("properties.pushable", true));
+        definition.setPose(NpcPose.fromStored(configuration.getString("properties.pose")));
         definition.setColor(NpcColor.fromStored(configuration.getString("properties.color")));
         java.util.EnumSet<AiActionType> allowedAiActions = java.util.EnumSet.noneOf(AiActionType.class);
         for (String stored : configuration.getStringList("ai-control.allowed-actions")) {

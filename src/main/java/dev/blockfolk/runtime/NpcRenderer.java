@@ -35,6 +35,9 @@ public interface NpcRenderer {
 
     void pose(NpcInstance instance, Pose pose);
 
+    default void sit(NpcInstance instance) {
+    }
+
     void stand(NpcInstance instance);
 
     void wave(NpcInstance instance);

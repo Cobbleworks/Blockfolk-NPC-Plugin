@@ -15,24 +15,26 @@ public enum BehaviourActionType {
                                                                             "Drop Inventory", false), HARVEST("Harvest",
                                                                                     false), EMIT_EVENT(
                                                                                             "Emit Custom Event",
-                                                                                            true), SLEEP("Sleeping",
-                                                                                                    false), SWIM(
-                                                                                                            "Swimming",
-                                                                                                            false), FALL_FLY(
-                                                                                                                    "Fall Flying",
-                                                                                                                    false), STAND(
-                                                                                                                            "Standing",
-                                                                                                                            false), SNEAK(
-                                                                                                                                    "Sneaking",
-                                                                                                                                    false), WAVE(
-                                                                                                                                            "Wave",
-                                                                                                                                            false), JUMP(
-                                                                                                                                                    "Jump",
-                                                                                                                                                    false), FOLLOW(
-                                                                                                                                                            "Follow",
-                                                                                                                                                            false), UNFOLLOW(
-                                                                                                                                                                    "Unfollow",
-                                                                                                                                                                    false);
+                                                                                            true), SIT("Sitting",
+                                                                                                    false), SLEEP(
+                                                                                                            "Sleeping",
+                                                                                                            false), SWIM(
+                                                                                                                    "Swimming",
+                                                                                                                    false), FALL_FLY(
+                                                                                                                            "Fall Flying",
+                                                                                                                            false), STAND(
+                                                                                                                                    "Standing",
+                                                                                                                                    false), SNEAK(
+                                                                                                                                            "Sneaking",
+                                                                                                                                            false), WAVE(
+                                                                                                                                                    "Wave",
+                                                                                                                                                    false), JUMP(
+                                                                                                                                                            "Jump",
+                                                                                                                                                            false), FOLLOW(
+                                                                                                                                                                    "Follow",
+                                                                                                                                                                    false), UNFOLLOW(
+                                                                                                                                                                            "Unfollow",
+                                                                                                                                                                            false);
 
     private final String displayName;
     private final boolean requiresValue;
