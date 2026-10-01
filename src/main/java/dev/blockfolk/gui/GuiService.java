@@ -3522,7 +3522,7 @@ public final class GuiService implements Listener {
         return holder instanceof MainHolder || holder instanceof ReorderHolder || holder instanceof EditorHolder
                 || holder instanceof PropertiesHolder || holder instanceof PoseHolder
                 || holder instanceof FightingHolder || holder instanceof TargetsHolder
-                || holder instanceof SpecialAttacksHolder || holder instanceof FightOptionsActionHolder
+                || holder instanceof FightOptionsActionHolder
                 || holder instanceof InstancesHolder || holder instanceof BehaviourHolder
                 || holder instanceof CustomBehaviourHolder || holder instanceof CustomBehaviourEventPickerHolder
                 || holder instanceof ActionPickerHolder || holder instanceof AnimationPickerHolder
