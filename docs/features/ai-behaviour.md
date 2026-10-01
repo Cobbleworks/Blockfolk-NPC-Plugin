@@ -71,6 +71,8 @@ The model cannot issue commands, executable code, arbitrary coordinates, or unli
 
 Enable **Temporary Inventory** when the AI should see and manipulate the items carried by each instance. This also enables container transfers and direct collection of mined drops. If mined drops do not fit, the block remains untouched. Without temporary inventory, mined blocks drop items naturally.
 
+Nearby containers include their custom names in the NPC's context when set. With container interaction enabled, players can refer to a named container such as “Food Supplies”; the NPC matches that name to the listed container target for taking or storing items.
+
 ## Conversation and memory
 
 Conversation can be:
