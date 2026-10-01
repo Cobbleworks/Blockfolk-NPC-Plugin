@@ -657,24 +657,24 @@ public final class GuiService implements Listener {
                         : LegacyText.DARK_GRAY + "Preset spawn point is configured",
                 LegacyText.GRAY + "Step: " + CombatProfile.RESPAWN_STEP_SECONDS + " seconds"));
         respawnLore.addAll(NumericControl.lore());
-        inventory.setItem(12, item(Material.CLOCK, "Respawn Time: " + respawnLabel(combat), respawnLore));
+        inventory.setItem(11, item(Material.CLOCK, "Respawn Time: " + respawnLabel(combat), respawnLore));
         List<String> experienceLore = new ArrayList<>(List.of(
                 combat.droppedExperience() == 0
                         ? LegacyText.GRAY + "This NPC drops no experience"
                         : LegacyText.GREEN + "Dropped when this NPC dies",
                 LegacyText.GRAY + "Step: " + CombatProfile.EXPERIENCE_STEP + " XP"));
         experienceLore.addAll(NumericControl.lore());
-        inventory.setItem(14,
-                item(Material.EXPERIENCE_BOTTLE, "Dropped Experience: " + experienceLabel(combat), experienceLore));
-        inventory.setItem(15, toggleItem(Material.WITHER_SKELETON_SKULL, "Show Boss Bar", combat.showBossBar(),
-                "Shows current HP to players within 16 blocks"));
         inventory.setItem(13,
+                item(Material.EXPERIENCE_BOTTLE, "Dropped Experience: " + experienceLabel(combat), experienceLore));
+        inventory.setItem(14, toggleItem(Material.WITHER_SKELETON_SKULL, "Show Boss Bar", combat.showBossBar(),
+                "Shows current HP to players within 16 blocks"));
+        inventory.setItem(12,
                 item(Material.TARGET, "Targets & Behaviour", List
                         .of(LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName(),
                                 LegacyText.GRAY + "Attack targets enabled: " + LegacyText.WHITE
                                         + enabledTargetCount(combat) + "/4",
                                 LegacyText.YELLOW + "Click to configure")));
-        inventory.setItem(16,
+        inventory.setItem(15,
                 item(Material.NAME_TAG, "Alliance",
                         List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + allianceLabel(combat),
                                 LegacyText.GRAY + "NPCs with the same alliance will not fight",
@@ -682,7 +682,7 @@ public final class GuiService implements Listener {
                                 LegacyText.GRAY + "whose custom name matches the alliance",
                                 LegacyText.DARK_GRAY + "Matching ignores capitalization; any inventory slot works",
                                 LegacyText.YELLOW + "Click to enter text")));
-        inventory.setItem(25, specialAttacksItem(combat.specialAttacks()));
+        inventory.setItem(16, specialAttacksItem(combat.specialAttacks()));
         inventory.setItem(31, item(Material.BARRIER, "Back", List.of()));
         openInventory(player, inventory);
     }
@@ -1428,7 +1428,7 @@ public final class GuiService implements Listener {
         }
         CombatProfile combat = definition.getCombatProfile();
         int slot = event.getRawSlot();
-        if (slot == 10 || slot == 12 || slot == 14) {
+        if (slot == 10 || slot == 11 || slot == 13) {
             if (event.getClick() == ClickType.MIDDLE) {
                 requestCombatValue(player, key, slot);
                 return;
@@ -1438,10 +1438,10 @@ public final class GuiService implements Listener {
                 return;
             int step = slot == 10
                     ? CombatProfile.HEALTH_STEP
-                    : slot == 12 ? CombatProfile.RESPAWN_STEP_SECONDS : CombatProfile.EXPERIENCE_STEP;
+                    : slot == 11 ? CombatProfile.RESPAWN_STEP_SECONDS : CombatProfile.EXPERIENCE_STEP;
             int current = slot == 10
                     ? combat.maxHealth()
-                    : slot == 12 ? combat.respawnSeconds() : combat.droppedExperience();
+                    : slot == 11 ? combat.respawnSeconds() : combat.droppedExperience();
             int max = slot == 10 ? CombatProfile.MAX_HEALTH : Integer.MAX_VALUE;
             int value = (int) Math.clamp((long) current + (long) direction * step * (event.isShiftClick() ? 5 : 1), 0,
                     max);
@@ -1449,21 +1449,21 @@ public final class GuiService implements Listener {
             return;
         }
         switch (slot) {
-            case 13 -> {
+            case 12 -> {
                 openTargetsAndBehaviour(player, definition);
             }
-            case 15 -> {
+            case 14 -> {
                 definition.setCombatProfile(combat.withShowBossBar(!combat.showBossBar()));
                 definitionRepository.save(definition);
                 openFightingEditor(player, definition);
             }
-            case 16 -> chatInputService.request(player, "Enter an alliance, or type clear to remove it:", value -> {
+            case 15 -> chatInputService.request(player, "Enter an alliance, or type clear to remove it:", value -> {
                 String alliance = value.equalsIgnoreCase("clear") ? null : value;
                 definition.setCombatProfile(definition.getCombatProfile().withAlliance(alliance));
                 saveRefresh(definition);
                 openFightingEditor(player, definition);
             });
-            case 25 -> openSpecialAttacks(player, new SpecialAttacksHolder(key, null));
+            case 16 -> openSpecialAttacks(player, new SpecialAttacksHolder(key, null));
             case 31 -> openEditor(player, definition);
             default -> {
             }
@@ -1473,7 +1473,7 @@ public final class GuiService implements Listener {
     private void requestCombatValue(Player player, String key, int slot) {
         String label = slot == 10
                 ? "maximum health in HP"
-                : slot == 12 ? "respawn time in seconds" : "dropped experience";
+                : slot == 11 ? "respawn time in seconds" : "dropped experience";
         int max = slot == 10 ? CombatProfile.MAX_HEALTH : Integer.MAX_VALUE;
         chatInputService.request(player, "Enter " + label + " (0 to " + max + "):", value -> {
             NpcDefinition current = definitionRepository.find(key).orElse(null);
@@ -1497,8 +1497,8 @@ public final class GuiService implements Listener {
         CombatProfile current = definition.getCombatProfile();
         definition.setCombatProfile(switch (slot) {
             case 10 -> current.withMaxHealth(value);
-            case 12 -> current.withRespawnSeconds(value);
-            case 14 -> current.withDroppedExperience(value);
+            case 11 -> current.withRespawnSeconds(value);
+            case 13 -> current.withDroppedExperience(value);
             default -> current;
         });
         if (slot == 10)
@@ -3522,15 +3522,14 @@ public final class GuiService implements Listener {
         return holder instanceof MainHolder || holder instanceof ReorderHolder || holder instanceof EditorHolder
                 || holder instanceof PropertiesHolder || holder instanceof PoseHolder
                 || holder instanceof FightingHolder || holder instanceof TargetsHolder
-                || holder instanceof FightOptionsActionHolder
-                || holder instanceof InstancesHolder || holder instanceof BehaviourHolder
-                || holder instanceof CustomBehaviourHolder || holder instanceof CustomBehaviourEventPickerHolder
-                || holder instanceof ActionPickerHolder || holder instanceof AnimationPickerHolder
-                || holder instanceof BehaviourValuePickerHolder || holder instanceof RoutePointActionsHolder
-                || holder instanceof RoutePointActionPickerHolder || holder instanceof RoutePointAnimationPickerHolder
-                || holder instanceof RoutePointValuePickerHolder || holder instanceof SavedLocationPickerHolder
-                || holder instanceof QuestionEditorHolder || holder instanceof QuestionBranchPickerHolder
-                || holder instanceof QuestionBranchRoutePickerHolder
+                || holder instanceof FightOptionsActionHolder || holder instanceof InstancesHolder
+                || holder instanceof BehaviourHolder || holder instanceof CustomBehaviourHolder
+                || holder instanceof CustomBehaviourEventPickerHolder || holder instanceof ActionPickerHolder
+                || holder instanceof AnimationPickerHolder || holder instanceof BehaviourValuePickerHolder
+                || holder instanceof RoutePointActionsHolder || holder instanceof RoutePointActionPickerHolder
+                || holder instanceof RoutePointAnimationPickerHolder || holder instanceof RoutePointValuePickerHolder
+                || holder instanceof SavedLocationPickerHolder || holder instanceof QuestionEditorHolder
+                || holder instanceof QuestionBranchPickerHolder || holder instanceof QuestionBranchRoutePickerHolder
                 || holder instanceof QuestionBranchAnimationPickerHolder || holder instanceof ConfirmationHolder
                 || aiGuiService.handles(holder);
     }

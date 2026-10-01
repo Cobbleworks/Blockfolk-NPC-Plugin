@@ -47,7 +47,8 @@ public final class AbilitiesGuiService implements Listener {
     }
     private record LibraryHolder(int page, Consumer<Player> back) implements Holder {
     }
-    private record SelectHolder(int page, Consumer<String> select, Consumer<Player> back) implements Holder {
+    private record SelectHolder(int page, Consumer<String> select, Consumer<Player> back,
+            boolean assignment) implements Holder {
     }
     private record TemplateHolder(Consumer<Player> back) implements Holder {
     }
@@ -73,7 +74,7 @@ public final class AbilitiesGuiService implements Listener {
     }
 
     public void selectAbility(Player player, Consumer<String> select, Consumer<Player> back) {
-        selector(player, new SelectHolder(0, select, back));
+        selector(player, new SelectHolder(0, select, back, false));
     }
     public String abilityName(String key) {
         return repository.find(key).map(FighterAttack::name).orElse(key + " (missing)");
@@ -82,12 +83,13 @@ public final class AbilitiesGuiService implements Listener {
     private void selector(Player player, SelectHolder holder) {
         List<FighterAttack> attacks = repository.findAll();
         int page = page(holder.page(), attacks.size());
-        Inventory inventory = menu(new SelectHolder(page, holder.select(), holder.back()),
-                "Use Ability · Choose Ability");
+        Inventory inventory = menu(new SelectHolder(page, holder.select(), holder.back(), holder.assignment()),
+                holder.assignment() ? "Abilities · Assign Ability" : "Use Ability · Choose Ability");
         for (int i = page * PAGE_SIZE; i < Math.min(attacks.size(), (page + 1) * PAGE_SIZE); i++) {
             FighterAttack attack = attacks.get(i);
             List<String> lore = summary(attack);
-            lore.add(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Use this ability in the action");
+            lore.add(LegacyText.YELLOW + "Left-click: " + LegacyText.GRAY
+                    + (holder.assignment() ? "Assign this ability to the NPC" : "Use this ability in the action"));
             inventory.setItem(i % PAGE_SIZE, abilityItem(attack, attack.name(), lore));
         }
         if (attacks.isEmpty())
@@ -104,7 +106,8 @@ public final class AbilitiesGuiService implements Listener {
         for (int i = page * PAGE_SIZE; i < Math.min(attacks.size(), (page + 1) * PAGE_SIZE); i++) {
             FighterAttack attack = attacks.get(i);
             List<String> lore = summary(attack);
-            lore.add(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Edit this shared ability");
+            lore.add(LegacyText.YELLOW + "Left-click: " + LegacyText.GRAY + "Edit this shared ability");
+            lore.add(LegacyText.YELLOW + "Shift-right-click: " + LegacyText.GRAY + "Delete this shared ability");
             lore.addAll(iconHints());
             inventory.setItem(i % PAGE_SIZE, abilityItem(attack, attack.name(), lore));
         }
@@ -131,14 +134,13 @@ public final class AbilitiesGuiService implements Listener {
         for (int i = page * PAGE_SIZE; i < Math.min(keys.size(), (page + 1) * PAGE_SIZE); i++) {
             String key = keys.get(i);
             FighterAttack attack = repository.find(key).orElse(null);
-            boolean enabled = holder.options().assignedAttackKeys().contains(key);
             List<String> lore = attack == null
-                    ? new ArrayList<>(List.of(LegacyText.RED + "Definition was deleted; click to unassign"))
+                    ? new ArrayList<>(List.of(LegacyText.RED + "Definition was deleted; right-click to unassign"))
                     : summary(attack);
-            lore.add(0, enabled ? LegacyText.GREEN + "Assigned" : LegacyText.RED + "Not assigned");
+            lore.add(0, LegacyText.GREEN + "Assigned");
+            lore.add(LegacyText.YELLOW + "Right-click: " + LegacyText.GRAY + "Remove assignment");
             if (attack != null) {
-                lore.add(LegacyText.YELLOW + "Left-click: " + LegacyText.GRAY + "Toggle assignment");
-                lore.add(LegacyText.YELLOW + "Right-click: " + LegacyText.GRAY + "Edit shared ability");
+                lore.add(LegacyText.YELLOW + "Left-click: " + LegacyText.GRAY + "Edit shared ability");
                 lore.addAll(iconHints());
             }
             if (attack == null)
@@ -146,26 +148,28 @@ public final class AbilitiesGuiService implements Listener {
             else
                 inventory.setItem(i % PAGE_SIZE, abilityItem(attack, attack.name(), lore));
         }
+        if (keys.isEmpty())
+            inventory.setItem(22, item(Material.BARRIER, "No Assigned Abilities",
+                    List.of("Use Assign Ability to choose an attack from the library")));
         inventory.setItem(46,
-                item(Material.RED_DYE, "Use More Often",
-                        List.of(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Decrease interval by 1 second",
-                                LegacyText.DARK_GRAY + "Shift-click: " + LegacyText.GRAY + "Five seconds")));
-        inventory.setItem(48,
-                item(Material.CLOCK, "Interval: about " + holder.options().intervalSeconds() + " Seconds",
-                        List.of("Mixes ready attacks with weapon combat", "Each NPC has independent cooldowns",
-                                "Requires Max Health above 0")));
+                item(Material.EMERALD, "Assign Ability", List.of("Choose an ability from the shared library")));
+        List<String> intervalLore = new ArrayList<>(List.of("Mixes ready attacks with weapon combat",
+                "Each NPC has independent cooldowns", "Requires Max Health above 0",
+                LegacyText.YELLOW + "Left-click: " + LegacyText.GRAY + "Decrease interval by 1 second",
+                LegacyText.YELLOW + "Right-click: " + LegacyText.GRAY + "Increase interval by 1 second",
+                LegacyText.DARK_GRAY + "Shift-click: " + LegacyText.GRAY + "Five seconds"));
+        inventory.setItem(48, item(Material.CLOCK, "Interval: about " + holder.options().intervalSeconds() + " Seconds",
+                intervalLore));
         inventory.setItem(50,
-                item(Material.LIME_DYE, "Use Less Often",
-                        List.of(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Increase interval by 1 second",
-                                LegacyText.DARK_GRAY + "Shift-click: " + LegacyText.GRAY + "Five seconds")));
-        inventory.setItem(51,
                 item(Material.BOOK, "Manage Ability Library", List.of("Create and edit attacks for all NPCs")));
         footer(inventory, page, keys.size());
         show(player, inventory);
     }
     private List<String> assignmentKeys(SpecialAttackOptions options) {
-        List<String> keys = new ArrayList<>(repository.findAll().stream().map(FighterAttack::key).toList());
-        options.assignedAttackKeys().stream().filter(key -> !keys.contains(key)).sorted().forEach(keys::add);
+        Set<String> assigned = options.assignedAttackKeys();
+        List<String> keys = new ArrayList<>(
+                repository.findAll().stream().map(FighterAttack::key).filter(assigned::contains).toList());
+        assigned.stream().filter(key -> !keys.contains(key)).sorted().forEach(keys::add);
         return keys;
     }
 
@@ -176,14 +180,14 @@ public final class AbilitiesGuiService implements Listener {
             return;
         }
         Inventory inventory = menu(holder, "Abilities · " + attack.name());
-        inventory.setItem(0,
+        inventory.setItem(2,
                 item(Material.COMPASS, "Shape & Origin", List.of("Choose where and how the attack is cast")));
-        inventory.setItem(1, item(Material.CLOCK, "Timing", List.of("Instant, delayed, or charged for the next hit")));
-        inventory.setItem(2, item(Material.IRON_SWORD, "Damage & Effects",
+        inventory.setItem(3, item(Material.CLOCK, "Timing", List.of("Instant, delayed, or charged for the next hit")));
+        inventory.setItem(4, item(Material.IRON_SWORD, "Damage & Effects",
                 List.of("Combine damage, debuffs, healing, and knockback")));
-        inventory.setItem(3,
+        inventory.setItem(5,
                 item(Material.FIREWORK_STAR, "Visuals", List.of("Choose the attack's particles and sound")));
-        inventory.setItem(4, item(Material.ENDER_EYE, "Preview",
+        inventory.setItem(6, item(Material.ENDER_EYE, "Preview",
                 List.of("Shows the shape from your position and view", "Preview does not damage or teleport anyone")));
         switch (holder.tab()) {
             case OVERVIEW -> {
@@ -271,7 +275,7 @@ public final class AbilitiesGuiService implements Listener {
                                     "Visuals only; damage and effects are set separately")));
         }
         inventory.setItem(45, item(Material.BOOK, "Overview", List.of()));
-        inventory.setItem(49, item(Material.BARRIER, "Back to Library", List.of()));
+        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         show(player, inventory);
     }
     private void confirmDelete(Player player, EditHolder holder) {
@@ -299,8 +303,8 @@ public final class AbilitiesGuiService implements Listener {
             else if (slot == 49)
                 select.back().accept(player);
             else if (slot == 45 || slot == 53)
-                selector(player,
-                        new SelectHolder(select.page() + (slot == 45 ? -1 : 1), select.select(), select.back()));
+                selector(player, new SelectHolder(select.page() + (slot == 45 ? -1 : 1), select.select(), select.back(),
+                        select.assignment()));
         } else if (holder instanceof LibraryHolder library) {
             List<FighterAttack> attacks = repository.findAll();
             if (slot < PAGE_SIZE && library.page() * PAGE_SIZE + slot < attacks.size()) {
@@ -308,7 +312,10 @@ public final class AbilitiesGuiService implements Listener {
                 if (isIconClick(event)) {
                     repository.save(attack.withIcon(player.getInventory().getItemInMainHand()));
                     library(player, library.page(), library.back());
-                } else
+                } else if (event.isShiftClick() && event.isRightClick())
+                    confirmDelete(player, new EditHolder(attack.key(), Tab.OVERVIEW,
+                            p -> library(p, library.page(), library.back())));
+                else if (event.isLeftClick())
                     edit(player, new EditHolder(attack.key(), Tab.OVERVIEW,
                             p -> library(p, library.page(), library.back())));
             } else if (slot == 51)
@@ -331,18 +338,28 @@ public final class AbilitiesGuiService implements Listener {
                     repository.save(
                             repository.find(key).orElseThrow().withIcon(player.getInventory().getItemInMainHand()));
                     assignments(player, assign);
-                } else if (event.isRightClick() && repository.find(key).isPresent())
+                } else if (event.isLeftClick() && repository.find(key).isPresent())
                     edit(player, new EditHolder(key, Tab.OVERVIEW, p -> assignments(p, assign)));
-                else
+                else if (event.isRightClick())
                     saveAssignment(player, assign, assign.options().toggle(key));
             } else if (slot == 49)
                 assign.back().accept(player);
-            else if (slot == 51)
+            else if (slot == 50)
                 library(player, 0, p -> assignments(p, assign));
-            else if (slot == 46 || slot == 50)
-                saveAssignment(player, assign, assign.options().withIntervalSeconds(
-                        assign.options().intervalSeconds() + (slot == 46 ? -1 : 1) * (event.isShiftClick() ? 5 : 1)));
-            else if (slot == 45 || slot == 53)
+            else if (slot == 46)
+                selector(player,
+                        new SelectHolder(0,
+                                key -> saveAssignment(player, assign,
+                                        assign.options().assignedAttackKeys().contains(key)
+                                                ? assign.options()
+                                                : assign.options().toggle(key)),
+                                p -> assignments(p, assign), true));
+            else if (slot == 48) {
+                int direction = NumericControl.direction(event.getClick());
+                if (direction != 0)
+                    saveAssignment(player, assign, assign.options().withIntervalSeconds(
+                            assign.options().intervalSeconds() + direction * (event.isShiftClick() ? 5 : 1)));
+            } else if (slot == 45 || slot == 53)
                 assignments(player, new AssignHolder(assign.options(), assign.save(), assign.back(),
                         assign.page() + (slot == 45 ? -1 : 1)));
         } else if (holder instanceof DeleteHolder delete) {
@@ -361,11 +378,11 @@ public final class AbilitiesGuiService implements Listener {
             holder.back().accept(player);
             return;
         }
-        if (slot <= 3) {
-            edit(player, new EditHolder(holder.key(), Tab.values()[slot + 1], holder.back()));
+        if (slot >= 2 && slot <= 5) {
+            edit(player, new EditHolder(holder.key(), Tab.values()[slot - 1], holder.back()));
             return;
         }
-        if (slot == 4) {
+        if (slot == 6) {
             player.closeInventory();
             NpcSpecialAttackService.preview(player, attack);
             player.sendMessage(UiText.info("Previewing " + attack.name() + ". Use /bf abilities to continue editing."));

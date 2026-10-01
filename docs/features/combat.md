@@ -16,7 +16,7 @@ Combat is configured per preset under **Fighting & Survival**.
 - Dropped experience changes in steps of 5.
 - The optional boss bar is visible to players within 16 blocks.
 
-Health, respawn time, and dropped experience each use one icon. **Left-click** increases the value, **right-click** decreases it, **shift-click** uses five steps, and **middle-click** lets you enter an exact whole number in chat. Setting health or respawn time to `0` keeps the behaviours described above.
+Health, respawn time, and dropped experience each use one icon. **Left-click** decreases the value, **right-click** increases it, **shift-click** uses five steps, and **middle-click** lets you enter an exact whole number in chat. Setting health or respawn time to `0` keeps the behaviours described above.
 
 ![Adjusting an NPC combat respawn time](../screenshots/screenshot-combat-respawn.jpeg)
 
