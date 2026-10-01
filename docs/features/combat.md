@@ -9,12 +9,14 @@ Combat is configured per preset under **Fighting & Survival**.
 
 ## Health and respawning
 
-- Maximum health ranges from `0` to `1024` and changes in steps of 5 (shift-click uses ten steps).
+- Maximum health ranges from `0` to `1024` and changes in steps of 5.
 - A value of `0` makes the NPC invulnerable.
 - Respawn time changes in 10-second steps. `0` disables respawning.
 - A respawning NPC needs a preset spawnpoint.
 - Dropped experience changes in steps of 5.
 - The optional boss bar is visible to players within 16 blocks.
+
+Health, respawn time, and dropped experience each use one icon. **Left-click** increases the value, **right-click** decreases it, **shift-click** uses five steps, and **middle-click** lets you enter an exact whole number in chat. Setting health or respawn time to `0` keeps the behaviours described above.
 
 ![Adjusting an NPC combat respawn time](../screenshots/screenshot-combat-respawn.jpeg)
 
@@ -31,11 +33,11 @@ Pending combat respawns survive server restarts and keep the persistent instance
 
 Target categories are non-animal mobs, animals, survival/adventure players, and other vulnerable Blockfolk NPCs.
 
-## Fighter attacks
+## Abilities
 
-Open **Fighting & Survival → Fighter Attacks** to assign attacks from the shared **Fighters** library and adjust how often the NPC uses them. The library provides editable spells, fire breath, a sonic beam, a defensive shockwave, and a short reposition blink. Build custom attacks with origins, shapes, instant or delayed casts, cooldowns, damage, combined effects, and particle themes.
+Open **Fighting & Survival → Abilities** to assign attacks from the shared **Abilities** library and adjust how often the NPC uses them. The library provides editable spells, fire breath, a sonic beam, a defensive shockwave, and a short reposition blink. Build custom attacks with origins, shapes, instant or delayed casts, cooldowns, damage, combined effects, and particle themes.
 
-See [Fighters](/features/fighters) for the attack editor, templates, and casting rules. Attacks require active combat and maximum health above zero. Each instance has independent cooldowns and mixes assigned attacks with its weapon combat. Existing assignments to the original eight special attacks remain valid.
+See [Abilities](/features/abilities) for the attack editor, templates, and casting rules. Attacks require active combat and maximum health above zero. Each instance has independent cooldowns and mixes assigned attacks with its weapon combat. Existing assignments to the original eight special attacks remain valid.
 
 **Change Fight Options** includes the same attack assignment screen, so behaviours, waypoint actions, and question branches can temporarily change the NPC's attacks and usage interval.
 

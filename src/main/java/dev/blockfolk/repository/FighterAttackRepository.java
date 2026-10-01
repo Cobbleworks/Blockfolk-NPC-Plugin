@@ -21,17 +21,24 @@ public final class FighterAttackRepository {
     private final Map<String, FighterAttack> attacks = new LinkedHashMap<>();
 
     public FighterAttackRepository(JavaPlugin plugin) {
-        file = new File(plugin.getDataFolder(), "fighters.yml");
+        file = new File(plugin.getDataFolder(), "abilities.yml");
         writer = new DebouncedYamlWriter(plugin);
     }
     public void loadAll() {
         attacks.clear();
-        if (!file.exists()) {
+        File source = sourceFile(file);
+        if (!source.exists()) {
             FighterTemplates.defaults().forEach(attack -> attacks.put(attack.key(), attack));
             saveAll();
             return;
         }
-        decode(YamlConfiguration.loadConfiguration(file)).forEach(attack -> attacks.put(attack.key(), attack));
+        decode(YamlConfiguration.loadConfiguration(source)).forEach(attack -> attacks.put(attack.key(), attack));
+        if (!source.equals(file))
+            saveAll();
+    }
+
+    static File sourceFile(File file) {
+        return file.exists() ? file : new File(file.getParentFile(), "fighters.yml");
     }
     public List<FighterAttack> findAll() {
         return List.copyOf(attacks.values());
@@ -56,7 +63,7 @@ public final class FighterAttackRepository {
 
     static YamlConfiguration encode(List<FighterAttack> attacks) {
         YamlConfiguration yaml = new YamlConfiguration();
-        yaml.set("version", 1);
+        yaml.set("version", 2);
         ConfigurationSection root = yaml.createSection("attacks");
         for (FighterAttack attack : attacks) {
             ConfigurationSection section = root.createSection(attack.key());
@@ -64,6 +71,8 @@ public final class FighterAttackRepository {
             section.set("origin", attack.origin().name());
             section.set("shape", attack.shape().name());
             section.set("range", attack.range());
+            section.set("cone-length", attack.coneLength());
+            section.set("icon", attack.icon());
             section.set("size", attack.size());
             section.set("angle", attack.angle());
             section.set("delay-ticks", attack.delayTicks());
@@ -96,7 +105,8 @@ public final class FighterAttackRepository {
                     section.getInt("cooldown-ticks", 200), section.getDouble("damage", 4), effects,
                     section.getInt("effect-seconds", 3), section.getInt("effect-level", 1),
                     section.getDouble("knockback", 0.8),
-                    enumValue(Visual.class, section.getString("visual"), Visual.SOUL)));
+                    enumValue(Visual.class, section.getString("visual"), Visual.SOUL),
+                    section.getDouble("cone-length", section.getDouble("range", 8)), section.getItemStack("icon")));
         }
         return attacks;
     }

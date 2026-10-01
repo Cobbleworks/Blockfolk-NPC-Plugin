@@ -6,13 +6,19 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Added
 
-- Dedicated Fighters library and template editor, available through `/bf fighters` and the main menu, with per-NPC attack assignments and previews.
+- Custom ability icons copied from a held item with Q / Drop, and separately configurable cone length.
+- Dedicated Abilities library and template editor, available through `/bf abilities` and the main menu, with per-NPC attack assignments and previews.
 - Custom attack origins, spherical areas, aimed cones, beams that stop at blocks, safe short-range teleports, instant or delayed casts, cooldowns, damage, combined effects, and visual themes.
 - Fire Breath, Sonic Blast, and Reposition Blink templates; defensive Shockwave follows the caster. Existing special attack assignments remain compatible.
-- Persist shared definitions in `fighters.yml` and custom assignments in combat profiles and Change Fight Options actions.
+- Persist shared definitions in `abilities.yml` and custom assignments in combat profiles and Change Fight Options actions.
 - Native special attacks in Fighting & Survival: life drain, freezing spell, poison spit, wither curse, flame burst, lightning mark, shockwave, and fear.
 - Individual attack toggles, adjustable cadence, per-instance cooldowns, and configurable cast warnings with dodgeable impacts.
 - Persist special attack settings per preset and configure temporary overrides through Change Fight Options actions for behaviours, waypoints, and question branches.
+
+### Changed
+
+- Rename Fighters to Abilities, including `/bf abilities`, and migrate saved definitions to `abilities.yml`.
+- Consolidate health, respawn time, and experience controls into one icon each with left/right adjustment, shift for five steps, middle-click input, and consistent coloured click labels.
 
 ### Fixed
 
@@ -29,4 +35,3 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 ### Fixed
 
 - Apply the repository's required Java formatting to files that previously blocked the release checks.
-

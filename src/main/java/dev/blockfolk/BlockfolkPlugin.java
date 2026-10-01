@@ -49,7 +49,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private LocationRepository locationRepository;
     private CustomEventRepository customEventRepository;
     private dev.blockfolk.repository.FighterAttackRepository fighterAttackRepository;
-    private dev.blockfolk.gui.FightersGuiService fightersGuiService;
+    private dev.blockfolk.gui.AbilitiesGuiService abilitiesGuiService;
     private NpcInstanceRegistry instanceRegistry;
     private NpcRenderer npcRenderer;
     private NativeNpcNavigationService navigationService;
@@ -94,9 +94,9 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 skinResolver, routeGuiService::openRoutes, routeGuiService::openNpcRoutes, routeGuiService::createRoute,
                 routeGuiService::beginEditing, customEventRepository, customEventGuiService::open,
                 customEventGuiService::createEvent, locationRepository);
-        fightersGuiService = new dev.blockfolk.gui.FightersGuiService(fighterAttackRepository, chatInputService,
+        abilitiesGuiService = new dev.blockfolk.gui.AbilitiesGuiService(fighterAttackRepository, chatInputService,
                 this::openMainGui);
-        guiService.setFightersGuiService(fightersGuiService);
+        guiService.setAbilitiesGuiService(abilitiesGuiService);
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         routeGuiService.setNpcMenuOpener(guiService::openEditor);
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService,
@@ -173,7 +173,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 .register("blockfolk", "Opens and controls Blockfolk.", java.util.List.of("bf"), executor));
 
         getServer().getPluginManager().registerEvents(guiService, this);
-        getServer().getPluginManager().registerEvents(fightersGuiService, this);
+        getServer().getPluginManager().registerEvents(abilitiesGuiService, this);
         getServer().getPluginManager().registerEvents(routeGuiService, this);
         getServer().getPluginManager().registerEvents(customEventGuiService, this);
         getServer().getPluginManager().registerEvents(chatInputService, this);

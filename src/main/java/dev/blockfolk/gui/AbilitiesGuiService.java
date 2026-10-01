@@ -29,8 +29,8 @@ import dev.blockfolk.repository.FighterAttackRepository;
 import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.UiText;
 
-/** Shared attack library, template editor, and per-NPC assignment menus. */
-public final class FightersGuiService implements Listener {
+/** Shared ability library, template editor, and per-NPC assignment menus. */
+public final class AbilitiesGuiService implements Listener {
     private static final int PAGE_SIZE = 45;
     private final FighterAttackRepository repository;
     private final ChatInputService input;
@@ -56,7 +56,7 @@ public final class FightersGuiService implements Listener {
             Consumer<Player> back, int page) implements Holder {
     }
 
-    public FightersGuiService(FighterAttackRepository repository, ChatInputService input, Consumer<Player> mainMenu) {
+    public AbilitiesGuiService(FighterAttackRepository repository, ChatInputService input, Consumer<Player> mainMenu) {
         this.repository = repository;
         this.input = input;
         this.mainMenu = mainMenu;
@@ -72,24 +72,25 @@ public final class FightersGuiService implements Listener {
     private void library(Player player, int requestedPage, Consumer<Player> back) {
         List<FighterAttack> attacks = repository.findAll();
         int page = page(requestedPage, attacks.size());
-        Inventory inventory = menu(new LibraryHolder(page, back), "Fighters · Attack Library");
+        Inventory inventory = menu(new LibraryHolder(page, back), "Abilities · Ability Library");
         for (int i = page * PAGE_SIZE; i < Math.min(attacks.size(), (page + 1) * PAGE_SIZE); i++) {
             FighterAttack attack = attacks.get(i);
             List<String> lore = summary(attack);
-            lore.add(LegacyText.YELLOW + "Click to edit this shared attack");
-            inventory.setItem(i % PAGE_SIZE, item(icon(attack), attack.name(), lore));
+            lore.add(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Edit this shared ability");
+            lore.addAll(iconHints());
+            inventory.setItem(i % PAGE_SIZE, abilityItem(attack, attack.name(), lore));
         }
         inventory.setItem(51,
-                item(Material.EMERALD, "Create Attack", List.of("Choose a starting template, then enter a name")));
+                item(Material.EMERALD, "Create Ability", List.of("Choose a starting template, then enter a name")));
         footer(inventory, page, attacks.size());
         show(player, inventory);
     }
     private void templates(Player player, Consumer<Player> back) {
-        Inventory inventory = menu(new TemplateHolder(back), "Fighters · Choose Template");
+        Inventory inventory = menu(new TemplateHolder(back), "Abilities · Choose Template");
         List<FighterAttack> templates = FighterTemplates.defaults();
         for (int i = 0; i < templates.size(); i++) {
             FighterAttack attack = templates.get(i);
-            inventory.setItem(i, item(icon(attack), attack.name(), summary(attack)));
+            inventory.setItem(i, abilityItem(attack, attack.name(), summary(attack)));
         }
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         show(player, inventory);
@@ -98,7 +99,7 @@ public final class FightersGuiService implements Listener {
         List<String> keys = assignmentKeys(holder.options());
         int page = page(holder.page(), keys.size());
         holder = new AssignHolder(holder.options(), holder.save(), holder.back(), page);
-        Inventory inventory = menu(holder, "Fighters · Assigned Attacks");
+        Inventory inventory = menu(holder, "Abilities · Assigned Abilities");
         for (int i = page * PAGE_SIZE; i < Math.min(keys.size(), (page + 1) * PAGE_SIZE); i++) {
             String key = keys.get(i);
             FighterAttack attack = repository.find(key).orElse(null);
@@ -108,22 +109,29 @@ public final class FightersGuiService implements Listener {
                     : summary(attack);
             lore.add(0, enabled ? LegacyText.GREEN + "Assigned" : LegacyText.RED + "Not assigned");
             if (attack != null) {
-                lore.add(LegacyText.YELLOW + "Left click: toggle assignment");
-                lore.add(LegacyText.AQUA + "Right click: edit shared attack");
+                lore.add(LegacyText.YELLOW + "Left-click: " + LegacyText.GRAY + "Toggle assignment");
+                lore.add(LegacyText.YELLOW + "Right-click: " + LegacyText.GRAY + "Edit shared ability");
+                lore.addAll(iconHints());
             }
-            inventory.setItem(i % PAGE_SIZE, item(attack == null ? Material.BARRIER : icon(attack),
-                    attack == null ? key + " (missing)" : attack.name(), lore));
+            if (attack == null)
+                inventory.setItem(i % PAGE_SIZE, item(Material.BARRIER, key + " (missing)", lore));
+            else
+                inventory.setItem(i % PAGE_SIZE, abilityItem(attack, attack.name(), lore));
         }
         inventory.setItem(46,
-                item(Material.RED_DYE, "Use More Often", List.of("Decrease interval by 1 second; shift for 5")));
+                item(Material.RED_DYE, "Use More Often",
+                        List.of(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Decrease interval by 1 second",
+                                LegacyText.DARK_GRAY + "Shift-click: " + LegacyText.GRAY + "Five seconds")));
         inventory.setItem(48,
                 item(Material.CLOCK, "Interval: about " + holder.options().intervalSeconds() + " Seconds",
                         List.of("Mixes ready attacks with weapon combat", "Each NPC has independent cooldowns",
                                 "Requires Max Health above 0")));
         inventory.setItem(50,
-                item(Material.LIME_DYE, "Use Less Often", List.of("Increase interval by 1 second; shift for 5")));
+                item(Material.LIME_DYE, "Use Less Often",
+                        List.of(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Increase interval by 1 second",
+                                LegacyText.DARK_GRAY + "Shift-click: " + LegacyText.GRAY + "Five seconds")));
         inventory.setItem(51,
-                item(Material.BOOK, "Manage Attack Library", List.of("Create and edit attacks for all NPCs")));
+                item(Material.BOOK, "Manage Ability Library", List.of("Create and edit attacks for all NPCs")));
         footer(inventory, page, keys.size());
         show(player, inventory);
     }
@@ -139,7 +147,7 @@ public final class FightersGuiService implements Listener {
             holder.back().accept(player);
             return;
         }
-        Inventory inventory = menu(holder, "Fighters · " + attack.name());
+        Inventory inventory = menu(holder, "Abilities · " + attack.name());
         inventory.setItem(0,
                 item(Material.COMPASS, "Shape & Origin", List.of("Choose where and how the attack is cast")));
         inventory.setItem(1, item(Material.CLOCK, "Timing", List.of("Instant or delayed cast; individual cooldown")));
@@ -151,24 +159,28 @@ public final class FightersGuiService implements Listener {
                 List.of("Shows the shape from your position and view", "Preview does not damage or teleport anyone")));
         switch (holder.tab()) {
             case OVERVIEW -> {
-                inventory.setItem(13, item(icon(attack), attack.name(), summary(attack)));
+                inventory.setItem(13, abilityItem(attack, attack.name(), iconLore(attack)));
                 inventory.setItem(20, item(Material.NAME_TAG, "Rename",
                         List.of("Display name; existing NPC assignments are preserved")));
                 inventory.setItem(22, item(Material.WRITABLE_BOOK, "Duplicate",
                         List.of("Create an independent copy of this attack")));
                 inventory.setItem(24,
-                        item(Material.BOOK, "Shared Attack",
+                        item(Material.BOOK, "Shared Ability",
                                 List.of("Edits apply to every NPC assigned this attack",
                                         "Use the tabs above to configure it",
                                         "NPC usage frequency is set on the assignment screen")));
-                inventory.setItem(53, item(Material.TNT, "Delete Attack", List.of("Requires confirmation")));
+                inventory.setItem(53, item(Material.TNT, "Delete Ability", List.of("Requires confirmation")));
             }
             case GEOMETRY -> {
-                inventory.setItem(10, item(icon(attack), "Shape: " + label(attack.shape()),
-                        List.of("Click to cycle: sphere, cone, beam, teleport")));
-                inventory.setItem(11, item(Material.COMPASS, "Origin: " + label(attack.origin()), List.of(
-                        attack.shape() == Shape.SPHERE ? "Click to cycle NPC or target position" : "Casts from the NPC",
-                        "NPC spheres follow the caster; target spheres mark a spot")));
+                inventory.setItem(10, abilityItem(attack, "Shape: " + label(attack.shape()), List
+                        .of(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Cycle sphere, cone, beam, teleport")));
+                inventory.setItem(11,
+                        item(Material.COMPASS, "Origin: " + label(attack.origin()), List.of(
+                                attack.shape() == Shape.SPHERE
+                                        ? LegacyText.YELLOW + "Click: " + LegacyText.GRAY
+                                                + "Cycle NPC or target position"
+                                        : "Casts from the NPC",
+                                "NPC spheres follow the caster; target spheres mark a spot")));
                 number(inventory, 12, Material.SPYGLASS, "Activation Range", attack.range(), "blocks",
                         "How close the opponent must be to start casting");
                 if (attack.shape() != Shape.CONE)
@@ -177,9 +189,12 @@ public final class FightersGuiService implements Listener {
                                     ? "Blink Distance"
                                     : attack.shape() == Shape.BEAM ? "Beam Radius" : "Area Radius",
                             attack.size(), "blocks", "Size of the affected area");
-                if (attack.shape() == Shape.CONE)
+                if (attack.shape() == Shape.CONE) {
                     number(inventory, 14, Material.BLAZE_POWDER, "Cone Angle", attack.angle(), "degrees",
                             "Aimed at the opponent when casting starts");
+                    number(inventory, 15, Material.SPYGLASS, "Cone Length", attack.coneLength(), "blocks",
+                            "How far the cone reaches; separate from activation range");
+                }
                 inventory.setItem(22,
                         item(Material.BOOK, "Casting",
                                 List.of("Cones and beams lock their aim when casting starts",
@@ -191,8 +206,8 @@ public final class FightersGuiService implements Listener {
                         "0 fires instantly; movement pauses while casting");
                 number(inventory, 13, Material.REPEATER, "Cooldown", attack.cooldownTicks() / 20.0, "seconds",
                         "Starts after the cast delay; tracked per NPC");
-                inventory.setItem(15,
-                        item(Material.LIGHTNING_ROD, "Make Instant", List.of("Click to set cast delay to zero")));
+                inventory.setItem(15, item(Material.LIGHTNING_ROD, "Make Instant",
+                        List.of(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Set cast delay to zero")));
             }
             case EFFECTS -> {
                 number(inventory, 10, Material.IRON_SWORD, "Damage", attack.damage(), "HP",
@@ -208,22 +223,24 @@ public final class FightersGuiService implements Listener {
                     inventory.setItem(19 + effect.ordinal(),
                             item(enabled ? Material.LIME_DYE : Material.GRAY_DYE, label(effect),
                                     List.of(enabled ? LegacyText.GREEN + "Enabled" : LegacyText.RED + "Disabled",
-                                            "Click to toggle")));
+                                            LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Toggle effect")));
                 }
                 inventory.setItem(31,
                         item(Material.BOOK, "Combine Effects", List.of("Toggle any combination of effects",
                                 "Life Drain heals by damage actually dealt", "Teleport only repositions the caster",
                                 "Cancelled damage also prevents secondary effects")));
             }
-            case VISUALS -> inventory.setItem(13, item(Material.FIREWORK_STAR, "Theme: " + label(attack.visual()),
-                    List.of("Click to cycle particle themes", "Sonic uses the Warden blast sound and particles")));
+            case VISUALS -> inventory.setItem(13,
+                    item(Material.FIREWORK_STAR, "Theme: " + label(attack.visual()),
+                            List.of(LegacyText.YELLOW + "Click: " + LegacyText.GRAY + "Cycle particle themes",
+                                    "Sonic uses the Warden blast sound and particles")));
         }
         inventory.setItem(45, item(Material.BOOK, "Overview", List.of()));
         inventory.setItem(49, item(Material.BARRIER, "Back to Library", List.of()));
         show(player, inventory);
     }
     private void confirmDelete(Player player, EditHolder holder) {
-        Inventory inventory = menu(new DeleteHolder(holder.key(), holder.back()), "Delete Shared Attack?");
+        Inventory inventory = menu(new DeleteHolder(holder.key(), holder.back()), "Delete Shared Ability?");
         inventory.setItem(11, item(Material.TNT, "Delete", List.of("Assigned NPCs will stop using this attack",
                 "The definition will be removed from the library")));
         inventory.setItem(15, item(Material.BARRIER, "Cancel", List.of()));
@@ -242,8 +259,13 @@ public final class FightersGuiService implements Listener {
         if (holder instanceof LibraryHolder library) {
             List<FighterAttack> attacks = repository.findAll();
             if (slot < PAGE_SIZE && library.page() * PAGE_SIZE + slot < attacks.size()) {
-                edit(player, new EditHolder(attacks.get(library.page() * PAGE_SIZE + slot).key(), Tab.OVERVIEW,
-                        p -> library(p, library.page(), library.back())));
+                FighterAttack attack = attacks.get(library.page() * PAGE_SIZE + slot);
+                if (isIconClick(event)) {
+                    repository.save(attack.withIcon(player.getInventory().getItemInMainHand()));
+                    library(player, library.page(), library.back());
+                } else
+                    edit(player, new EditHolder(attack.key(), Tab.OVERVIEW,
+                            p -> library(p, library.page(), library.back())));
             } else if (slot == 51)
                 templates(player, p -> library(p, library.page(), library.back()));
             else if (slot == 49)
@@ -260,7 +282,11 @@ public final class FightersGuiService implements Listener {
             int index = assign.page() * PAGE_SIZE + slot;
             if (slot < PAGE_SIZE && index < keys.size()) {
                 String key = keys.get(index);
-                if (event.isRightClick() && repository.find(key).isPresent())
+                if (isIconClick(event) && repository.find(key).isPresent()) {
+                    repository.save(
+                            repository.find(key).orElseThrow().withIcon(player.getInventory().getItemInMainHand()));
+                    assignments(player, assign);
+                } else if (event.isRightClick() && repository.find(key).isPresent())
                     edit(player, new EditHolder(key, Tab.OVERVIEW, p -> assignments(p, assign)));
                 else
                     saveAssignment(player, assign, assign.options().toggle(key));
@@ -297,7 +323,7 @@ public final class FightersGuiService implements Listener {
         if (slot == 4) {
             player.closeInventory();
             NpcSpecialAttackService.preview(player, attack);
-            player.sendMessage(UiText.info("Previewing " + attack.name() + ". Use /bf fighters to continue editing."));
+            player.sendMessage(UiText.info("Previewing " + attack.name() + ". Use /bf abilities to continue editing."));
             return;
         }
         if (slot == 49) {
@@ -309,12 +335,14 @@ public final class FightersGuiService implements Listener {
             return;
         }
         if (holder.tab() == Tab.OVERVIEW) {
-            if (slot == 53)
+            if (slot == 13 && isIconClick(event))
+                change(player, holder, a -> a.withIcon(player.getInventory().getItemInMainHand()));
+            else if (slot == 53)
                 confirmDelete(player, holder);
             else if (slot == 22)
                 create(player, attack, holder.back());
             else if (slot == 20)
-                input.request(player, "Enter the attack display name:",
+                input.request(player, "Enter the ability display name:",
                         name -> change(player, holder, a -> a.withName(name)), () -> edit(player, holder));
             return;
         }
@@ -334,6 +362,8 @@ public final class FightersGuiService implements Listener {
             else if (slot == 14 && attack.shape() == Shape.CONE)
                 numeric(event, player, holder, attack.angle(), 5,
                         value -> a -> a.withGeometry(a.origin(), a.shape(), a.range(), a.size(), value));
+            else if (slot == 15 && attack.shape() == Shape.CONE)
+                numeric(event, player, holder, attack.coneLength(), 1, value -> a -> a.withConeLength(value));
         } else if (holder.tab() == Tab.TIMING) {
             if (slot == 11)
                 numeric(event, player, holder, attack.delayTicks() / 20.0, 0.25,
@@ -382,16 +412,18 @@ public final class FightersGuiService implements Listener {
                     edit(player, holder);
                 }
             }, () -> edit(player, holder));
-        } else
-            change(player, holder,
-                    update.apply(current + step * (event.isRightClick() ? -1 : 1) * (event.isShiftClick() ? 5 : 1)));
+        } else {
+            int direction = NumericControl.direction(event.getClick());
+            if (direction != 0)
+                change(player, holder, update.apply(current + step * direction * (event.isShiftClick() ? 5 : 1)));
+        }
     }
     private void change(Player player, EditHolder holder, UnaryOperator<FighterAttack> update) {
         repository.find(holder.key()).ifPresent(a -> repository.save(update.apply(a)));
         edit(player, holder);
     }
     private void create(Player player, FighterAttack template, Consumer<Player> back) {
-        input.request(player, "Enter a name for the new attack:", name -> {
+        input.request(player, "Enter a name for the new ability:", name -> {
             String key = FighterAttack.normalizeKey(name);
             if (key.isEmpty()) {
                 player.sendMessage(UiText.error("Use a name containing letters or numbers."));
@@ -435,26 +467,53 @@ public final class FightersGuiService implements Listener {
     }
     private static void number(Inventory inventory, int slot, Material icon, String label, double value, String unit,
             String help) {
+        List<String> lore = new ArrayList<>(List.of(help));
+        lore.addAll(NumericControl.lore());
         inventory.setItem(slot,
-                item(icon, label + ": " + String.format(java.util.Locale.ROOT, "%.2f", value) + " " + unit,
-                        List.of(help, "Left click: increase; right click: decrease",
-                                "Shift: five steps; middle click: enter value")));
+                item(icon, label + ": " + String.format(java.util.Locale.ROOT, "%.2f", value) + " " + unit, lore));
     }
     private static List<String> summary(FighterAttack attack) {
-        return new ArrayList<>(List.of(LegacyText.GRAY + label(attack.shape()) + " · from " + label(attack.origin()),
-                LegacyText.GRAY + "Range: " + attack.range() + " blocks · Damage: " + attack.damage() + " HP",
-                LegacyText.GRAY + "Delay: " + attack.delayTicks() / 20.0 + "s · Cooldown: "
-                        + attack.cooldownTicks() / 20.0 + "s",
-                LegacyText.GRAY + "Effects: "
-                        + (attack.effects().isEmpty()
-                                ? "None"
-                                : attack.effects().stream().sorted().map(FightersGuiService::label)
-                                        .collect(java.util.stream.Collectors.joining(", ")))));
+        List<String> lore = new ArrayList<>(
+                List.of(LegacyText.GRAY + label(attack.shape()) + " · from " + label(attack.origin()),
+                        LegacyText.GRAY + "Range: " + attack.range() + " blocks · Damage: " + attack.damage() + " HP",
+                        LegacyText.GRAY + "Delay: " + attack.delayTicks() / 20.0 + "s · Cooldown: "
+                                + attack.cooldownTicks() / 20.0 + "s",
+                        LegacyText.GRAY + "Effects: "
+                                + (attack.effects().isEmpty()
+                                        ? "None"
+                                        : attack.effects().stream().sorted().map(AbilitiesGuiService::label)
+                                                .collect(java.util.stream.Collectors.joining(", ")))));
+        if (attack.shape() == Shape.CONE)
+            lore.add(1, LegacyText.GRAY + "Cone: " + attack.coneLength() + " blocks · " + attack.angle() + " degrees");
+        return lore;
     }
     private static String label(Enum<?> value) {
         String name = value.name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
         return Character.toUpperCase(name.charAt(0)) + name.substring(1);
     }
+    private static boolean isIconClick(InventoryClickEvent event) {
+        return event.getClick() == org.bukkit.event.inventory.ClickType.DROP
+                || event.getClick() == org.bukkit.event.inventory.ClickType.CONTROL_DROP;
+    }
+
+    private static List<String> iconHints() {
+        return List.of(LegacyText.GOLD + "Q / Drop: " + LegacyText.GRAY + "Set icon from main-hand item",
+                LegacyText.DARK_GRAY + "Empty hand: " + LegacyText.GRAY + "Restore the default icon");
+    }
+
+    private static List<String> iconLore(FighterAttack attack) {
+        List<String> lore = summary(attack);
+        lore.addAll(iconHints());
+        return lore;
+    }
+
+    private static ItemStack abilityItem(FighterAttack attack, String name, List<String> lore) {
+        ItemStack icon = attack.icon();
+        if (icon == null)
+            icon = new ItemStack(icon(attack));
+        return decorate(icon, name, lore);
+    }
+
     private static Material icon(FighterAttack attack) {
         if (attack.shape() == Shape.TELEPORT)
             return Material.ENDER_PEARL;
@@ -471,7 +530,10 @@ public final class FightersGuiService implements Listener {
         };
     }
     private static ItemStack item(Material material, String name, List<String> lore) {
-        ItemStack item = new ItemStack(material);
+        return decorate(new ItemStack(material), name, lore);
+    }
+
+    private static ItemStack decorate(ItemStack item, String name, List<String> lore) {
         var meta = item.getItemMeta();
         meta.displayName(LegacyText.component(LegacyText.WHITE + name));
         meta.lore(lore.stream().map(line -> LegacyText.component(LegacyText.GRAY + line)).toList());

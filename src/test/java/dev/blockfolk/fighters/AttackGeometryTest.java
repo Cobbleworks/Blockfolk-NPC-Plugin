@@ -22,6 +22,20 @@ class AttackGeometryTest {
         assertFalse(AttackGeometry.contains(cone, new Vector(8, 0, 1), aim, 8));
     }
     @Test
+    void coneLengthIsIndependentOfActivationRange() {
+        FighterAttack cone = attack(Shape.CONE).withConeLength(3);
+        Vector aim = new Vector(1, 0, 0);
+        assertEquals(8, cone.range());
+        assertTrue(AttackGeometry.contains(cone, new Vector(2, 0, 0), aim, cone.reach()));
+        assertFalse(AttackGeometry.contains(cone, new Vector(4, 0, 0), aim, cone.reach()));
+        FighterAttack longer = cone.withConeLength(12);
+        assertEquals(8, longer.range());
+        assertTrue(AttackGeometry.contains(longer, new Vector(10, 0, 0), aim, longer.reach()));
+        assertEquals(12,
+                longer.withGeometry(longer.origin(), longer.shape(), 20, longer.size(), longer.angle()).coneLength());
+    }
+
+    @Test
     void beamUsesRadiusAndStopsAtTheFirstObstacle() {
         FighterAttack beam = attack(Shape.BEAM);
         Vector aim = new Vector(1, 0, 0);

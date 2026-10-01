@@ -142,7 +142,7 @@ public final class GuiService implements Listener {
     private final NpcCreationDialog creationDialog;
     private NpcBehaviourService behaviourService;
     private AiControlService aiControlService;
-    private FightersGuiService fightersGuiService;
+    private AbilitiesGuiService abilitiesGuiService;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
     private final Map<String, String> pendingSkinUrls = new HashMap<>();
     private final Map<UUID, WaypointSession> waypointSessions = new HashMap<>();
@@ -177,12 +177,12 @@ public final class GuiService implements Listener {
         this.creationDialog = new NpcCreationDialog(plugin, definitionRepository, instanceRegistry, this::openEditor);
     }
 
-    public void setFightersGuiService(FightersGuiService service) {
-        fightersGuiService = service;
+    public void setAbilitiesGuiService(AbilitiesGuiService service) {
+        abilitiesGuiService = service;
     }
 
-    public void openFighters(Player player) {
-        fightersGuiService.open(player);
+    public void openAbilities(Player player) {
+        abilitiesGuiService.open(player);
     }
 
     public void setBehaviourService(NpcBehaviourService behaviourService) {
@@ -352,7 +352,7 @@ public final class GuiService implements Listener {
                         List.of(LegacyText.GRAY + "Create and edit NPC walking routes",
                                 LegacyText.YELLOW + "Click to open route setup")));
         inventory.setItem(48,
-                item(Material.IRON_SWORD, "Fighters",
+                item(Material.IRON_SWORD, "Abilities",
                         List.of(LegacyText.GRAY + "Build shared attacks and assign them to NPCs",
                                 LegacyText.YELLOW + "Click to open")));
         inventory.setItem(46,
@@ -636,58 +636,35 @@ public final class GuiService implements Listener {
         CombatProfile combat = definition.getCombatProfile();
         Inventory inventory = Bukkit.createInventory(new FightingHolder(definition.getKey()), 36,
                 UiText.title("Fighting & Survival", definition.getDisplayName()));
-        inventory.setItem(1,
-                item(Material.LIME_DYE, "+ " + CombatProfile.HEALTH_STEP + " Health",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + healthLabel(combat),
-                                LegacyText.YELLOW + "Click to increase max health",
-                                LegacyText.DARK_GRAY + "Shift-click for x10")));
+        List<String> healthLore = new ArrayList<>(List.of(
+                combat.invulnerable()
+                        ? LegacyText.GREEN + "This NPC cannot be damaged"
+                        : LegacyText.GRAY + "Maximum health in HP; 2 HP equals one heart",
+                LegacyText.DARK_GRAY + "Set health to 0 for invulnerability",
+                LegacyText.GRAY + "Step: " + CombatProfile.HEALTH_STEP + " HP"));
+        healthLore.addAll(NumericControl.lore());
         inventory.setItem(10,
                 combat.invulnerable()
-                        ? item(Material.TOTEM_OF_UNDYING, "Max Health: " + healthLabel(combat),
-                                List.of(LegacyText.GREEN + "This NPC cannot be damaged",
-                                        LegacyText.DARK_GRAY + "Set health to 0 for invulnerability"))
-                        : potionItem(PotionType.HEALING, "Max Health: " + healthLabel(combat),
-                                List.of(LegacyText.GRAY + "The NPC is removed when killed",
-                                        LegacyText.DARK_GRAY + "Set health to 0 for invulnerability")));
-        inventory.setItem(19,
-                item(Material.RED_DYE, "- " + CombatProfile.HEALTH_STEP + " Health",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + healthLabel(combat),
-                                LegacyText.YELLOW + "Click to decrease max health",
-                                LegacyText.DARK_GRAY + "Shift-click for x10")));
-        inventory.setItem(3,
-                item(Material.LIME_DYE, "+ " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + respawnLabel(combat),
-                                LegacyText.YELLOW + "Click to increase respawn time",
-                                LegacyText.DARK_GRAY + "Shift-click for x10")));
-        inventory.setItem(12,
-                item(combat.respawnSeconds() == 0 ? Material.BARRIER : Material.CLOCK,
-                        "Respawn Time: " + respawnLabel(combat),
-                        List.of(combat.respawnSeconds() == 0
-                                ? LegacyText.GRAY + "Killed NPCs will not respawn"
-                                : LegacyText.GREEN + "Respawns at the preset spawn point",
-                                definition.getSpawnpoint() == null
-                                        ? LegacyText.RED + "A preset spawn point is required"
-                                        : LegacyText.DARK_GRAY + "Preset spawn point is configured")));
-        inventory.setItem(21,
-                item(Material.RED_DYE, "- " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + respawnLabel(combat),
-                                LegacyText.YELLOW + "Click to decrease respawn time",
-                                LegacyText.DARK_GRAY + "Shift-click for x10")));
-        inventory.setItem(5,
-                item(Material.LIME_DYE, "+ " + CombatProfile.EXPERIENCE_STEP + " Experience",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + experienceLabel(combat),
-                                LegacyText.YELLOW + "Click to increase dropped experience",
-                                LegacyText.DARK_GRAY + "Shift-click for x10")));
+                        ? item(Material.TOTEM_OF_UNDYING, "Max Health: " + healthLabel(combat), healthLore)
+                        : potionItem(PotionType.HEALING, "Max Health: " + healthLabel(combat), healthLore));
+        List<String> respawnLore = new ArrayList<>(List.of(
+                combat.respawnSeconds() == 0
+                        ? LegacyText.GRAY + "Killed NPCs will not respawn"
+                        : LegacyText.GREEN + "Respawns at the preset spawn point",
+                definition.getSpawnpoint() == null
+                        ? LegacyText.RED + "A preset spawn point is required"
+                        : LegacyText.DARK_GRAY + "Preset spawn point is configured",
+                LegacyText.GRAY + "Step: " + CombatProfile.RESPAWN_STEP_SECONDS + " seconds"));
+        respawnLore.addAll(NumericControl.lore());
+        inventory.setItem(12, item(Material.CLOCK, "Respawn Time: " + respawnLabel(combat), respawnLore));
+        List<String> experienceLore = new ArrayList<>(List.of(
+                combat.droppedExperience() == 0
+                        ? LegacyText.GRAY + "This NPC drops no experience"
+                        : LegacyText.GREEN + "Dropped when this NPC dies",
+                LegacyText.GRAY + "Step: " + CombatProfile.EXPERIENCE_STEP + " XP"));
+        experienceLore.addAll(NumericControl.lore());
         inventory.setItem(14,
-                item(Material.EXPERIENCE_BOTTLE, "Dropped Experience: " + experienceLabel(combat),
-                        List.of(combat.droppedExperience() == 0
-                                ? LegacyText.GRAY + "This NPC drops no experience"
-                                : LegacyText.GREEN + "Dropped when this NPC dies")));
-        inventory.setItem(23,
-                item(Material.RED_DYE, "- " + CombatProfile.EXPERIENCE_STEP + " Experience",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + experienceLabel(combat),
-                                LegacyText.YELLOW + "Click to decrease dropped experience",
-                                LegacyText.DARK_GRAY + "Shift-click for x10")));
+                item(Material.EXPERIENCE_BOTTLE, "Dropped Experience: " + experienceLabel(combat), experienceLore));
         inventory.setItem(15, toggleItem(Material.WITHER_SKELETON_SKULL, "Show Boss Bar", combat.showBossBar(),
                 "Shows current HP to players within 16 blocks"));
         inventory.setItem(13,
@@ -741,7 +718,7 @@ public final class GuiService implements Listener {
     }
 
     private ItemStack specialAttacksItem(SpecialAttackOptions options) {
-        return item(Material.BLAZE_POWDER, "Fighter Attacks",
+        return item(Material.BLAZE_POWDER, "Abilities",
                 List.of(LegacyText.GRAY + "Assigned: " + LegacyText.WHITE + options.assignedAttackKeys().size(),
                         LegacyText.GRAY + "Interval: about " + options.intervalSeconds() + " seconds",
                         LegacyText.YELLOW + "Click to configure"));
@@ -754,7 +731,7 @@ public final class GuiService implements Listener {
                 player.closeInventory();
                 return;
             }
-            fightersGuiService.openAssignments(player, definition.getCombatProfile().specialAttacks(), options -> {
+            abilitiesGuiService.openAssignments(player, definition.getCombatProfile().specialAttacks(), options -> {
                 definitionRepository.find(context.key()).ifPresent(current -> {
                     current.setCombatProfile(current.getCombatProfile().withSpecialAttacks(options));
                     definitionRepository.save(current);
@@ -763,7 +740,7 @@ public final class GuiService implements Listener {
                     p::closeInventory));
         } else {
             FightOptionsActionHolder[] current = {context.action()};
-            fightersGuiService.openAssignments(player, current[0].options().specialAttacks(), options -> {
+            abilitiesGuiService.openAssignments(player, current[0].options().specialAttacks(), options -> {
                 FightOptionsActionHolder saved = saveFightOptionsAction(current[0],
                         current[0].options().withSpecialAttacks(options));
                 if (saved != null)
@@ -1256,7 +1233,7 @@ public final class GuiService implements Listener {
             return;
         }
         if (event.getRawSlot() == 48) {
-            openFighters(player);
+            openAbilities(player);
             return;
         }
         if (event.getRawSlot() == 47) {
@@ -1449,46 +1426,28 @@ public final class GuiService implements Listener {
             return;
         }
         CombatProfile combat = definition.getCombatProfile();
-        int multiplier = event.isShiftClick() ? 10 : 1;
-        switch (event.getRawSlot()) {
-            case 19 -> {
-                definition.setCombatProfile(
-                        combat.withMaxHealth(combat.maxHealth() - CombatProfile.HEALTH_STEP * multiplier));
-                saveRefresh(definition);
-                openFightingEditor(player, definition);
+        int slot = event.getRawSlot();
+        if (slot == 10 || slot == 12 || slot == 14) {
+            if (event.getClick() == ClickType.MIDDLE) {
+                requestCombatValue(player, key, slot);
+                return;
             }
-            case 1 -> {
-                definition.setCombatProfile(
-                        combat.withMaxHealth(combat.maxHealth() + CombatProfile.HEALTH_STEP * multiplier));
-                saveRefresh(definition);
-                openFightingEditor(player, definition);
-            }
-            case 21 -> {
-                definition.setCombatProfile(combat
-                        .withRespawnSeconds(combat.respawnSeconds() - CombatProfile.RESPAWN_STEP_SECONDS * multiplier));
-                definitionRepository.save(definition);
-                openFightingEditor(player, definition);
-            }
-            case 3 -> {
-                int respawnSeconds = (int) Math.min(Integer.MAX_VALUE,
-                        (long) combat.respawnSeconds() + CombatProfile.RESPAWN_STEP_SECONDS * multiplier);
-                definition.setCombatProfile(combat.withRespawnSeconds(respawnSeconds));
-                definitionRepository.save(definition);
-                openFightingEditor(player, definition);
-            }
-            case 23 -> {
-                definition.setCombatProfile(combat.withDroppedExperience(
-                        combat.droppedExperience() - CombatProfile.EXPERIENCE_STEP * multiplier));
-                definitionRepository.save(definition);
-                openFightingEditor(player, definition);
-            }
-            case 5 -> {
-                int droppedExperience = (int) Math.min(Integer.MAX_VALUE,
-                        (long) combat.droppedExperience() + CombatProfile.EXPERIENCE_STEP * multiplier);
-                definition.setCombatProfile(combat.withDroppedExperience(droppedExperience));
-                definitionRepository.save(definition);
-                openFightingEditor(player, definition);
-            }
+            int direction = NumericControl.direction(event.getClick());
+            if (direction == 0)
+                return;
+            int step = slot == 10
+                    ? CombatProfile.HEALTH_STEP
+                    : slot == 12 ? CombatProfile.RESPAWN_STEP_SECONDS : CombatProfile.EXPERIENCE_STEP;
+            int current = slot == 10
+                    ? combat.maxHealth()
+                    : slot == 12 ? combat.respawnSeconds() : combat.droppedExperience();
+            int max = slot == 10 ? CombatProfile.MAX_HEALTH : Integer.MAX_VALUE;
+            int value = (int) Math.clamp((long) current + (long) direction * step * (event.isShiftClick() ? 5 : 1), 0,
+                    max);
+            setCombatValue(player, definition, slot, value);
+            return;
+        }
+        switch (slot) {
             case 13 -> {
                 openTargetsAndBehaviour(player, definition);
             }
@@ -1508,6 +1467,44 @@ public final class GuiService implements Listener {
             default -> {
             }
         }
+    }
+
+    private void requestCombatValue(Player player, String key, int slot) {
+        String label = slot == 10
+                ? "maximum health in HP"
+                : slot == 12 ? "respawn time in seconds" : "dropped experience";
+        int max = slot == 10 ? CombatProfile.MAX_HEALTH : Integer.MAX_VALUE;
+        chatInputService.request(player, "Enter " + label + " (0 to " + max + "):", value -> {
+            NpcDefinition current = definitionRepository.find(key).orElse(null);
+            if (current == null) {
+                player.closeInventory();
+                return;
+            }
+            try {
+                int parsed = Integer.parseInt(value.trim());
+                if (parsed < 0 || parsed > max)
+                    throw new NumberFormatException();
+                setCombatValue(player, current, slot, parsed);
+            } catch (NumberFormatException error) {
+                player.sendMessage(UiText.error("Enter a whole number from 0 to " + max + "."));
+                openFightingEditor(player, current);
+            }
+        }, () -> definitionRepository.find(key).ifPresent(current -> openFightingEditor(player, current)));
+    }
+
+    private void setCombatValue(Player player, NpcDefinition definition, int slot, int value) {
+        CombatProfile current = definition.getCombatProfile();
+        definition.setCombatProfile(switch (slot) {
+            case 10 -> current.withMaxHealth(value);
+            case 12 -> current.withRespawnSeconds(value);
+            case 14 -> current.withDroppedExperience(value);
+            default -> current;
+        });
+        if (slot == 10)
+            saveRefresh(definition);
+        else
+            definitionRepository.save(definition);
+        openFightingEditor(player, definition);
     }
 
     private void handleTargetsClick(InventoryClickEvent event, Player player, String key) {

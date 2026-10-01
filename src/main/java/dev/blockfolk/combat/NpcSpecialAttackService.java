@@ -133,7 +133,7 @@ public final class NpcSpecialAttackService {
         if (attack.damage() == 0 && attack.effects().isEmpty())
             return;
         Set<LivingEntity> victims = new LinkedHashSet<>(center.getNearbyLivingEntities(
-                attack.shape() == Shape.SPHERE ? attack.size() : attack.range() + attack.size()));
+                attack.shape() == Shape.SPHERE ? attack.size() : attack.reach() + attack.size()));
         victims.add(target);
         double drained = 0;
         for (LivingEntity victim : victims) {
@@ -247,7 +247,7 @@ public final class NpcSpecialAttackService {
     }
     private static double visibleRange(FighterAttack attack, Location center, Vector direction) {
         if (attack.shape() != Shape.BEAM)
-            return attack.range();
+            return attack.reach();
         var hit = center.getWorld().rayTraceBlocks(center, direction, attack.range(), FluidCollisionMode.NEVER, true);
         return hit == null
                 ? attack.range()

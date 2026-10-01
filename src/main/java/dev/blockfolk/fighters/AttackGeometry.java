@@ -10,6 +10,8 @@ public final class AttackGeometry {
             return relative.lengthSquared() <= attack.size() * attack.size();
         if (attack.shape() == FighterAttack.Shape.TELEPORT)
             return false;
+        if (attack.shape() == FighterAttack.Shape.CONE)
+            range = Math.min(range, attack.coneLength());
         double forward = relative.dot(direction);
         if (forward < 0 || forward > range)
             return false;
