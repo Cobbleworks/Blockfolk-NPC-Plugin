@@ -37,6 +37,7 @@ export default defineConfig({
           { text: 'Custom events', link: '/features/custom-events' },
           { text: 'Combat', link: '/features/combat' },
           { text: 'Abilities', link: '/features/abilities' },
+          { text: 'Shops', link: '/features/shop' },
           { text: 'Routes', link: '/features/routes' },
           { text: 'Locations', link: '/features/locations' },
           { text: 'AI behaviour', link: '/features/ai-behaviour' },

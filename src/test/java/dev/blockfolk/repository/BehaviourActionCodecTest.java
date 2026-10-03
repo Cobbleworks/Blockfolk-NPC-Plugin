@@ -69,4 +69,10 @@ class BehaviourActionCodecTest {
         assertEquals(4, decoded.question().options().size());
         assertEquals("Option 3", decoded.question().options().getLast().label());
     }
+
+    @Test
+    void roundTripsOpenShopWithoutAValue() {
+        BehaviourAction action = new BehaviourAction(BehaviourActionType.OPEN_SHOP, null);
+        assertEquals(action, BehaviourActionCodec.decode(BehaviourActionCodec.encode(action)));
+    }
 }

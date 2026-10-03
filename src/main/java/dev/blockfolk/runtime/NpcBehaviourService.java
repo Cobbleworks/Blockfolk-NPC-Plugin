@@ -142,6 +142,7 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, Location> playerLocationSnapshots = new ConcurrentHashMap<>();
     private final long proximityCooldownTicks;
     private NpcCombatService combatService;
+    private NpcShopService shopService;
     private AiControlService aiControlService;
     private BukkitTask behaviourTask;
     private long currentTick;
@@ -161,6 +162,10 @@ public final class NpcBehaviourService implements Listener {
         this.dialogService = dialogService;
         this.questionService = questionService;
         this.proximityCooldownTicks = Math.max(0L, proximityCooldownSeconds) * 20L;
+    }
+
+    public void setShopService(NpcShopService shopService) {
+        this.shopService = shopService;
     }
 
     public void setCombatService(NpcCombatService combatService) {
@@ -749,6 +754,10 @@ public final class NpcBehaviourService implements Listener {
             case MINE_BLOCKS -> mineNearbyBlocks(instance, definition);
             case TAKE_ITEM -> takeNearbyItem(instance, actor);
             case SHOW_INVENTORY -> showInventory(instance, actor);
+            case OPEN_SHOP -> {
+                if (shopService != null && actor instanceof Player player)
+                    shopService.open(player, definition);
+            }
             case DROP_INVENTORY -> dropInventory(instance);
             case HARVEST -> harvestNearbyCrops(instance);
             case EMIT_EVENT ->

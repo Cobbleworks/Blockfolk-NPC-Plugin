@@ -206,6 +206,25 @@ class NpcDefinitionTest {
     }
 
     @Test
+    void copyKeepsTheShop() {
+        NpcDefinition source = NpcDefinition.create("Baker");
+        source.setShopProfile(ShopProfile.empty().withTitle("Fresh Bread"));
+
+        NpcDefinition copy = source.copyAs("Baker Copy");
+
+        assertEquals(source.getShopProfile(), copy.getShopProfile());
+    }
+
+    @Test
+    void shopDefaultsToEmptyAndRejectsNull() {
+        NpcDefinition definition = NpcDefinition.create("Baker");
+        assertEquals(ShopProfile.empty(), definition.getShopProfile());
+
+        definition.setShopProfile(null);
+        assertEquals(ShopProfile.empty(), definition.getShopProfile());
+    }
+
+    @Test
     void temporaryInventoryTemplateKeepsTwentySevenIndependentSlots() {
         NpcDefinition definition = NpcDefinition.create("Guard");
         ItemStack[] template = new ItemStack[3];
