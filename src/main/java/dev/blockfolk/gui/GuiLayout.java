@@ -13,8 +13,13 @@ final class GuiLayout {
     }
 
     static void fillMainBar(Inventory inventory) {
-        int firstSlot = inventory.getSize() - 9;
-        for (int slot = firstSlot; slot < inventory.getSize(); slot++) {
+        fillRow(inventory, inventory.getSize() / 9 - 1);
+    }
+
+    /** Fills empty slots of one row with neutral panes. */
+    static void fillRow(Inventory inventory, int row) {
+        int firstSlot = row * 9;
+        for (int slot = firstSlot; slot < firstSlot + 9; slot++) {
             if (inventory.getItem(slot) == null) {
                 inventory.setItem(slot, filler());
             }

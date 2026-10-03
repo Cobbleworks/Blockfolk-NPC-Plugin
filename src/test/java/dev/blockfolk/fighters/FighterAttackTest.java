@@ -61,4 +61,34 @@ class FighterAttackTest {
         assertEquals(Origin.NPC, shockwave.origin());
         assertTrue(shockwave.effects().contains(Effect.KNOCKBACK));
     }
+
+    @Test
+    void builderNormalizesShapeSpecificSettings() {
+        FighterAttack ring = FighterAttack.builder("nova", "Nova").shape(Shape.RING).size(4).build();
+        assertEquals(2, ring.innerRadius());
+        assertEquals(3.5, ring.toBuilder().innerRadius(7).build().innerRadius());
+        assertEquals(Origin.TARGET, ring.toBuilder().origin(Origin.TARGET).build().origin());
+        FighterAttack chain = FighterAttack.builder("chain", "Chain").shape(Shape.CHAIN).origin(Origin.TARGET)
+                .pulses(5).chainTargets(99).build();
+        assertEquals(Origin.NPC, chain.origin());
+        assertEquals(1, chain.pulses());
+        assertEquals(FighterAttack.MAX_CHAIN_TARGETS, chain.chainTargets());
+        FighterAttack zone = FighterAttack.builder("zone", "Zone").pulses(50).pulseIntervalTicks(1).range(6)
+                .minRange(10).build();
+        assertEquals(FighterAttack.MAX_PULSES, zone.pulses());
+        assertEquals(FighterAttack.MIN_PULSE_INTERVAL_TICKS, zone.pulseIntervalTicks());
+        assertEquals(5, zone.minRange());
+        assertEquals(Condition.ALWAYS, zone.condition());
+        assertEquals(zone, zone.toBuilder().build());
+    }
+
+    @Test
+    void knockbackAndPullCannotBeCombinedAndCasterOnlyAbilitiesDoNotHitVictims() {
+        FighterAttack both = FighterAttack.builder("push", "Push").effects(Effect.KNOCKBACK, Effect.PULL).build();
+        assertEquals(Set.of(Effect.KNOCKBACK), both.effects());
+        FighterAttack buff = FighterAttack.builder("buff", "Buff").damage(0).effects(Effect.STRENGTH).build();
+        assertFalse(buff.affectsVictims());
+        assertTrue(buff.toBuilder().damage(2).build().affectsVictims());
+        assertFalse(buff.toBuilder().shape(Shape.SELF).damage(10).effects(Effect.POISON).build().affectsVictims());
+    }
 }

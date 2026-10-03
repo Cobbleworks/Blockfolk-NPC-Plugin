@@ -34,6 +34,14 @@ public final class SpecialAttackScheduler {
     }
     public FighterAttack select(long tick, SpecialAttackOptions options, List<FighterAttack> definitions,
             double distanceSquared, RandomGenerator random) {
+        return select(tick, options, definitions, CastContext.atDistance(distanceSquared), random);
+    }
+    /**
+     * Picks a ready ability. Abilities whose trigger condition is currently met
+     * take precedence over unconditional ones.
+     */
+    public FighterAttack select(long tick, SpecialAttackOptions options, List<FighterAttack> definitions,
+            CastContext context, RandomGenerator random) {
         if (intervalSeconds != options.intervalSeconds()) {
             intervalSeconds = options.intervalSeconds();
             nextAttemptAt = tick + intervalSeconds * 20L;
@@ -45,11 +53,15 @@ public final class SpecialAttackScheduler {
         var keys = options.assignedAttackKeys();
         List<FighterAttack> available = definitions.stream().filter(attack -> keys.contains(attack.key()))
                 .filter(attack -> tick >= readyAt.getOrDefault(attack.key(), 0L))
-                .filter(attack -> distanceSquared <= attack.range() * attack.range()).toList();
+                .filter(context::allows).toList();
         if (available.isEmpty()) {
             nextAttemptAt = tick + 20;
             return null;
         }
+        List<FighterAttack> reactive = available.stream()
+                .filter(attack -> attack.condition() != FighterAttack.Condition.ALWAYS).toList();
+        if (!reactive.isEmpty())
+            available = reactive;
         FighterAttack selected = available.get(random.nextInt(available.size()));
         markUsed(selected, tick);
         int intervalTicks = intervalSeconds * 20;

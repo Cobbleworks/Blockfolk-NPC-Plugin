@@ -50,4 +50,18 @@ class AttackGeometryTest {
         assertFalse(AttackGeometry.contains(attack(Shape.SPHERE), new Vector(1, 1, 0), new Vector(1, 0, 0), 8));
         assertFalse(AttackGeometry.contains(attack(Shape.TELEPORT), new Vector(), new Vector(1, 0, 0), 8));
     }
+
+    @Test
+    void ringsSpareTheInnerAreaAndDashesUseTheirPath() {
+        FighterAttack ring = FighterAttack.builder("ring", "Ring").shape(Shape.RING).size(5).innerRadius(2).build();
+        Vector aim = new Vector(1, 0, 0);
+        assertFalse(AttackGeometry.contains(ring, new Vector(1, 0, 0), aim, 8));
+        assertTrue(AttackGeometry.contains(ring, new Vector(0, 0, 3), aim, 8));
+        assertFalse(AttackGeometry.contains(ring, new Vector(6, 0, 0), aim, 8));
+        FighterAttack dash = FighterAttack.builder("dash", "Dash").shape(Shape.DASH).size(1).build();
+        assertTrue(AttackGeometry.contains(dash, new Vector(3, 0, 0.5), aim, 4));
+        assertFalse(AttackGeometry.contains(dash, new Vector(5, 0, 0), aim, 4));
+        assertFalse(AttackGeometry.contains(attack(Shape.CHAIN), new Vector(), aim, 8));
+        assertFalse(AttackGeometry.contains(attack(Shape.SELF), new Vector(), aim, 8));
+    }
 }

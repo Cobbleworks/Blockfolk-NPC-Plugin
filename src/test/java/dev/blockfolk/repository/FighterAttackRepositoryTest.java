@@ -72,4 +72,16 @@ class FighterAttackRepositoryTest {
         assertEquals(0, attack.delayTicks());
         assertEquals(Set.of(Effect.FIRE), attack.effects());
     }
+
+    @Test
+    void everyTemplateRoundTripsIncludingNewShapesPulsesAndTriggers() throws Exception {
+        YamlConfiguration yaml = new YamlConfiguration();
+        yaml.loadFromString(FighterAttackRepository.encode(FighterTemplates.defaults()).saveToString());
+        assertEquals(FighterTemplates.defaults(), FighterAttackRepository.decode(yaml));
+        yaml.loadFromString("attacks:\n  legacy:\n    shape: SPHERE\n");
+        FighterAttack legacy = FighterAttackRepository.decode(yaml).getFirst();
+        assertEquals(1, legacy.pulses());
+        assertEquals(0, legacy.minRange());
+        assertEquals(FighterAttack.Condition.ALWAYS, legacy.condition());
+    }
 }

@@ -63,7 +63,7 @@ public final class FighterAttackRepository {
 
     static YamlConfiguration encode(List<FighterAttack> attacks) {
         YamlConfiguration yaml = new YamlConfiguration();
-        yaml.set("version", 3);
+        yaml.set("version", 4);
         ConfigurationSection root = yaml.createSection("attacks");
         for (FighterAttack attack : attacks) {
             ConfigurationSection section = root.createSection(attack.key());
@@ -84,6 +84,12 @@ public final class FighterAttackRepository {
             section.set("effect-level", attack.effectLevel());
             section.set("knockback", attack.knockback());
             section.set("visual", attack.visual().name());
+            section.set("min-range", attack.minRange());
+            section.set("inner-radius", attack.innerRadius());
+            section.set("chain-targets", attack.chainTargets());
+            section.set("pulses", attack.pulses());
+            section.set("pulse-interval-ticks", attack.pulseIntervalTicks());
+            section.set("condition", attack.condition().name());
         }
         return yaml;
     }
@@ -99,16 +105,22 @@ public final class FighterAttackRepository {
             Set<Effect> effects = section.getStringList("effects").stream()
                     .map(value -> enumValue(Effect.class, value, null)).filter(java.util.Objects::nonNull)
                     .collect(Collectors.toSet());
-            attacks.add(new FighterAttack(key, section.getString("name", key),
-                    enumValue(Origin.class, section.getString("origin"), Origin.NPC),
-                    enumValue(Shape.class, section.getString("shape"), Shape.SPHERE), section.getDouble("range", 8),
-                    section.getDouble("size", 2), section.getDouble("angle", 60), section.getInt("delay-ticks", 20),
-                    section.getInt("cooldown-ticks", 200), section.getDouble("damage", 4), effects,
-                    section.getInt("effect-seconds", 3), section.getInt("effect-level", 1),
-                    section.getDouble("knockback", 0.8),
-                    enumValue(Visual.class, section.getString("visual"), Visual.SOUL),
-                    section.getDouble("cone-length", section.getDouble("range", 8)), section.getItemStack("icon"),
-                    enumValue(CastMode.class, section.getString("cast-mode"), null)));
+            attacks.add(FighterAttack.builder(key, section.getString("name", key))
+                    .origin(enumValue(Origin.class, section.getString("origin"), Origin.NPC))
+                    .shape(enumValue(Shape.class, section.getString("shape"), Shape.SPHERE))
+                    .range(section.getDouble("range", 8)).size(section.getDouble("size", 2))
+                    .angle(section.getDouble("angle", 60)).delayTicks(section.getInt("delay-ticks", 20))
+                    .cooldownTicks(section.getInt("cooldown-ticks", 200)).damage(section.getDouble("damage", 4))
+                    .effects(effects).effectSeconds(section.getInt("effect-seconds", 3))
+                    .effectLevel(section.getInt("effect-level", 1)).knockback(section.getDouble("knockback", 0.8))
+                    .visual(enumValue(Visual.class, section.getString("visual"), Visual.SOUL))
+                    .coneLength(section.getDouble("cone-length", section.getDouble("range", 8)))
+                    .icon(section.getItemStack("icon"))
+                    .castMode(enumValue(CastMode.class, section.getString("cast-mode"), null))
+                    .minRange(section.getDouble("min-range", 0)).innerRadius(section.getDouble("inner-radius", 0))
+                    .chainTargets(section.getInt("chain-targets", 3)).pulses(section.getInt("pulses", 1))
+                    .pulseIntervalTicks(section.getInt("pulse-interval-ticks", 20))
+                    .condition(enumValue(Condition.class, section.getString("condition"), Condition.ALWAYS)).build());
         }
         return attacks;
     }

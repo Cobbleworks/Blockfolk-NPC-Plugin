@@ -384,6 +384,114 @@ class NpcSpecialAttackServiceTest {
         assertEquals(60, target.fireTicks);
     }
 
+    @Test
+    void lingeringAreasPulseAtTheMarkedSpotWithoutBlockingCombatAndStopWhenCancelled() {
+        FighterAttack cloud = FighterAttack.builder("cloud", "Cloud").origin(FighterAttack.Origin.TARGET).size(2)
+                .delayTicks(0).damage(2).effects(Set.of()).pulses(3).pulseIntervalTicks(10).build();
+        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(cloud), (id, to) -> false,
+                victim -> {
+                });
+        var options = SpecialAttackOptions.disabled();
+        nearby = List.of(target.entity);
+        assertEquals(0, local.useAbility(instanceId, npc.entity, target.entity, "cloud", options, victim -> true, 0));
+        assertEquals(18, target.health);
+        assertFalse(local.tick(instanceId, npc.entity, null, options, victim -> true, 9));
+        assertEquals(18, target.health);
+        assertFalse(local.tick(instanceId, npc.entity, null, options, victim -> true, 10));
+        assertEquals(16, target.health);
+        target.x = 8; // Leaving the marked area avoids later pulses.
+        local.tick(instanceId, npc.entity, null, options, victim -> true, 20);
+        assertEquals(16, target.health);
+        target.x = 3;
+        local.tick(instanceId, npc.entity, null, options, victim -> true, 30);
+        assertEquals(16, target.health); // All three pulses are spent.
+
+        assertEquals(0, local.useAbility(instanceId, npc.entity, target.entity, "cloud", options, victim -> true,
+                cloud.cooldownTicks()));
+        local.cancelCast(instanceId);
+        local.tick(instanceId, npc.entity, null, options, victim -> true, cloud.cooldownTicks() + 10);
+        assertEquals(14, target.health);
+    }
+
+    @Test
+    void chainJumpsBetweenNearbyEligibleVictimsUpToItsLimit() {
+        FighterAttack chain = FighterAttack.builder("chain", "Chain").shape(FighterAttack.Shape.CHAIN).size(4)
+                .chainTargets(3).delayTicks(0).damage(3).build();
+        Actor near = new Actor(6);
+        Actor next = new Actor(9);
+        Actor ally = new Actor(4);
+        Actor beyond = new Actor(10);
+        nearby = List.of(npc.entity, target.entity, ally.entity, near.entity, next.entity, beyond.entity);
+        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(chain), (id, to) -> false,
+                victim -> {
+                });
+        assertEquals(0, local.useAbility(instanceId, npc.entity, target.entity, "chain", SpecialAttackOptions.disabled(),
+                victim -> victim != ally.entity, 0));
+        assertEquals(17, target.health);
+        assertEquals(17, near.health);
+        assertEquals(17, next.health);
+        assertEquals(20, beyond.health);
+        assertEquals(20, ally.health);
+        assertEquals(20, npc.health);
+    }
+
+    @Test
+    void dashStopsInFrontOfTheTargetAndHitsAlongItsPath() {
+        FighterAttack dash = FighterAttack.builder("dash", "Dash").shape(FighterAttack.Shape.DASH).range(10).size(1)
+                .delayTicks(0).damage(4).build();
+        Location[] landing = {null};
+        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(dash), (id, to) -> {
+            landing[0] = to;
+            return true;
+        }, victim -> {
+        });
+        Actor inPath = new Actor(2);
+        Actor aside = new Actor(2);
+        aside.z = 3;
+        target.x = 6;
+        nearby = List.of(inPath.entity, aside.entity, target.entity);
+        assertEquals(0, local.useAbility(instanceId, npc.entity, target.entity, "dash", SpecialAttackOptions.disabled(),
+                victim -> true, 0));
+        assertNotNull(landing[0]);
+        assertEquals(4.5, landing[0].getX(), 0.01);
+        assertEquals(16, inPath.health);
+        assertEquals(16, target.health);
+        assertEquals(20, aside.health);
+    }
+
+    @Test
+    void dashWithoutASafeLandingFizzlesAndSelfAbilitiesNeverHitOthers() {
+        FighterAttack dash = FighterAttack.builder("dash", "Dash").shape(FighterAttack.Shape.DASH).delayTicks(0)
+                .damage(4).build();
+        FighterAttack self = FighterAttack.builder("self", "Self").shape(FighterAttack.Shape.SELF).delayTicks(0)
+                .damage(4).build();
+        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(dash, self), (id, to) -> true,
+                victim -> {
+                });
+        nearby = List.of(target.entity);
+        safeLanding = false;
+        assertEquals(0, local.useAbility(instanceId, npc.entity, target.entity, "dash", SpecialAttackOptions.disabled(),
+                victim -> true, 0));
+        assertEquals(20, target.health);
+        assertEquals(0, local.useAbility(instanceId, npc.entity, null, "self", SpecialAttackOptions.disabled(),
+                victim -> true, 0));
+        assertEquals(20, target.health);
+    }
+
+    @Test
+    void pullDrawsVictimsInAndLaunchThrowsThemUp() {
+        FighterAttack well = FighterAttack.builder("well", "Well").size(5).delayTicks(0).damage(1)
+                .effects(FighterAttack.Effect.PULL, FighterAttack.Effect.LAUNCH).knockback(1).build();
+        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(well), (id, to) -> false,
+                victim -> {
+                });
+        nearby = List.of(target.entity);
+        assertEquals(0, local.useAbility(instanceId, npc.entity, null, "well", SpecialAttackOptions.disabled(),
+                victim -> true, 0));
+        assertTrue(target.velocity.getX() < 0, "pulled towards the caster");
+        assertTrue(target.velocity.getY() > 0.5, "launched upwards");
+    }
+
     private Block block(boolean floor) {
         return (Block) Proxy.newProxyInstance(Block.class.getClassLoader(), new Class<?>[]{Block.class},
                 (proxy, method, args) -> switch (method.getName()) {
