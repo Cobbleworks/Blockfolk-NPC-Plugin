@@ -47,6 +47,10 @@ Left-click an action to replace it and right-click to remove it. Shift-left-clic
 
 To set a **Move To** destination in a question branch, right-click a block with the selector compass or choose a saved location from its chat link.
 
+## Abilities
+
+**Use Ability** opens a selector from the shared [Abilities](/features/abilities) library. It casts the selected ability or arms its **On Next Attack** charge. This action works in event routines, custom events, waypoint actions, and question branches. Delayed casts wait before the next action; instant casts and charges continue immediately. NPC-centred abilities can cast without an opponent. Targeted spells use a valid combat opponent, triggering actor, or nearby selected target. Casts respect the ability's cooldown.
+
 ## Dialog timing
 
 Dialog line duration is calculated at 12 characters per second with a minimum of three seconds.

@@ -122,6 +122,11 @@ public final class NpcBehaviourService implements Listener {
     private final Set<UUID> routePaused = new HashSet<>();
     private final Set<UUID> externallyPaused = new HashSet<>();
     private final Map<UUID, Location> moveTargets = new HashMap<>();
+    /**
+     * Move targets issued by AI Behaviour, so a failed walk can be reported back to
+     * the model.
+     */
+    private final Map<UUID, Location> aiMoveTargets = new HashMap<>();
     private final Map<UUID, List<PendingMove>> pendingMoves = new HashMap<>();
     private final Map<UUID, FollowState> following = new HashMap<>();
     private final Map<UUID, Object> waypointActionSequences = new HashMap<>();
@@ -184,6 +189,7 @@ public final class NpcBehaviourService implements Listener {
         routePaused.clear();
         externallyPaused.clear();
         moveTargets.clear();
+        aiMoveTargets.clear();
         pendingMoves.clear();
         following.clear();
         waypointActionSequences.clear();
@@ -389,6 +395,16 @@ public final class NpcBehaviourService implements Listener {
         BehaviourAction action = actions.get(index);
         if (action.type() == BehaviourActionType.ASK_QUESTION) {
             askQuestion(event, actions, index, action, instance, definition, actor, eventDetail, completion);
+            return;
+        }
+        if (action.type() == BehaviourActionType.USE_ABILITY) {
+            int delay = combatService == null ? -1 : combatService.useAbility(instance, action.value(), actor);
+            Runnable next = () -> executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail,
+                    completion);
+            if (delay > 0)
+                Bukkit.getScheduler().runTaskLater(plugin, next, delay + 1L);
+            else
+                next.run();
             return;
         }
         Location previousMoveTarget = action.type() == BehaviourActionType.MOVE_TO
@@ -691,6 +707,10 @@ public final class NpcBehaviourService implements Listener {
                     combatService.startCombat(instance, actor);
                 }
             }
+            case USE_ABILITY -> {
+                if (combatService != null)
+                    combatService.useAbility(instance, action.value(), actor);
+            }
             case CHANGE_FIGHT_OPTIONS -> {
                 if (combatService != null) {
                     combatService.changeFightOptions(instance, FightOptions.fromStored(action.value()));
@@ -780,19 +800,30 @@ public final class NpcBehaviourService implements Listener {
                     if (combatService != null)
                         combatService.exitCombat(instance);
                 }
-                case FLEE_FROM -> fleeFrom(instance, target);
+                case FLEE_FROM -> {
+                    if (target == null)
+                        aiControlService.noteOutcome(instance,
+                                "flee_from " + action.target() + " failed: that entity is no longer present.");
+                    fleeFrom(instance, target);
+                }
                 case FOLLOW -> {
                     if (target instanceof Player player)
                         startFollowing(instance, player);
+                    else
+                        aiControlService.noteOutcome(instance,
+                                "follow " + action.target() + " failed: only players can be followed.");
                 }
                 case UNFOLLOW -> stopFollowing(instance);
                 case INTERACT -> startAiInteraction(instance, action.target(), result.targets());
-                case MOVE_TO -> resolveAiMoveTarget(action.target(), result.targets()).ifPresent(targetLocation -> {
-                    stopFollowing(instance);
-                    moveTargets.put(instance.getId(), targetLocation);
-                    instances.stand(instance);
-                    instances.stopNavigating(instance);
-                });
+                case MOVE_TO ->
+                    resolveAiMoveTarget(action.target(), result.targets()).ifPresentOrElse(targetLocation -> {
+                        stopFollowing(instance);
+                        moveTargets.put(instance.getId(), targetLocation);
+                        aiMoveTargets.put(instance.getId(), targetLocation);
+                        instances.stand(instance);
+                        instances.stopNavigating(instance);
+                    }, () -> aiControlService.noteOutcome(instance,
+                            "move_to " + action.target() + " failed: that target is no longer present."));
                 case MINE_BLOCKS -> mineNearbyBlocks(instance, action.target(), true, definition.isItemPickup());
                 case RETURN_HOME -> {
                     stopFollowing(instance);
@@ -930,6 +961,7 @@ public final class NpcBehaviourService implements Listener {
         if (cleanRuntimeState) {
             routePaused.retainAll(active);
             moveTargets.keySet().retainAll(active);
+            aiMoveTargets.keySet().retainAll(moveTargets.keySet());
             pendingMoves.keySet().retainAll(active);
             following.keySet().retainAll(active);
             waypointActionSequences.keySet().retainAll(active);
@@ -1044,7 +1076,12 @@ public final class NpcBehaviourService implements Listener {
                     if (pending.target == target)
                         pending.arrive();
                 }
+            } else if (aiControlService != null && aiMoveTargets.get(instance.getId()) == target) {
+                aiControlService.noteOutcome(instance,
+                        "Walking to the destination at " + target.getBlockX() + "," + target.getBlockY() + ","
+                                + target.getBlockZ() + " stalled: no walkable path was found, so the NPC stopped.");
             }
+            aiMoveTargets.remove(instance.getId());
             moveTargets.remove(instance.getId());
             instances.stopNavigating(instance);
         }

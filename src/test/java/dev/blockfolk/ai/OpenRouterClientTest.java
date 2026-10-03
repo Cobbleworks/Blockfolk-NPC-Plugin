@@ -127,8 +127,9 @@ class OpenRouterClientTest {
                   {"id":"call_1","type":"function","function":{"name":"say","arguments":"{\\"text\\":\\"Hello\\"}"}}
                 ]}
                 """).getAsJsonObject();
-        session.result(new OpenRouterClient.ActionTurn("", assistant, assistant.getAsJsonArray("tool_calls"), false),
-                List.of("Speech was dispatched."), "NPC is speaking to Alex");
+        session.feedback(
+                new OpenRouterClient.ActionTurn("", assistant, assistant.getAsJsonArray("tool_calls"), false, ""),
+                List.of("Speech was dispatched."), "NPC is speaking to Alex", true);
 
         JsonArray messages = session.transcript();
         assertEquals(5, messages.size());
@@ -136,5 +137,49 @@ class OpenRouterClientTest {
         assertEquals("call_1", messages.get(3).getAsJsonObject().get("tool_call_id").getAsString());
         assertEquals("Speech was dispatched.", messages.get(3).getAsJsonObject().get("content").getAsString());
         assertTrue(messages.get(4).getAsJsonObject().get("content").getAsString().contains("NPC is speaking to Alex"));
+    }
+
+    @Test
+    void normalizedCallsCarryTheirIndexAndPreciseRejection() {
+        JsonArray tools = AiActionTools.definitions(EnumSet.of(AiActionType.SAY, AiActionType.MOVE_TO), List.of());
+        String normalized = OpenRouterClient.responseActions("""
+                {"choices":[{"message":{"tool_calls":[
+                  {"id":"a","function":{"name":"say","arguments":"{\\"text\\":\\"On my way\\"}"}},
+                  {"id":"b","function":{"name":"teleport","arguments":"{}"}},
+                  {"id":"c","function":{"name":"move_to","arguments":"not json"}}
+                ]},"finish_reason":"tool_calls"}]}
+                """, false, tools);
+        AiControlSettings settings = AiControlSettings.defaults().toggle(AiActionType.MOVE_TO);
+
+        AiParseResult<AiDecision> parsed = AiDecisionParser.parseDetailed(normalized, settings);
+
+        assertEquals(List.of(0, 1, 2), parsed.outcomes().stream().map(AiCallOutcome::call).toList());
+        assertTrue(parsed.outcomes().get(0).isAccepted());
+        assertTrue(parsed.outcomes().get(1).rejection().contains("unknown function"));
+        assertTrue(parsed.outcomes().get(2).rejection().contains("valid JSON"));
+    }
+
+    @Test
+    void firstRequestRequiresAToolCallAndFollowUpsMayFinish() {
+        OpenRouterClient client = new OpenRouterClient("https://example.test/api", "key", "model", 5);
+        JsonArray tools = AiActionTools.definitions(EnumSet.of(AiActionType.SAY), List.of());
+        OpenRouterClient.ActionSession session = client.actionSession("rules", "state", tools, false);
+        assertEquals("required", session.toolChoice());
+
+        var assistant = JsonParser.parseString("""
+                {"role":"assistant","tool_calls":[{"id":"call_1","type":"function",
+                  "function":{"name":"say","arguments":"{}"}}]}
+                """).getAsJsonObject();
+        var turn = new OpenRouterClient.ActionTurn("", assistant, assistant.getAsJsonArray("tool_calls"), false, "");
+        session.feedback(turn, List.of("Rejected: missing text."), "fix it", false);
+        assertEquals("required", session.toolChoice());
+        session.feedback(turn, List.of("Done."), "state", true);
+        assertEquals("auto", session.toolChoice());
+    }
+
+    @Test
+    void unknownReasoningEffortFallsBackToLow() {
+        assertEquals("low", OpenRouterClient.normalizeEffort("turbo"));
+        assertEquals("none", OpenRouterClient.normalizeEffort(" NONE "));
     }
 }

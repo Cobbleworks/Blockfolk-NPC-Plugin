@@ -36,6 +36,7 @@ export default defineConfig({
           { text: 'Behaviour routines', link: '/features/behaviours' },
           { text: 'Custom events', link: '/features/custom-events' },
           { text: 'Combat', link: '/features/combat' },
+          { text: 'Abilities', link: '/features/abilities' },
           { text: 'Routes', link: '/features/routes' },
           { text: 'Locations', link: '/features/locations' },
           { text: 'AI behaviour', link: '/features/ai-behaviour' },

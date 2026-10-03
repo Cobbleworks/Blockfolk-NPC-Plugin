@@ -7,6 +7,7 @@
 | `/bf`, `/bf npc` | Open the NPC preset browser. |
 | `/bf locations` | Open global locations. |
 | `/bf routes` | Open routes. |
+| `/bf abilities` | Open the shared attack library and editor. |
 | `/bf npc <name> edit` | Open the NPC editor. |
 | `/bf npc <name> set spawnpoint [here\|location]` | Set the preset spawnpoint to your position or a saved location. |
 | `/bf npc <name> set name <display name>` | Rename the NPC. |

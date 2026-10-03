@@ -37,6 +37,7 @@ import org.bukkit.util.Vector;
 
 import dev.blockfolk.combat.NpcAttack;
 import dev.blockfolk.combat.NpcAttackSelector;
+import dev.blockfolk.combat.NpcSpecialAttackService;
 import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.FightOptions;
@@ -45,6 +46,8 @@ import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
+import dev.blockfolk.repository.FighterAttackRepository;
+import dev.blockfolk.fighters.FighterTemplates;
 import dev.blockfolk.util.LegacyText;
 import net.kyori.adventure.text.Component;
 
@@ -64,6 +67,7 @@ public final class NpcCombatService implements Listener {
     private final NpcInstanceRegistry instanceRegistry;
     private final NativeNpcNavigationService navigationService;
     private final NpcAttackSelector attackSelector = new NpcAttackSelector();
+    private final NpcSpecialAttackService specialAttackService;
     private final Map<UUID, CombatState> states = new HashMap<>();
     private final Map<UUID, BukkitTask> pendingRespawns = new HashMap<>();
     private final Map<UUID, BossBar> bossBars = new HashMap<>();
@@ -72,13 +76,29 @@ public final class NpcCombatService implements Listener {
     private NpcBehaviourService behaviourService;
     private BukkitTask task;
     private long currentTick;
+    private final List<PendingWeaponHit> pendingWeaponHits = new java.util.ArrayList<>();
+    private record PendingWeaponHit(NpcInstance instance, UUID charge, LivingEntity victim, double before,
+            EntityDamageByEntityEvent event) {
+    }
 
     public NpcCombatService(Plugin plugin, NpcDefinitionRepository definitionRepository,
             NpcInstanceRegistry instanceRegistry, NativeNpcNavigationService navigationService) {
+        this(plugin, definitionRepository, instanceRegistry, navigationService, null);
+    }
+
+    public NpcCombatService(Plugin plugin, NpcDefinitionRepository definitionRepository,
+            NpcInstanceRegistry instanceRegistry, NativeNpcNavigationService navigationService,
+            FighterAttackRepository fighters) {
         this.plugin = plugin;
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.navigationService = navigationService;
+        this.specialAttackService = new NpcSpecialAttackService(
+                fighters == null ? FighterTemplates::defaults : fighters::findAll,
+                (id, location) -> instanceRegistry.findById(id)
+                        .map(instance -> instanceRegistry.move(instance, location)).orElse(false),
+                victim -> instanceRegistry.findByEntityId(victim.getEntityId())
+                        .ifPresent(instanceRegistry::stopNavigating));
     }
 
     public void start() {
@@ -104,6 +124,8 @@ public final class NpcCombatService implements Listener {
         pendingRespawns.values().forEach(BukkitTask::cancel);
         pendingRespawns.clear();
         states.clear();
+        specialAttackService.clear();
+        pendingWeaponHits.clear();
         bossBars.values().forEach(BossBar::removeAll);
         bossBars.clear();
         fightOptionsOverrides.clear();
@@ -111,7 +133,7 @@ public final class NpcCombatService implements Listener {
     }
 
     public boolean isEngaged(NpcInstance instance) {
-        return states.containsKey(instance.getId());
+        return states.containsKey(instance.getId()) || specialAttackService.isCasting(instance.getId());
     }
 
     public Entity currentTarget(NpcInstance instance) {
@@ -158,6 +180,70 @@ public final class NpcCombatService implements Listener {
                 .filter(npc::hasLineOfSight)
                 .min(Comparator.comparingDouble(target -> target.getLocation().distanceSquared(npc.getLocation())))
                 .orElse(null);
+    }
+
+    /**
+     * Cast a shared ability at the combat opponent, triggering actor, or nearest
+     * selected target.
+     */
+    public int useAbility(NpcInstance instance, String key, Entity actor) {
+        NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
+        LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
+        if (definition == null || npc == null || !npc.isValid() || npc.isDead())
+            return -1;
+        FightOptions options = fightOptions(instance, definition.getCombatProfile());
+        Entity opponent = currentTarget(instance);
+        LivingEntity target = opponent instanceof LivingEntity living && isAttackable(instance, living)
+                ? living
+                : actor instanceof LivingEntity living && living.getWorld() == npc.getWorld()
+                        && isAttackable(instance, living) ? living : findNearestTarget(instance, npc, options);
+        LivingEntity chosen = target;
+        int delay = specialAttackService.useAbility(instance.getId(), npc, target, key, options.specialAttacks(),
+                victim -> isAttackable(instance, victim)
+                        && (victim.equals(chosen) || isSelectedTarget(victim, options)),
+                currentTick);
+        if (delay > 0)
+            instanceRegistry.stopNavigating(instance);
+        return delay;
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onNpcWeaponHit(EntityDamageByEntityEvent event) {
+        if (event.getFinalDamage() <= 0 || specialAttackService.isExecutingAbility()
+                || !(event.getEntity() instanceof LivingEntity victim))
+            return;
+        LivingEntity attacker = resolveAttacker(event.getDamager());
+        if (attacker == null)
+            return;
+        NpcInstance instance = instanceRegistry.findByEntityId(attacker.getEntityId()).orElse(null);
+        if (instance == null || !isAttackable(instance, victim))
+            return;
+        UUID charge = specialAttackService.chargeId(instance.getId());
+        if (charge == null)
+            return;
+        pendingWeaponHits.add(new PendingWeaponHit(instance, charge, victim,
+                victim.getHealth() + victim.getAbsorptionAmount(), event));
+    }
+
+    private void releaseSuccessfulCharges() {
+        List<PendingWeaponHit> hits = List.copyOf(pendingWeaponHits);
+        pendingWeaponHits.clear();
+        for (PendingWeaponHit hit : hits) {
+            NpcInstance instance = hit.instance();
+            LivingEntity victim = hit.victim();
+            NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
+            LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
+            if (definition == null || npc == null || hit.event().isCancelled() || hit.event().getFinalDamage() <= 0
+                    || victim.getHealth() + victim.getAbsorptionAmount() >= hit.before())
+                continue;
+            FightOptions options = fightOptions(instance, definition.getCombatProfile());
+            specialAttackService.onSuccessfulWeaponHit(instance.getId(), hit.charge(), npc, victim,
+                    options.specialAttacks(),
+                    candidate -> candidate.equals(victim)
+                            ? victim.isDead() || isAttackable(instance, victim)
+                            : isAttackable(instance, candidate) && isSelectedTarget(candidate, options),
+                    currentTick);
+        }
     }
 
     public void exitCombat(NpcInstance instance) {
@@ -276,6 +362,7 @@ public final class NpcCombatService implements Listener {
 
     private void tick() {
         currentTick++;
+        releaseSuccessfulCharges();
         unreachableUntil.entrySet().removeIf(entry -> entry.getValue() <= currentTick);
         Set<UUID> activeBossBars = new HashSet<>();
         Set<UUID> activeInstances = new HashSet<>();
@@ -285,6 +372,7 @@ public final class NpcCombatService implements Listener {
             LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
             if (definition == null || npc == null || !npc.isValid() || npc.isDead()) {
                 states.remove(instance.getId());
+                specialAttackService.cancelCast(instance.getId());
                 fightOptionsOverrides.remove(instance.getId());
                 continue;
             }
@@ -292,7 +380,10 @@ public final class NpcCombatService implements Listener {
             FightOptions fightOptions = fightOptions(instance, profile);
             updateBossBar(instance, definition, npc, profile, activeBossBars);
             if (profile.invulnerable()) {
-                clearState(instance);
+                if (states.containsKey(instance.getId()))
+                    clearState(instance);
+                specialAttackService.tick(instance.getId(), npc, null, fightOptions.specialAttacks(),
+                        hitPredicate(instance, fightOptions, null), currentTick);
                 continue;
             }
 
@@ -306,15 +397,22 @@ public final class NpcCombatService implements Listener {
                 }
             }
             if (state == null) {
+                specialAttackService.tick(instance.getId(), npc, null, fightOptions.specialAttacks(),
+                        hitPredicate(instance, fightOptions, null), currentTick);
                 continue;
             }
             if (state.mode == CombatMode.FLEE) {
-                flee(instance, npc, state);
+                if (specialAttackService.tick(instance.getId(), npc, null, fightOptions.specialAttacks(),
+                        hitPredicate(instance, fightOptions, null), currentTick))
+                    instanceRegistry.stopNavigating(instance);
+                else
+                    flee(instance, npc, state);
             } else {
                 fight(instance, definition, npc, state);
             }
         }
         states.keySet().retainAll(activeInstances);
+        specialAttackService.retainInstances(activeInstances);
         fightOptionsOverrides.keySet().retainAll(activeInstances);
         bossBars.entrySet().removeIf(entry -> {
             if (activeBossBars.contains(entry.getKey()))
@@ -392,6 +490,18 @@ public final class NpcCombatService implements Listener {
             return;
         }
         double distanceSquared = npc.getLocation().distanceSquared(target.getLocation());
+        FightOptions options = fightOptions(instance, definition.getCombatProfile());
+        if (specialAttackService.tick(instance.getId(), npc, target, options.specialAttacks(),
+                hitPredicate(instance, options, target), currentTick)) {
+            instanceRegistry.stopNavigating(instance);
+            state.navigationTarget = null;
+            state.retreating = false;
+            state.lastProgressLocation = npc.getLocation();
+            state.lastProgressAt = currentTick;
+            state.nextAttackAt = Math.max(state.nextAttackAt, currentTick + 10);
+            face(npc, target);
+            return;
+        }
         ItemStack mainHand = definition.getMainHand();
         ItemStack offHand = definition.getOffHand();
         boolean swap = attackSelector.useOffHand(mainHand, offHand, distanceSquared);
@@ -467,6 +577,15 @@ public final class NpcCombatService implements Listener {
                 && (mode != CombatMode.FIGHT || !previous.entityId.equals(entity.getUniqueId()))) {
             releaseMobTarget(instance, previous);
         }
+        if (!enteringCombat && mode == CombatMode.FIGHT) {
+            // Incoming hits must not restart attacks, pursuit timers, or pending casts.
+            instanceRegistry.findEntity(instance).ifPresent(npc -> makeMobFightBack(entity, npc));
+            return;
+        }
+        if (previous != null)
+            specialAttackService.cancelCast(instance.getId());
+        else
+            specialAttackService.cancelAutomaticCast(instance.getId());
         states.put(instance.getId(), new CombatState(mode, entity.getUniqueId(), entity.getLocation(),
                 currentTick + (mode == CombatMode.FLEE ? FLEE_TICKS : Long.MAX_VALUE), currentTick));
         if (mode == CombatMode.FIGHT) {
@@ -486,6 +605,14 @@ public final class NpcCombatService implements Listener {
                 .filter(target -> !isTemporarilyUnreachable(instance, target)).filter(npc::hasLineOfSight)
                 .min(Comparator.comparingDouble(target -> target.getLocation().distanceSquared(npc.getLocation())))
                 .orElse(null);
+    }
+
+    private java.util.function.Predicate<LivingEntity> hitPredicate(NpcInstance instance, FightOptions options,
+            LivingEntity primary) {
+        // Capture the explicit target before the cast is consumed at impact.
+        LivingEntity scripted = specialAttackService.scriptedTarget(instance.getId());
+        return victim -> isAttackable(instance, victim)
+                && (victim.equals(primary) || victim.equals(scripted) || isSelectedTarget(victim, options));
     }
 
     private boolean isSelectedTarget(LivingEntity target, FightOptions options) {
@@ -574,6 +701,7 @@ public final class NpcCombatService implements Listener {
     }
 
     private void clearState(NpcInstance instance) {
+        specialAttackService.cancelCast(instance.getId());
         CombatState removed = states.remove(instance.getId());
         if (removed != null) {
             restoreEquipment(instance);

@@ -46,6 +46,7 @@ import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.FightOptions;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
+import dev.blockfolk.model.SpecialAttackOptions;
 import dev.blockfolk.model.CustomEvent;
 import dev.blockfolk.model.LootTier;
 import dev.blockfolk.model.NamedLocation;
@@ -112,7 +113,8 @@ public final class GuiService implements Listener {
             Map.entry(21, BehaviourActionType.TAKE_ITEM), Map.entry(22, BehaviourActionType.SHOW_INVENTORY),
             Map.entry(23, BehaviourActionType.DROP_INVENTORY), Map.entry(24, BehaviourActionType.HARVEST),
             // Combat
-            Map.entry(28, BehaviourActionType.START_COMBAT), Map.entry(29, BehaviourActionType.CHANGE_FIGHT_OPTIONS));
+            Map.entry(28, BehaviourActionType.START_COMBAT), Map.entry(29, BehaviourActionType.CHANGE_FIGHT_OPTIONS),
+            Map.entry(30, BehaviourActionType.USE_ABILITY));
     private static final int ACTION_PICKER_ANIMATIONS_SLOT = 32;
     private static final int ACTION_PICKER_BACK_SLOT = 49;
     private static final String AI_TRIGGER_PROMPT_INPUT = "ai_trigger_prompt";
@@ -141,6 +143,7 @@ public final class GuiService implements Listener {
     private final NpcCreationDialog creationDialog;
     private NpcBehaviourService behaviourService;
     private AiControlService aiControlService;
+    private AbilitiesGuiService abilitiesGuiService;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
     private final Map<String, String> pendingSkinUrls = new HashMap<>();
     private final Map<UUID, WaypointSession> waypointSessions = new HashMap<>();
@@ -173,6 +176,14 @@ public final class GuiService implements Listener {
         this.reorderIconKey = new NamespacedKey(plugin, "reorder-definition");
         this.aiGuiService = new AiGuiService(plugin, definitionRepository, chatInputService, this::openEditor);
         this.creationDialog = new NpcCreationDialog(plugin, definitionRepository, instanceRegistry, this::openEditor);
+    }
+
+    public void setAbilitiesGuiService(AbilitiesGuiService service) {
+        abilitiesGuiService = service;
+    }
+
+    public void openAbilities(Player player) {
+        abilitiesGuiService.open(player);
     }
 
     public void setBehaviourService(NpcBehaviourService behaviourService) {
@@ -341,6 +352,10 @@ public final class GuiService implements Listener {
                 item(Material.POWERED_RAIL, "Manage Routes",
                         List.of(LegacyText.GRAY + "Create and edit NPC walking routes",
                                 LegacyText.YELLOW + "Click to open route setup")));
+        inventory.setItem(48,
+                item(Material.IRON_SWORD, "Abilities",
+                        List.of(LegacyText.GRAY + "Build shared attacks and assign them to NPCs",
+                                LegacyText.YELLOW + "Click to open")));
         inventory.setItem(46,
                 item(Material.BELL, "Custom Events",
                         List.of(LegacyText.GRAY + "Define events NPCs can emit and react to",
@@ -622,67 +637,44 @@ public final class GuiService implements Listener {
         CombatProfile combat = definition.getCombatProfile();
         Inventory inventory = Bukkit.createInventory(new FightingHolder(definition.getKey()), 36,
                 UiText.title("Fighting & Survival", definition.getDisplayName()));
-        inventory.setItem(1,
-                item(Material.LIME_DYE, "+ " + CombatProfile.HEALTH_STEP + " Health",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + healthLabel(combat),
-                                LegacyText.YELLOW + "Click to increase max health",
-                                LegacyText.DARK_GRAY + "Shift-click for x10")));
+        List<String> healthLore = new ArrayList<>(List.of(
+                combat.invulnerable()
+                        ? LegacyText.GREEN + "This NPC cannot be damaged"
+                        : LegacyText.GRAY + "Maximum health in HP; 2 HP equals one heart",
+                LegacyText.DARK_GRAY + "Set health to 0 for invulnerability",
+                LegacyText.GRAY + "Step: " + CombatProfile.HEALTH_STEP + " HP"));
+        healthLore.addAll(NumericControl.lore());
         inventory.setItem(10,
                 combat.invulnerable()
-                        ? item(Material.TOTEM_OF_UNDYING, "Max Health: " + healthLabel(combat),
-                                List.of(LegacyText.GREEN + "This NPC cannot be damaged",
-                                        LegacyText.DARK_GRAY + "Set health to 0 for invulnerability"))
-                        : potionItem(PotionType.HEALING, "Max Health: " + healthLabel(combat),
-                                List.of(LegacyText.GRAY + "The NPC is removed when killed",
-                                        LegacyText.DARK_GRAY + "Set health to 0 for invulnerability")));
-        inventory.setItem(19,
-                item(Material.RED_DYE, "- " + CombatProfile.HEALTH_STEP + " Health",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + healthLabel(combat),
-                                LegacyText.YELLOW + "Click to decrease max health",
-                                LegacyText.DARK_GRAY + "Shift-click for x10")));
-        inventory.setItem(3,
-                item(Material.LIME_DYE, "+ " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + respawnLabel(combat),
-                                LegacyText.YELLOW + "Click to increase respawn time",
-                                LegacyText.DARK_GRAY + "Shift-click for x10")));
-        inventory.setItem(12,
-                item(combat.respawnSeconds() == 0 ? Material.BARRIER : Material.CLOCK,
-                        "Respawn Time: " + respawnLabel(combat),
-                        List.of(combat.respawnSeconds() == 0
-                                ? LegacyText.GRAY + "Killed NPCs will not respawn"
-                                : LegacyText.GREEN + "Respawns at the preset spawn point",
-                                definition.getSpawnpoint() == null
-                                        ? LegacyText.RED + "A preset spawn point is required"
-                                        : LegacyText.DARK_GRAY + "Preset spawn point is configured")));
-        inventory.setItem(21,
-                item(Material.RED_DYE, "- " + CombatProfile.RESPAWN_STEP_SECONDS + " Seconds",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + respawnLabel(combat),
-                                LegacyText.YELLOW + "Click to decrease respawn time",
-                                LegacyText.DARK_GRAY + "Shift-click for x10")));
-        inventory.setItem(5,
-                item(Material.LIME_DYE, "+ " + CombatProfile.EXPERIENCE_STEP + " Experience",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + experienceLabel(combat),
-                                LegacyText.YELLOW + "Click to increase dropped experience",
-                                LegacyText.DARK_GRAY + "Shift-click for x10")));
-        inventory.setItem(14,
-                item(Material.EXPERIENCE_BOTTLE, "Dropped Experience: " + experienceLabel(combat),
-                        List.of(combat.droppedExperience() == 0
-                                ? LegacyText.GRAY + "This NPC drops no experience"
-                                : LegacyText.GREEN + "Dropped when this NPC dies")));
-        inventory.setItem(23,
-                item(Material.RED_DYE, "- " + CombatProfile.EXPERIENCE_STEP + " Experience",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + experienceLabel(combat),
-                                LegacyText.YELLOW + "Click to decrease dropped experience",
-                                LegacyText.DARK_GRAY + "Shift-click for x10")));
-        inventory.setItem(15, toggleItem(Material.WITHER_SKELETON_SKULL, "Show Boss Bar", combat.showBossBar(),
-                "Shows current HP to players within 16 blocks"));
+                        ? item(Material.TOTEM_OF_UNDYING, "Max Health: " + healthLabel(combat), healthLore)
+                        : potionItem(PotionType.HEALING, "Max Health: " + healthLabel(combat), healthLore));
+        List<String> respawnLore = new ArrayList<>(List.of(
+                combat.respawnSeconds() == 0
+                        ? LegacyText.GRAY + "Killed NPCs will not respawn"
+                        : LegacyText.GREEN + "Respawns at the preset spawn point",
+                definition.getSpawnpoint() == null
+                        ? LegacyText.RED + "A preset spawn point is required"
+                        : LegacyText.DARK_GRAY + "Preset spawn point is configured",
+                LegacyText.GRAY + "Step: " + CombatProfile.RESPAWN_STEP_SECONDS + " seconds"));
+        respawnLore.addAll(NumericControl.lore());
+        inventory.setItem(11, item(Material.CLOCK, "Respawn Time: " + respawnLabel(combat), respawnLore));
+        List<String> experienceLore = new ArrayList<>(List.of(
+                combat.droppedExperience() == 0
+                        ? LegacyText.GRAY + "This NPC drops no experience"
+                        : LegacyText.GREEN + "Dropped when this NPC dies",
+                LegacyText.GRAY + "Step: " + CombatProfile.EXPERIENCE_STEP + " XP"));
+        experienceLore.addAll(NumericControl.lore());
         inventory.setItem(13,
+                item(Material.EXPERIENCE_BOTTLE, "Dropped Experience: " + experienceLabel(combat), experienceLore));
+        inventory.setItem(14, toggleItem(Material.WITHER_SKELETON_SKULL, "Show Boss Bar", combat.showBossBar(),
+                "Shows current HP to players within 16 blocks"));
+        inventory.setItem(12,
                 item(Material.TARGET, "Targets & Behaviour", List
                         .of(LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName(),
                                 LegacyText.GRAY + "Attack targets enabled: " + LegacyText.WHITE
                                         + enabledTargetCount(combat) + "/4",
                                 LegacyText.YELLOW + "Click to configure")));
-        inventory.setItem(16,
+        inventory.setItem(15,
                 item(Material.NAME_TAG, "Alliance",
                         List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + allianceLabel(combat),
                                 LegacyText.GRAY + "NPCs with the same alliance will not fight",
@@ -690,6 +682,7 @@ public final class GuiService implements Listener {
                                 LegacyText.GRAY + "whose custom name matches the alliance",
                                 LegacyText.DARK_GRAY + "Matching ignores capitalization; any inventory slot works",
                                 LegacyText.YELLOW + "Click to enter text")));
+        inventory.setItem(16, specialAttacksItem(combat.specialAttacks()));
         inventory.setItem(31, item(Material.BARRIER, "Back", List.of()));
         openInventory(player, inventory);
     }
@@ -721,7 +714,40 @@ public final class GuiService implements Listener {
                 "Allows attacks against survival and adventure players"));
         inventory.setItem(15, toggleItem(Material.ARMOR_STAND, "Target Other NPCs", options.npcs(),
                 "Allows attacks against vulnerable NPCs"));
+        inventory.setItem(16, specialAttacksItem(options.specialAttacks()));
         inventory.setItem(22, item(Material.BARRIER, backLabel, List.of()));
+    }
+
+    private ItemStack specialAttacksItem(SpecialAttackOptions options) {
+        return item(Material.BLAZE_POWDER, "Abilities",
+                List.of(LegacyText.GRAY + "Assigned: " + LegacyText.WHITE + options.assignedAttackKeys().size(),
+                        LegacyText.GRAY + "Interval: about " + options.intervalSeconds() + " seconds",
+                        LegacyText.YELLOW + "Click to configure"));
+    }
+
+    private void openSpecialAttacks(Player player, SpecialAttacksHolder context) {
+        if (context.key() != null) {
+            NpcDefinition definition = definitionRepository.find(context.key()).orElse(null);
+            if (definition == null) {
+                player.closeInventory();
+                return;
+            }
+            abilitiesGuiService.openAssignments(player, definition.getCombatProfile().specialAttacks(), options -> {
+                definitionRepository.find(context.key()).ifPresent(current -> {
+                    current.setCombatProfile(current.getCombatProfile().withSpecialAttacks(options));
+                    definitionRepository.save(current);
+                });
+            }, p -> definitionRepository.find(context.key()).ifPresentOrElse(current -> openFightingEditor(p, current),
+                    p::closeInventory));
+        } else {
+            FightOptionsActionHolder[] current = {context.action()};
+            abilitiesGuiService.openAssignments(player, current[0].options().specialAttacks(), options -> {
+                FightOptionsActionHolder saved = saveFightOptionsAction(current[0],
+                        current[0].options().withSpecialAttacks(options));
+                if (saved != null)
+                    current[0] = saved;
+            }, p -> openFightOptionsAction(p, current[0]));
+        }
     }
 
     public void openBehaviours(Player player, NpcDefinition definition, int requestedPage) {
@@ -1053,6 +1079,7 @@ public final class GuiService implements Listener {
             handlePropertiesClick(event, player, propertiesHolder.key());
         } else if (holder instanceof FightingHolder fightingHolder) {
             handleFightingClick(event, player, fightingHolder.key());
+
         } else if (holder instanceof TargetsHolder targetsHolder) {
             handleTargetsClick(event, player, targetsHolder.key());
         } else if (holder instanceof FightOptionsActionHolder fightOptionsHolder) {
@@ -1204,6 +1231,10 @@ public final class GuiService implements Listener {
         }
         if (event.getRawSlot() == 46) {
             customEventGuiOpener.accept(player);
+            return;
+        }
+        if (event.getRawSlot() == 48) {
+            openAbilities(player);
             return;
         }
         if (event.getRawSlot() == 47) {
@@ -1396,64 +1427,85 @@ public final class GuiService implements Listener {
             return;
         }
         CombatProfile combat = definition.getCombatProfile();
-        int multiplier = event.isShiftClick() ? 10 : 1;
-        switch (event.getRawSlot()) {
-            case 19 -> {
-                definition.setCombatProfile(
-                        combat.withMaxHealth(combat.maxHealth() - CombatProfile.HEALTH_STEP * multiplier));
-                saveRefresh(definition);
-                openFightingEditor(player, definition);
+        int slot = event.getRawSlot();
+        if (slot == 10 || slot == 11 || slot == 13) {
+            if (event.getClick() == ClickType.MIDDLE) {
+                requestCombatValue(player, key, slot);
+                return;
             }
-            case 1 -> {
-                definition.setCombatProfile(
-                        combat.withMaxHealth(combat.maxHealth() + CombatProfile.HEALTH_STEP * multiplier));
-                saveRefresh(definition);
-                openFightingEditor(player, definition);
-            }
-            case 21 -> {
-                definition.setCombatProfile(combat
-                        .withRespawnSeconds(combat.respawnSeconds() - CombatProfile.RESPAWN_STEP_SECONDS * multiplier));
-                definitionRepository.save(definition);
-                openFightingEditor(player, definition);
-            }
-            case 3 -> {
-                int respawnSeconds = (int) Math.min(Integer.MAX_VALUE,
-                        (long) combat.respawnSeconds() + CombatProfile.RESPAWN_STEP_SECONDS * multiplier);
-                definition.setCombatProfile(combat.withRespawnSeconds(respawnSeconds));
-                definitionRepository.save(definition);
-                openFightingEditor(player, definition);
-            }
-            case 23 -> {
-                definition.setCombatProfile(combat.withDroppedExperience(
-                        combat.droppedExperience() - CombatProfile.EXPERIENCE_STEP * multiplier));
-                definitionRepository.save(definition);
-                openFightingEditor(player, definition);
-            }
-            case 5 -> {
-                int droppedExperience = (int) Math.min(Integer.MAX_VALUE,
-                        (long) combat.droppedExperience() + CombatProfile.EXPERIENCE_STEP * multiplier);
-                definition.setCombatProfile(combat.withDroppedExperience(droppedExperience));
-                definitionRepository.save(definition);
-                openFightingEditor(player, definition);
-            }
-            case 13 -> {
+            int direction = NumericControl.direction(event.getClick());
+            if (direction == 0)
+                return;
+            int step = slot == 10
+                    ? CombatProfile.HEALTH_STEP
+                    : slot == 11 ? CombatProfile.RESPAWN_STEP_SECONDS : CombatProfile.EXPERIENCE_STEP;
+            int current = slot == 10
+                    ? combat.maxHealth()
+                    : slot == 11 ? combat.respawnSeconds() : combat.droppedExperience();
+            int max = slot == 10 ? CombatProfile.MAX_HEALTH : Integer.MAX_VALUE;
+            int value = (int) Math.clamp((long) current + (long) direction * step * (event.isShiftClick() ? 5 : 1), 0,
+                    max);
+            setCombatValue(player, definition, slot, value);
+            return;
+        }
+        switch (slot) {
+            case 12 -> {
                 openTargetsAndBehaviour(player, definition);
             }
-            case 15 -> {
+            case 14 -> {
                 definition.setCombatProfile(combat.withShowBossBar(!combat.showBossBar()));
                 definitionRepository.save(definition);
                 openFightingEditor(player, definition);
             }
-            case 16 -> chatInputService.request(player, "Enter an alliance, or type clear to remove it:", value -> {
+            case 15 -> chatInputService.request(player, "Enter an alliance, or type clear to remove it:", value -> {
                 String alliance = value.equalsIgnoreCase("clear") ? null : value;
                 definition.setCombatProfile(definition.getCombatProfile().withAlliance(alliance));
                 saveRefresh(definition);
                 openFightingEditor(player, definition);
             });
+            case 16 -> openSpecialAttacks(player, new SpecialAttacksHolder(key, null));
             case 31 -> openEditor(player, definition);
             default -> {
             }
         }
+    }
+
+    private void requestCombatValue(Player player, String key, int slot) {
+        String label = slot == 10
+                ? "maximum health in HP"
+                : slot == 11 ? "respawn time in seconds" : "dropped experience";
+        int max = slot == 10 ? CombatProfile.MAX_HEALTH : Integer.MAX_VALUE;
+        chatInputService.request(player, "Enter " + label + " (0 to " + max + "):", value -> {
+            NpcDefinition current = definitionRepository.find(key).orElse(null);
+            if (current == null) {
+                player.closeInventory();
+                return;
+            }
+            try {
+                int parsed = Integer.parseInt(value.trim());
+                if (parsed < 0 || parsed > max)
+                    throw new NumberFormatException();
+                setCombatValue(player, current, slot, parsed);
+            } catch (NumberFormatException error) {
+                player.sendMessage(UiText.error("Enter a whole number from 0 to " + max + "."));
+                openFightingEditor(player, current);
+            }
+        }, () -> definitionRepository.find(key).ifPresent(current -> openFightingEditor(player, current)));
+    }
+
+    private void setCombatValue(Player player, NpcDefinition definition, int slot, int value) {
+        CombatProfile current = definition.getCombatProfile();
+        definition.setCombatProfile(switch (slot) {
+            case 10 -> current.withMaxHealth(value);
+            case 11 -> current.withRespawnSeconds(value);
+            case 13 -> current.withDroppedExperience(value);
+            default -> current;
+        });
+        if (slot == 10)
+            saveRefresh(definition);
+        else
+            definitionRepository.save(definition);
+        openFightingEditor(player, definition);
     }
 
     private void handleTargetsClick(InventoryClickEvent event, Player player, String key) {
@@ -1464,6 +1516,10 @@ public final class GuiService implements Listener {
         NpcDefinition definition = definitionRepository.find(key).orElse(null);
         if (definition == null) {
             player.closeInventory();
+            return;
+        }
+        if (event.getRawSlot() == 16) {
+            openSpecialAttacks(player, new SpecialAttacksHolder(key, null));
             return;
         }
         CombatProfile combat = definition.getCombatProfile();
@@ -1491,6 +1547,10 @@ public final class GuiService implements Listener {
             return;
         if (event.getRawSlot() == 22) {
             openFightOptionsActionParent(player, holder);
+            return;
+        }
+        if (event.getRawSlot() == 16) {
+            openSpecialAttacks(player, new SpecialAttacksHolder(null, holder));
             return;
         }
         FightOptions current = holder.options();
@@ -1929,6 +1989,12 @@ public final class GuiService implements Listener {
             beginRouteWaypointSelection(player, action, type);
         } else if (type == BehaviourActionType.WAIT) {
             requestRouteWaitAction(player, action);
+        } else if (type == BehaviourActionType.USE_ABILITY) {
+            abilitiesGuiService.selectAbility(player, key -> {
+                RoutePoint updated = setRoutePointAction(action, type, key);
+                if (updated != null)
+                    openWaypointActions(player, action.routeKey(), updated);
+            }, p -> openRoutePointActionPicker(p, action));
         } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             requestRouteFightOptionsAction(player, action);
         } else if (!type.requiresValue()) {
@@ -2148,6 +2214,13 @@ public final class GuiService implements Listener {
             beginWaypointSelection(player, holder, type);
         } else if (type == BehaviourActionType.WAIT) {
             requestWaitAction(player, definition, holder);
+        } else if (type == BehaviourActionType.USE_ABILITY) {
+            abilitiesGuiService.selectAbility(player,
+                    key -> definitionRepository.find(holder.key()).ifPresent(current -> {
+                        setAction(current, holder, type, key);
+                        openBehaviourHome(player, current, holder);
+                    }), p -> definitionRepository.find(holder.key()).ifPresent(current -> openActionPicker(p, current,
+                            holder.event(), holder.customEvent(), holder.actionIndex(), holder.page())));
         } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             requestFightOptionsAction(player, definition, holder);
         } else if (!type.requiresValue()) {
@@ -2962,6 +3035,13 @@ public final class GuiService implements Listener {
             return;
         if (type == null)
             return;
+        if (type == BehaviourActionType.USE_ABILITY) {
+            abilitiesGuiService.selectAbility(player, key -> {
+                setQuestionBranchAction(holder, new BehaviourAction(type, key));
+                openAfterQuestionBranchPicker(player, holder);
+            }, p -> openQuestionBranchPicker(p, holder.target(), holder.optionIndex(), holder.actionIndex()));
+            return;
+        }
         if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             List<BehaviourAction> branch = questionBranch(questionAction(holder.target()).question(),
                     holder.optionIndex());
@@ -3592,6 +3672,7 @@ public final class GuiService implements Listener {
             case SET_ROUTE -> Material.RAIL;
             case RUN_CONSOLE_COMMAND -> Material.COMMAND_BLOCK;
             case START_COMBAT -> Material.DIAMOND_SWORD;
+            case USE_ABILITY -> Material.ENCHANTED_BOOK;
             case CHANGE_FIGHT_OPTIONS -> Material.TARGET;
             case START_NAVIGATION -> Material.COMPASS;
             case STOP_NAVIGATION -> Material.BARRIER;
@@ -3632,6 +3713,7 @@ public final class GuiService implements Listener {
             case SET_ROUTE -> "Assigns a route and starts following it";
             case RUN_CONSOLE_COMMAND -> "Runs a configured command as the server";
             case START_COMBAT -> "Starts combat with the triggering entity";
+            case USE_ABILITY -> "Casts a selected ability or charges it for the next hit";
             case CHANGE_FIGHT_OPTIONS -> "Changes aggression and target settings";
             case START_NAVIGATION -> "Starts or resumes route navigation";
             case STOP_NAVIGATION -> "Pauses the current route navigation";
@@ -3672,6 +3754,9 @@ public final class GuiService implements Listener {
         }
         if (action.type() == BehaviourActionType.MOVE_TO || action.type() == BehaviourActionType.TELEPORT_TO) {
             return ActionLocation.parse(action.value()).map(ActionLocation::display).orElse("Invalid waypoint");
+        }
+        if (action.type() == BehaviourActionType.USE_ABILITY) {
+            return abilitiesGuiService.abilityName(action.value());
         }
         if (action.type() == BehaviourActionType.WAIT) {
             return action.value() + " seconds";
@@ -3746,6 +3831,9 @@ public final class GuiService implements Listener {
     }
 
     private record PropertiesHolder(String key) implements GuiHolder {
+    }
+
+    private record SpecialAttacksHolder(String key, FightOptionsActionHolder action) {
     }
 
     private record FightingHolder(String key) implements GuiHolder {

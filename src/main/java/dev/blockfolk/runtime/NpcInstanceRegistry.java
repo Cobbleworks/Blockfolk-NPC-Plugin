@@ -23,6 +23,8 @@ import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 
 import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.model.NpcDefinition;
@@ -272,7 +274,11 @@ public final class NpcInstanceRegistry implements Listener {
         // while an asynchronous AI request was in flight). Capture that rendered
         // position before starting or continuing pathfinding.
         currentLocation(instance);
-        NativeNpcNavigationService.NavigationUpdate update = navigationService.navigate(instance, target, walkingSpeed);
+        LivingEntity npc = findEntity(instance).orElse(null);
+        PotionEffect slowness = npc == null ? null : npc.getPotionEffect(PotionEffectType.SLOWNESS);
+        double speed = slowedNavigationSpeed(walkingSpeed.blocksPerSecond(),
+                slowness == null ? -1 : slowness.getAmplifier());
+        NativeNpcNavigationService.NavigationUpdate update = navigationService.navigate(instance, target, speed);
         if (renderer.move(instance, update.location())) {
             dialogService.move(instance);
         }
@@ -281,6 +287,13 @@ public final class NpcInstanceRegistry implements Listener {
 
     public void stopNavigating(NpcInstance instance) {
         navigationService.stop(instance);
+    }
+
+    static double slowedNavigationSpeed(double speed, int slownessAmplifier) {
+        if (slownessAmplifier < 0)
+            return speed;
+        // Navigation is performed by a separate entity; apply the visible NPC's debuff.
+        return speed * Math.max(0.05, 1.0 - 0.15 * (slownessAmplifier + 1.0));
     }
 
     public Optional<Location> activeNavigationTarget(NpcInstance instance) {

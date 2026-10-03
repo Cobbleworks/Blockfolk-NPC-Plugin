@@ -170,6 +170,10 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             guiService.openMain(player);
             return true;
         }
+        if (args.length == 1 && args[0].equalsIgnoreCase("abilities")) {
+            guiService.openAbilities(player);
+            return true;
+        }
         if (args.length == 1 && args[0].equalsIgnoreCase("routes")) {
             routeGuiService.openRoutes(player);
             return true;
@@ -226,7 +230,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return true;
         }
         player.sendMessage(UiText.info(
-                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|routes|locations|config ai <model|mute-me|memory forgetnearby <radius>>]"));
+                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|abilities|routes|locations|config ai <model|mute-me|memory forgetnearby <radius>>]"));
         return true;
     }
 
@@ -435,6 +439,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         if (args.length == 1) {
             List<String> suggestions = new ArrayList<>();
             suggestions.add("create");
+            suggestions.add("abilities");
             suggestions.add("routes");
             suggestions.add("locations");
             suggestions.add("events");

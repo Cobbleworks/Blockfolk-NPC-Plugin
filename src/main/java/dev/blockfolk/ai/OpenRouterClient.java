@@ -26,13 +26,24 @@ public final class OpenRouterClient {
     private volatile String model;
     private final Duration timeout;
     private final int maxTokens;
+    private final String reasoningEffort;
     private final String endpointIssue;
+    /**
+     * Set once a provider rejects tool_choice "required"; later requests then use
+     * "auto".
+     */
+    private volatile boolean requiredToolChoiceUnsupported;
 
     public OpenRouterClient(String endpoint, String apiKey, String model, int timeoutSeconds) {
         this(endpoint, apiKey, model, timeoutSeconds, 1600);
     }
 
     public OpenRouterClient(String endpoint, String apiKey, String model, int timeoutSeconds, int maxTokens) {
+        this(endpoint, apiKey, model, timeoutSeconds, maxTokens, "low");
+    }
+
+    public OpenRouterClient(String endpoint, String apiKey, String model, int timeoutSeconds, int maxTokens,
+            String reasoningEffort) {
         URI parsedEndpoint = null;
         String parsedIssue = "";
         try {
@@ -50,6 +61,7 @@ public final class OpenRouterClient {
         this.model = model == null ? "" : model.trim();
         this.timeout = Duration.ofSeconds(Math.max(2, timeoutSeconds));
         this.maxTokens = Math.max(350, maxTokens);
+        this.reasoningEffort = normalizeEffort(reasoningEffort);
         this.client = HttpClient.newBuilder().connectTimeout(timeout).build();
     }
 
@@ -94,6 +106,7 @@ public final class OpenRouterClient {
         private final JsonArray messages = new JsonArray();
         private final JsonArray tools;
         private final boolean group;
+        private boolean followUp;
 
         private ActionSession(String systemPrompt, String context, JsonArray tools, boolean group) {
             messages.add(message("system", systemPrompt));
@@ -105,11 +118,27 @@ public final class OpenRouterClient {
         CompletableFuture<ActionTurn> complete() {
             if (!configured())
                 return CompletableFuture.failedFuture(new IllegalStateException("OpenRouter is not configured"));
-            JsonObject body = requestBody(tools, messages.deepCopy());
-            return send(body).thenApply(response -> {
+            // The first answer must be a function call (do_nothing exists for silence), so
+            // the
+            // model cannot reply in prose that players never see. Follow-ups may finish
+            // freely.
+            String toolChoice = toolChoice();
+            CompletableFuture<String> sent = send(requestBody(tools, messages.deepCopy(), toolChoice));
+            if ("required".equals(toolChoice)) {
+                sent = sent.exceptionallyCompose(error -> {
+                    if (!rejectedRequest(error))
+                        return CompletableFuture.failedFuture(error);
+                    requiredToolChoiceUnsupported = true;
+                    return send(requestBody(tools, messages.deepCopy(), "auto"));
+                });
+            }
+            return sent.thenApply(response -> {
                 JsonObject choice = firstChoice(response);
                 JsonObject assistant = choice.getAsJsonObject("message");
-                JsonArray calls = assistant == null ? null : assistant.getAsJsonArray("tool_calls");
+                JsonElement callsElement = assistant == null ? null : assistant.get("tool_calls");
+                JsonArray calls = callsElement != null && callsElement.isJsonArray()
+                        ? callsElement.getAsJsonArray()
+                        : null;
                 boolean truncated = "length".equals(string(choice, "finish_reason"));
                 if (calls != null) {
                     for (JsonElement element : calls) {
@@ -117,32 +146,47 @@ public final class OpenRouterClient {
                             truncated = true;
                     }
                 }
+                String text = assistant == null ? null : string(assistant, "content");
                 return new ActionTurn(responseActions(response, group, tools),
                         assistant == null ? null : assistant.deepCopy(),
-                        calls == null ? new JsonArray() : calls.deepCopy(), truncated);
+                        calls == null ? new JsonArray() : calls.deepCopy(), truncated, text == null ? "" : text.trim());
             });
         }
 
-        void retry(String issue) {
-            messages.add(message("user", "The previous response was unusable (" + issue
-                    + "). Call valid available functions using listed target aliases."));
+        /** Asks again after a response that contained no answerable function calls. */
+        void retry(ActionTurn turn, String issue) {
+            if (!turn.text().isEmpty() && turn.calls().isEmpty())
+                messages.add(message("assistant", turn.text()));
+            messages.add(message("user",
+                    turn.calls().isEmpty() && !turn.text().isEmpty()
+                            ? "You answered in plain text. Players never see plain text and it performs no action. "
+                                    + "Respond again using function calls only: use say to speak and call the action "
+                                    + "functions for anything the NPC does."
+                            : "The previous response was unusable (" + issue + "). Call the provided functions "
+                                    + "with target aliases exactly as listed in the context."));
         }
 
-        void result(ActionTurn turn, List<String> results, String updatedContext) {
+        /**
+         * Answers every function call of a turn with its own result, then adds a user
+         * note. Used both for corrections and after actions were dispatched.
+         */
+        void feedback(ActionTurn turn, List<String> results, String note, boolean dispatched) {
             messages.add(turn.assistant());
             int index = 0;
             for (JsonElement element : turn.calls()) {
                 JsonObject call = element.getAsJsonObject();
-                JsonObject toolMessage = message("tool",
-                        index < results.size()
-                                ? results.get(index)
-                                : "Action was rejected or exceeded the turn limit.");
+                JsonObject toolMessage = message("tool", index < results.size() ? results.get(index) : "Not executed.");
                 toolMessage.addProperty("tool_call_id", string(call, "id"));
                 messages.add(toolMessage);
                 index++;
             }
-            messages.add(message("user", "Updated NPC state after those actions:\n" + updatedContext
-                    + "\nIf another action is needed, call a function. Otherwise finish with no tool calls."));
+            messages.add(message("user", note));
+            if (dispatched)
+                followUp = true;
+        }
+
+        String toolChoice() {
+            return followUp || requiredToolChoiceUnsupported ? "auto" : "required";
         }
 
         JsonArray transcript() {
@@ -150,16 +194,16 @@ public final class OpenRouterClient {
         }
     }
 
-    record ActionTurn(String normalized, JsonObject assistant, JsonArray calls, boolean truncated) {
+    record ActionTurn(String normalized, JsonObject assistant, JsonArray calls, boolean truncated, String text) {
     }
 
-    private JsonObject requestBody(JsonArray tools, JsonArray messages) {
+    private JsonObject requestBody(JsonArray tools, JsonArray messages, String toolChoice) {
         JsonObject body = new JsonObject();
         body.addProperty("model", model);
-        body.addProperty("temperature", 0.4);
+        body.addProperty("temperature", 0.3);
         body.addProperty("max_tokens", maxTokens);
         JsonObject reasoning = new JsonObject();
-        reasoning.addProperty("effort", "none");
+        reasoning.addProperty("effort", reasoningEffort);
         body.add("reasoning", reasoning);
         if (tools == null) {
             JsonObject responseFormat = new JsonObject();
@@ -167,10 +211,27 @@ public final class OpenRouterClient {
             body.add("response_format", responseFormat);
         } else {
             body.add("tools", tools);
-            body.addProperty("tool_choice", "auto");
+            body.addProperty("tool_choice", toolChoice);
+            body.addProperty("parallel_tool_calls", true);
         }
         body.add("messages", messages);
         return body;
+    }
+
+    private static boolean rejectedRequest(Throwable error) {
+        Throwable cause = error;
+        while (cause.getCause() != null && cause.getCause() != cause)
+            cause = cause.getCause();
+        return cause instanceof HttpStatusException status && (status.code == 400 || status.code == 422);
+    }
+
+    static final class HttpStatusException extends IllegalStateException {
+        private final int code;
+
+        HttpStatusException(int code) {
+            super("OpenRouter returned HTTP " + code);
+            this.code = code;
+        }
     }
 
     private CompletableFuture<String> send(JsonObject body) {
@@ -180,7 +241,7 @@ public final class OpenRouterClient {
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build();
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply(response -> {
             if (response.statusCode() < 200 || response.statusCode() >= 300)
-                throw new IllegalStateException("OpenRouter returned HTTP " + response.statusCode());
+                throw new HttpStatusException(response.statusCode());
             return response.body();
         }).orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS);
     }
@@ -200,7 +261,7 @@ public final class OpenRouterClient {
         JsonArray messages = new JsonArray();
         messages.add(message("system", systemPrompt));
         messages.add(message("user", context));
-        return send(requestBody(tools, messages)).thenApply(
+        return send(requestBody(tools, messages, requiredToolChoiceUnsupported ? "auto" : "required")).thenApply(
                 response -> tools == null ? responseContent(response) : responseActions(response, group, tools));
     }
 
@@ -265,6 +326,7 @@ public final class OpenRouterClient {
             Set<String> offeredNames = tools.asList().stream()
                     .map(tool -> tool.getAsJsonObject().getAsJsonObject("function").get("name").getAsString())
                     .collect(Collectors.toSet());
+            int callIndex = 0;
             for (JsonElement element : calls) {
                 JsonObject call = element.isJsonObject() ? element.getAsJsonObject() : null;
                 JsonElement functionElement = call == null ? null : call.get("function");
@@ -281,10 +343,12 @@ public final class OpenRouterClient {
                     // Preserve the failed call so the validator can reject it.
                 }
                 JsonObject action = new JsonObject();
-                action.addProperty("type",
-                        name == null || argumentsObject == null || !offeredNames.contains(name)
-                                ? "INVALID_TOOL_CALL"
-                                : name);
+                action.addProperty("call", callIndex++);
+                action.addProperty("type", name == null ? "INVALID_TOOL_CALL" : name);
+                if (name == null || !offeredNames.contains(name))
+                    action.addProperty("rejection", "unknown function; call only the functions provided");
+                else if (argumentsObject == null)
+                    action.addProperty("rejection", "arguments were not a valid JSON object");
                 if (argumentsObject != null) {
                     for (String field : new String[]{"text", "target", "animation", "name"}) {
                         if (argumentsObject.has(field))
@@ -316,6 +380,14 @@ public final class OpenRouterClient {
         } catch (RuntimeException exception) {
             throw new IllegalStateException("OpenRouter returned malformed tool calls", exception);
         }
+    }
+
+    static String normalizeEffort(String effort) {
+        String normalized = effort == null ? "" : effort.trim().toLowerCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "none", "minimal", "low", "medium", "high" -> normalized;
+            default -> "low";
+        };
     }
 
     private static String string(JsonObject object, String field) {

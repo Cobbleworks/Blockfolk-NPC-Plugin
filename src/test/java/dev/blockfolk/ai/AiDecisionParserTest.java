@@ -269,4 +269,42 @@ class AiDecisionParserTest {
             EnumSet<AiActionType> actions) {
         return new AiControlSettings(identity, behaviour, "", goal, "", actions, true, true, false, false);
     }
+
+    @Test
+    void moveToAcceptsLocationNamesAndExplainsInvalidTargets() {
+        AiControlSettings settings = settings("Guide", "", "Show people around", EnumSet.of(AiActionType.MOVE_TO));
+        AiTargetSnapshot.Builder builder = AiTargetSnapshot.builder();
+        builder.bindLocation("nearby_location_1", new org.bukkit.Location(null, 5, 64, 5));
+        builder.synonym("market", "nearby_location_1");
+        AiTargetSnapshot snapshot = builder.build();
+
+        AiParseResult<AiDecision> byName = AiDecisionParser
+                .parseDetailed("{\"actions\":[{\"type\":\"move_to\",\"target\":\"Market\"}]}", settings, snapshot);
+        AiParseResult<AiDecision> unknown = AiDecisionParser
+                .parseDetailed("{\"actions\":[{\"type\":\"move_to\",\"target\":\"castle\"}]}", settings, snapshot);
+
+        assertEquals("nearby_location_1", byName.value().actions().getFirst().target());
+        String rejection = unknown.outcomes().getFirst().rejection();
+        org.junit.jupiter.api.Assertions.assertTrue(rejection.contains("castle"), rejection);
+        org.junit.jupiter.api.Assertions.assertTrue(rejection.contains("nearby_location_1"), rejection);
+    }
+
+    @Test
+    void disabledActionIsRejectedWithAReason() {
+        AiControlSettings settings = settings("Guard", "", "", EnumSet.of(AiActionType.SAY));
+        AiParseResult<AiDecision> parsed = AiDecisionParser
+                .parseDetailed("{\"actions\":[{\"type\":\"follow\",\"target\":\"triggering_player\"}]}", settings);
+
+        org.junit.jupiter.api.Assertions.assertTrue(parsed.outcomes().getFirst().rejection().contains("cannot use"));
+    }
+
+    @Test
+    void fourthActionIsMarkedAsOverTheResponseLimit() {
+        AiParseResult<AiDecision> parsed = AiDecisionParser.parseDetailed("""
+                {"actions":[{"type":"SAY","text":"1"},{"type":"PLAY_ANIMATION","animation":"wave"},
+                  {"type":"PLAY_ANIMATION","animation":"jump"},{"type":"PLAY_ANIMATION","animation":"stand"}]}
+                """, AiControlSettings.defaults());
+
+        assertEquals(AiDecisionParser.OVER_LIMIT_REJECTION, parsed.outcomes().get(3).rejection());
+    }
 }

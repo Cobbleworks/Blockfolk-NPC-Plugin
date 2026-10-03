@@ -16,10 +16,17 @@ import dev.blockfolk.model.QuestionOption;
 class BehaviourActionCodecTest {
 
     @Test
+    void roundTripsAnAbilityActionWithItsStableLibraryKey() {
+        BehaviourAction action = new BehaviourAction(BehaviourActionType.USE_ABILITY, "fire_breath");
+        assertEquals(action, BehaviourActionCodec.decode(BehaviourActionCodec.encode(action)));
+    }
+
+    @Test
     void roundTripsNestedQuestionActions() {
         NpcQuestion question = new NpcQuestion(UUID.randomUUID(), "Choose",
                 List.of(new QuestionOption("First",
                         List.of(new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Selected"),
+                                new BehaviourAction(BehaviourActionType.USE_ABILITY, "fire_breath"),
                                 new BehaviourAction(BehaviourActionType.WAVE, null)))),
                 List.of(new BehaviourAction(BehaviourActionType.RUN_CONSOLE_COMMAND, "say cancelled")));
         BehaviourAction original = BehaviourAction.ask(question);

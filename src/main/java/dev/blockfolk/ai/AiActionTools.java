@@ -26,7 +26,7 @@ final class AiActionTools {
         JsonObject properties = new JsonObject();
         JsonArray required = new JsonArray();
         if (!responseIds.isEmpty()) {
-            JsonObject npc = stringProperty("Response ID of the NPC performing this action.");
+            JsonObject npc = stringProperty("Response ID of the NPC that performs this call.");
             JsonArray ids = new JsonArray();
             responseIds.forEach(ids::add);
             npc.add("enum", ids);
@@ -35,7 +35,7 @@ final class AiActionTools {
         }
         switch (action) {
             case SAY -> {
-                properties.add("text", stringProperty("Concise speech in this NPC's voice."));
+                properties.add("text", stringProperty("The spoken line, in this NPC's voice."));
                 required.add("text");
             }
             case REMEMBER_FACT -> {
@@ -86,37 +86,51 @@ final class AiActionTools {
 
     private static String targetDescription(AiActionType action) {
         return switch (action) {
-            case START_COMBAT -> "Listed entity alias; omit to attack the nearest safe attackable entity.";
-            case INTERACT -> "Listed switch or container alias. Use nearby_lever_N for a lever request and "
-                    + "nearby_button_N for a button request; nearest_switch may select either type.";
-            case FLEE_FROM -> "Listed entity alias to flee from.";
-            case FOLLOW -> "Listed player alias or Minecraft player name.";
-            case MOVE_TO -> "Listed player, NPC, entity, or saved location alias.";
-            case MINE_BLOCKS -> "ores, trees, mineable_blocks, or a nearby material name.";
-            case DROP_ITEM -> "Listed inventory_slot_N alias.";
-            default -> "Listed target alias.";
+            case START_COMBAT -> "triggering_entity, nearby_player_N, nearby_npc_<name>, or nearby_entity_N "
+                    + "exactly as listed. Omit to attack the nearest safe attackable entity.";
+            case INTERACT -> "A listed nearby_lever_N or nearby_button_N to operate that exact switch "
+                    + "(nearest_switch only when it does not matter which), or a listed take_from_container_N / "
+                    + "store_in_container_N. For a container requested by its custom name, use that container's "
+                    + "listed alias.";
+            case FLEE_FROM -> "A listed entity alias such as triggering_entity or nearby_entity_N.";
+            case FOLLOW -> "triggering_player, nearest_player, a listed nearby_player_N, or the player's name.";
+            case MOVE_TO -> "A listed nearby_location_N, nearby_player_N, nearby_npc_<name>, nearby_entity_N, or "
+                    + "triggering_player; or block coordinates as \"x,y,z\" within "
+                    + (int) AiTargetSnapshot.MAX_COORDINATE_DISTANCE + " blocks.";
+            case MINE_BLOCKS -> "ores, trees, mineable_blocks, or a listed nearby material name.";
+            case DROP_ITEM -> "A listed inventory_slot_N.";
+            default -> "A listed target alias.";
         };
     }
 
     private static String description(AiActionType action) {
         return switch (action) {
-            case SAY -> "Say a short line to nearby players.";
-            case PLAY_ANIMATION -> "Play a visible NPC animation.";
-            case START_COMBAT -> "Begin combat with a listed target or the nearest safe attackable entity.";
+            case SAY -> "Speak one concise line aloud to nearby players, in character. At most once per turn. "
+                    + "Speech changes nothing in the world: when you agree to do something, also call that "
+                    + "action's function in the same response.";
+            case PLAY_ANIMATION -> "Play a visible animation.";
+            case START_COMBAT -> "Attack a target, regardless of the NPC's normal targeting preferences. "
+                    + "To retaliate after being damaged, target triggering_entity.";
             case STOP_COMBAT -> "End the current fight.";
-            case FLEE_FROM -> "Move away from a listed entity.";
-            case FOLLOW -> "Follow a listed player.";
+            case FLEE_FROM -> "Run about 10 blocks away from an entity.";
+            case FOLLOW -> "Keep following a player until unfollow is called.";
             case UNFOLLOW -> "Stop following the current player.";
-            case INTERACT -> "Operate a nearby switch or transfer items with a nearby container.";
-            case MOVE_TO -> "Walk to a listed target.";
-            case MINE_BLOCKS -> "Mine matching nearby blocks.";
-            case RETURN_HOME -> "Walk to this instance's respawn location.";
-            case START_ROUTE -> "Resume the configured route.";
-            case PAUSE_ROUTE -> "Pause the configured route.";
+            case INTERACT -> "Walk to and operate a nearby lever or button, or take items from / store items in "
+                    + "a nearby container. For several switches, call it once per switch in the requested order. "
+                    + "It may take time; do not repeat a target that is already in progress.";
+            case MOVE_TO -> "Walk to a place, player, NPC, or entity. Call this whenever the NPC should go, "
+                    + "come, walk, or head somewhere.";
+            case MINE_BLOCKS -> "Mine every matching block within reach. Drops go into the temporary inventory "
+                    + "when item pickup is enabled; otherwise they drop into the world.";
+            case RETURN_HOME -> "Walk back to this NPC's home (respawn) location.";
+            case START_ROUTE -> "Resume the configured patrol route.";
+            case PAUSE_ROUTE -> "Pause the configured patrol route.";
             case REMEMBER_FACT -> "Store a durable fact for later interactions.";
-            case REMEMBER_LOCATION -> "Save this NPC's current position as a named location for all NPCs to use.";
-            case DROP_ITEM -> "Drop an item stack from temporary inventory.";
-            case DO_NOTHING -> "Take no action; use this to intentionally stay silent or idle.";
+            case REMEMBER_LOCATION -> "Save the NPC's current position under a new unique name that every NPC "
+                    + "can then walk to. Use it when a player names the place the NPC is standing, such as "
+                    + "\"this is my home\". Use / to group names, e.g. town/market.";
+            case DROP_ITEM -> "Drop one item stack from the temporary inventory.";
+            case DO_NOTHING -> "Deliberately take no action and stay silent. Never combine with other calls.";
         };
     }
 }
