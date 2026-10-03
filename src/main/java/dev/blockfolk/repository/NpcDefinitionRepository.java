@@ -28,6 +28,8 @@ import dev.blockfolk.model.AiMemory;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
+import dev.blockfolk.model.ShopOffer;
+import dev.blockfolk.model.ShopProfile;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.SpecialAttackOptions;
 import dev.blockfolk.model.MovementProfile;
@@ -112,6 +114,7 @@ public final class NpcDefinitionRepository {
         configuration.set("inventory.main-hand", definition.getMainHand());
         configuration.set("inventory.off-hand", definition.getOffHand());
         writeCombatProfile(configuration, definition.getCombatProfile());
+        writeShop(configuration, definition.getShopProfile());
         configuration.set("movement.speed",
                 definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
         configuration.set("movement.enabled", definition.getMovementProfile().enabled());
@@ -245,6 +248,45 @@ public final class NpcDefinitionRepository {
                         .withFighterAttacks(configuration.getStringList("combat.special-attacks.fighter-attacks")));
     }
 
+    static void writeShop(YamlConfiguration configuration, ShopProfile profile) {
+        if (!profile.enabled() && profile.title() == null && profile.offers().isEmpty()) {
+            return;
+        }
+        configuration.set("shop.enabled", profile.enabled());
+        configuration.set("shop.title", profile.title());
+        configuration.set("shop.offers", profile.offers().stream().map(offer -> {
+            Map<String, Object> saved = new LinkedHashMap<>();
+            putItem(saved, "cost", offer.cost());
+            putItem(saved, "second-cost", offer.secondCost());
+            putItem(saved, "result", offer.result());
+            return saved;
+        }).toList());
+    }
+
+    static ShopProfile readShop(YamlConfiguration configuration) {
+        if (!configuration.isConfigurationSection("shop")) {
+            return ShopProfile.disabled();
+        }
+        List<ShopOffer> offers = new ArrayList<>();
+        for (Object entry : configuration.getList("shop.offers", List.of())) {
+            if (entry instanceof Map<?, ?> saved) {
+                offers.add(new ShopOffer(itemOrNull(saved.get("cost")), itemOrNull(saved.get("second-cost")),
+                        itemOrNull(saved.get("result"))));
+            }
+        }
+        return new ShopProfile(configuration.getBoolean("shop.enabled", false), configuration.getString("shop.title"),
+                offers);
+    }
+
+    private static void putItem(Map<String, Object> target, String key, ItemStack item) {
+        if (item != null)
+            target.put(key, item);
+    }
+
+    private static ItemStack itemOrNull(Object value) {
+        return value instanceof ItemStack itemStack ? itemStack : null;
+    }
+
     private NpcDefinition load(File file) {
         YamlConfiguration configuration = YamlConfiguration.loadConfiguration(file);
         String key = configuration.getString("key", file.getName().replaceFirst("\\.yml$", ""));
@@ -260,6 +302,7 @@ public final class NpcDefinitionRepository {
         definition.setMainHand(configuration.getItemStack("inventory.main-hand"));
         definition.setOffHand(configuration.getItemStack("inventory.off-hand"));
         definition.setCombatProfile(readCombatProfile(configuration));
+        definition.setShopProfile(readShop(configuration));
         WalkingSpeed storedSpeed = WalkingSpeed.fromStored(configuration.getString("movement.speed"));
         String storedRoute = configuration.getString("movement.route");
         try {

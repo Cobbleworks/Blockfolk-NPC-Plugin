@@ -46,6 +46,7 @@ import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.FightOptions;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
+import dev.blockfolk.model.ShopProfile;
 import dev.blockfolk.model.SpecialAttackOptions;
 import dev.blockfolk.model.CustomEvent;
 import dev.blockfolk.model.LootTier;
@@ -112,6 +113,7 @@ public final class GuiService implements Listener {
             Map.entry(19, BehaviourActionType.INTERACT), Map.entry(20, BehaviourActionType.MINE_BLOCKS),
             Map.entry(21, BehaviourActionType.TAKE_ITEM), Map.entry(22, BehaviourActionType.SHOW_INVENTORY),
             Map.entry(23, BehaviourActionType.DROP_INVENTORY), Map.entry(24, BehaviourActionType.HARVEST),
+            Map.entry(25, BehaviourActionType.OPEN_SHOP),
             // Combat
             Map.entry(28, BehaviourActionType.START_COMBAT), Map.entry(29, BehaviourActionType.CHANGE_FIGHT_OPTIONS),
             Map.entry(30, BehaviourActionType.USE_ABILITY));
@@ -144,6 +146,7 @@ public final class GuiService implements Listener {
     private NpcBehaviourService behaviourService;
     private AiControlService aiControlService;
     private AbilitiesGuiService abilitiesGuiService;
+    private ShopGuiService shopGuiService;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
     private final Map<String, String> pendingSkinUrls = new HashMap<>();
     private final Map<UUID, WaypointSession> waypointSessions = new HashMap<>();
@@ -180,6 +183,16 @@ public final class GuiService implements Listener {
 
     public void setAbilitiesGuiService(AbilitiesGuiService service) {
         abilitiesGuiService = service;
+    }
+
+    public void setShopGuiService(ShopGuiService service) {
+        shopGuiService = service;
+    }
+
+    public void openShop(Player player, NpcDefinition definition) {
+        String key = definition.getKey();
+        shopGuiService.open(player, definition, p -> definitionRepository.find(key)
+                .ifPresentOrElse(current -> openEditor(p, current), p::closeInventory));
     }
 
     public void openAbilities(Player player) {
@@ -508,6 +521,11 @@ public final class GuiService implements Listener {
         aiLore.add(LegacyText.YELLOW + "Click to configure");
         inventory.setItem(23, item(ai.enabled() ? Material.OXIDIZED_COPPER_GOLEM_STATUE : Material.COPPER_GOLEM_STATUE,
                 "AI Behaviour: " + aiStatus, aiLore));
+        ShopProfile shop = definition.getShopProfile();
+        inventory.setItem(24, item(Material.EMERALD, "Shop: " + (shop.enabled() ? "On" : "Off"), List.of(
+                LegacyText.GRAY + "Complete trades: " + LegacyText.WHITE + shop.validOffers().size(),
+                LegacyText.GRAY + "Opened by the " + LegacyText.WHITE + "Open Shop" + LegacyText.GRAY + " action",
+                LegacyText.YELLOW + "Click to configure trades")));
         CombatProfile combat = definition.getCombatProfile();
         inventory.setItem(15, item(Material.IRON_SWORD, "Fighting & Survival",
                 List.of(LegacyText.GRAY + "Health: " + LegacyText.WHITE + healthLabel(combat),
@@ -1376,6 +1394,7 @@ public final class GuiService implements Listener {
             }
             case 13 -> openBehaviours(player, definition, 0);
             case 23 -> openAiControl(player, definition);
+            case 24 -> openShop(player, definition);
             case 22 -> openCustomBehaviours(player, definition, 0);
             case 21 -> npcRoutesOpener.accept(player, definition.getKey());
             case 15 -> openFightingEditor(player, definition);
@@ -3685,6 +3704,7 @@ public final class GuiService implements Listener {
             case MINE_BLOCKS -> Material.IRON_PICKAXE;
             case TAKE_ITEM -> Material.HOPPER;
             case SHOW_INVENTORY -> Material.CHEST;
+            case OPEN_SHOP -> Material.EMERALD;
             case DROP_INVENTORY -> Material.DROPPER;
             case HARVEST -> Material.IRON_HOE;
             case EMIT_EVENT -> Material.SCULK_SENSOR;
@@ -3726,6 +3746,7 @@ public final class GuiService implements Listener {
             case MINE_BLOCKS -> "Mines nearby blocks around the NPC";
             case TAKE_ITEM -> "Picks up a nearby or offered item";
             case SHOW_INVENTORY -> "Opens the NPC's inventory for the player";
+            case OPEN_SHOP -> "Opens the NPC's shop trading screen for the player";
             case DROP_INVENTORY -> "Drops every item in the NPC's inventory";
             case HARVEST -> "Harvests crops and plants carried seeds on nearby soil";
             case EMIT_EVENT -> "Triggers a custom event for listening NPCs";

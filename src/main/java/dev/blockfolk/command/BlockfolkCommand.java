@@ -31,6 +31,7 @@ import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
+import dev.blockfolk.runtime.NpcShopService;
 import dev.blockfolk.util.UiText;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -47,13 +48,14 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
     private final NpcBehaviourService behaviourService;
     private final LocationRepository locationRepository;
     private final AiControlService aiControlService;
+    private final NpcShopService shopService;
     private final JavaPlugin plugin;
 
     public BlockfolkCommand(NpcDefinitionRepository definitionRepository, NpcInstanceRegistry instanceRegistry,
             GuiService guiService, RouteGuiService routeGuiService, RouteRepository routeRepository,
             CustomEventGuiService customEventGuiService, CustomEventRepository customEventRepository,
             NpcBehaviourService behaviourService, LocationRepository locationRepository,
-            AiControlService aiControlService, JavaPlugin plugin) {
+            AiControlService aiControlService, NpcShopService shopService, JavaPlugin plugin) {
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.guiService = guiService;
@@ -64,6 +66,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         this.behaviourService = behaviourService;
         this.locationRepository = locationRepository;
         this.aiControlService = aiControlService;
+        this.shopService = shopService;
         this.plugin = plugin;
     }
 
@@ -199,6 +202,10 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             guiService.beginCreate(player, name);
             return true;
         }
+        if (args.length >= 1 && args[0].equalsIgnoreCase("shop")) {
+            handleShopCommand(player, args);
+            return true;
+        }
         if (args.length >= 2 && args[0].equalsIgnoreCase("npc")) {
             NpcDefinition definition = definitionRepository.find(args[1]).orElse(null);
             if (definition == null) {
@@ -230,8 +237,50 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return true;
         }
         player.sendMessage(UiText.info(
-                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|abilities|routes|locations|config ai <model|mute-me|memory forgetnearby <radius>>]"));
+                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|shop <name> [on|off|title <text>|preview]|abilities|routes|locations|config ai <model|mute-me|memory forgetnearby <radius>>]"));
         return true;
+    }
+
+    private void handleShopCommand(Player player, String[] args) {
+        if (args.length < 2) {
+            player.sendMessage(UiText.info("Usage: /bf shop <name> [on|off|title <text|reset>|preview]"));
+            return;
+        }
+        NpcDefinition definition = definitionRepository.find(args[1]).orElse(null);
+        if (definition == null) {
+            player.sendMessage(UiText.error("Unknown NPC: " + args[1]));
+            return;
+        }
+        if (args.length == 2) {
+            guiService.openShop(player, definition);
+            return;
+        }
+        String action = args[2].toLowerCase(Locale.ROOT);
+        Boolean enabled = parseToggle(action);
+        if (enabled != null && args.length == 3) {
+            definition.setShopProfile(definition.getShopProfile().withEnabled(enabled));
+            definitionRepository.save(definition);
+            player.sendMessage(UiText.success(
+                    "Shop of " + definition.getDisplayName() + " " + (enabled ? "enabled" : "disabled") + "."));
+            if (enabled && definition.getShopProfile().validOffers().isEmpty())
+                player.sendMessage(UiText.warning(
+                        "It has no complete trades yet. Use /bf shop " + definition.getKey() + " to add some."));
+            return;
+        }
+        if (action.equals("title") && args.length >= 4) {
+            String title = String.join(" ", List.of(args).subList(3, args.length));
+            definition.setShopProfile(
+                    definition.getShopProfile().withTitle(title.equalsIgnoreCase("reset") ? null : title));
+            definitionRepository.save(definition);
+            player.sendMessage(UiText.success("Shop title updated."));
+            return;
+        }
+        if (action.equals("preview") && args.length == 3) {
+            if (!shopService.open(player, definition, true))
+                player.sendMessage(UiText.warning("Nothing to preview yet."));
+            return;
+        }
+        player.sendMessage(UiText.info("Usage: /bf shop <name> [on|off|title <text|reset>|preview]"));
     }
 
     private boolean handleNpcCommand(Player player, NpcDefinition definition, String[] args) {
@@ -444,8 +493,18 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             suggestions.add("locations");
             suggestions.add("events");
             suggestions.add("npc");
+            suggestions.add("shop");
             suggestions.add("config");
             return filter(suggestions, args[0]);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("shop")) {
+            return filter(definitionRepository.findAll().stream().map(NpcDefinition::getKey).toList(), args[1]);
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("shop")) {
+            return filter(List.of("on", "off", "title", "preview"), args[2]);
+        }
+        if (args.length == 4 && args[0].equalsIgnoreCase("shop") && args[2].equalsIgnoreCase("title")) {
+            return filter(List.of("reset"), args[3]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("npc")) {
             return filter(definitionRepository.findAll().stream().map(NpcDefinition::getKey).toList(), args[1]);

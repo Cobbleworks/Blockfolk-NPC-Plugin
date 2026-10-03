@@ -24,11 +24,13 @@ Nearby chat is configured from the AI menu rather than shown as a deterministic 
 | --- | --- |
 | Dialogue & scripting | Send Dialog, Show Holo Dialog, Ask Question, Emit Custom Event, Console Command, AI Trigger, Wait |
 | Movement | Set Route, Start/Stop Navigation, Set Walk Speed, Move To, Teleport To, Follow, Unfollow |
-| World & inventory | Interact, Mine Blocks, Take Item, Show Inventory, Drop Inventory, Harvest |
+| World & inventory | Interact, Mine Blocks, Take Item, Show Inventory, Drop Inventory, Harvest, Open Shop |
 | Combat | Start Combat, Change Fight Options |
 | Animation | Sleeping, Swimming, Fall Flying, Standing, Sneaking, Sitting, Wave, Jump |
 
 **Move To** pauses the rest of its action sequence until the NPC arrives. If it cannot arrive, the sequence continues after 30 seconds.
+
+**Open Shop** opens the NPC's [shop](./shop.md) in the vanilla trading screen for the triggering player. It does nothing on triggers without a player.
 
 **Console Command** uses a command block icon. Selecting it prompts for a command without the leading slash, which runs as the server when the action triggers.
 

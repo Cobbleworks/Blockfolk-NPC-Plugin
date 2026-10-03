@@ -60,6 +60,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private CustomEventGuiService customEventGuiService;
     private RouteMovementService routeMovementService;
     private NpcCombatService combatService;
+    private dev.blockfolk.runtime.NpcShopService shopService;
+    private dev.blockfolk.gui.ShopGuiService shopGuiService;
     private NpcBehaviourService behaviourService;
     private NpcQuestionService questionService;
     private SkinResolver skinResolver;
@@ -97,6 +99,10 @@ public final class BlockfolkPlugin extends JavaPlugin {
         abilitiesGuiService = new dev.blockfolk.gui.AbilitiesGuiService(fighterAttackRepository, chatInputService,
                 this::openMainGui);
         guiService.setAbilitiesGuiService(abilitiesGuiService);
+        shopService = new dev.blockfolk.runtime.NpcShopService();
+        shopGuiService = new dev.blockfolk.gui.ShopGuiService(this, definitionRepository, shopService,
+                chatInputService);
+        guiService.setShopGuiService(shopGuiService);
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         routeGuiService.setNpcMenuOpener(guiService::openEditor);
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService,
@@ -107,6 +113,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         behaviourService = new NpcBehaviourService(this, definitionRepository, instanceRegistry, dialogService,
                 questionService, getConfig().getInt("proximity-transition-cooldown-seconds", 3));
         behaviourService.setCombatService(combatService);
+        behaviourService.setShopService(shopService);
         routeGuiService.setBehaviourService(behaviourService);
         OpenRouterClient openRouterClient = new OpenRouterClient(
                 getConfig().getString("openrouter.endpoint", "https://openrouter.ai/api/v1/chat/completions"),
@@ -168,12 +175,13 @@ public final class BlockfolkPlugin extends JavaPlugin {
 
         BlockfolkCommand executor = new BlockfolkCommand(definitionRepository, instanceRegistry, guiService,
                 routeGuiService, routeRepository, customEventGuiService, customEventRepository, behaviourService,
-                locationRepository, aiControlService, this);
+                locationRepository, aiControlService, shopService, this);
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> event.registrar()
                 .register("blockfolk", "Opens and controls Blockfolk.", java.util.List.of("bf"), executor));
 
         getServer().getPluginManager().registerEvents(guiService, this);
         getServer().getPluginManager().registerEvents(abilitiesGuiService, this);
+        getServer().getPluginManager().registerEvents(shopGuiService, this);
         getServer().getPluginManager().registerEvents(routeGuiService, this);
         getServer().getPluginManager().registerEvents(customEventGuiService, this);
         getServer().getPluginManager().registerEvents(chatInputService, this);

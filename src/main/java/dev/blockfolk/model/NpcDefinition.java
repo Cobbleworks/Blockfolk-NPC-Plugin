@@ -41,6 +41,7 @@ public final class NpcDefinition {
     private Map<String, List<BehaviourAction>> customEventBehaviours;
     private AiControlSettings aiControlSettings;
     private List<AiMemory> aiMemories;
+    private ShopProfile shopProfile;
 
     public NpcDefinition(String key) {
         this.key = key;
@@ -58,6 +59,7 @@ public final class NpcDefinition {
         this.customEventBehaviours = new java.util.LinkedHashMap<>();
         this.aiControlSettings = AiControlSettings.defaults();
         this.aiMemories = new ArrayList<>();
+        this.shopProfile = ShopProfile.disabled();
     }
 
     public static NpcDefinition create(String displayName) {
@@ -85,6 +87,7 @@ public final class NpcDefinition {
         copy.setPose(pose);
         copy.setAiControlSettings(aiControlSettings);
         copy.setAiMemoryEntries(aiMemories);
+        copy.setShopProfile(shopProfile);
         behaviours.forEach(copy::setBehaviourActions);
         customEventBehaviours.forEach(copy::setCustomEventActions);
         return copy;
@@ -199,6 +202,14 @@ public final class NpcDefinition {
 
     public void setCombatProfile(CombatProfile combatProfile) {
         this.combatProfile = combatProfile == null ? CombatProfile.disabled() : combatProfile;
+    }
+
+    public ShopProfile getShopProfile() {
+        return shopProfile;
+    }
+
+    public void setShopProfile(ShopProfile shopProfile) {
+        this.shopProfile = shopProfile == null ? ShopProfile.disabled() : shopProfile;
     }
 
     public MovementProfile getMovementProfile() {
