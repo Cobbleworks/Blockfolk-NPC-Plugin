@@ -6,10 +6,9 @@ Any NPC preset can run a small shop that uses the vanilla villager trading scree
 
 1. Open the NPC editor and click **Shop**, or run `/bf shop <name>`.
 2. Each row holds two trades. A trade has three item slots: **cost**, an optional **second cost**, and the **result**. Place the items you want, with the amounts you want, directly into the slots. The pane between the costs and the result turns green when the trade is ready and red when it is incomplete.
-3. Click **Shop: Off** to switch the shop on.
-4. Optionally click **Shop Title** to name the trading screen. By default it shows the NPC's name.
-5. Click **Preview Shop** to see the trading screen exactly as players will see it.
-6. Open **Event Behaviour → On Right-Click** (or any other trigger) and add the **Open Shop** action.
+3. Optionally click **Shop Title** to name the trading screen. By default it shows the NPC's name.
+4. Click **Preview Shop** to see the trading screen exactly as players will see it.
+5. Open **Event Behaviour → On Right-Click** (or any other trigger) and add the **Open Shop** action.
 
 Players can now right-click the NPC to trade. The shop is saved when you close the editor, change page, or click any button.
 
@@ -30,13 +29,14 @@ Shops only open through the **Open Shop** behaviour action, so you decide when p
 - add it to an **Ask Question** answer such as "Show me your wares"
 - combine it with **Send Dialog** for a greeting first
 
-Open Shop needs a player as its trigger, so it does nothing on triggers without one, such as Spawn or Idle. If the shop is disabled or has no complete trades, nothing opens; administrators receive a warning explaining why.
+The action is the only way in: a shop without an Open Shop action is invisible to players, which lets you prepare trades before opening. To close a shop, remove its Open Shop actions.
+
+Open Shop needs a player as its trigger, so it does nothing on triggers without one, such as Spawn or Idle. If the shop has no complete trades, nothing opens; administrators receive a warning explaining why.
 
 ## Commands
 
 | Command | Description |
 | --- | --- |
 | `/bf shop <name>` | Open the shop editor. |
-| `/bf shop <name> <on\|off>` | Enable or disable the shop. |
 | `/bf shop <name> title <text\|reset>` | Set the trading screen title; `reset` uses the NPC name. |
-| `/bf shop <name> preview` | Open the trading screen for yourself, even while the shop is disabled. |
+| `/bf shop <name> preview` | Open the trading screen for yourself. |

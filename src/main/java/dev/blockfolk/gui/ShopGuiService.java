@@ -40,7 +40,6 @@ public final class ShopGuiService implements Listener {
     static final int MAX_PAGES = 5;
     private static final int BACK_SLOT = 45;
     private static final int HELP_SLOT = 46;
-    private static final int ENABLED_SLOT = 47;
     private static final int TITLE_SLOT = 48;
     private static final int SAVE_SLOT = 49;
     private static final int PREVIEW_SLOT = 50;
@@ -99,10 +98,6 @@ public final class ShopGuiService implements Listener {
                 List.of("Place items into a trade row:", LegacyText.WHITE + "cost, second cost (optional), result",
                         "Trades have unlimited stock.", "Players open the shop through the",
                         LegacyText.WHITE + "Open Shop" + LegacyText.GRAY + " behaviour action, e.g. on right-click.")));
-        inventory.setItem(ENABLED_SLOT,
-                item(shop.enabled() ? Material.LIME_DYE : Material.GRAY_DYE, "Shop: " + (shop.enabled() ? "On" : "Off"),
-                        List.of("Complete trades: " + LegacyText.WHITE + shop.validOffers().size(),
-                                LegacyText.YELLOW + "Click to toggle")));
         inventory.setItem(TITLE_SLOT,
                 item(Material.NAME_TAG, "Shop Title",
                         List.of("Current: " + LegacyText.WHITE
@@ -110,7 +105,8 @@ public final class ShopGuiService implements Listener {
                                 LegacyText.YELLOW + "Click to rename")));
         inventory.setItem(SAVE_SLOT, item(Material.WRITABLE_BOOK, "Save", List.of("Closing the menu also saves.")));
         inventory.setItem(PREVIEW_SLOT,
-                item(Material.EMERALD, "Preview Shop", List.of("Opens the trading screen as players see it.")));
+                item(Material.EMERALD, "Preview Shop", List.of("Opens the trading screen as players see it.",
+                        "Complete trades: " + LegacyText.WHITE + shop.validOffers().size())));
         if (page > 0)
             inventory.setItem(PREVIOUS_SLOT, item(Material.ARROW, "Previous Page", List.of()));
         if (page + 1 < MAX_PAGES)
@@ -146,15 +142,6 @@ public final class ShopGuiService implements Listener {
                     holder.back().accept(player);
                 }
             }
-            case ENABLED_SLOT -> {
-                NpcDefinition definition = persist(player, top, holder);
-                if (definition != null) {
-                    ShopProfile shop = definition.getShopProfile();
-                    definition.setShopProfile(shop.withEnabled(!shop.enabled()));
-                    definitions.save(definition);
-                    reopen(player, definition, holder.page(), holder.back());
-                }
-            }
             case TITLE_SLOT -> {
                 NpcDefinition definition = persist(player, top, holder);
                 if (definition != null) {
@@ -179,7 +166,7 @@ public final class ShopGuiService implements Listener {
                     return;
                 }
                 explicitSaves.add(player.getUniqueId());
-                shopService.open(player, definition, true);
+                shopService.open(player, definition);
             }
             case PREVIOUS_SLOT, NEXT_SLOT -> {
                 int target = holder.page() + (slot == NEXT_SLOT ? 1 : -1);

@@ -9,7 +9,6 @@
 | `/bf routes` | Open routes. |
 | `/bf abilities` | Open the shared attack library and editor. |
 | `/bf shop <name>` | Open the NPC's shop editor. |
-| `/bf shop <name> <on\|off>` | Enable or disable the NPC's shop. |
 | `/bf shop <name> title <text\|reset>` | Set the trading screen title; `reset` uses the NPC name. |
 | `/bf shop <name> preview` | Open the shop's trading screen for yourself. |
 | `/bf npc <name> edit` | Open the NPC editor. |

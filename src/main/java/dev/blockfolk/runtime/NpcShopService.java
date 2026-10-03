@@ -23,17 +23,10 @@ public final class NpcShopService {
      * Opens the shop of {@code definition} for {@code player}. Admins are told why
      * nothing opened.
      *
-     * @param preview
-     *            when true the shop opens even if it is disabled, so admins can
-     *            test their trades
      * @return whether the trading screen was opened
      */
-    public boolean open(Player player, NpcDefinition definition, boolean preview) {
+    public boolean open(Player player, NpcDefinition definition) {
         ShopProfile shop = definition.getShopProfile();
-        if (!shop.enabled() && !preview) {
-            notifyAdmin(player, "The shop of " + definition.getDisplayName() + " is disabled.");
-            return false;
-        }
         if (shop.validOffers().isEmpty()) {
             notifyAdmin(player, "The shop of " + definition.getDisplayName() + " has no complete trades.");
             return false;

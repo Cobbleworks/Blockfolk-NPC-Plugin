@@ -208,7 +208,7 @@ class NpcDefinitionTest {
     @Test
     void copyKeepsTheShop() {
         NpcDefinition source = NpcDefinition.create("Baker");
-        source.setShopProfile(ShopProfile.disabled().withEnabled(true).withTitle("Fresh Bread"));
+        source.setShopProfile(ShopProfile.empty().withTitle("Fresh Bread"));
 
         NpcDefinition copy = source.copyAs("Baker Copy");
 
@@ -216,12 +216,12 @@ class NpcDefinitionTest {
     }
 
     @Test
-    void shopDefaultsToDisabledAndRejectsNull() {
+    void shopDefaultsToEmptyAndRejectsNull() {
         NpcDefinition definition = NpcDefinition.create("Baker");
-        assertEquals(ShopProfile.disabled(), definition.getShopProfile());
+        assertEquals(ShopProfile.empty(), definition.getShopProfile());
 
         definition.setShopProfile(null);
-        assertEquals(ShopProfile.disabled(), definition.getShopProfile());
+        assertEquals(ShopProfile.empty(), definition.getShopProfile());
     }
 
     @Test

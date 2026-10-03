@@ -249,10 +249,9 @@ public final class NpcDefinitionRepository {
     }
 
     static void writeShop(YamlConfiguration configuration, ShopProfile profile) {
-        if (!profile.enabled() && profile.title() == null && profile.offers().isEmpty()) {
+        if (profile.isEmpty()) {
             return;
         }
-        configuration.set("shop.enabled", profile.enabled());
         configuration.set("shop.title", profile.title());
         configuration.set("shop.offers", profile.offers().stream().map(offer -> {
             Map<String, Object> saved = new LinkedHashMap<>();
@@ -265,7 +264,7 @@ public final class NpcDefinitionRepository {
 
     static ShopProfile readShop(YamlConfiguration configuration) {
         if (!configuration.isConfigurationSection("shop")) {
-            return ShopProfile.disabled();
+            return ShopProfile.empty();
         }
         List<ShopOffer> offers = new ArrayList<>();
         for (Object entry : configuration.getList("shop.offers", List.of())) {
@@ -274,8 +273,9 @@ public final class NpcDefinitionRepository {
                         itemOrNull(saved.get("result"))));
             }
         }
-        return new ShopProfile(configuration.getBoolean("shop.enabled", false), configuration.getString("shop.title"),
-                offers);
+        // Older files may still contain shop.enabled; the Open Shop action is the only
+        // gate now.
+        return new ShopProfile(configuration.getString("shop.title"), offers);
     }
 
     private static void putItem(Map<String, Object> target, String key, ItemStack item) {

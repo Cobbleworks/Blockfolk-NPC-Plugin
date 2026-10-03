@@ -12,22 +12,18 @@ import org.junit.jupiter.api.Test;
 
 class ShopProfileTest {
     @Test
-    void disabledShopHasNoTitleOrTrades() {
-        ShopProfile shop = ShopProfile.disabled();
+    void emptyShopHasNoTitleOrTrades() {
+        ShopProfile shop = ShopProfile.empty();
 
-        assertFalse(shop.enabled());
         assertNull(shop.title());
         assertTrue(shop.offers().isEmpty());
-        assertFalse(shop.isOpenable());
+        assertTrue(shop.validOffers().isEmpty());
+        assertTrue(shop.isEmpty());
     }
 
     @Test
-    void enabledShopWithoutCompleteTradesCannotBeOpened() {
-        ShopProfile shop = ShopProfile.disabled().withEnabled(true);
-
-        assertTrue(shop.enabled());
-        assertTrue(shop.validOffers().isEmpty());
-        assertFalse(shop.isOpenable());
+    void shopWithOnlyATitleIsNotEmpty() {
+        assertFalse(ShopProfile.empty().withTitle("Bakery").isEmpty());
     }
 
     @Test
@@ -36,8 +32,8 @@ class ShopProfileTest {
         offers.add(new ShopOffer(null, null, null));
         offers.add(null);
 
-        assertTrue(ShopProfile.disabled().withOffers(offers).offers().isEmpty());
-        assertTrue(ShopProfile.disabled().withOffers(null).offers().isEmpty());
+        assertTrue(ShopProfile.empty().withOffers(offers).offers().isEmpty());
+        assertTrue(ShopProfile.empty().withOffers(null).offers().isEmpty());
     }
 
     @Test
@@ -50,17 +46,15 @@ class ShopProfileTest {
 
     @Test
     void titleIsTrimmedBlankBecomesNullAndLongTitlesAreCut() {
-        assertEquals("Bakery", ShopProfile.disabled().withTitle("  Bakery  ").title());
-        assertNull(ShopProfile.disabled().withTitle("   ").title());
-        assertEquals(ShopProfile.MAX_TITLE_LENGTH, ShopProfile.disabled().withTitle("x".repeat(100)).title().length());
+        assertEquals("Bakery", ShopProfile.empty().withTitle("  Bakery  ").title());
+        assertNull(ShopProfile.empty().withTitle("   ").title());
+        assertEquals(ShopProfile.MAX_TITLE_LENGTH, ShopProfile.empty().withTitle("x".repeat(100)).title().length());
     }
 
     @Test
-    void withMethodsKeepTheOtherFields() {
-        ShopProfile shop = ShopProfile.disabled().withTitle("Smithy").withEnabled(true);
+    void replacingTradesKeepsTheTitle() {
+        ShopProfile shop = ShopProfile.empty().withTitle("Smithy");
 
-        assertEquals("Smithy", shop.title());
-        assertTrue(shop.enabled());
-        assertEquals("Smithy", shop.withEnabled(false).title());
+        assertEquals("Smithy", shop.withOffers(List.of()).title());
     }
 }

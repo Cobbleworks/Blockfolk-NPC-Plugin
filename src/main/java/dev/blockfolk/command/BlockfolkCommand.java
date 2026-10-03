@@ -237,13 +237,13 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return true;
         }
         player.sendMessage(UiText.info(
-                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|shop <name> [on|off|title <text>|preview]|abilities|routes|locations|config ai <model|mute-me|memory forgetnearby <radius>>]"));
+                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|shop <name> [title <text>|preview]|abilities|routes|locations|config ai <model|mute-me|memory forgetnearby <radius>>]"));
         return true;
     }
 
     private void handleShopCommand(Player player, String[] args) {
         if (args.length < 2) {
-            player.sendMessage(UiText.info("Usage: /bf shop <name> [on|off|title <text|reset>|preview]"));
+            player.sendMessage(UiText.info("Usage: /bf shop <name> [title <text|reset>|preview]"));
             return;
         }
         NpcDefinition definition = definitionRepository.find(args[1]).orElse(null);
@@ -256,17 +256,6 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return;
         }
         String action = args[2].toLowerCase(Locale.ROOT);
-        Boolean enabled = parseToggle(action);
-        if (enabled != null && args.length == 3) {
-            definition.setShopProfile(definition.getShopProfile().withEnabled(enabled));
-            definitionRepository.save(definition);
-            player.sendMessage(UiText.success(
-                    "Shop of " + definition.getDisplayName() + " " + (enabled ? "enabled" : "disabled") + "."));
-            if (enabled && definition.getShopProfile().validOffers().isEmpty())
-                player.sendMessage(UiText.warning(
-                        "It has no complete trades yet. Use /bf shop " + definition.getKey() + " to add some."));
-            return;
-        }
         if (action.equals("title") && args.length >= 4) {
             String title = String.join(" ", List.of(args).subList(3, args.length));
             definition.setShopProfile(
@@ -276,11 +265,10 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return;
         }
         if (action.equals("preview") && args.length == 3) {
-            if (!shopService.open(player, definition, true))
-                player.sendMessage(UiText.warning("Nothing to preview yet."));
+            shopService.open(player, definition);
             return;
         }
-        player.sendMessage(UiText.info("Usage: /bf shop <name> [on|off|title <text|reset>|preview]"));
+        player.sendMessage(UiText.info("Usage: /bf shop <name> [title <text|reset>|preview]"));
     }
 
     private boolean handleNpcCommand(Player player, NpcDefinition definition, String[] args) {
@@ -501,7 +489,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return filter(definitionRepository.findAll().stream().map(NpcDefinition::getKey).toList(), args[1]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("shop")) {
-            return filter(List.of("on", "off", "title", "preview"), args[2]);
+            return filter(List.of("title", "preview"), args[2]);
         }
         if (args.length == 4 && args[0].equalsIgnoreCase("shop") && args[2].equalsIgnoreCase("title")) {
             return filter(List.of("reset"), args[3]);

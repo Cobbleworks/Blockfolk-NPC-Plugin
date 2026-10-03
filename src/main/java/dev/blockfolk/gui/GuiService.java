@@ -522,7 +522,7 @@ public final class GuiService implements Listener {
         inventory.setItem(23, item(ai.enabled() ? Material.OXIDIZED_COPPER_GOLEM_STATUE : Material.COPPER_GOLEM_STATUE,
                 "AI Behaviour: " + aiStatus, aiLore));
         ShopProfile shop = definition.getShopProfile();
-        inventory.setItem(24, item(Material.EMERALD, "Shop: " + (shop.enabled() ? "On" : "Off"), List.of(
+        inventory.setItem(24, item(Material.EMERALD, "Shop", List.of(
                 LegacyText.GRAY + "Complete trades: " + LegacyText.WHITE + shop.validOffers().size(),
                 LegacyText.GRAY + "Opened by the " + LegacyText.WHITE + "Open Shop" + LegacyText.GRAY + " action",
                 LegacyText.YELLOW + "Click to configure trades")));

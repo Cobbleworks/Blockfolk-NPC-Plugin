@@ -756,7 +756,7 @@ public final class NpcBehaviourService implements Listener {
             case SHOW_INVENTORY -> showInventory(instance, actor);
             case OPEN_SHOP -> {
                 if (shopService != null && actor instanceof Player player)
-                    shopService.open(player, definition, false);
+                    shopService.open(player, definition);
             }
             case DROP_INVENTORY -> dropInventory(instance);
             case HARVEST -> harvestNearbyCrops(instance);

@@ -60,7 +60,7 @@ class NpcDefinitionRepositoryTest {
 
     @Test
     void savesAndReloadsShopSettings() throws Exception {
-        ShopProfile shop = ShopProfile.disabled().withEnabled(true).withTitle("Bakery");
+        ShopProfile shop = ShopProfile.empty().withTitle("Bakery");
         YamlConfiguration saved = new YamlConfiguration();
         NpcDefinitionRepository.writeShop(saved, shop);
         YamlConfiguration loaded = new YamlConfiguration();
@@ -69,16 +69,23 @@ class NpcDefinitionRepositoryTest {
     }
 
     @Test
-    void definitionsWithoutAShopSectionLoadADisabledShop() throws Exception {
+    void definitionsWithoutAShopSectionLoadAnEmptyShop() throws Exception {
         YamlConfiguration old = new YamlConfiguration();
         old.loadFromString("combat:\n  max-health: 30\n");
-        assertEquals(ShopProfile.disabled(), NpcDefinitionRepository.readShop(old));
+        assertEquals(ShopProfile.empty(), NpcDefinitionRepository.readShop(old));
+    }
+
+    @Test
+    void legacyEnabledFlagIsIgnored() throws Exception {
+        YamlConfiguration old = new YamlConfiguration();
+        old.loadFromString("shop:\n  enabled: false\n  title: Bakery\n");
+        assertEquals(ShopProfile.empty().withTitle("Bakery"), NpcDefinitionRepository.readShop(old));
     }
 
     @Test
     void unusedShopIsNotWritten() {
         YamlConfiguration saved = new YamlConfiguration();
-        NpcDefinitionRepository.writeShop(saved, ShopProfile.disabled());
+        NpcDefinitionRepository.writeShop(saved, ShopProfile.empty());
         assertEquals(false, saved.contains("shop"));
     }
 }

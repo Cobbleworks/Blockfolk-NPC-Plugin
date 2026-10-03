@@ -4,10 +4,10 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Per-preset shop configuration. Trades have unlimited stock and are opened
- * through the {@link BehaviourActionType#OPEN_SHOP} action.
+ * Per-preset shop configuration. Trades have unlimited stock. Players can only
+ * reach the shop through the {@link BehaviourActionType#OPEN_SHOP} action.
  */
-public record ShopProfile(boolean enabled, String title, List<ShopOffer> offers) {
+public record ShopProfile(String title, List<ShopOffer> offers) {
 
     public static final int MAX_TITLE_LENGTH = 48;
 
@@ -17,20 +17,16 @@ public record ShopProfile(boolean enabled, String title, List<ShopOffer> offers)
                 .filter(offer -> offer != null && !offer.isEmpty()).toList();
     }
 
-    public static ShopProfile disabled() {
-        return new ShopProfile(false, null, List.of());
-    }
-
-    public ShopProfile withEnabled(boolean enabled) {
-        return new ShopProfile(enabled, title, offers);
+    public static ShopProfile empty() {
+        return new ShopProfile(null, List.of());
     }
 
     public ShopProfile withTitle(String title) {
-        return new ShopProfile(enabled, title, offers);
+        return new ShopProfile(title, offers);
     }
 
     public ShopProfile withOffers(List<ShopOffer> offers) {
-        return new ShopProfile(enabled, title, offers);
+        return new ShopProfile(title, offers);
     }
 
     /** Trades that are complete enough to be shown to players. */
@@ -38,9 +34,8 @@ public record ShopProfile(boolean enabled, String title, List<ShopOffer> offers)
         return offers.stream().filter(ShopOffer::isValid).toList();
     }
 
-    /** Whether opening the shop would show at least one trade. */
-    public boolean isOpenable() {
-        return enabled && offers.stream().anyMatch(ShopOffer::isValid);
+    public boolean isEmpty() {
+        return title == null && offers.isEmpty();
     }
 
     private static String normalizeTitle(String title) {

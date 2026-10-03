@@ -59,7 +59,7 @@ public final class NpcDefinition {
         this.customEventBehaviours = new java.util.LinkedHashMap<>();
         this.aiControlSettings = AiControlSettings.defaults();
         this.aiMemories = new ArrayList<>();
-        this.shopProfile = ShopProfile.disabled();
+        this.shopProfile = ShopProfile.empty();
     }
 
     public static NpcDefinition create(String displayName) {
@@ -209,7 +209,7 @@ public final class NpcDefinition {
     }
 
     public void setShopProfile(ShopProfile shopProfile) {
-        this.shopProfile = shopProfile == null ? ShopProfile.disabled() : shopProfile;
+        this.shopProfile = shopProfile == null ? ShopProfile.empty() : shopProfile;
     }
 
     public MovementProfile getMovementProfile() {
