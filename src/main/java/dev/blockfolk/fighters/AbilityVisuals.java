@@ -6,7 +6,9 @@ import dev.blockfolk.fighters.FighterAttack.Visual;
 
 /** Visual themes shared by the editor, impact, and caster indicators. */
 public final class AbilityVisuals {
-    /** Every telegraphed cast uses the same warning so players learn to react to it. */
+    /**
+     * Every telegraphed cast uses the same warning so players learn to react to it.
+     */
     public static final String CAST_SOUND = "minecraft:entity.evoker.prepare_attack";
 
     private AbilityVisuals() {
@@ -39,8 +41,8 @@ public final class AbilityVisuals {
     }
 
     /**
-     * Particle used while charging or warning. Sonic booms are too large to
-     * outline a shape, so they show sparks until impact.
+     * Particle used while charging or warning. Sonic booms are too large to outline
+     * a shape, so they show sparks until impact.
      */
     public static Particle warningParticle(Visual visual) {
         return visual == Visual.SONIC ? Particle.ELECTRIC_SPARK : particle(visual);

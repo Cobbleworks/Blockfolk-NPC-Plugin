@@ -37,16 +37,16 @@ public final class FighterTemplates {
                 FighterAttack.builder("searing_ray", "Searing Ray").shape(Shape.BEAM).range(14).size(0.6)
                         .cooldownTicks(400).damage(2).effects(Effect.FIRE).pulses(4).pulseIntervalTicks(10)
                         .visual(Visual.SOUL_FLAME).build(),
-                FighterAttack.builder("shadow_dash", "Shadow Dash").shape(Shape.DASH).range(10).minRange(4)
-                        .size(1.25).delayTicks(10).cooldownTicks(280).damage(4).effects(Effect.BLINDNESS)
-                        .effectSeconds(2).visual(Visual.SMOKE).build(),
+                FighterAttack.builder("shadow_dash", "Shadow Dash").shape(Shape.DASH).range(10).minRange(4).size(1.25)
+                        .delayTicks(10).cooldownTicks(280).damage(4).effects(Effect.BLINDNESS).effectSeconds(2)
+                        .visual(Visual.SMOKE).build(),
                 FighterAttack.builder("updraft", "Updraft").range(4).size(3.5).delayTicks(10).cooldownTicks(320)
                         .damage(2).effects(Effect.LAUNCH).knockback(0.9).visual(Visual.WIND).build(),
                 FighterAttack.builder("finishing_blow", "Finishing Blow").origin(Origin.TARGET).range(4).size(1.5)
                         .castMode(CastMode.NEXT_ATTACK).cooldownTicks(300).damage(6).effects(Effect.WITHER)
                         .condition(Condition.TARGET_WOUNDED).visual(Visual.BLOOD).build(),
-                FighterAttack.builder("war_cry", "War Cry").shape(Shape.SELF).range(8).delayTicks(10)
-                        .cooldownTicks(600).damage(0).effects(Effect.STRENGTH, Effect.RESISTANCE).effectSeconds(8)
+                FighterAttack.builder("war_cry", "War Cry").shape(Shape.SELF).range(8).delayTicks(10).cooldownTicks(600)
+                        .damage(0).effects(Effect.STRENGTH, Effect.RESISTANCE).effectSeconds(8)
                         .condition(Condition.CASTER_HURT).visual(Visual.TOTEM).build(),
                 FighterAttack.builder("second_wind", "Second Wind").shape(Shape.SELF).range(16).cooldownTicks(900)
                         .damage(0).effects(Effect.REGENERATION, Effect.ABSORPTION).effectSeconds(6).effectLevel(2)

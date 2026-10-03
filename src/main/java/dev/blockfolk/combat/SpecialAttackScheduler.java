@@ -52,8 +52,7 @@ public final class SpecialAttackScheduler {
                 .retainAll(definitions.stream().map(FighterAttack::key).collect(java.util.stream.Collectors.toSet()));
         var keys = options.assignedAttackKeys();
         List<FighterAttack> available = definitions.stream().filter(attack -> keys.contains(attack.key()))
-                .filter(attack -> tick >= readyAt.getOrDefault(attack.key(), 0L))
-                .filter(context::allows).toList();
+                .filter(attack -> tick >= readyAt.getOrDefault(attack.key(), 0L)).filter(context::allows).toList();
         if (available.isEmpty()) {
             nextAttemptAt = tick + 20;
             return null;

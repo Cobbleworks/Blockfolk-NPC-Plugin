@@ -71,14 +71,20 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
         AFFLICTION, CONTROL, CASTER
     }
     public enum Effect {
-        FIRE(EffectCategory.AFFLICTION), POISON(EffectCategory.AFFLICTION), WITHER(EffectCategory.AFFLICTION),
-        WEAKNESS(EffectCategory.AFFLICTION), BLINDNESS(EffectCategory.AFFLICTION), DARKNESS(EffectCategory.AFFLICTION),
-        NAUSEA(EffectCategory.AFFLICTION), HUNGER(EffectCategory.AFFLICTION),
-        SLOWNESS(EffectCategory.CONTROL), MINING_FATIGUE(EffectCategory.CONTROL), LEVITATION(EffectCategory.CONTROL),
-        GLOWING(EffectCategory.CONTROL), KNOCKBACK(EffectCategory.CONTROL), PULL(EffectCategory.CONTROL),
-        LAUNCH(EffectCategory.CONTROL),
-        LIFE_DRAIN(EffectCategory.CASTER), REGENERATION(EffectCategory.CASTER), SPEED(EffectCategory.CASTER),
-        STRENGTH(EffectCategory.CASTER), RESISTANCE(EffectCategory.CASTER), ABSORPTION(EffectCategory.CASTER);
+        FIRE(EffectCategory.AFFLICTION), POISON(EffectCategory.AFFLICTION), WITHER(EffectCategory.AFFLICTION), WEAKNESS(
+                EffectCategory.AFFLICTION), BLINDNESS(EffectCategory.AFFLICTION), DARKNESS(
+                        EffectCategory.AFFLICTION), NAUSEA(EffectCategory.AFFLICTION), HUNGER(
+                                EffectCategory.AFFLICTION), SLOWNESS(EffectCategory.CONTROL), MINING_FATIGUE(
+                                        EffectCategory.CONTROL), LEVITATION(EffectCategory.CONTROL), GLOWING(
+                                                EffectCategory.CONTROL), KNOCKBACK(
+                                                        EffectCategory.CONTROL), PULL(EffectCategory.CONTROL), LAUNCH(
+                                                                EffectCategory.CONTROL), LIFE_DRAIN(
+                                                                        EffectCategory.CASTER), REGENERATION(
+                                                                                EffectCategory.CASTER), SPEED(
+                                                                                        EffectCategory.CASTER), STRENGTH(
+                                                                                                EffectCategory.CASTER), RESISTANCE(
+                                                                                                        EffectCategory.CASTER), ABSORPTION(
+                                                                                                                EffectCategory.CASTER);
 
         private final EffectCategory category;
 
@@ -110,8 +116,7 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
         }
     }
     public enum Visual {
-        FLAME, SONIC, SOUL, ICE, POISON, CLOUD, BLOOD, LIGHTNING, ENDER, ENCHANT, HEARTS, SMOKE, SOUL_FLAME, BUBBLES,
-        SPORES, TOTEM, HOLY, SCULK, CHERRY, WIND, GLOW;
+        FLAME, SONIC, SOUL, ICE, POISON, CLOUD, BLOOD, LIGHTNING, ENDER, ENCHANT, HEARTS, SMOKE, SOUL_FLAME, BUBBLES, SPORES, TOTEM, HOLY, SCULK, CHERRY, WIND, GLOW;
         public Visual next() {
             return values()[(ordinal() + 1) % values().length];
         }
@@ -222,7 +227,10 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
     public FighterAttack withGeometry(Origin origin, Shape shape, double range, double size, double angle) {
         return toBuilder().origin(origin).shape(shape).range(range).size(size).angle(angle).build();
     }
-    /** Changing the delay re-derives instant or delayed casting; charges stay charges. */
+    /**
+     * Changing the delay re-derives instant or delayed casting; charges stay
+     * charges.
+     */
     public FighterAttack withTiming(int delay, int cooldown) {
         return toBuilder().delayTicks(delay).cooldownTicks(cooldown)
                 .castMode(castMode == CastMode.NEXT_ATTACK ? castMode : null).build();

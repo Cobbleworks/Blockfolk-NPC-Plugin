@@ -68,8 +68,8 @@ class FighterAttackTest {
         assertEquals(2, ring.innerRadius());
         assertEquals(3.5, ring.toBuilder().innerRadius(7).build().innerRadius());
         assertEquals(Origin.TARGET, ring.toBuilder().origin(Origin.TARGET).build().origin());
-        FighterAttack chain = FighterAttack.builder("chain", "Chain").shape(Shape.CHAIN).origin(Origin.TARGET)
-                .pulses(5).chainTargets(99).build();
+        FighterAttack chain = FighterAttack.builder("chain", "Chain").shape(Shape.CHAIN).origin(Origin.TARGET).pulses(5)
+                .chainTargets(99).build();
         assertEquals(Origin.NPC, chain.origin());
         assertEquals(1, chain.pulses());
         assertEquals(FighterAttack.MAX_CHAIN_TARGETS, chain.chainTargets());

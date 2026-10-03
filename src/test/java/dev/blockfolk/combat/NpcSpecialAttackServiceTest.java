@@ -388,9 +388,8 @@ class NpcSpecialAttackServiceTest {
     void lingeringAreasPulseAtTheMarkedSpotWithoutBlockingCombatAndStopWhenCancelled() {
         FighterAttack cloud = FighterAttack.builder("cloud", "Cloud").origin(FighterAttack.Origin.TARGET).size(2)
                 .delayTicks(0).damage(2).effects(Set.of()).pulses(3).pulseIntervalTicks(10).build();
-        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(cloud), (id, to) -> false,
-                victim -> {
-                });
+        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(cloud), (id, to) -> false, victim -> {
+        });
         var options = SpecialAttackOptions.disabled();
         nearby = List.of(target.entity);
         assertEquals(0, local.useAbility(instanceId, npc.entity, target.entity, "cloud", options, victim -> true, 0));
@@ -422,11 +421,10 @@ class NpcSpecialAttackServiceTest {
         Actor ally = new Actor(4);
         Actor beyond = new Actor(10);
         nearby = List.of(npc.entity, target.entity, ally.entity, near.entity, next.entity, beyond.entity);
-        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(chain), (id, to) -> false,
-                victim -> {
-                });
-        assertEquals(0, local.useAbility(instanceId, npc.entity, target.entity, "chain", SpecialAttackOptions.disabled(),
-                victim -> victim != ally.entity, 0));
+        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(chain), (id, to) -> false, victim -> {
+        });
+        assertEquals(0, local.useAbility(instanceId, npc.entity, target.entity, "chain",
+                SpecialAttackOptions.disabled(), victim -> victim != ally.entity, 0));
         assertEquals(17, target.health);
         assertEquals(17, near.health);
         assertEquals(17, next.health);
@@ -482,9 +480,8 @@ class NpcSpecialAttackServiceTest {
     void pullDrawsVictimsInAndLaunchThrowsThemUp() {
         FighterAttack well = FighterAttack.builder("well", "Well").size(5).delayTicks(0).damage(1)
                 .effects(FighterAttack.Effect.PULL, FighterAttack.Effect.LAUNCH).knockback(1).build();
-        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(well), (id, to) -> false,
-                victim -> {
-                });
+        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(well), (id, to) -> false, victim -> {
+        });
         nearby = List.of(target.entity);
         assertEquals(0, local.useAbility(instanceId, npc.entity, null, "well", SpecialAttackOptions.disabled(),
                 victim -> true, 0));

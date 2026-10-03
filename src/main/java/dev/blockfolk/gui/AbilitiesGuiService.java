@@ -46,11 +46,12 @@ public final class AbilitiesGuiService implements Listener {
     private final Consumer<Player> mainMenu;
 
     private enum Tab {
-        OVERVIEW(Material.BOOK, "Overview", "Name, icon, duplicate, and delete"),
-        SHAPE(Material.COMPASS, "Shape & Range", "Where the ability strikes and how far it reaches"),
-        TIMING(Material.CLOCK, "Timing & Triggers", "Cast mode, cooldown, pulses, and when NPCs use it"),
-        EFFECTS(Material.IRON_SWORD, "Damage & Effects", "Damage, afflictions, crowd control, and caster buffs"),
-        VISUALS(Material.FIREWORK_STAR, "Visuals", "Particle theme and impact sound");
+        OVERVIEW(Material.BOOK, "Overview", "Name, icon, duplicate, and delete"), SHAPE(Material.COMPASS,
+                "Shape & Range", "Where the ability strikes and how far it reaches"), TIMING(Material.CLOCK,
+                        "Timing & Triggers", "Cast mode, cooldown, pulses, and when NPCs use it"), EFFECTS(
+                                Material.IRON_SWORD, "Damage & Effects",
+                                "Damage, afflictions, crowd control, and caster buffs"), VISUALS(Material.FIREWORK_STAR,
+                                        "Visuals", "Particle theme and impact sound");
 
         private final Material icon;
         private final String title;
@@ -83,8 +84,8 @@ public final class AbilitiesGuiService implements Listener {
     }
     private record TemplateHolder(Consumer<Player> back) implements Holder {
     }
-    private record EditHolder(String key, Tab tab, Consumer<Player> back, Map<Integer, Action> actions)
-            implements Holder {
+    private record EditHolder(String key, Tab tab, Consumer<Player> back,
+            Map<Integer, Action> actions) implements Holder {
         EditHolder(String key, Tab tab, Consumer<Player> back) {
             this(key, tab, back, new HashMap<>());
         }
@@ -132,9 +133,8 @@ public final class AbilitiesGuiService implements Listener {
         for (int i = page * PAGE_SIZE; i < Math.min(attacks.size(), (page + 1) * PAGE_SIZE); i++) {
             FighterAttack attack = attacks.get(i);
             List<String> lore = summary(attack);
-            lore.add(hint("Left-click", holder.assignment()
-                    ? "Assign this ability to the NPC"
-                    : "Use this ability in the action"));
+            lore.add(hint("Left-click",
+                    holder.assignment() ? "Assign this ability to the NPC" : "Use this ability in the action"));
             inventory.setItem(i % PAGE_SIZE, abilityItem(attack, attack.name(), lore));
         }
         if (attacks.isEmpty())
@@ -231,8 +231,8 @@ public final class AbilitiesGuiService implements Listener {
         Screen screen = new Screen(inventory, holder.actions());
         for (Tab tab : Tab.values()) {
             boolean open = tab == holder.tab();
-            ItemStack item = item(tab.icon, tab.title, List.of(tab.description,
-                    open ? LegacyText.GREEN + "▶ Open" : hint("Click", "Open this tab")));
+            ItemStack item = item(tab.icon, tab.title,
+                    List.of(tab.description, open ? LegacyText.GREEN + "▶ Open" : hint("Click", "Open this tab")));
             screen.button(tab.slot(), open ? glint(item) : item,
                     (event, p) -> edit(p, new EditHolder(holder.key(), tab, holder.back())));
         }
@@ -241,7 +241,8 @@ public final class AbilitiesGuiService implements Listener {
                 (event, p) -> {
                     p.closeInventory();
                     NpcSpecialAttackService.preview(p, attack);
-                    p.sendMessage(UiText.info("Previewing " + attack.name() + ". Use /bf abilities to continue editing."));
+                    p.sendMessage(
+                            UiText.info("Previewing " + attack.name() + ". Use /bf abilities to continue editing."));
                 });
         switch (holder.tab()) {
             case OVERVIEW -> overviewTab(screen, holder, attack);
@@ -260,11 +261,12 @@ public final class AbilitiesGuiService implements Listener {
             if (isIconClick(event))
                 change(p, holder, a -> a.withIcon(p.getInventory().getItemInMainHand()));
         });
-        screen.button(20, item(Material.NAME_TAG, "Rename",
-                List.of("Display name; existing NPC assignments are preserved")),
+        screen.button(20,
+                item(Material.NAME_TAG, "Rename", List.of("Display name; existing NPC assignments are preserved")),
                 (event, p) -> input.request(p, "Enter the ability display name:",
                         name -> change(p, holder, a -> a.withName(name)), () -> edit(p, holder)));
-        screen.button(22, item(Material.WRITABLE_BOOK, "Duplicate", List.of("Create an independent copy of this attack")),
+        screen.button(22,
+                item(Material.WRITABLE_BOOK, "Duplicate", List.of("Create an independent copy of this attack")),
                 (event, p) -> create(p, attack, holder.back()));
         screen.set(24, item(Material.BOOK, "Shared Ability", List.of("Edits apply to every NPC assigned this attack",
                 "Use the tabs above to configure it", "NPC usage frequency is set on the assignment screen")));
@@ -349,8 +351,8 @@ public final class AbilitiesGuiService implements Listener {
                 "Counted after the cast delay; charges restart it on release",
                 v -> a -> a.toBuilder().cooldownTicks((int) Math.round(v * 20)).build()));
         if (attack.shape().supportsPulses()) {
-            controls.add(slot -> number(screen, holder, slot, Material.BELL, "Pulses", attack.pulses(), "",
-                    1, FighterAttack.MAX_PULSES, 1, "Strikes again at the same spot and aim; 1 strikes once",
+            controls.add(slot -> number(screen, holder, slot, Material.BELL, "Pulses", attack.pulses(), "", 1,
+                    FighterAttack.MAX_PULSES, 1, "Strikes again at the same spot and aim; 1 strikes once",
                     v -> a -> a.toBuilder().pulses((int) Math.round(v)).build()));
             if (attack.pulses() > 1)
                 controls.add(slot -> number(screen, holder, slot, Material.COMPARATOR, "Pulse Interval",
@@ -358,9 +360,8 @@ public final class AbilitiesGuiService implements Listener {
                         FighterAttack.MAX_PULSE_INTERVAL_TICKS / 20.0, 0.25, "Time between lingering strikes",
                         v -> a -> a.toBuilder().pulseIntervalTicks((int) Math.round(v * 20)).build()));
         } else
-            controls.add(slot -> screen.set(slot, item(Material.GRAY_DYE, "Pulses: Not available",
-                    List.of(label(attack.shape()) + " abilities strike once",
-                            "Sphere, ring, cone, and beam can linger"))));
+            controls.add(slot -> screen.set(slot, item(Material.GRAY_DYE, "Pulses: Not available", List
+                    .of(label(attack.shape()) + " abilities strike once", "Sphere, ring, cone, and beam can linger"))));
         place(controls, 3);
         Condition[] conditions = Condition.values();
         for (int i = 0; i < conditions.length; i++) {
@@ -433,10 +434,11 @@ public final class AbilitiesGuiService implements Listener {
                     change(p, holder, a -> a.withVisual(visual));
             });
         }
-        screen.set(40, item(Material.BOOK, "About Visuals",
-                List.of("Themes change particles and impact sound only",
-                        "Every telegraphed cast plays the same warning sound",
-                        "so players learn to react to it", "Use Preview to see the shape in the world")));
+        screen.set(40,
+                item(Material.BOOK, "About Visuals",
+                        List.of("Themes change particles and impact sound only",
+                                "Every telegraphed cast plays the same warning sound",
+                                "so players learn to react to it", "Use Preview to see the shape in the world")));
     }
 
     private void confirmDelete(Player player, EditHolder holder) {
@@ -685,11 +687,10 @@ public final class AbilitiesGuiService implements Listener {
         return lore;
     }
     private static String effectList(FighterAttack attack, boolean caster) {
-        return attack.effects().stream().filter(e -> (e.category() == EffectCategory.CASTER) == caster).sorted()
-                .map(effect -> label(effect)
-                        + (effect.casterBuff() || !caster && !effect.movement() && effect != Effect.FIRE
-                                ? " " + roman(attack.effectLevel())
-                                : ""))
+        return attack.effects().stream().filter(e -> (e.category() == EffectCategory.CASTER) == caster).sorted().map(
+                effect -> label(effect) + (effect.casterBuff() || !caster && !effect.movement() && effect != Effect.FIRE
+                        ? " " + roman(attack.effectLevel())
+                        : ""))
                 .collect(Collectors.joining(", "));
     }
 
@@ -798,8 +799,8 @@ public final class AbilitiesGuiService implements Listener {
                     "Jumps follow alliance and target rules");
             case DASH -> List.of("Stops in front of the target or a wall", "Fizzles without a safe landing spot",
                     "Set a Minimum Range so it closes distance");
-            case TELEPORT -> List.of("Chooses a nearby safe landing spot",
-                    "Add caster buffs (e.g. Speed) for an evasive escape");
+            case TELEPORT ->
+                List.of("Chooses a nearby safe landing spot", "Add caster buffs (e.g. Speed) for an evasive escape");
             case SELF -> List.of("Applies caster buffs from the Effects tab",
                     "Pair with a Trigger like Caster below 50% health");
         };
@@ -855,9 +856,9 @@ public final class AbilitiesGuiService implements Listener {
                     List.of("Harm victims over time", "Use Effect Duration and Effect Level"));
             case CONTROL -> item(Material.LIGHT_BLUE_STAINED_GLASS_PANE, "Crowd Control",
                     List.of("Hinder or move victims", "Knockback, Pull, and Launch use Force"));
-            case CASTER -> item(Material.LIME_STAINED_GLASS_PANE, "Caster Buffs",
-                    List.of("Apply to the NPC when released", "even if nothing is hit",
-                            "Life Drain heals by damage actually dealt"));
+            case CASTER ->
+                item(Material.LIME_STAINED_GLASS_PANE, "Caster Buffs", List.of("Apply to the NPC when released",
+                        "even if nothing is hit", "Life Drain heals by damage actually dealt"));
         };
     }
     private static Material effectIcon(Effect effect) {

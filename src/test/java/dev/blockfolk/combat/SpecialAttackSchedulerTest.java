@@ -87,11 +87,11 @@ class SpecialAttackSchedulerTest {
                 .withIntervalSeconds(3);
         for (int i = 0; i < 10; i++) {
             SpecialAttackScheduler healthy = new SpecialAttackScheduler(0, both);
-            assertEquals(plain, healthy.select(60, both, List.of(plain, heal), new CastContext(4, () -> 1, () -> 1),
-                    random));
+            assertEquals(plain,
+                    healthy.select(60, both, List.of(plain, heal), new CastContext(4, () -> 1, () -> 1), random));
             SpecialAttackScheduler hurt = new SpecialAttackScheduler(0, both);
-            assertEquals(heal, hurt.select(60, both, List.of(plain, heal), new CastContext(4, () -> 0.4, () -> 1),
-                    random));
+            assertEquals(heal,
+                    hurt.select(60, both, List.of(plain, heal), new CastContext(4, () -> 0.4, () -> 1), random));
         }
     }
 }

@@ -304,8 +304,8 @@ public final class NpcSpecialAttackService {
                 executionDepth--;
             }
             if (zone.remaining() > 1)
-                active.add(new Zone(zone.cast(), zone.remaining() - 1,
-                        tick + zone.cast().attack().pulseIntervalTicks()));
+                active.add(
+                        new Zone(zone.cast(), zone.remaining() - 1, tick + zone.cast().attack().pulseIntervalTicks()));
         }
         if (active.isEmpty())
             zones.remove(instanceId);
@@ -500,8 +500,7 @@ public final class NpcSpecialAttackService {
     }
 
     /** Knockback or pull sets horizontal motion; launch sets vertical motion. */
-    private void move(LivingEntity npc, LivingEntity victim, FighterAttack attack, Location center,
-            Vector direction) {
+    private void move(LivingEntity npc, LivingEntity victim, FighterAttack attack, Location center, Vector direction) {
         Set<Effect> effects = attack.effects();
         double force = attack.knockback();
         if (force <= 0 || effects.stream().noneMatch(Effect::movement))
@@ -696,8 +695,7 @@ public final class NpcSpecialAttackService {
                 for (int i = 0; i < 16; i++) {
                     double angle = i * Math.PI / 4;
                     center.getWorld().spawnParticle(particle,
-                            center.clone().add(Math.cos(angle) * 0.7, i * 0.13, Math.sin(angle) * 0.7), 1, 0, 0, 0,
-                            0);
+                            center.clone().add(Math.cos(angle) * 0.7, i * 0.13, Math.sin(angle) * 0.7), 1, 0, 0, 0, 0);
                 }
             }
             case CHAIN -> {
@@ -722,8 +720,8 @@ public final class NpcSpecialAttackService {
             for (double step = 1; step <= range; step += 2) {
                 Vector offset = direction.clone().add(right.clone().multiply(Math.cos(angle) * spread))
                         .add(up.clone().multiply(Math.sin(angle) * spread)).normalize().multiply(step);
-                center.getWorld().spawnParticle(particle, center.clone().add(offset), impact ? 3 : 1, 0.05, 0.05,
-                        0.05, 0.01);
+                center.getWorld().spawnParticle(particle, center.clone().add(offset), impact ? 3 : 1, 0.05, 0.05, 0.05,
+                        0.01);
             }
         }
     }
