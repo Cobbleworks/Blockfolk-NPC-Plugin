@@ -15,8 +15,12 @@ openrouter:
   model: "deepseek/deepseek-v4-flash-0731"
   # Increase this further for slower providers or reasoning-heavy models.
   timeout-seconds: 17
-  # Output allowance for action tool calls and memory JSON. Reasoning is disabled for lower latency.
+  # Output allowance for action tool calls and memory JSON, including any reasoning tokens.
   max-tokens: 1600
+  # How much the model may think before acting: none, minimal, low, medium, or high.
+  # A little reasoning makes NPCs follow through on requested actions far more reliably;
+  # use "none" for the lowest latency. Models without reasoning support ignore this.
+  reasoning-effort: "low"
 ai-control:
   # Per-NPC protection in addition to trigger-specific event throttling.
   invocation-cooldown-seconds: 2

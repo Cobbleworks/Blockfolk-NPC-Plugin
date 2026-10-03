@@ -13,6 +13,7 @@ openrouter:
   model: "deepseek/deepseek-v4-flash-0731"
   timeout-seconds: 17
   max-tokens: 1600
+  reasoning-effort: "low"
 ```
 
 Keep the endpoint on HTTPS. The AI menu reports whether OpenRouter is ready.
@@ -80,7 +81,7 @@ Conversation can be:
 - **Private** — each player has a separate conversation with that NPC instance;
 - **Shared** — all players contribute to one conversation on that instance.
 
-Long-term memory is separately optional. It stores up to 45 facts on the preset, shared by its instances and retained across restarts. The AI reviews up to 20 recent conversation lines after 20 seconds without a new player chat message; each follow-up message resets this timer. It may save up to three useful facts or nothing. Facts are classified as Personal (red, private knowledge and deals), Regional (green, local news shared with every AI NPC within 50 blocks of where it was learned), or Temporal (blue, changing facts that expire after 24 hours). Regional facts are also available to nearby NPCs that have their own memory saving disabled. At capacity, saving a new fact replaces the oldest Temporal fact if one exists; otherwise, it replaces the oldest fact. Existing facts without a category become Personal. Players see "NPC is telling the others..." when a Regional fact is saved and "NPC remembered this..." for Personal or Temporal facts. Administrators can add, edit, reclassify with shift-left-click, delete, or clear facts in the memory menu. Newly added facts start as Personal; manually reclassified Regional facts are centered on the administrator’s position.
+Long-term memory is separately optional. It stores up to 45 facts on the preset, shared by its instances and retained across restarts. The AI reviews up to 20 recent conversation lines after 20 seconds without a new player chat message; each follow-up message resets this timer. It saves only key facts about people and agreements, such as how someone treated the NPC, deals and promises, agreed meetings, and important news. It does not store reminders of what the NPC is currently doing; follow-through happens during its action turns. Most conversations save nothing; at most three facts are saved. Facts are classified as Personal (red, private knowledge and deals), Regional (green, local news shared with every AI NPC within 50 blocks of where it was learned), or Temporal (blue, changing facts that expire after 24 hours). Regional facts are also available to nearby NPCs that have their own memory saving disabled. At capacity, saving a new fact replaces the oldest Temporal fact if one exists; otherwise, it replaces the oldest fact. Existing facts without a category become Personal. Players see "NPC is telling the others..." when a Regional fact is saved and "NPC remembered this..." for Personal or Temporal facts. Administrators can add, edit, reclassify with shift-left-click, delete, or clear facts in the memory menu. Newly added facts start as Personal; manually reclassified Regional facts are centered on the administrator’s position.
 
 The number of recent conversation lines supplied to the model is set globally with `ai-control.conversation-history-limit`. Its default is `20`; when the limit is exceeded, the oldest lines are discarded first.
 

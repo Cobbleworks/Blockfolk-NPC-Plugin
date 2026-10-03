@@ -111,8 +111,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
         OpenRouterClient openRouterClient = new OpenRouterClient(
                 getConfig().getString("openrouter.endpoint", "https://openrouter.ai/api/v1/chat/completions"),
                 getConfig().getString("openrouter.api-key", ""), getConfig().getString("openrouter.model", ""),
-                getConfig().getInt("openrouter.timeout-seconds", 17),
-                getConfig().getInt("openrouter.max-tokens", 1600));
+                getConfig().getInt("openrouter.timeout-seconds", 17), getConfig().getInt("openrouter.max-tokens", 1600),
+                getConfig().getString("openrouter.reasoning-effort", "low"));
         aiControlService = new AiControlService(this, definitionRepository, instanceRegistry, combatService,
                 locationRepository, openRouterClient, getConfig().getInt("ai-control.invocation-cooldown-seconds", 2),
                 getConfig().getInt("ai-control.conversation-history-limit", AiMemoryStore.DEFAULT_MAX_MESSAGES));

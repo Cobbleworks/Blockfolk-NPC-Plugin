@@ -1,6 +1,8 @@
 package dev.blockfolk.ai;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import com.google.gson.JsonArray;
@@ -36,6 +38,7 @@ public final class AiGroupDecisionParser {
             Map<String, AiControlSettings> participants, Map<String, AiTargetSnapshot> targetsByParticipant,
             Map<String, java.util.Set<AiActionType>> availableByParticipant) {
         Map<String, AiDecision> accepted = new LinkedHashMap<>();
+        List<AiCallOutcome> outcomes = new ArrayList<>();
         int rejected = 0;
         try {
             JsonObject root = JsonParser.parseString(TextUtil.stripCodeFence(json)).getAsJsonObject();
@@ -52,6 +55,12 @@ public final class AiGroupDecisionParser {
                 AiControlSettings settings = participants.get(alias);
                 if (settings == null || accepted.containsKey(alias)) {
                     rejected++;
+                    rejectAll(response,
+                            alias == null || alias.isEmpty()
+                                    ? "missing npc Response ID; valid IDs: " + String.join(", ", participants.keySet())
+                                    : "'" + alias + "' is not a listed Response ID; valid IDs: "
+                                            + String.join(", ", participants.keySet()),
+                            outcomes);
                     continue;
                 }
                 JsonObject decision = new JsonObject();
@@ -63,6 +72,7 @@ public final class AiGroupDecisionParser {
                         : availableByParticipant.get(alias);
                 AiParseResult<AiDecision> parsed = AiDecisionParser.parseDetailed(decision.toString(), settings,
                         targets, available);
+                outcomes.addAll(parsed.outcomes());
                 if (parsed.usable())
                     accepted.put(alias, parsed.value());
                 if (!parsed.issue().isEmpty())
@@ -73,8 +83,26 @@ public final class AiGroupDecisionParser {
         }
         Map<String, AiDecision> decisions = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(accepted));
         if (accepted.isEmpty() && rejected > 0)
-            return AiParseResult.invalid(decisions, "all NPC responses were rejected");
-        return new AiParseResult<>(decisions, true, rejected == 0 ? "" : rejected + " response(s) rejected");
+            return new AiParseResult<>(decisions, false, "all NPC responses were rejected", outcomes);
+        return new AiParseResult<>(decisions, true, rejected == 0 ? "" : rejected + " response(s) rejected", outcomes);
+    }
+
+    private static void rejectAll(JsonObject response, String reason, List<AiCallOutcome> outcomes) {
+        if (!response.has("actions") || !response.get("actions").isJsonArray())
+            return;
+        int index = 0;
+        for (JsonElement action : response.getAsJsonArray("actions")) {
+            int call = index++;
+            String function = null;
+            if (action.isJsonObject()) {
+                JsonObject object = action.getAsJsonObject();
+                if (object.has("call") && object.get("call").isJsonPrimitive())
+                    call = object.get("call").getAsInt();
+                if (object.has("type") && object.get("type").isJsonPrimitive())
+                    function = object.get("type").getAsString();
+            }
+            outcomes.add(AiCallOutcome.rejected(call, function, reason));
+        }
     }
 
     private static String string(JsonObject object, String name) {

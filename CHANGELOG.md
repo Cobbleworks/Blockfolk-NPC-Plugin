@@ -20,6 +20,14 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Changed
 
+- AI NPCs follow through on requested actions more reliably. Each function call now gets its own result. A response with a rejected call runs nothing and is sent back once with the reasons and valid targets, so an NPC no longer says "on my way" while its move is rejected. After acting, the model checks whether its speech promised anything it has not started.
+- Long-term AI memory keeps only key facts about people and agreements (treatment, deals, promises, meetings, news) and no longer stores reminders of what the NPC is currently doing.
+- AI turns must begin with a function call, so models can no longer answer in plain text that players never see.
+- AI targets accept saved location names, player and NPC names, and mob types as well as listed aliases. `move_to` also accepts block coordinates within 128 blocks, and the NPC now knows its own position and facing.
+- AI perceives saved locations within 128 blocks (up to 20, with compass direction), up from 64 blocks.
+- Per-action guidance moved from the system prompt into each function's description, and only enabled actions are described.
+- New `openrouter.reasoning-effort` setting, default `low`. Reasoning was previously always disabled; set it to `none` for the previous behaviour.
+- Unreachable AI destinations and invalid follow targets are recorded in the NPC's recent event memory for its next request.
 - Rename Fighters to Abilities, including `/bf abilities`, and migrate saved definitions to `abilities.yml`.
 - Consolidate health, respawn time, and experience controls into one icon each with left/right adjustment, shift for five steps, middle-click input, and consistent coloured click labels.
 
