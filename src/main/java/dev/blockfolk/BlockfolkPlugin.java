@@ -60,6 +60,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private CustomEventGuiService customEventGuiService;
     private RouteMovementService routeMovementService;
     private NpcCombatService combatService;
+    private dev.blockfolk.repository.ShopRepository shopRepository;
     private dev.blockfolk.runtime.NpcShopService shopService;
     private dev.blockfolk.gui.ShopGuiService shopGuiService;
     private NpcBehaviourService behaviourService;
@@ -78,6 +79,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         locationRepository = new LocationRepository(this);
         customEventRepository = new CustomEventRepository(this);
         fighterAttackRepository = new dev.blockfolk.repository.FighterAttackRepository(this);
+        shopRepository = new dev.blockfolk.repository.ShopRepository(this);
         npcRenderer = new PaperMannequinNpcRenderer(this);
         navigationService = new NativeNpcNavigationService(this);
         transientNpcService = new dev.blockfolk.api.TransientNpcService(this, npcRenderer, navigationService);
@@ -99,9 +101,9 @@ public final class BlockfolkPlugin extends JavaPlugin {
         abilitiesGuiService = new dev.blockfolk.gui.AbilitiesGuiService(fighterAttackRepository, chatInputService,
                 this::openMainGui);
         guiService.setAbilitiesGuiService(abilitiesGuiService);
-        shopService = new dev.blockfolk.runtime.NpcShopService();
-        shopGuiService = new dev.blockfolk.gui.ShopGuiService(this, definitionRepository, shopService,
-                chatInputService);
+        shopService = new dev.blockfolk.runtime.NpcShopService(shopRepository);
+        shopGuiService = new dev.blockfolk.gui.ShopGuiService(this, shopRepository, shopService, chatInputService,
+                definitionRepository, routeRepository, this::openMainGui);
         guiService.setShopGuiService(shopGuiService);
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         routeGuiService.setNpcMenuOpener(guiService::openEditor);
@@ -153,8 +155,17 @@ public final class BlockfolkPlugin extends JavaPlugin {
         locationRepository.loadAll();
         customEventRepository.loadAll();
         fighterAttackRepository.loadAll();
+        shopRepository.loadAll();
         definitionRepository.loadAll();
         routeRepository.migrateOwnership(definitionRepository.findAll(), definitionRepository::save);
+        int migratedShops = shopRepository.migrateLegacyShops(definitionRepository.takeLegacyShops(),
+                definitionRepository.findAll(), definitionRepository::save, routeRepository.findAll(),
+                routeRepository::save);
+        if (migratedShops > 0) {
+            // Persist the library before the presets drop their old shop sections.
+            shopRepository.flush();
+            getLogger().info(() -> "Moved " + migratedShops + " NPC shop(s) into the shared shop library.");
+        }
         instanceRegistry.loadPersistedInstances();
 
         if (getServer().getPluginManager().isPluginEnabled("BeautyQuests")) {
@@ -175,7 +186,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
 
         BlockfolkCommand executor = new BlockfolkCommand(definitionRepository, instanceRegistry, guiService,
                 routeGuiService, routeRepository, customEventGuiService, customEventRepository, behaviourService,
-                locationRepository, aiControlService, shopService, this);
+                locationRepository, aiControlService, shopRepository, shopService, shopGuiService, this);
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> event.registrar()
                 .register("blockfolk", "Opens and controls Blockfolk.", java.util.List.of("bf"), executor));
 
@@ -246,6 +257,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
             customEventRepository.flush();
         if (fighterAttackRepository != null)
             fighterAttackRepository.flush();
+        if (shopRepository != null)
+            shopRepository.flush();
         if (dialogService != null) {
             dialogService.stop();
         }

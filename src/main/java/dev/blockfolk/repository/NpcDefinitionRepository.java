@@ -29,7 +29,7 @@ import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.ShopOffer;
-import dev.blockfolk.model.ShopProfile;
+import dev.blockfolk.model.Shop;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.SpecialAttackOptions;
 import dev.blockfolk.model.MovementProfile;
@@ -48,6 +48,7 @@ public final class NpcDefinitionRepository {
     private final DebouncedYamlWriter writer;
     private final Map<String, NpcDefinition> definitions = new LinkedHashMap<>();
     private final List<String> definitionOrder = new ArrayList<>();
+    private final Map<String, Shop> legacyShops = new LinkedHashMap<>();
 
     public NpcDefinitionRepository(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -59,6 +60,7 @@ public final class NpcDefinitionRepository {
     public void loadAll() {
         definitions.clear();
         definitionOrder.clear();
+        legacyShops.clear();
         if (!definitionsFolder.exists() && !definitionsFolder.mkdirs()) {
             plugin.getLogger().warning("Could not create definitions folder.");
             return;
@@ -76,6 +78,16 @@ public final class NpcDefinitionRepository {
             }
         }
         loadOrder();
+    }
+
+    /**
+     * Returns and forgets the per-preset shops found while loading, keyed by preset
+     * key. The next save of each preset drops its old shop section.
+     */
+    public Map<String, Shop> takeLegacyShops() {
+        Map<String, Shop> taken = new LinkedHashMap<>(legacyShops);
+        legacyShops.clear();
+        return taken;
     }
 
     public Optional<NpcDefinition> find(String keyOrName) {
@@ -114,7 +126,6 @@ public final class NpcDefinitionRepository {
         configuration.set("inventory.main-hand", definition.getMainHand());
         configuration.set("inventory.off-hand", definition.getOffHand());
         writeCombatProfile(configuration, definition.getCombatProfile());
-        writeShop(configuration, definition.getShopProfile());
         configuration.set("movement.speed",
                 definition.getMovementProfile().walkingSpeed().name().toLowerCase(Locale.ROOT));
         configuration.set("movement.enabled", definition.getMovementProfile().enabled());
@@ -248,43 +259,18 @@ public final class NpcDefinitionRepository {
                         .withFighterAttacks(configuration.getStringList("combat.special-attacks.fighter-attacks")));
     }
 
-    static void writeShop(YamlConfiguration configuration, ShopProfile profile) {
-        if (profile.isEmpty()) {
-            return;
-        }
-        configuration.set("shop.title", profile.title());
-        configuration.set("shop.offers", profile.offers().stream().map(offer -> {
-            Map<String, Object> saved = new LinkedHashMap<>();
-            putItem(saved, "cost", offer.cost());
-            putItem(saved, "second-cost", offer.secondCost());
-            putItem(saved, "result", offer.result());
-            return saved;
-        }).toList());
-    }
-
-    static ShopProfile readShop(YamlConfiguration configuration) {
-        if (!configuration.isConfigurationSection("shop")) {
-            return ShopProfile.empty();
-        }
-        List<ShopOffer> offers = new ArrayList<>();
-        for (Object entry : configuration.getList("shop.offers", List.of())) {
-            if (entry instanceof Map<?, ?> saved) {
-                offers.add(new ShopOffer(itemOrNull(saved.get("cost")), itemOrNull(saved.get("second-cost")),
-                        itemOrNull(saved.get("result"))));
-            }
-        }
-        // Older files may still contain shop.enabled; the Open Shop action is the only
-        // gate now.
-        return new ShopProfile(configuration.getString("shop.title"), offers);
-    }
-
-    private static void putItem(Map<String, Object> target, String key, ItemStack item) {
-        if (item != null)
-            target.put(key, item);
-    }
-
-    private static ItemStack itemOrNull(Object value) {
-        return value instanceof ItemStack itemStack ? itemStack : null;
+    /**
+     * Reads the per-preset shop section written by versions before shared shops.
+     * Returns {@code null} when there is nothing to migrate.
+     */
+    static Shop readLegacyShop(YamlConfiguration configuration, String key, String displayName) {
+        if (!configuration.isConfigurationSection("shop"))
+            return null;
+        String title = configuration.getString("shop.title");
+        List<ShopOffer> offers = ShopRepository.decodeOffers(configuration.getList("shop.offers", List.of()));
+        if ((title == null || title.isBlank()) && offers.stream().allMatch(ShopOffer::isEmpty))
+            return null;
+        return new Shop(key, title == null || title.isBlank() ? displayName : title, offers);
     }
 
     private NpcDefinition load(File file) {
@@ -302,7 +288,9 @@ public final class NpcDefinitionRepository {
         definition.setMainHand(configuration.getItemStack("inventory.main-hand"));
         definition.setOffHand(configuration.getItemStack("inventory.off-hand"));
         definition.setCombatProfile(readCombatProfile(configuration));
-        definition.setShopProfile(readShop(configuration));
+        Shop legacyShop = readLegacyShop(configuration, definition.getKey(), definition.getDisplayName());
+        if (legacyShop != null)
+            legacyShops.put(definition.getKey(), legacyShop);
         WalkingSpeed storedSpeed = WalkingSpeed.fromStored(configuration.getString("movement.speed"));
         String storedRoute = configuration.getString("movement.route");
         try {

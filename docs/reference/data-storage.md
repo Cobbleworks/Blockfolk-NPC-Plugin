@@ -5,7 +5,8 @@ Blockfolk stores its runtime configuration under `plugins/Blockfolk/`.
 | Path | Contents |
 | --- | --- |
 | `config.yml` | Global timeouts, MineSkin, and OpenRouter settings. |
-| `definitions/*.yml` | One file per NPC preset, including behaviour, combat, equipment, shop trades, and AI settings. |
+| `definitions/*.yml` | One file per NPC preset, including behaviour, combat, equipment, and AI settings. |
+| `shops.yml` | Shared shops: name and trades, keyed by shop key. |
 | `definition-order.yml` | Preset browser ordering. |
 | `instances.yml` | Persistent spawned instances and their UUIDs. |
 | `routes.yml` | NPC-owned routes and their point actions. |

@@ -1,40 +1,55 @@
 package dev.blockfolk.runtime;
 
-import java.util.Objects;
-
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.MenuType;
 import org.bukkit.inventory.Merchant;
 import org.bukkit.inventory.MerchantRecipe;
 
-import dev.blockfolk.model.NpcDefinition;
+import dev.blockfolk.model.Shop;
 import dev.blockfolk.model.ShopOffer;
-import dev.blockfolk.model.ShopProfile;
+import dev.blockfolk.repository.ShopRepository;
 import dev.blockfolk.util.UiText;
 import net.kyori.adventure.text.Component;
 
 /**
- * Opens an NPC preset's shop in the vanilla trading screen. Stock is unlimited.
+ * Opens a shared shop in the vanilla trading screen. Stock is unlimited.
  */
 public final class NpcShopService {
+    private final ShopRepository shops;
+
+    public NpcShopService(ShopRepository shops) {
+        this.shops = shops;
+    }
 
     /**
-     * Opens the shop of {@code definition} for {@code player}. Admins are told why
-     * nothing opened.
+     * Opens the shop stored under {@code shopKey} for {@code player}. Admins are
+     * told why nothing opened.
      *
      * @return whether the trading screen was opened
      */
-    public boolean open(Player player, NpcDefinition definition) {
-        ShopProfile shop = definition.getShopProfile();
+    public boolean open(Player player, String shopKey) {
+        if (shopKey == null) {
+            notifyAdmin(player, "This Open Shop action has no shop selected.");
+            return false;
+        }
+        Shop shop = shops.find(shopKey).orElse(null);
+        if (shop == null) {
+            notifyAdmin(player, "The shop '" + shopKey + "' no longer exists.");
+            return false;
+        }
+        return open(player, shop);
+    }
+
+    public boolean open(Player player, Shop shop) {
         if (shop.validOffers().isEmpty()) {
-            notifyAdmin(player, "The shop of " + definition.getDisplayName() + " has no complete trades.");
+            notifyAdmin(player, "The shop " + shop.name() + " has no complete trades.");
             return false;
         }
         Merchant merchant = Bukkit.getServer().createMerchant();
         merchant.setRecipes(shop.validOffers().stream().map(NpcShopService::recipe).toList());
-        Component title = Component.text(Objects.requireNonNullElse(shop.title(), definition.getDisplayName()));
-        MenuType.MERCHANT.builder().merchant(merchant).title(title).checkReachable(false).build(player).open();
+        MenuType.MERCHANT.builder().merchant(merchant).title(Component.text(shop.name())).checkReachable(false)
+                .build(player).open();
         return true;
     }
 

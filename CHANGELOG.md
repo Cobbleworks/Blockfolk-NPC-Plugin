@@ -6,8 +6,9 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Added
 
-- NPC shops: give any preset item-for-item trades with unlimited stock, shown in the vanilla trading screen. Configure them under **Shop** in the NPC editor or with `/bf shop <name> [title|preview]`.
-- Open Shop behaviour action that opens an NPC's shop for the triggering player, for example on right-click or from a question answer.
+- Shared shops: item-for-item trades with unlimited stock, shown in the vanilla trading screen and reusable by any number of NPCs. Manage them in the shop library under `/bf shop` or **Shops** in the main menu, and use `/bf shop create <name>` or `/bf shop <shop> [rename|preview]`. Stored in `shops.yml`.
+- Open Shop behaviour action that opens a chosen shop for the triggering player, for example on right-click or from a question answer. Shops configured on a preset by earlier development builds move into the library automatically, and that preset's Open Shop actions are pointed at them.
+- `/bf config ai model` without a model shows the model currently in use.
 - Ring, Chain, Dash, and Self ability shapes. Rings spare a safe inner area, chains jump between nearby enemies, dashes rush the caster towards its target and strike along the path, and Self abilities empower the caster.
 - Lingering pulses: spheres, rings, cones, and beams can strike up to 10 times at their marked spot and aim, without pausing weapon combat.
 - Ability triggers (Always, Caster below 50% / 25% health, Target below 50% health) and a minimum range for automatic casts. Abilities whose trigger is met are preferred.

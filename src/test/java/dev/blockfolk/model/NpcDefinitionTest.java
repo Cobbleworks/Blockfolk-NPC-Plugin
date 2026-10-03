@@ -206,22 +206,23 @@ class NpcDefinitionTest {
     }
 
     @Test
-    void copyKeepsTheShop() {
-        NpcDefinition source = NpcDefinition.create("Baker");
-        source.setShopProfile(ShopProfile.empty().withTitle("Fresh Bread"));
-
-        NpcDefinition copy = source.copyAs("Baker Copy");
-
-        assertEquals(source.getShopProfile(), copy.getShopProfile());
-    }
-
-    @Test
-    void shopDefaultsToEmptyAndRejectsNull() {
+    void mapActionsRewritesNestedQuestionBranchesAndReportsChanges() {
         NpcDefinition definition = NpcDefinition.create("Baker");
-        assertEquals(ShopProfile.empty(), definition.getShopProfile());
+        BehaviourAction unset = new BehaviourAction(BehaviourActionType.OPEN_SHOP, null);
+        NpcQuestion question = NpcQuestion.create("Buy bread?");
+        question = question.withOptions(List.of(new QuestionOption("Yes", List.of(unset))));
+        definition.setBehaviourActions(BehaviourEvent.RIGHT_CLICK, List.of(unset, BehaviourAction.ask(question)));
+        definition.setCustomEventActions("market/open", List.of(unset));
 
-        definition.setShopProfile(null);
-        assertEquals(ShopProfile.empty(), definition.getShopProfile());
+        boolean changed = definition.mapActions(action -> action.type() == BehaviourActionType.OPEN_SHOP
+                ? new BehaviourAction(BehaviourActionType.OPEN_SHOP, "bakery")
+                : action);
+
+        assertTrue(changed);
+        List<String> values = new java.util.ArrayList<>();
+        definition.forEachAction(action -> values.add(action.value()));
+        assertEquals(List.of("bakery", "bakery", "bakery"), values);
+        assertFalse(definition.mapActions(action -> action));
     }
 
     @Test

@@ -30,7 +30,7 @@ Nearby chat is configured from the AI menu rather than shown as a deterministic 
 
 **Move To** pauses the rest of its action sequence until the NPC arrives. If it cannot arrive, the sequence continues after 30 seconds.
 
-**Open Shop** opens the NPC's [shop](./shop.md) in the vanilla trading screen for the triggering player. It does nothing on triggers without a player.
+**Open Shop** opens the chosen shared [shop](./shop.md) in the vanilla trading screen for the triggering player. It does nothing on triggers without a player.
 
 **Console Command** uses a command block icon. Selecting it prompts for a command without the leading slash, which runs as the server when the action triggers.
 

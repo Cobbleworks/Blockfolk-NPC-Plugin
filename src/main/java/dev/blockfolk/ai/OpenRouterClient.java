@@ -69,6 +69,10 @@ public final class OpenRouterClient {
         return endpoint != null && !apiKey.isBlank() && !model.isBlank();
     }
 
+    public String model() {
+        return model;
+    }
+
     public void setModel(String model) {
         this.model = model == null ? "" : model.trim();
     }

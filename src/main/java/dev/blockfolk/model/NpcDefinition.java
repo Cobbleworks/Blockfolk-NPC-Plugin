@@ -41,7 +41,6 @@ public final class NpcDefinition {
     private Map<String, List<BehaviourAction>> customEventBehaviours;
     private AiControlSettings aiControlSettings;
     private List<AiMemory> aiMemories;
-    private ShopProfile shopProfile;
 
     public NpcDefinition(String key) {
         this.key = key;
@@ -59,7 +58,6 @@ public final class NpcDefinition {
         this.customEventBehaviours = new java.util.LinkedHashMap<>();
         this.aiControlSettings = AiControlSettings.defaults();
         this.aiMemories = new ArrayList<>();
-        this.shopProfile = ShopProfile.empty();
     }
 
     public static NpcDefinition create(String displayName) {
@@ -87,7 +85,6 @@ public final class NpcDefinition {
         copy.setPose(pose);
         copy.setAiControlSettings(aiControlSettings);
         copy.setAiMemoryEntries(aiMemories);
-        copy.setShopProfile(shopProfile);
         behaviours.forEach(copy::setBehaviourActions);
         customEventBehaviours.forEach(copy::setCustomEventActions);
         return copy;
@@ -202,14 +199,6 @@ public final class NpcDefinition {
 
     public void setCombatProfile(CombatProfile combatProfile) {
         this.combatProfile = combatProfile == null ? CombatProfile.disabled() : combatProfile;
-    }
-
-    public ShopProfile getShopProfile() {
-        return shopProfile;
-    }
-
-    public void setShopProfile(ShopProfile shopProfile) {
-        this.shopProfile = shopProfile == null ? ShopProfile.empty() : shopProfile;
     }
 
     public MovementProfile getMovementProfile() {
@@ -331,6 +320,41 @@ public final class NpcDefinition {
             collectRouteKeys(getCustomEventActions(eventName), routeKeys);
         }
         return Set.copyOf(routeKeys);
+    }
+
+    /**
+     * Rewrites every behaviour and custom event action, including question
+     * branches. Returns whether anything changed.
+     */
+    public boolean mapActions(java.util.function.UnaryOperator<BehaviourAction> mapper) {
+        boolean changed = false;
+        for (BehaviourEvent event : BehaviourEvent.values()) {
+            List<BehaviourAction> actions = getBehaviourActions(event);
+            List<BehaviourAction> mapped = BehaviourActions.map(actions, mapper);
+            if (!mapped.equals(actions)) {
+                setBehaviourActions(event, mapped);
+                changed = true;
+            }
+        }
+        for (String eventName : getCustomEventNames()) {
+            List<BehaviourAction> actions = getCustomEventActions(eventName);
+            List<BehaviourAction> mapped = BehaviourActions.map(actions, mapper);
+            if (!mapped.equals(actions)) {
+                setCustomEventActions(eventName, mapped);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    /**
+     * Visits every behaviour and custom event action, including question branches.
+     */
+    public void forEachAction(java.util.function.Consumer<BehaviourAction> visitor) {
+        for (BehaviourEvent event : BehaviourEvent.values())
+            BehaviourActions.forEach(getBehaviourActions(event), visitor);
+        for (String eventName : getCustomEventNames())
+            BehaviourActions.forEach(getCustomEventActions(eventName), visitor);
     }
 
     /** Repoints direct, movement, and question-branch route references. */

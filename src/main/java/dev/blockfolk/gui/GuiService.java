@@ -46,7 +46,6 @@ import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.FightOptions;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
-import dev.blockfolk.model.ShopProfile;
 import dev.blockfolk.model.SpecialAttackOptions;
 import dev.blockfolk.model.CustomEvent;
 import dev.blockfolk.model.LootTier;
@@ -189,10 +188,24 @@ public final class GuiService implements Listener {
         shopGuiService = service;
     }
 
-    public void openShop(Player player, NpcDefinition definition) {
+    public void openShops(Player player) {
+        shopGuiService.open(player);
+    }
+
+    private void openShops(Player player, NpcDefinition definition) {
         String key = definition.getKey();
-        shopGuiService.open(player, definition, p -> definitionRepository.find(key)
+        shopGuiService.openLibrary(player, p -> definitionRepository.find(key)
                 .ifPresentOrElse(current -> openEditor(p, current), p::closeInventory));
+    }
+
+    /** Keys of the shops opened by this preset's actions, in first-use order. */
+    private static List<String> usedShopKeys(NpcDefinition definition) {
+        Set<String> keys = new java.util.LinkedHashSet<>();
+        definition.forEachAction(action -> {
+            if (action.type() == BehaviourActionType.OPEN_SHOP && action.value() != null)
+                keys.add(action.value());
+        });
+        return List.copyOf(keys);
     }
 
     public void openAbilities(Player player) {
@@ -384,6 +397,9 @@ public final class GuiService implements Listener {
                                         + instanceRegistry.findActive().size(),
                                 LegacyText.GRAY + "Page " + (page + 1) + " of " + pages,
                                 LegacyText.YELLOW + "Click to reorder NPC presets")));
+        inventory.setItem(50,
+                item(Material.EMERALD_BLOCK, "Shops", List.of(LegacyText.GRAY + "Build shared shops NPCs can open",
+                        LegacyText.YELLOW + "Click to manage shops")));
         inventory.setItem(51, item(Material.EMERALD, "Create NPC", List.of(LegacyText.GRAY + "Creates a new preset",
                 LegacyText.YELLOW + "Click, then enter its name in chat")));
         if (page + 1 < pages) {
@@ -521,11 +537,18 @@ public final class GuiService implements Listener {
         aiLore.add(LegacyText.YELLOW + "Click to configure");
         inventory.setItem(23, item(ai.enabled() ? Material.OXIDIZED_COPPER_GOLEM_STATUE : Material.COPPER_GOLEM_STATUE,
                 "AI Behaviour: " + aiStatus, aiLore));
-        ShopProfile shop = definition.getShopProfile();
-        inventory.setItem(24, item(Material.EMERALD, "Shop", List.of(
-                LegacyText.GRAY + "Complete trades: " + LegacyText.WHITE + shop.validOffers().size(),
-                LegacyText.GRAY + "Opened by the " + LegacyText.WHITE + "Open Shop" + LegacyText.GRAY + " action",
-                LegacyText.YELLOW + "Click to configure trades")));
+        List<String> shopLore = new ArrayList<>();
+        List<String> usedShops = usedShopKeys(definition);
+        if (usedShops.isEmpty()) {
+            shopLore.add(LegacyText.GRAY + "No Open Shop action yet");
+        } else {
+            shopLore.add(
+                    LegacyText.GRAY + "Opens via the " + LegacyText.WHITE + "Open Shop" + LegacyText.GRAY + " action:");
+            usedShops.forEach(shopKey -> shopLore.add(LegacyText.WHITE + "• " + shopGuiService.shopName(shopKey)));
+        }
+        shopLore.add(LegacyText.GRAY + "Shops are shared between NPCs");
+        shopLore.add(LegacyText.YELLOW + "Click to manage shops");
+        inventory.setItem(24, item(Material.EMERALD, "Shops", shopLore));
         CombatProfile combat = definition.getCombatProfile();
         inventory.setItem(15, item(Material.IRON_SWORD, "Fighting & Survival",
                 List.of(LegacyText.GRAY + "Health: " + LegacyText.WHITE + healthLabel(combat),
@@ -1255,6 +1278,10 @@ public final class GuiService implements Listener {
             openAbilities(player);
             return;
         }
+        if (event.getRawSlot() == 50) {
+            openShops(player);
+            return;
+        }
         if (event.getRawSlot() == 47) {
             openMain(player, page - 1);
             return;
@@ -1394,7 +1421,7 @@ public final class GuiService implements Listener {
             }
             case 13 -> openBehaviours(player, definition, 0);
             case 23 -> openAiControl(player, definition);
-            case 24 -> openShop(player, definition);
+            case 24 -> openShops(player, definition);
             case 22 -> openCustomBehaviours(player, definition, 0);
             case 21 -> npcRoutesOpener.accept(player, definition.getKey());
             case 15 -> openFightingEditor(player, definition);
@@ -2016,6 +2043,12 @@ public final class GuiService implements Listener {
             }, p -> openRoutePointActionPicker(p, action));
         } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             requestRouteFightOptionsAction(player, action);
+        } else if (type == BehaviourActionType.OPEN_SHOP) {
+            shopGuiService.selectShop(player, key -> {
+                RoutePoint updated = setRoutePointAction(action, type, key);
+                if (updated != null)
+                    openWaypointActions(player, action.routeKey(), updated);
+            }, p -> openRoutePointActionPicker(p, action));
         } else if (!type.requiresValue()) {
             RoutePoint updated = setRoutePointAction(action, type, null);
             if (updated != null) {
@@ -2242,6 +2275,12 @@ public final class GuiService implements Listener {
                             holder.event(), holder.customEvent(), holder.actionIndex(), holder.page())));
         } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             requestFightOptionsAction(player, definition, holder);
+        } else if (type == BehaviourActionType.OPEN_SHOP) {
+            shopGuiService.selectShop(player, key -> definitionRepository.find(holder.key()).ifPresent(current -> {
+                setAction(current, holder, type, key);
+                openBehaviourHome(player, current, holder);
+            }), p -> definitionRepository.find(holder.key()).ifPresent(current -> openActionPicker(p, current,
+                    holder.event(), holder.customEvent(), holder.actionIndex(), holder.page())));
         } else if (!type.requiresValue()) {
             setAction(definition, holder, type, null);
             openBehaviourHome(player, definition, holder);
@@ -3074,6 +3113,13 @@ public final class GuiService implements Listener {
             openQuestionBranchRoutePicker(player, holder, "", 0);
             return;
         }
+        if (type == BehaviourActionType.OPEN_SHOP) {
+            shopGuiService.selectShop(player, key -> {
+                setQuestionBranchAction(holder, new BehaviourAction(type, key));
+                openAfterQuestionBranchPicker(player, holder);
+            }, p -> openQuestionBranchPicker(p, holder.target(), holder.optionIndex(), holder.actionIndex()));
+            return;
+        }
         if (type == BehaviourActionType.MOVE_TO || type == BehaviourActionType.TELEPORT_TO) {
             beginQuestionWaypointSelection(player, holder, type);
             return;
@@ -3746,7 +3792,7 @@ public final class GuiService implements Listener {
             case MINE_BLOCKS -> "Mines nearby blocks around the NPC";
             case TAKE_ITEM -> "Picks up a nearby or offered item";
             case SHOW_INVENTORY -> "Opens the NPC's inventory for the player";
-            case OPEN_SHOP -> "Opens the NPC's shop trading screen for the player";
+            case OPEN_SHOP -> "Opens a chosen shared shop's trading screen for the player";
             case DROP_INVENTORY -> "Drops every item in the NPC's inventory";
             case HARVEST -> "Harvests crops and plants carried seeds on nearby soil";
             case EMIT_EVENT -> "Triggers a custom event for listening NPCs";
@@ -3769,6 +3815,9 @@ public final class GuiService implements Listener {
         }
         if (action.type() == BehaviourActionType.AI_TRIGGER) {
             return action.value() == null ? "No prompt" : TextUtil.abbreviateSingleLine(action.value(), 80);
+        }
+        if (action.type() == BehaviourActionType.OPEN_SHOP) {
+            return shopGuiService.shopName(action.value());
         }
         if (!action.type().requiresValue() || action.value() == null) {
             return "No setting required";

@@ -21,7 +21,7 @@ Blockfolk is a GUI-driven NPC system for Paper servers. Administrators create re
 - **Routes and locations:** Build NPC-owned walking routes in the world and reuse named destinations across NPCs
 - **Configurable combat:** Define attacks, targets, alliances, loot, experience, respawn timing, and nearby boss bars
 - **Abilities:** Build shared custom attacks with origins, spheres, cones, beams, teleport, timing, charged weapon hits, combined effects, and previews; assign them through Fighting & Survival or cast them with a Use Ability behaviour action
-- **NPC shops:** Sell items through the vanilla trading screen with unlimited, item-for-item trades, opened by an Open Shop behaviour action
+- **Shared shops:** Sell items through the vanilla trading screen with unlimited, item-for-item trades; build each shop once and open it from any NPC with the Open Shop behaviour action
 - **World interaction:** Mine configured resources, harvest crops, and transfer items to or from containers
 - **Optional AI behavior:** Use OpenRouter for contextual conversation and validated, administrator-approved actions
 - **Quest integration:** Expose persistent Blockfolk NPCs directly to BeautyQuests

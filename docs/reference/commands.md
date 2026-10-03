@@ -8,9 +8,11 @@
 | `/bf locations` | Open global locations. |
 | `/bf routes` | Open routes. |
 | `/bf abilities` | Open the shared attack library and editor. |
-| `/bf shop <name>` | Open the NPC's shop editor. |
-| `/bf shop <name> title <text\|reset>` | Set the trading screen title; `reset` uses the NPC name. |
-| `/bf shop <name> preview` | Open the shop's trading screen for yourself. |
+| `/bf shop` | Open the shared shop library. |
+| `/bf shop create <name>` | Create a shop and open its trade editor. |
+| `/bf shop <shop>` | Open a shop's trade editor. |
+| `/bf shop <shop> rename <name>` | Rename a shop; the name is the trading screen title. |
+| `/bf shop <shop> preview` | Open the shop's trading screen for yourself. |
 | `/bf npc <name> edit` | Open the NPC editor. |
 | `/bf npc <name> set spawnpoint [here\|location]` | Set the preset spawnpoint to your position or a saved location. |
 | `/bf npc <name> set name <display name>` | Rename the NPC. |
@@ -27,7 +29,7 @@
 | `/bf npc <name> equipment` | Open Equipment & Loot. |
 | `/bf npc <name> delete` | Delete the preset, its instances, and its owned routes. |
 | `/bf npc <name> spawn [here\|location]` | Spawn a persistent instance at your position or a saved location. |
-| `/bf config ai model <model>` | Save and immediately use the OpenRouter model. Also works from the console. |
+| `/bf config ai model [model]` | Without a model, show the one in use. With a model, save and immediately use it. Also works from the console. |
 | `/bf config ai mute-me <on\|off>` | Stop or allow nearby AIs hearing your chat. Off by default; saved per player. |
 
 NPC names in commands are stable preset keys, shown in the editor. Saved locations are global location keys. Tab completion lists both.

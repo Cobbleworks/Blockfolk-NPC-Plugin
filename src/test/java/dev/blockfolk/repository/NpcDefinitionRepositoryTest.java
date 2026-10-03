@@ -1,6 +1,7 @@
 package dev.blockfolk.repository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.util.List;
 
@@ -12,7 +13,7 @@ import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.SpecialAttack;
 import dev.blockfolk.model.SpecialAttackOptions;
-import dev.blockfolk.model.ShopProfile;
+import dev.blockfolk.model.Shop;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 class NpcDefinitionRepositoryTest {
@@ -59,33 +60,29 @@ class NpcDefinitionRepositoryTest {
     }
 
     @Test
-    void savesAndReloadsShopSettings() throws Exception {
-        ShopProfile shop = ShopProfile.empty().withTitle("Bakery");
-        YamlConfiguration saved = new YamlConfiguration();
-        NpcDefinitionRepository.writeShop(saved, shop);
-        YamlConfiguration loaded = new YamlConfiguration();
-        loaded.loadFromString(saved.saveToString());
-        assertEquals(shop, NpcDefinitionRepository.readShop(loaded));
+    void legacyShopSectionIsReadForMigration() throws Exception {
+        YamlConfiguration old = new YamlConfiguration();
+        old.loadFromString("shop:\n  enabled: false\n  title: Fresh Bread\n  offers: []\n");
+
+        Shop shop = NpcDefinitionRepository.readLegacyShop(old, "baker", "Baker");
+
+        assertEquals("baker", shop.key());
+        assertEquals("Fresh Bread", shop.name());
     }
 
     @Test
-    void definitionsWithoutAShopSectionLoadAnEmptyShop() throws Exception {
+    void legacyShopWithOnlyEmptyTradesHasNothingToMigrate() throws Exception {
+        YamlConfiguration old = new YamlConfiguration();
+        old.loadFromString("shop:\n  offers:\n    - {}\n  title: '  '\n");
+
+        assertNull(NpcDefinitionRepository.readLegacyShop(old, "baker", "Baker"),
+                "a section with only empty trades has nothing to migrate");
+    }
+
+    @Test
+    void definitionsWithoutAShopSectionHaveNothingToMigrate() throws Exception {
         YamlConfiguration old = new YamlConfiguration();
         old.loadFromString("combat:\n  max-health: 30\n");
-        assertEquals(ShopProfile.empty(), NpcDefinitionRepository.readShop(old));
-    }
-
-    @Test
-    void legacyEnabledFlagIsIgnored() throws Exception {
-        YamlConfiguration old = new YamlConfiguration();
-        old.loadFromString("shop:\n  enabled: false\n  title: Bakery\n");
-        assertEquals(ShopProfile.empty().withTitle("Bakery"), NpcDefinitionRepository.readShop(old));
-    }
-
-    @Test
-    void unusedShopIsNotWritten() {
-        YamlConfiguration saved = new YamlConfiguration();
-        NpcDefinitionRepository.writeShop(saved, ShopProfile.empty());
-        assertEquals(false, saved.contains("shop"));
+        assertNull(NpcDefinitionRepository.readLegacyShop(old, "baker", "Baker"));
     }
 }

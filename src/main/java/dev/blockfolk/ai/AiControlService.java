@@ -469,6 +469,10 @@ public final class AiControlService {
         return client.configured();
     }
 
+    public String model() {
+        return client.model();
+    }
+
     public void setModel(String model) {
         client.setModel(model);
     }

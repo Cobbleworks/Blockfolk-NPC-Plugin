@@ -102,6 +102,29 @@ public final class NpcRoute {
         }
     }
 
+    /**
+     * Rewrites every route point action, including question branches. Returns
+     * whether anything changed.
+     */
+    public boolean mapActions(java.util.function.UnaryOperator<BehaviourAction> mapper) {
+        boolean changed = false;
+        for (int index = 0; index < points.size(); index++) {
+            RoutePoint point = points.get(index);
+            List<BehaviourAction> mapped = BehaviourActions.map(point.actions(), mapper);
+            if (!mapped.equals(point.actions())) {
+                points.set(index, point.withActions(mapped));
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    /** Visits every route point action, including question branches. */
+    public void forEachAction(java.util.function.Consumer<BehaviourAction> visitor) {
+        for (RoutePoint point : points)
+            BehaviourActions.forEach(point.actions(), visitor);
+    }
+
     public void replaceRouteReferences(String oldKey, String newKey) {
         for (int index = 0; index < points.size(); index++) {
             RoutePoint point = points.get(index);
