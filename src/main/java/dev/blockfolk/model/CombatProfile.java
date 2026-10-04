@@ -91,7 +91,8 @@ public record CombatProfile(int maxHealth, int respawnSeconds, AttackReaction at
     }
 
     public boolean alliedWith(CombatProfile other) {
-        return other != null && alliance != null && alliance.equals(other.alliance);
+        // Matches how players are recognised by item name: capitalization is ignored.
+        return other != null && alliance != null && alliance.equalsIgnoreCase(other.alliance);
     }
 
     private static String normalizeOptionalText(String value) {

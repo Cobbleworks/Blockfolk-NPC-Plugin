@@ -35,6 +35,11 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 - The main menu adds a **Locations** button. An NPC's route list has a **Create Route** button.
 - The AI Behaviour menu shows the master switch, conversation mode, and memory together, and gives every AI capability its own icon. Memories show their category with a matching icon.
 - Turned-off attack targets show a poppy ("spared") instead of identical gray dye.
+- The preset list keeps its second-last row as a divider above the navigation bar, showing 36 presets per page.
+- Allies fight together: when an NPC is attacked, allied NPCs within 16 blocks join in according to their aggression, and nearby allies defend players who carry their alliance. Spawned copies of one preset are always allied, and alliance names ignore capitalization.
+- Hunting NPCs retaliate against any attacker, not only enabled target categories.
+- NPCs under attack from several sides keep their opponent unless a new attacker is clearly closer, and turn to the closest recent attacker after a kill instead of leaving combat. **On Combat Entered** no longer fires again when an NPC merely switches opponents.
+- The Mobs target category covers hostile mobs only. Villagers, iron golems, and other peaceful mobs are no longer hunted or hit by area abilities aimed at other targets, but can still be fought when they attack.
 
 - AI NPCs follow through on requested actions more reliably. Each function call now gets its own result. A response with a rejected call runs nothing and is sent back once with the reasons and valid targets, so an NPC no longer says "on my way" while its move is rejected. After acting, the model checks whether its speech promised anything it has not started.
 - Long-term AI memory keeps only key facts about people and agreements (treatment, deals, promises, meetings, news) and no longer stores reminders of what the NPC is currently doing.
@@ -58,6 +63,8 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 - Remove All and Refresh on an empty instance list no longer open a deletion confirmation.
 - Cancelling an ability deletion started from the library returns to the library instead of opening the ability editor.
 - AI menu warnings now use the standard Blockfolk message style.
+- Allied NPCs no longer damage each other or alliance-carrying players with stray arrows or swings.
+- Hunting NPCs of the same preset no longer attack each other when Target Other NPCs is enabled.
 
 - Preserve ongoing combat timers when the same opponent repeatedly attacks an NPC.
 

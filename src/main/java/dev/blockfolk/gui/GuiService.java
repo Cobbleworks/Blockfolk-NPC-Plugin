@@ -92,6 +92,11 @@ import net.kyori.adventure.text.format.TextDecoration;
 public final class GuiService implements Listener {
 
     private static final int PAGE_SIZE = 45;
+    /**
+     * The preset list keeps its second-last row as a divider above the navigation.
+     */
+    private static final int MAIN_PAGE_SIZE = 36;
+    private static final int MAIN_DIVIDER_ROW = 4;
     private static final List<BehaviourEvent> MANUAL_BEHAVIOUR_EVENTS = java.util.Arrays.stream(BehaviourEvent.values())
             .filter(event -> event != BehaviourEvent.PLAYER_CHAT).toList();
     private static final List<BehaviourActionType> ANIMATION_ACTIONS = List.of(BehaviourActionType.SLEEP,
@@ -391,11 +396,11 @@ public final class GuiService implements Listener {
 
     public void openMain(Player player, int requestedPage) {
         List<NpcDefinition> definitions = new ArrayList<>(definitionRepository.findAll());
-        int pages = Math.max(1, (definitions.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int pages = Math.max(1, (definitions.size() + MAIN_PAGE_SIZE - 1) / MAIN_PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new MainHolder(page), 54, UiText.title("Blockfolk Presets"));
-        int from = page * PAGE_SIZE;
-        int to = Math.min(from + PAGE_SIZE, definitions.size());
+        int from = page * MAIN_PAGE_SIZE;
+        int to = Math.min(from + MAIN_PAGE_SIZE, definitions.size());
         for (int index = from; index < to; index++) {
             NpcDefinition definition = definitions.get(index);
             int instances = instanceRegistry.findByDefinition(definition).size();
@@ -434,6 +439,7 @@ public final class GuiService implements Listener {
         inventory.setItem(MAIN_CREATE_SLOT, GuiItems.create("Create NPC", "Creates a new NPC preset"));
         if (page + 1 < pages)
             inventory.setItem(MAIN_NEXT_SLOT, GuiItems.nextPage(page, pages));
+        GuiLayout.fillRow(inventory, MAIN_DIVIDER_ROW);
         openInventory(player, inventory);
     }
 
@@ -790,7 +796,7 @@ public final class GuiService implements Listener {
                 .toList();
         inventory.setItem(10, GuiItems.cycle("Aggression", reactions, reaction.ordinal(),
                 List.of("How the NPC reacts to enemies and attackers")));
-        inventory.setItem(12, targetToggle(Material.ZOMBIE_HEAD, "Mobs", options.mobs(), "hostile and neutral mobs"));
+        inventory.setItem(12, targetToggle(Material.ZOMBIE_HEAD, "Mobs", options.mobs(), "hostile mobs"));
         inventory.setItem(13, targetToggle(Material.PORKCHOP, "Animals", options.animals(), "passive animals"));
         inventory.setItem(14,
                 targetToggle(Material.PLAYER_HEAD, "Players", options.players(), "survival and adventure players"));
@@ -801,7 +807,7 @@ public final class GuiService implements Listener {
 
     private ItemStack targetToggle(Material icon, String label, boolean enabled, String who) {
         return GuiItems.toggle(icon, Material.POPPY, "Target " + label, enabled, "attacks " + who, "spares " + who,
-                List.of(LegacyText.DARK_GRAY + "Same-alliance entities are always spared"));
+                List.of(LegacyText.DARK_GRAY + "Allies and same-preset NPCs are always spared"));
     }
 
     private static String reactionColor(AttackReaction reaction) {
@@ -1334,8 +1340,8 @@ public final class GuiService implements Listener {
             }
         }
         List<NpcDefinition> definitions = new ArrayList<>(definitionRepository.findAll());
-        int index = page * PAGE_SIZE + event.getRawSlot();
-        if (event.getRawSlot() < PAGE_SIZE && index >= 0 && index < definitions.size()) {
+        int index = page * MAIN_PAGE_SIZE + event.getRawSlot();
+        if (event.getRawSlot() < MAIN_PAGE_SIZE && index >= 0 && index < definitions.size()) {
             NpcDefinition definition = definitions.get(index);
             if (event.getClick() == ClickType.SHIFT_RIGHT) {
                 openConfirmation(player, definition, ConfirmationAction.DELETE_DEFINITION, page);
@@ -3921,7 +3927,7 @@ public final class GuiService implements Listener {
             case IGNORE -> "does not react when attacked";
             case FLEE -> "runs away after taking damage";
             case FIGHT_BACK -> "attacks whoever damages it";
-            case HUNTING -> "actively hunts enabled targets";
+            case HUNTING -> "hunts enabled targets, fights back";
         };
     }
 
