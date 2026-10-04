@@ -29,7 +29,6 @@ import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.UiText;
-import net.kyori.adventure.text.Component;
 
 public final class CustomEventGuiService implements Listener {
     private static final int PAGE_SIZE = 45;
@@ -73,7 +72,7 @@ public final class CustomEventGuiService implements Listener {
                 player.sendMessage(UiText.error(exception.getMessage()));
                 onFailure.run();
             }
-        });
+        }, onFailure);
     }
 
     private void open(Player player, String folder, int requestedPage) {
@@ -87,7 +86,7 @@ public final class CustomEventGuiService implements Listener {
             CustomEventBrowserModel.Entry entry = entries.get(index);
             if (entry.folder()) {
                 ItemStack icon = item(entry.npcFolder() ? Material.PLAYER_HEAD : Material.CHEST, entry.label(), List.of(
-                        LegacyText.GRAY + "" + entry.childCount() + " event(s)", LegacyText.YELLOW + "Click to open"));
+                        LegacyText.GRAY + "" + entry.childCount() + " event(s)", "", GuiItems.hint("Click", "open")));
                 if (entry.path().startsWith("npc:"))
                     definitions.find(entry.path().substring(4)).ifPresent(npc -> NpcHeadUtil.applySkin(icon, npc));
                 inventory.setItem(index - from, icon);
@@ -95,20 +94,19 @@ public final class CustomEventGuiService implements Listener {
                 inventory.setItem(index - from, eventItem(entry.event()));
             }
         }
-        inventory.setItem(45, item(folder.isEmpty() ? Material.PLAYER_HEAD : Material.ARROW,
-                folder.isEmpty() ? "Manage NPCs" : "Up One Group", List.of()));
+        if (entries.isEmpty())
+            inventory.setItem(22, GuiItems.empty("No Custom Events Yet", "Use Create Event below to add one"));
         if (page > 0)
-            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
-        inventory.setItem(49,
+            inventory.setItem(GuiItems.PREVIOUS_SLOT, GuiItems.previousPage(page, pages));
+        inventory.setItem(48,
                 item(Material.BELL, "Event Overview",
                         List.of(LegacyText.GRAY + "Defined events: " + LegacyText.WHITE + events.findAll().size(),
-                                LegacyText.GRAY + "Group: " + LegacyText.WHITE + folderLabel(folder),
-                                LegacyText.YELLOW + "Click to reorder custom events")));
-        inventory.setItem(51,
-                item(Material.EMERALD, "Create Event", List.of(LegacyText.GRAY + "Use / in the name to create groups",
-                        LegacyText.YELLOW + "Click, then enter the full event name")));
+                                LegacyText.GRAY + "Group: " + LegacyText.WHITE + folderLabel(folder), "",
+                                GuiItems.hint("Click", "reorder custom events"))));
+        inventory.setItem(GuiItems.BACK_SLOT, GuiItems.back(folder.isEmpty() ? "the main menu" : "the parent group"));
+        inventory.setItem(GuiItems.CREATE_SLOT, GuiItems.create("Create Event", "Use / in the name to create groups"));
         if (page + 1 < pages)
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(GuiItems.NEXT_SLOT, GuiItems.nextPage(page, pages));
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
@@ -205,18 +203,19 @@ public final class CustomEventGuiService implements Listener {
 
     private void handleEventsClick(InventoryClickEvent click, Player player, EventsHolder holder) {
         int slot = click.getRawSlot();
-        if (slot == 45) {
+        if (slot == GuiItems.BACK_SLOT) {
             if (holder.folder().isEmpty())
                 mainGuiOpener.accept(player);
             else
                 open(player, CustomEventBrowserModel.parent(holder.folder()), 0);
             return;
         }
-        if (slot == 47) {
-            open(player, holder.folder(), holder.page() - 1);
+        if (slot == GuiItems.PREVIOUS_SLOT) {
+            if (holder.page() > 0)
+                open(player, holder.folder(), holder.page() - 1);
             return;
         }
-        if (slot == 49) {
+        if (slot == 48) {
             openReorder(player, holder.folder(), holder.page());
             return;
         }
@@ -251,7 +250,7 @@ public final class CustomEventGuiService implements Listener {
                 customEvent.setDescription(value.equalsIgnoreCase("clear") ? "" : value);
                 events.save(customEvent);
                 open(player, holder.folder(), holder.page());
-            });
+            }, () -> open(player, holder.folder(), holder.page()));
         }
     }
 
@@ -299,9 +298,8 @@ public final class CustomEventGuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(new DeleteHolder(event.getName(), back.folder(), back.page()), 27,
                 UiText.title("Delete Event", event.getName()));
         inventory.setItem(11,
-                item(Material.LIME_CONCRETE, "Confirm", List.of(LegacyText.RED + "Permanently delete this event",
-                        LegacyText.GRAY + "NPC reactions to it will also be removed")));
-        inventory.setItem(15, item(Material.RED_CONCRETE, "Cancel", List.of()));
+                GuiItems.confirm(List.of("Permanently deletes this event", "NPC reactions to it are removed too")));
+        inventory.setItem(15, GuiItems.cancel());
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
@@ -351,9 +349,9 @@ public final class CustomEventGuiService implements Listener {
                 List.of(LegacyText.DARK_GRAY + event.getName(),
                         LegacyText.GRAY
                                 + (event.getDescription().isBlank() ? "No description" : event.getDescription()),
-                        LegacyText.AQUA + "Middle-click: set icon from main hand",
-                        LegacyText.YELLOW + "Right-click: edit description",
-                        LegacyText.RED + "Shift-right-click: delete"));
+                        "", GuiItems.hint("Right-click", "edit description"),
+                        GuiItems.hint("Middle-click", "set icon from main hand"),
+                        GuiItems.danger("Shift-right-click", "delete")));
     }
 
     private static boolean top(InventoryClickEvent event) {
@@ -363,13 +361,7 @@ public final class CustomEventGuiService implements Listener {
         return item(new ItemStack(material), name, lore);
     }
     private ItemStack item(ItemStack template, String name, List<String> lore) {
-        ItemStack item = template.clone();
-        item.setAmount(1);
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(LegacyText.component(LegacyText.GOLD + name));
-        meta.lore(LegacyText.components(lore));
-        item.setItemMeta(meta);
-        return item;
+        return GuiItems.item(template, LegacyText.GOLD + name, lore);
     }
     private record EventsHolder(String folder, int page) implements GuiHolder {
     }

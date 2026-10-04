@@ -59,6 +59,8 @@ import net.kyori.adventure.text.Component;
 public final class RouteGuiService implements Listener {
 
     private static final int PAGE_SIZE = 45;
+    /** Return folder marking a location browser opened from the main menu. */
+    private static final String MAIN_MENU_RETURN = "\u0000main";
     private static final double PATH_PARTICLE_SPACING = 0.6;
     private static final double LOCATION_LABEL_RANGE_SQUARED = 64.0 * 64.0;
     private static final Color PATH_COLOR = Color.fromRGB(120, 210, 255);
@@ -134,10 +136,16 @@ public final class RouteGuiService implements Listener {
     }
 
     public void createRoute(Player player, String ownerKey, Consumer<NpcRoute> onCreated, Consumer<Player> onFinished) {
-        if (definitionRepository.find(ownerKey).isEmpty()) {
+        if (ownerKey == null || definitionRepository.find(ownerKey).isEmpty()) {
             player.sendMessage(UiText.error("That NPC no longer exists."));
             return;
         }
+        Runnable reopen = () -> {
+            if (onFinished != null)
+                onFinished.accept(player);
+            else
+                openNpcRoutes(player, ownerKey);
+        };
         chatInputService.request(player, "Enter the route name:", value -> {
             if (definitionRepository.find(ownerKey).isEmpty()) {
                 player.sendMessage(UiText.error("That NPC no longer exists."));
@@ -148,6 +156,7 @@ public final class RouteGuiService implements Listener {
                 route.setDisplayName(value);
                 if (routeRepository.find(route.getKey()).isPresent()) {
                     player.sendMessage(UiText.error("A route with that key already exists."));
+                    reopen.run();
                     return;
                 }
                 route.setOwnerKey(ownerKey);
@@ -156,8 +165,9 @@ public final class RouteGuiService implements Listener {
                 beginEditing(player, route, onFinished);
             } catch (IllegalArgumentException exception) {
                 player.sendMessage(UiText.error(exception.getMessage()));
+                reopen.run();
             }
-        });
+        }, reopen);
     }
 
     private void openRoutes(Player player, String folder, int requestedPage, String returnNpcKey) {
@@ -173,10 +183,14 @@ public final class RouteGuiService implements Listener {
         for (int index = from; index < to; index++) {
             RouteBrowserModel.Entry entry = entries.get(index);
             if (entry.folder()) {
+                List<String> folderLore = new ArrayList<>();
+                folderLore.add(LegacyText.GRAY + "" + entry.childCount() + " route(s)");
+                if (entry.npcFolder())
+                    folderLore.add(LegacyText.DARK_GRAY + "Routes owned by this NPC");
+                folderLore.add("");
+                folderLore.add(GuiItems.hint("Click", "open"));
                 ItemStack folderIcon = item(entry.npcFolder() ? Material.PLAYER_HEAD : Material.CHEST, entry.label(),
-                        List.of(LegacyText.GRAY + "" + entry.childCount() + " route(s)",
-                                LegacyText.DARK_GRAY + "Routes owned by this NPC",
-                                LegacyText.YELLOW + "Click to open"));
+                        folderLore);
                 if (entry.npcFolder()) {
                     definitionRepository.find(RouteBrowserModel.npcKey(entry.path()))
                             .ifPresent(definition -> NpcHeadUtil.applySkin(folderIcon, definition));
@@ -185,38 +199,55 @@ public final class RouteGuiService implements Listener {
                 continue;
             }
             NpcRoute route = entry.route();
-            inventory.setItem(index - from, routeItem(route, List.of(LegacyText.DARK_GRAY + "Key: " + route.getKey(),
-                    LegacyText.GRAY + "Key points: " + LegacyText.WHITE + route.getPoints().size(),
-                    LegacyText.YELLOW + "Left-click: edit points", LegacyText.AQUA + "Middle-click: rename route",
-                    LegacyText.RED + "Shift-right-click: remove route")));
+            inventory.setItem(index - from,
+                    routeItem(route, List.of(LegacyText.DARK_GRAY + "Key: " + route.getKey(),
+                            LegacyText.GRAY + "Points: " + LegacyText.WHITE + route.getPoints().size(), "",
+                            GuiItems.hint("Left-click", "edit points in the world"),
+                            GuiItems.hint("Middle-click", "rename"), GuiItems.danger("Shift-right-click", "delete"))));
         }
-        inventory.setItem(45,
-                item(folder.isEmpty() ? Material.PLAYER_HEAD : Material.ARROW,
-                        returnNpcKey != null ? "Back to NPC Menu" : folder.isEmpty() ? "Manage NPCs" : "Back to Routes",
-                        List.of()));
+        String npcKey = npcKeyForFolder(folder, returnNpcKey);
+        if (entries.isEmpty())
+            inventory.setItem(22, GuiItems.empty("No Routes Yet",
+                    npcKey != null ? "Use Create Route below to add one" : "Open an NPC's routes to create one"));
+        if (page > 0)
+            inventory.setItem(GuiItems.PREVIOUS_SLOT, GuiItems.previousPage(page, pages));
         inventory.setItem(46,
-                item(Material.LODESTONE, "Manage Locations",
-                        List.of(LegacyText.GRAY + "Define global positions for NPC actions",
-                                LegacyText.GREEN + "Uses green waypoint markers",
-                                LegacyText.YELLOW + "Click to manage locations")));
-        if (page > 0) {
-            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
-        }
-        inventory.setItem(49,
+                item(Material.LODESTONE, "Locations",
+                        List.of(LegacyText.GRAY + "Named global positions for movement actions", "",
+                                GuiItems.hint("Click", "open locations"))));
+        inventory.setItem(48,
                 item(Material.COMPASS, "Route Overview",
                         List.of(LegacyText.GRAY + "Routes: " + LegacyText.WHITE + routeRepository.findAll().size(),
                                 LegacyText.GRAY + "View: " + LegacyText.WHITE + routeBrowserLabel(folder),
-                                LegacyText.GRAY + "NPCs start at their nearest point",
-                                LegacyText.GRAY + "then follow nearest unvisited points in a loop")));
-        if (page + 1 < pages) {
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
-        }
+                                LegacyText.DARK_GRAY + "NPCs start at their nearest point, then",
+                                LegacyText.DARK_GRAY + "follow the nearest unvisited points in a loop")));
+        inventory.setItem(GuiItems.BACK_SLOT,
+                GuiItems.back(returnNpcKey != null && folder.equals("npc:" + returnNpcKey)
+                        ? "the NPC menu"
+                        : folder.isEmpty() ? "the main menu" : "all routes"));
+        if (npcKey != null)
+            inventory.setItem(GuiItems.CREATE_SLOT, GuiItems.create("Create Route",
+                    "Owned by " + routeBrowserLabel("npc:" + npcKey), "Then place its points in the world"));
+        if (page + 1 < pages)
+            inventory.setItem(GuiItems.NEXT_SLOT, GuiItems.nextPage(page, pages));
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
 
     public void openLocations(Player player) {
         openLocations(player, "", 0, "", 0, null);
+    }
+
+    /** Opens the location browser with Back leading to the main menu. */
+    public void openLocationsFromMain(Player player) {
+        openLocations(player, "", 0, MAIN_MENU_RETURN, 0, null);
+    }
+
+    /** The NPC whose routes a folder shows, or {@code null} outside NPC folders. */
+    private String npcKeyForFolder(String folder, String returnNpcKey) {
+        if (RouteBrowserModel.isNpcFolder(folder))
+            return RouteBrowserModel.npcKey(folder);
+        return folder.isEmpty() ? null : returnNpcKey;
     }
 
     private void openLocations(Player player, String folder, int requestedPage, String returnFolder, int returnPage,
@@ -237,31 +268,37 @@ public final class RouteGuiService implements Listener {
                 inventory.setItem(index - from,
                         item(Material.CHEST, entry.label(),
                                 List.of(LegacyText.GRAY + "" + entry.childCount() + " location(s)",
-                                        LegacyText.DARK_GRAY + entry.path(), LegacyText.YELLOW + "Click to open")));
+                                        LegacyText.DARK_GRAY + entry.path(), "", GuiItems.hint("Click", "open"))));
                 continue;
             }
             NamedLocation named = entry.location();
-            inventory.setItem(index - from, locationItem(named, entry.label(),
-                    List.of(LegacyText.DARK_GRAY + "Key: " + named.key(), LegacyText.GRAY + named.location().display(),
-                            LegacyText.AQUA + "Middle-click: set icon from main hand",
-                            LegacyText.YELLOW + "Left-click: teleport", LegacyText.RED + "Shift-right-click: delete")));
+            inventory.setItem(index - from,
+                    locationItem(named, entry.label(), List.of(LegacyText.DARK_GRAY + "Key: " + named.key(),
+                            LegacyText.GRAY + named.location().display(), "", GuiItems.hint("Left-click", "teleport"),
+                            GuiItems.hint("Middle-click", "set icon from main hand"),
+                            GuiItems.danger("Shift-right-click", "delete"))));
         }
-        inventory.setItem(45, item(Material.ARROW, folder.isEmpty() ? "Back to Routes" : "Up One Group", List.of()));
+        if (entries.isEmpty())
+            inventory.setItem(22, GuiItems.empty("No Locations Yet", "Use Edit Locations below to place one"));
         if (page > 0)
-            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
-        inventory.setItem(49, item(Material.COMPASS, "Location Overview",
+            inventory.setItem(GuiItems.PREVIOUS_SLOT, GuiItems.previousPage(page, pages));
+        inventory.setItem(48, item(Material.COMPASS, "Location Overview",
                 List.of(LegacyText.GRAY + "Locations: " + LegacyText.WHITE + locationRepository.findAll().size(),
                         LegacyText.GRAY + "Group: " + LegacyText.WHITE
                                 + (folder.isEmpty() ? "Root" : locationFolderLabel(folder)),
-                        LegacyText.GRAY + "Saved locations can be selected by movement actions",
-                        LegacyText.YELLOW + "Click to reorder locations")));
-        inventory.setItem(51,
+                        LegacyText.DARK_GRAY + "Movement actions can target saved locations", "",
+                        GuiItems.hint("Click", "reorder locations"))));
+        inventory.setItem(GuiItems.BACK_SLOT,
+                GuiItems.back(!folder.isEmpty()
+                        ? "the parent group"
+                        : MAIN_MENU_RETURN.equals(returnFolder) ? "the main menu" : "routes"));
+        inventory.setItem(GuiItems.CREATE_SLOT,
                 item(Material.AMETHYST_SHARD, "Edit Locations",
-                        List.of(LegacyText.GRAY + "Use / in names to create groups",
-                                LegacyText.GRAY + "Left-click a block, then enter a name",
-                                LegacyText.YELLOW + "Click to begin placement")));
+                        List.of(LegacyText.GRAY + "Left-click a block, then enter a name",
+                                LegacyText.GRAY + "Use / in names to create groups", "",
+                                GuiItems.hint("Click", "get the location editor"))));
         if (page + 1 < pages)
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(GuiItems.NEXT_SLOT, GuiItems.nextPage(page, pages));
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
@@ -295,8 +332,8 @@ public final class RouteGuiService implements Listener {
         }
         if (holder.page > 0)
             inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
-        inventory.setItem(48, item(Material.LIME_CONCRETE, "Save Order",
-                List.of(LegacyText.GRAY + "Apply this order to the locations browser")));
+        inventory.setItem(48, item(Material.LIME_CONCRETE, "Save Order", List.of(
+                LegacyText.GRAY + "Apply this order to the locations browser", "", GuiItems.hint("Click", "save"))));
         inventory.setItem(50,
                 item(Material.RED_CONCRETE, "Cancel", List.of(LegacyText.GRAY + "Discard all ordering changes")));
         if (holder.page + 1 < pages)
@@ -567,7 +604,7 @@ public final class RouteGuiService implements Listener {
         String folder = holder.folder();
         int page = holder.page();
         String returnNpcKey = holder.returnNpcKey();
-        if (event.getRawSlot() == 45) {
+        if (event.getRawSlot() == GuiItems.BACK_SLOT) {
             if (returnNpcKey != null) {
                 definitionRepository.find(returnNpcKey).ifPresentOrElse(
                         definition -> npcMenuOpener.accept(player, definition), () -> mainGuiOpener.accept(player));
@@ -581,11 +618,20 @@ public final class RouteGuiService implements Listener {
             openLocations(player, "", 0, folder, page, returnNpcKey);
             return;
         }
-        if (event.getRawSlot() == 47) {
-            openRoutes(player, folder, page - 1, returnNpcKey);
+        if (event.getRawSlot() == GuiItems.CREATE_SLOT) {
+            String npcKey = npcKeyForFolder(folder, returnNpcKey);
+            if (npcKey != null)
+                createRoute(player, npcKey,
+                        route -> player.sendMessage(UiText.success("Created route '" + route.getDisplayName() + "'.")),
+                        p -> openRoutes(p, folder, page, returnNpcKey));
             return;
         }
-        if (event.getRawSlot() == 53) {
+        if (event.getRawSlot() == GuiItems.PREVIOUS_SLOT) {
+            if (page > 0)
+                openRoutes(player, folder, page - 1, returnNpcKey);
+            return;
+        }
+        if (event.getRawSlot() == GuiItems.NEXT_SLOT) {
             openRoutes(player, folder, page + 1, returnNpcKey);
             return;
         }
@@ -624,24 +670,27 @@ public final class RouteGuiService implements Listener {
 
     private void handleLocationsClick(InventoryClickEvent event, Player player, LocationsHolder holder) {
         int slot = event.getRawSlot();
-        if (slot == 45) {
-            if (holder.folder().isEmpty())
+        if (slot == GuiItems.BACK_SLOT) {
+            if (holder.folder().isEmpty() && MAIN_MENU_RETURN.equals(holder.returnFolder()))
+                mainGuiOpener.accept(player);
+            else if (holder.folder().isEmpty())
                 openRoutes(player, holder.returnFolder(), holder.returnPage(), holder.returnNpcKey());
             else
                 openLocations(player, LocationBrowserModel.parent(holder.folder()), 0, holder.returnFolder(),
                         holder.returnPage(), holder.returnNpcKey());
             return;
         }
-        if (slot == 47) {
-            openLocations(player, holder.folder(), holder.page() - 1, holder.returnFolder(), holder.returnPage(),
-                    holder.returnNpcKey());
+        if (slot == GuiItems.PREVIOUS_SLOT) {
+            if (holder.page() > 0)
+                openLocations(player, holder.folder(), holder.page() - 1, holder.returnFolder(), holder.returnPage(),
+                        holder.returnNpcKey());
             return;
         }
-        if (slot == 49) {
+        if (slot == 48) {
             openLocationReorder(player, holder);
             return;
         }
-        if (slot == 51) {
+        if (slot == GuiItems.CREATE_SLOT) {
             beginLocationEditing(player, holder);
             return;
         }
@@ -821,10 +870,8 @@ public final class RouteGuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(new DeleteRouteHolder(route.getKey(), folder, page, returnNpcKey),
                 27, UiText.title("Delete Route", route.getDisplayName()));
         inventory.setItem(11,
-                item(Material.LIME_CONCRETE, "Confirm", List.of(LegacyText.RED + "Permanently delete this route",
-                        LegacyText.GRAY + "NPC presets using it will be unassigned")));
-        inventory.setItem(15,
-                item(Material.RED_CONCRETE, "Cancel", List.of(LegacyText.GRAY + "Nothing will be changed")));
+                GuiItems.confirm(List.of("Permanently deletes this route", "NPC presets using it will be unassigned")));
+        inventory.setItem(15, GuiItems.cancel());
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
@@ -1106,32 +1153,16 @@ public final class RouteGuiService implements Listener {
     }
 
     private ItemStack item(Material material, String name, List<String> lore) {
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(LegacyText.component(LegacyText.GOLD + name));
-        meta.lore(LegacyText.components(lore));
-        item.setItemMeta(meta);
-        return item;
+        return GuiItems.item(material, name, lore);
     }
 
     private ItemStack routeItem(NpcRoute route, List<String> lore) {
-        ItemStack result = new ItemStack(Material.RAIL);
-        ItemMeta meta = result.getItemMeta();
-        meta.displayName(LegacyText.component(LegacyText.GOLD + route.getDisplayName()));
-        meta.lore(LegacyText.components(lore));
-        result.setItemMeta(meta);
-        return result;
+        return GuiItems.item(new ItemStack(Material.RAIL), LegacyText.GOLD + route.getDisplayName(), lore);
     }
 
     private ItemStack locationItem(NamedLocation location, String label, List<String> lore) {
         ItemStack icon = location.icon();
-        ItemStack result = icon == null ? new ItemStack(Material.LODESTONE) : icon;
-        result.setAmount(1);
-        ItemMeta meta = result.getItemMeta();
-        meta.displayName(LegacyText.component(LegacyText.GOLD + label));
-        meta.lore(LegacyText.components(lore));
-        result.setItemMeta(meta);
-        return result;
+        return GuiItems.item(icon == null ? new ItemStack(Material.LODESTONE) : icon, LegacyText.GOLD + label, lore);
     }
 
     private record EditSession(String routeKey, UUID token, Consumer<Player> onFinished) {

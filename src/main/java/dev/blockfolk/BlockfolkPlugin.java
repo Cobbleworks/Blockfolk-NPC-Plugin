@@ -107,6 +107,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         guiService.setShopGuiService(shopGuiService);
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         routeGuiService.setNpcMenuOpener(guiService::openEditor);
+        guiService.setLocationsOpener(routeGuiService::openLocationsFromMain);
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService,
                 fighterAttackRepository);
         questionService = new NpcQuestionService(this, instanceRegistry, chatInputService,

@@ -4,7 +4,7 @@
 
 The preset editor supports a display name and a skin URL or texture hash. Enter `default` when editing the skin to clear it. External image URLs are resolved through MineSkin; a MineSkin API key is optional but raises the public rate limit.
 
-Under **NPC Properties**, you can configure:
+Under **Appearance & Properties** in the preset editor, you can configure:
 
 | Property | Effect |
 | --- | --- |
@@ -12,8 +12,10 @@ Under **NPC Properties**, you can configure:
 | Show Name | Displays the name hologram above the NPC. |
 | Look at Player | Turns toward the nearest player with a subtle body turn. |
 | Item Pickup | Collects nearby item entities into that instance's temporary inventory. |
-| Name Color | Cycles the color used for the visible NPC name. |
-| Pose | Opens a selector for Standing, Crouching, Sleeping, Sitting, Swimming / Crawling, and Fall Flying. |
+| Pose | Standing, Crouching, Sleeping, Sitting, Swimming / Crawling, or Fall Flying. |
+| Name Color | The color used for the visible NPC name. |
+
+On/off settings switch with a click; their icon, name color, and tooltip show the current state. Multi-option settings such as Pose and Name Color list every option in their tooltip with a `▶` marker on the current one: left-click selects the next option, right-click the previous one.
 
 The selected pose is saved in the preset, applies to all its instances, and survives respawns and restarts. Sitting bends the legs using an invisible seat; changing poses or deleting the NPC removes that seat. Swimming / Crawling uses the same horizontal player pose, while Fall Flying supplies the elytra-style pose without initiating flight. These options cover all five native poses accepted by Paper's mannequin entity plus mounted sitting. Wave and Jump remain available under behavior **Animations**, which now also includes Sitting.
 

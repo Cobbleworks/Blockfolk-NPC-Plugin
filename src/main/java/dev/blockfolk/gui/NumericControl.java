@@ -13,10 +13,8 @@ final class NumericControl {
     }
 
     static List<String> lore() {
-        return List.of(LegacyText.YELLOW + "Left-click: " + LegacyText.GRAY + "Decrease value",
-                LegacyText.YELLOW + "Right-click: " + LegacyText.GRAY + "Increase value",
-                LegacyText.AQUA + "Middle-click: " + LegacyText.GRAY + "Enter exact value",
-                LegacyText.DARK_GRAY + "Shift-click: " + LegacyText.GRAY + "Five steps");
+        return List.of("", LegacyText.YELLOW + "Left-click: decrease · Right-click: increase",
+                LegacyText.YELLOW + "Shift-click: five steps · Middle-click: type a value");
     }
 
     static int direction(ClickType click) {

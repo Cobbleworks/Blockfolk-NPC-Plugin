@@ -116,6 +116,37 @@ public final class GuiService implements Listener {
             // Combat
             Map.entry(28, BehaviourActionType.START_COMBAT), Map.entry(29, BehaviourActionType.CHANGE_FIGHT_OPTIONS),
             Map.entry(30, BehaviourActionType.USE_ABILITY));
+    private static final int MAIN_PREVIOUS_SLOT = 45;
+    private static final int MAIN_ROUTES_SLOT = 46;
+    private static final int MAIN_LOCATIONS_SLOT = 47;
+    private static final int MAIN_EVENTS_SLOT = 48;
+    private static final int MAIN_OVERVIEW_SLOT = 49;
+    private static final int MAIN_ABILITIES_SLOT = 50;
+    private static final int MAIN_SHOPS_SLOT = 51;
+    private static final int MAIN_CREATE_SLOT = 52;
+    private static final int MAIN_NEXT_SLOT = 53;
+    private static final int EDITOR_SUMMARY_SLOT = 4;
+    private static final int EDITOR_NAME_SLOT = 10;
+    private static final int EDITOR_SKIN_SLOT = 11;
+    private static final int EDITOR_PROPERTIES_SLOT = 12;
+    private static final int EDITOR_EQUIPMENT_SLOT = 14;
+    private static final int EDITOR_SPAWN_SLOT = 15;
+    private static final int EDITOR_INSTANCES_SLOT = 16;
+    private static final int EDITOR_BEHAVIOUR_SLOT = 19;
+    private static final int EDITOR_CUSTOM_BEHAVIOUR_SLOT = 20;
+    private static final int EDITOR_AI_SLOT = 21;
+    private static final int EDITOR_ROUTES_SLOT = 23;
+    private static final int EDITOR_FIGHTING_SLOT = 24;
+    private static final int EDITOR_SHOPS_SLOT = 25;
+    private static final int EDITOR_BACK_SLOT = 31;
+    private static final int PROPERTY_PUSHABLE_SLOT = 10;
+    private static final int PROPERTY_SHOW_NAME_SLOT = 11;
+    private static final int PROPERTY_LOOK_SLOT = 12;
+    private static final int PROPERTY_PICKUP_SLOT = 13;
+    private static final int PROPERTY_POSE_SLOT = 15;
+    private static final int PROPERTY_COLOR_SLOT = 16;
+    private static final int PROPERTY_BACK_SLOT = 22;
+    private static final int MAX_ROW_ACTIONS = 7;
     private static final int ACTION_PICKER_ANIMATIONS_SLOT = 32;
     private static final int ACTION_PICKER_BACK_SLOT = 49;
     private static final String AI_TRIGGER_PROMPT_INPUT = "ai_trigger_prompt";
@@ -146,6 +177,7 @@ public final class GuiService implements Listener {
     private AiControlService aiControlService;
     private AbilitiesGuiService abilitiesGuiService;
     private ShopGuiService shopGuiService;
+    private Consumer<Player> locationsOpener;
     private final Set<UUID> explicitInventorySaves = new HashSet<>();
     private final Map<String, String> pendingSkinUrls = new HashMap<>();
     private final Map<UUID, WaypointSession> waypointSessions = new HashMap<>();
@@ -182,6 +214,10 @@ public final class GuiService implements Listener {
 
     public void setAbilitiesGuiService(AbilitiesGuiService service) {
         abilitiesGuiService = service;
+    }
+
+    public void setLocationsOpener(Consumer<Player> opener) {
+        locationsOpener = opener;
     }
 
     public void setShopGuiService(ShopGuiService service) {
@@ -259,14 +295,9 @@ public final class GuiService implements Listener {
             int slot = 10 + index;
             if (index < actions.size()) {
                 BehaviourAction action = actions.get(index);
-                inventory.setItem(slot,
-                        item(actionMaterial(action.type()), (index + 1) + ". " + action.type().displayName(),
-                                List.of(LegacyText.GRAY + actionValueDisplay(action),
-                                        LegacyText.YELLOW + "Left-click to replace",
-                                        LegacyText.RED + "Right-click to remove")));
+                inventory.setItem(slot, actionItem(action, index));
             } else if (index == actions.size()) {
-                inventory.setItem(slot, item(Material.LIME_STAINED_GLASS_PANE, "Add Action",
-                        List.of(LegacyText.YELLOW + "Click to append")));
+                inventory.setItem(slot, addActionItem(actions.size(), MAX_ROW_ACTIONS));
             }
         }
         inventory.setItem(22, item(Material.BARRIER, "Back to Route Editing",
@@ -328,7 +359,7 @@ public final class GuiService implements Listener {
                     List.of(LegacyText.GRAY + pickerType.emptyMessage())));
         }
         if (page > 0) {
-            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         }
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         if (pickerType == BehaviourValuePickerType.ROUTE) {
@@ -369,43 +400,40 @@ public final class GuiService implements Listener {
             NpcDefinition definition = definitions.get(index);
             int instances = instanceRegistry.findByDefinition(definition).size();
             List<String> lore = new ArrayList<>(List.of(LegacyText.DARK_GRAY + "Key: " + definition.getKey(),
-                    LegacyText.GRAY + "Instances: " + LegacyText.WHITE + instances, statusLine(definition),
-                    LegacyText.YELLOW + "Click to manage"));
-            lore.add(LegacyText.RED + "Shift + right-click to delete");
+                    LegacyText.GRAY + "Instances: " + LegacyText.WHITE + instances, statusLine(definition), "",
+                    GuiItems.hint("Click", "manage"), GuiItems.danger("Shift-right-click", "delete")));
             inventory.setItem(index - from, definitionIcon(definition, lore));
         }
-        inventory.setItem(45,
-                item(Material.POWERED_RAIL, "Manage Routes",
-                        List.of(LegacyText.GRAY + "Create and edit NPC walking routes",
-                                LegacyText.YELLOW + "Click to open route setup")));
-        inventory.setItem(48,
-                item(Material.IRON_SWORD, "Abilities",
-                        List.of(LegacyText.GRAY + "Build shared attacks and assign them to NPCs",
-                                LegacyText.YELLOW + "Click to open")));
-        inventory.setItem(46,
-                item(Material.BELL, "Custom Events",
-                        List.of(LegacyText.GRAY + "Define events NPCs can emit and react to",
-                                LegacyText.YELLOW + "Click to manage custom events")));
-        if (page > 0) {
-            inventory.setItem(47,
-                    item(Material.ARROW, "Previous Page", List.of(LegacyText.GRAY + "Page " + page + " of " + pages)));
-        }
-        inventory.setItem(49,
+        if (definitions.isEmpty())
+            inventory.setItem(22, GuiItems.empty("No NPC Presets Yet", "Use Create NPC below to add your first NPC"));
+        if (page > 0)
+            inventory.setItem(MAIN_PREVIOUS_SLOT, GuiItems.previousPage(page, pages));
+        inventory.setItem(MAIN_ROUTES_SLOT,
+                item(Material.POWERED_RAIL, "Routes", List.of(LegacyText.GRAY + "Walking routes and waypoint actions",
+                        "", GuiItems.hint("Click", "open routes"))));
+        inventory.setItem(MAIN_LOCATIONS_SLOT,
+                item(Material.LODESTONE, "Locations",
+                        List.of(LegacyText.GRAY + "Named global positions for movement actions", "",
+                                GuiItems.hint("Click", "open locations"))));
+        inventory.setItem(MAIN_EVENTS_SLOT,
+                item(Material.BELL, "Custom Events", List.of(LegacyText.GRAY + "Events NPCs can emit and react to", "",
+                        GuiItems.hint("Click", "open custom events"))));
+        inventory.setItem(MAIN_OVERVIEW_SLOT,
                 item(Material.NETHER_STAR, "Blockfolk Overview",
                         List.of(LegacyText.GRAY + "Presets: " + LegacyText.WHITE + definitions.size(),
                                 LegacyText.GRAY + "Active instances: " + LegacyText.WHITE
                                         + instanceRegistry.findActive().size(),
-                                LegacyText.GRAY + "Page " + (page + 1) + " of " + pages,
-                                LegacyText.YELLOW + "Click to reorder NPC presets")));
-        inventory.setItem(50,
-                item(Material.EMERALD_BLOCK, "Shops", List.of(LegacyText.GRAY + "Build shared shops NPCs can open",
-                        LegacyText.YELLOW + "Click to manage shops")));
-        inventory.setItem(51, item(Material.EMERALD, "Create NPC", List.of(LegacyText.GRAY + "Creates a new preset",
-                LegacyText.YELLOW + "Click, then enter its name in chat")));
-        if (page + 1 < pages) {
-            inventory.setItem(53, item(Material.ARROW, "Next Page",
-                    List.of(LegacyText.GRAY + "Page " + (page + 2) + " of " + pages)));
-        }
+                                LegacyText.GRAY + "Page " + (page + 1) + " of " + pages, "",
+                                GuiItems.hint("Click", "reorder NPC presets"))));
+        inventory.setItem(MAIN_ABILITIES_SLOT,
+                item(Material.BLAZE_POWDER, "Abilities", List.of(LegacyText.GRAY + "Shared combat abilities for NPCs",
+                        "", GuiItems.hint("Click", "open the ability library"))));
+        inventory.setItem(MAIN_SHOPS_SLOT,
+                item(Material.EMERALD_BLOCK, "Shops", List.of(LegacyText.GRAY + "Shared shops NPCs can open", "",
+                        GuiItems.hint("Click", "open the shop library"))));
+        inventory.setItem(MAIN_CREATE_SLOT, GuiItems.create("Create NPC", "Creates a new NPC preset"));
+        if (page + 1 < pages)
+            inventory.setItem(MAIN_NEXT_SLOT, GuiItems.nextPage(page, pages));
         openInventory(player, inventory);
     }
 
@@ -471,72 +499,103 @@ public final class GuiService implements Listener {
         int instances = instanceRegistry.findByDefinition(definition).size();
         Inventory inventory = Bukkit.createInventory(new EditorHolder(definition.getKey()), 36,
                 UiText.manageTitle(definition.getDisplayName()));
-        inventory.setItem(4, definitionIcon(definition, List.of(LegacyText.DARK_GRAY + "Key: " + definition.getKey(),
+        inventory.setItem(EDITOR_SUMMARY_SLOT, definitionIcon(definition, List.of(
+                LegacyText.DARK_GRAY + "Key: " + definition.getKey(),
                 LegacyText.GRAY + "Instances: " + LegacyText.WHITE + instances,
                 LegacyText.GRAY + "Skin: " + LegacyText.WHITE
                         + (definition.getSkinUrl() == null ? "Default" : "Custom"),
-                LegacyText.GRAY + "Spawn: " + LegacyText.WHITE + formatLocation(definition.getStoredSpawnpoint()),
-                LegacyText.YELLOW + "Click to configure NPC properties",
-                LegacyText.RED + "Shift + right-click to delete")));
-        inventory.setItem(10, item(Material.NAME_TAG, "Display Name",
-                List.of(LegacyText.GRAY + definition.getDisplayName(), LegacyText.YELLOW + "Click to rename")));
-        inventory.setItem(11,
-                item(Material.PLAYER_HEAD, "Skin",
-                        List.of(LegacyText.GRAY + abbreviatedSkin(definition.getSkinUrl()),
-                                LegacyText.YELLOW + "Click to set a URL or texture hash",
-                                LegacyText.DARK_GRAY + "Enter 'default' to clear it")));
-        inventory.setItem(12,
+                LegacyText.GRAY + "Spawn: " + LegacyText.WHITE + formatLocation(definition.getStoredSpawnpoint()), "",
+                GuiItems.hint("Click", "appearance & properties"),
+                GuiItems.danger("Shift-right-click", "delete this NPC"))));
+        // Row 1: who the NPC is and where it exists.
+        inventory.setItem(EDITOR_NAME_SLOT, item(Material.NAME_TAG, "Display Name",
+                List.of(LegacyText.WHITE + definition.getDisplayName(), "", GuiItems.hint("Click", "rename"))));
+        inventory
+                .setItem(EDITOR_SKIN_SLOT,
+                        NpcHeadUtil
+                                .applySkin(
+                                        item(Material.PLAYER_HEAD, "Skin",
+                                                List.of(LegacyText.WHITE + abbreviatedSkin(definition.getSkinUrl()), "",
+                                                        GuiItems.hint("Click", "set a URL or texture hash"),
+                                                        LegacyText.DARK_GRAY + "Enter 'default' to clear it")),
+                                        definition));
+        inventory.setItem(EDITOR_PROPERTIES_SLOT, item(Material.ARMOR_STAND, "Appearance & Properties",
+                List.of(LegacyText.GRAY + "Pose: " + LegacyText.WHITE + definition.getPose().displayName(),
+                        LegacyText.GRAY + "Name color: " + LegacyText.WHITE + definition.getColor().displayName(),
+                        onOff("Pushable", definition.isPushable()), onOff("Name shown", definition.isShowName()),
+                        onOff("Looks at players", definition.isLookAtPlayer()),
+                        onOff("Item pickup", definition.isItemPickup()), "", GuiItems.hint("Click", "configure"))));
+        inventory.setItem(EDITOR_EQUIPMENT_SLOT, item(Material.CHEST, "Equipment & Loot", List.of(
+                LegacyText.GRAY + "Armor, hands, loot, and temporary inventory", "", GuiItems.hint("Click", "edit"))));
+        inventory.setItem(EDITOR_SPAWN_SLOT,
                 item(Material.RED_BED, "Preset Spawnpoint",
-                        List.of(LegacyText.GRAY + formatLocation(definition.getStoredSpawnpoint()),
-                                LegacyText.YELLOW + "Click to use your current location")));
-        inventory.setItem(14, item(Material.CHEST, "Equipment & Loot", List.of(
-                LegacyText.GRAY + "Armor, hands, loot, and temporary inventory", LegacyText.YELLOW + "Click to edit")));
+                        List.of(LegacyText.WHITE + formatLocation(definition.getStoredSpawnpoint()), "",
+                                GuiItems.hint("Click", "set to your current location"),
+                                LegacyText.DARK_GRAY + "Existing instances are not moved")));
         if (instances == 0) {
-            inventory.setItem(16,
-                    item(Material.COMPASS, "Spawn NPC", List.of(LegacyText.GRAY + "Creates the first visible NPC",
-                            LegacyText.GRAY + "at the preset spawnpoint", LegacyText.YELLOW + "Click to spawn")));
+            inventory.setItem(EDITOR_INSTANCES_SLOT,
+                    item(Material.COMPASS, "Spawn NPC",
+                            List.of(LegacyText.GRAY + "No instance is spawned yet",
+                                    definition.getSpawnpoint() == null
+                                            ? LegacyText.RED + "Set a preset spawnpoint first"
+                                            : LegacyText.GRAY + "Spawns at the preset spawnpoint",
+                                    "", GuiItems.hint("Click", "spawn"))));
         } else {
             List<String> instanceLore = new ArrayList<>(
-                    List.of(LegacyText.GRAY + "" + instances + " spawned instance(s)",
-                            LegacyText.YELLOW + "Click to manage spawned copies"));
+                    List.of(LegacyText.GRAY + "Spawned instances: " + LegacyText.WHITE + instances, "",
+                            GuiItems.hint("Click", "manage spawned copies")));
             if (instances == 1) {
-                instanceLore.add(LegacyText.YELLOW + "Shift + left-click: teleport to NPC");
-                instanceLore.add(LegacyText.AQUA + "Shift + middle-click: move NPC to you");
+                instanceLore.add(GuiItems.hint("Shift-left-click", "teleport to the NPC"));
+                instanceLore.add(GuiItems.hint("Middle-click", "move the NPC to you"));
             }
-            inventory.setItem(16, item(Material.ARMOR_STAND, "Manage Instances", instanceLore));
+            inventory.setItem(EDITOR_INSTANCES_SLOT, item(Material.ARMOR_STAND, "Instances", instanceLore));
         }
+        // Row 2: what the NPC does.
         int behaviourCount = MANUAL_BEHAVIOUR_EVENTS.stream()
                 .mapToInt(event -> definition.getBehaviourActions(event).size()).sum();
-        inventory.setItem(13,
+        inventory.setItem(EDITOR_BEHAVIOUR_SLOT,
                 item(Material.COMMAND_BLOCK, "Event Behaviour",
-                        List.of(LegacyText.GRAY + "" + behaviourCount + " configured action(s)",
-                                LegacyText.GRAY + "Build event-to-action sequences",
-                                LegacyText.YELLOW + "Click to configure")));
-        inventory.setItem(22,
+                        List.of(LegacyText.GRAY + "Actions run on clicks, spawn, time of day, …",
+                                LegacyText.GRAY + "Configured actions: " + LegacyText.WHITE + behaviourCount, "",
+                                GuiItems.hint("Click", "configure"))));
+        inventory.setItem(EDITOR_CUSTOM_BEHAVIOUR_SLOT,
                 item(Material.BELL, "Custom Event Behaviour",
-                        List.of(LegacyText.GRAY + "" + definition.customEventActionCount() + " configured action(s)",
-                                LegacyText.GRAY + "React to globally emitted custom events",
-                                LegacyText.YELLOW + "Click to configure")));
-        long routeCount = routeRepository.findAll().stream().filter(route -> route.isOwnedBy(definition.getKey()))
-                .count();
-        inventory.setItem(21,
-                item(Material.ACTIVATOR_RAIL, "Routes",
-                        List.of(LegacyText.GRAY + "" + routeCount + " route(s) owned by this NPC",
-                                LegacyText.YELLOW + "Click to manage routes")));
+                        List.of(LegacyText.GRAY + "Reactions to globally emitted custom events",
+                                LegacyText.GRAY + "Configured actions: " + LegacyText.WHITE
+                                        + definition.customEventActionCount(),
+                                "", GuiItems.hint("Click", "configure"))));
         AiControlSettings ai = definition.getAiControlSettings();
         String aiStatus = !ai.enabled()
-                ? "Paused"
-                : aiGuiService.hasTrigger(definition) || ai.respondToChat() ? "Active" : "No Triggers";
-        List<String> aiLore = new ArrayList<>(
-                List.of(LegacyText.GRAY + "Context sections: " + LegacyText.WHITE + ai.configuredSectionCount() + "/5",
-                        LegacyText.GRAY + "Triggered by behaviours and chat"));
+                ? LegacyText.RED + "Paused"
+                : aiGuiService.hasTrigger(definition) || ai.respondToChat()
+                        ? LegacyText.GREEN + "Active"
+                        : LegacyText.GOLD + "No Triggers";
+        List<String> aiLore = new ArrayList<>(List.of(LegacyText.GRAY + "Status: " + aiStatus,
+                LegacyText.GRAY + "Context sections: " + LegacyText.WHITE + ai.configuredSectionCount() + "/5"));
         if (aiControlService == null || !aiControlService.configured()) {
             String issue = aiControlService == null ? "service unavailable" : aiControlService.configurationIssue();
-            aiLore.add(LegacyText.RED + "OpenRouter is NOT ready: " + issue);
+            aiLore.add(LegacyText.RED + "OpenRouter is not ready: " + issue);
         }
-        aiLore.add(LegacyText.YELLOW + "Click to configure");
-        inventory.setItem(23, item(ai.enabled() ? Material.OXIDIZED_COPPER_GOLEM_STATUE : Material.COPPER_GOLEM_STATUE,
-                "AI Behaviour: " + aiStatus, aiLore));
+        aiLore.add("");
+        aiLore.add(GuiItems.hint("Click", "configure"));
+        inventory.setItem(EDITOR_AI_SLOT,
+                item(ai.enabled() ? Material.OXIDIZED_COPPER_GOLEM_STATUE : Material.COPPER_GOLEM_STATUE,
+                        "AI Behaviour", aiLore));
+        long routeCount = routeRepository.findAll().stream().filter(route -> route.isOwnedBy(definition.getKey()))
+                .count();
+        inventory.setItem(EDITOR_ROUTES_SLOT,
+                item(Material.POWERED_RAIL, "Routes",
+                        List.of(LegacyText.GRAY + "Routes owned by this NPC: " + LegacyText.WHITE + routeCount, "",
+                                GuiItems.hint("Click", "manage routes"))));
+        CombatProfile combat = definition.getCombatProfile();
+        inventory.setItem(EDITOR_FIGHTING_SLOT, item(Material.IRON_SWORD, "Fighting & Survival",
+                List.of(LegacyText.GRAY + "Health: " + LegacyText.WHITE + healthLabel(combat),
+                        LegacyText.GRAY + "Respawn: " + LegacyText.WHITE + respawnLabel(combat),
+                        LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName(),
+                        LegacyText.GRAY + "Attack targets: " + LegacyText.WHITE + enabledTargetCount(combat) + "/4",
+                        LegacyText.GRAY + "Abilities: " + LegacyText.WHITE
+                                + combat.specialAttacks().assignedAttackKeys().size(),
+                        "", GuiItems.hint("Click", "configure combat"))));
         List<String> shopLore = new ArrayList<>();
         List<String> usedShops = usedShopKeys(definition);
         if (usedShops.isEmpty()) {
@@ -546,22 +605,16 @@ public final class GuiService implements Listener {
                     LegacyText.GRAY + "Opens via the " + LegacyText.WHITE + "Open Shop" + LegacyText.GRAY + " action:");
             usedShops.forEach(shopKey -> shopLore.add(LegacyText.WHITE + "• " + shopGuiService.shopName(shopKey)));
         }
-        shopLore.add(LegacyText.GRAY + "Shops are shared between NPCs");
-        shopLore.add(LegacyText.YELLOW + "Click to manage shops");
-        inventory.setItem(24, item(Material.EMERALD, "Shops", shopLore));
-        CombatProfile combat = definition.getCombatProfile();
-        inventory.setItem(15, item(Material.IRON_SWORD, "Fighting & Survival",
-                List.of(LegacyText.GRAY + "Health: " + LegacyText.WHITE + healthLabel(combat),
-                        LegacyText.GRAY + "Respawn: " + LegacyText.WHITE + respawnLabel(combat),
-                        LegacyText.GRAY + "Experience: " + LegacyText.WHITE + experienceLabel(combat),
-                        LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName(),
-                        LegacyText.GRAY + "Attack targets: " + LegacyText.WHITE + enabledTargetCount(combat) + "/4",
-                        LegacyText.GRAY + "Alliance: " + LegacyText.WHITE + allianceLabel(combat),
-                        LegacyText.GRAY + "Boss bar: " + LegacyText.WHITE
-                                + (combat.showBossBar() ? "Shown nearby" : "Hidden"),
-                        LegacyText.YELLOW + "Click to configure combat")));
-        inventory.setItem(31, item(Material.BARRIER, "Back to Presets", List.of()));
+        shopLore.add(LegacyText.DARK_GRAY + "Shops are shared between NPCs");
+        shopLore.add("");
+        shopLore.add(GuiItems.hint("Click", "manage shops"));
+        inventory.setItem(EDITOR_SHOPS_SLOT, item(Material.EMERALD, "Shops", shopLore));
+        inventory.setItem(EDITOR_BACK_SLOT, GuiItems.back("the preset list"));
         openInventory(player, inventory);
+    }
+
+    private static String onOff(String label, boolean enabled) {
+        return LegacyText.GRAY + label + ": " + (enabled ? LegacyText.GREEN + "On" : LegacyText.RED + "Off");
     }
 
     public void openMemories(Player player, NpcDefinition definition) {
@@ -583,46 +636,36 @@ public final class GuiService implements Listener {
     public void openProperties(Player player, NpcDefinition definition) {
         Inventory inventory = Bukkit.createInventory(new PropertiesHolder(definition.getKey()), 27,
                 UiText.title("NPC Properties", definition.getDisplayName()));
-        inventory.setItem(9, toggleItem(Material.PISTON, "Pushable", definition.isPushable(),
-                List.of(LegacyText.GRAY + "Allow players to move the NPC by bumping into it")));
-        inventory.setItem(11, toggleItem(Material.NAME_TAG, "Show Name", definition.isShowName(),
-                List.of(LegacyText.GRAY + "Show the name hologram above the NPC")));
-        inventory.setItem(13,
-                toggleItem(Material.SPYGLASS, "Look at Player", definition.isLookAtPlayer(),
-                        List.of(LegacyText.GRAY + "Turn the head toward the nearest player",
-                                LegacyText.GRAY + "with a subtle, natural body turn")));
-        inventory.setItem(15,
-                toggleItem(Material.HOPPER, "Item Pickup", definition.isItemPickup(),
-                        List.of(LegacyText.GRAY + "Pick up nearby dropped item entities",
-                                LegacyText.GRAY + "into this instance's temporary inventory")));
-        inventory.setItem(4,
-                item(definition.getPose().material(), "Pose",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + definition.getPose().displayName(),
-                                LegacyText.YELLOW + "Click to choose a saved pose")));
-        NpcColor color = definition.getColor();
-        inventory.setItem(17,
-                item(color.material(), "Name Color",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + color.displayName(),
-                                LegacyText.YELLOW + "Click to cycle through concrete colors")));
-        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(PROPERTY_PUSHABLE_SLOT, GuiItems.toggle(Material.PISTON, Material.OBSIDIAN, "Pushable",
+                definition.isPushable(), "players can bump it aside", "stays where it stands", List.of()));
+        inventory.setItem(PROPERTY_SHOW_NAME_SLOT, GuiItems.toggle(Material.NAME_TAG, Material.PAPER, "Show Name",
+                definition.isShowName(), "name hologram above the NPC", "no name above the NPC", List.of()));
+        inventory.setItem(PROPERTY_LOOK_SLOT,
+                GuiItems.toggle(Material.ENDER_EYE, Material.ENDER_PEARL, "Look at Player", definition.isLookAtPlayer(),
+                        "turns its head toward players", "keeps facing ahead",
+                        List.of("Uses a subtle, natural body turn")));
+        inventory.setItem(PROPERTY_PICKUP_SLOT,
+                GuiItems.toggle(Material.HOPPER, Material.CAULDRON, "Item Pickup", definition.isItemPickup(),
+                        "collects nearby dropped items", "ignores dropped items",
+                        List.of("Items go to the instance's temporary inventory")));
+        List<GuiItems.Option> poses = java.util.Arrays.stream(NpcPose.values())
+                .map(pose -> new GuiItems.Option(pose.material(), pose.displayName(), null)).toList();
+        inventory.setItem(PROPERTY_POSE_SLOT, GuiItems.cycle("Pose", poses, definition.getPose().ordinal(),
+                List.of("Saved across respawns and restarts")));
+        List<GuiItems.Option> colors = java.util.Arrays.stream(NpcColor.values())
+                .map(color -> new GuiItems.Option(color.material(), color.displayName(), null, legacyColor(color)))
+                .toList();
+        inventory.setItem(PROPERTY_COLOR_SLOT, GuiItems.cycle("Name Color", colors, definition.getColor().ordinal(),
+                List.of("Color of the name in chat and above the NPC")));
+        inventory.setItem(PROPERTY_BACK_SLOT, GuiItems.back("the NPC menu"));
         openInventory(player, inventory);
     }
 
-    private void openPosePicker(Player player, NpcDefinition definition) {
-        Inventory inventory = Bukkit.createInventory(new PoseHolder(definition.getKey()), 27,
-                UiText.title("Choose NPC Pose", definition.getDisplayName()));
-        NpcPose[] poses = NpcPose.values();
-        for (int index = 0; index < poses.length; index++) {
-            NpcPose pose = poses[index];
-            inventory.setItem(10 + index,
-                    item(pose.material(), pose.displayName(),
-                            List.of(LegacyText.GRAY + "Saved across respawns and restarts",
-                                    definition.getPose() == pose
-                                            ? LegacyText.GREEN + "Selected"
-                                            : LegacyText.YELLOW + "Click to select")));
-        }
-        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
-        openInventory(player, inventory);
+    /** Legacy color code matching an NPC name color, for item names. */
+    private static String legacyColor(NpcColor color) {
+        String legacy = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection()
+                .serialize(Component.text("x", color.textColor()));
+        return legacy.substring(0, 2);
     }
 
     public void openInventoryEditor(Player player, NpcDefinition definition) {
@@ -707,63 +750,74 @@ public final class GuiService implements Listener {
         experienceLore.addAll(NumericControl.lore());
         inventory.setItem(13,
                 item(Material.EXPERIENCE_BOTTLE, "Dropped Experience: " + experienceLabel(combat), experienceLore));
-        inventory.setItem(14, toggleItem(Material.WITHER_SKELETON_SKULL, "Show Boss Bar", combat.showBossBar(),
-                "Shows current HP to players within 16 blocks"));
-        inventory.setItem(12,
-                item(Material.TARGET, "Targets & Behaviour", List
-                        .of(LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName(),
-                                LegacyText.GRAY + "Attack targets enabled: " + LegacyText.WHITE
-                                        + enabledTargetCount(combat) + "/4",
-                                LegacyText.YELLOW + "Click to configure")));
+        inventory.setItem(14, GuiItems.toggle(Material.WITHER_SKELETON_SKULL, Material.SKELETON_SKULL, "Boss Bar",
+                combat.showBossBar(), "health bar for players within 16 blocks", "no health bar", List.of()));
+        inventory.setItem(12, item(Material.TARGET, "Targets & Behaviour", List.of(
+                LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName(),
+                LegacyText.GRAY + "Attack targets enabled: " + LegacyText.WHITE + enabledTargetCount(combat) + "/4", "",
+                GuiItems.hint("Click", "configure"))));
         inventory.setItem(15,
                 item(Material.NAME_TAG, "Alliance",
                         List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + allianceLabel(combat),
                                 LegacyText.GRAY + "NPCs with the same alliance will not fight",
                                 LegacyText.GRAY + "Players can appear allied by carrying an item",
                                 LegacyText.GRAY + "whose custom name matches the alliance",
-                                LegacyText.DARK_GRAY + "Matching ignores capitalization; any inventory slot works",
-                                LegacyText.YELLOW + "Click to enter text")));
+                                LegacyText.DARK_GRAY + "Matching ignores capitalization; any inventory slot works", "",
+                                GuiItems.hint("Click", "type an alliance"))));
         inventory.setItem(16, specialAttacksItem(combat.specialAttacks()));
-        inventory.setItem(31, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(31, GuiItems.back("the NPC menu"));
         openInventory(player, inventory);
     }
 
     public void openTargetsAndBehaviour(Player player, NpcDefinition definition) {
         Inventory inventory = Bukkit.createInventory(new TargetsHolder(definition.getKey()), 27,
                 UiText.title("Targets & Behaviour", definition.getDisplayName()));
-        populateFightOptions(inventory, FightOptions.from(definition.getCombatProfile()), "Back");
+        populateFightOptions(inventory, FightOptions.from(definition.getCombatProfile()), "Fighting & Survival");
         openInventory(player, inventory);
     }
 
     private void openFightOptionsAction(Player player, FightOptionsActionHolder holder) {
         Inventory inventory = Bukkit.createInventory(holder, 27, UiText.title("Change Fight Options"));
-        populateFightOptions(inventory, holder.options(), "Back");
+        populateFightOptions(inventory, holder.options(), "the action list");
         openInventory(player, inventory);
     }
 
-    private void populateFightOptions(Inventory inventory, FightOptions options, String backLabel) {
+    private void populateFightOptions(Inventory inventory, FightOptions options, String backDestination) {
         AttackReaction reaction = options.attackReaction();
-        inventory.setItem(10,
-                item(reactionMaterial(reaction), "Aggression Level",
-                        List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + reaction.displayName(),
-                                reactionDescription(reaction), LegacyText.YELLOW + "Click to cycle")));
-        inventory.setItem(12, toggleItem(Material.ZOMBIE_HEAD, "Target Mobs", options.mobs(),
-                "Allows attacks against non-animal mobs"));
-        inventory.setItem(13,
-                toggleItem(Material.PORKCHOP, "Target Animals", options.animals(), "Allows attacks against animals"));
-        inventory.setItem(14, toggleItem(Material.PLAYER_HEAD, "Target Players", options.players(),
-                "Allows attacks against survival and adventure players"));
-        inventory.setItem(15, toggleItem(Material.ARMOR_STAND, "Target Other NPCs", options.npcs(),
-                "Allows attacks against vulnerable NPCs"));
+        List<GuiItems.Option> reactions = java.util.Arrays.stream(AttackReaction.values())
+                .map(value -> new GuiItems.Option(reactionMaterial(value), value.displayName(),
+                        reactionDescription(value), reactionColor(value)))
+                .toList();
+        inventory.setItem(10, GuiItems.cycle("Aggression", reactions, reaction.ordinal(),
+                List.of("How the NPC reacts to enemies and attackers")));
+        inventory.setItem(12, targetToggle(Material.ZOMBIE_HEAD, "Mobs", options.mobs(), "hostile and neutral mobs"));
+        inventory.setItem(13, targetToggle(Material.PORKCHOP, "Animals", options.animals(), "passive animals"));
+        inventory.setItem(14,
+                targetToggle(Material.PLAYER_HEAD, "Players", options.players(), "survival and adventure players"));
+        inventory.setItem(15, targetToggle(Material.ARMOR_STAND, "Other NPCs", options.npcs(), "vulnerable NPCs"));
         inventory.setItem(16, specialAttacksItem(options.specialAttacks()));
-        inventory.setItem(22, item(Material.BARRIER, backLabel, List.of()));
+        inventory.setItem(22, GuiItems.back(backDestination));
+    }
+
+    private ItemStack targetToggle(Material icon, String label, boolean enabled, String who) {
+        return GuiItems.toggle(icon, Material.POPPY, "Target " + label, enabled, "attacks " + who, "spares " + who,
+                List.of(LegacyText.DARK_GRAY + "Same-alliance entities are always spared"));
+    }
+
+    private static String reactionColor(AttackReaction reaction) {
+        return switch (reaction) {
+            case IGNORE -> LegacyText.GRAY;
+            case FLEE -> LegacyText.AQUA;
+            case FIGHT_BACK -> LegacyText.GOLD;
+            case HUNTING -> LegacyText.RED;
+        };
     }
 
     private ItemStack specialAttacksItem(SpecialAttackOptions options) {
         return item(Material.BLAZE_POWDER, "Abilities",
                 List.of(LegacyText.GRAY + "Assigned: " + LegacyText.WHITE + options.assignedAttackKeys().size(),
-                        LegacyText.GRAY + "Interval: about " + options.intervalSeconds() + " seconds",
-                        LegacyText.YELLOW + "Click to configure"));
+                        LegacyText.GRAY + "Interval: about " + options.intervalSeconds() + " seconds", "",
+                        GuiItems.hint("Click", "configure")));
     }
 
     private void openSpecialAttacks(Player player, SpecialAttacksHolder context) {
@@ -807,19 +861,14 @@ public final class GuiService implements Listener {
             inventory.setItem(row * 9,
                     item(eventMaterial(behaviourEvent), behaviourEvent.displayName(),
                             actionSummaryLore(List.of(LegacyText.GRAY + "Actions run from left to right",
-                                    LegacyText.YELLOW + "Shift-left-click to copy row",
-                                    LegacyText.YELLOW + "Shift-right-click to paste row"), actions)));
-            inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action",
-                    List.of(LegacyText.YELLOW + "Click to append")));
+                                    GuiItems.hint("Shift-left-click", "copy row"),
+                                    GuiItems.hint("Shift-right-click", "paste row")), actions)));
+            inventory.setItem(row * 9 + 1, addActionItem(actions.size(), MAX_ROW_ACTIONS));
             for (int column = 0; column < 7; column++) {
                 int slot = row * 9 + column + 2;
                 if (column < actions.size()) {
                     BehaviourAction action = actions.get(column);
-                    inventory.setItem(slot,
-                            item(actionMaterial(action.type()), (column + 1) + ". " + action.type().displayName(),
-                                    List.of(LegacyText.GRAY + actionValueDisplay(action),
-                                            LegacyText.YELLOW + "Left-click to replace",
-                                            LegacyText.RED + "Right-click to remove")));
+                    inventory.setItem(slot, actionItem(action, column));
                 }
             }
         }
@@ -851,18 +900,13 @@ public final class GuiService implements Listener {
                                     ? "No description"
                                     : customEvent.getDescription()),
                             LegacyText.GRAY + "Actions run from left to right",
-                            LegacyText.YELLOW + "Shift-left-click to copy row",
-                            LegacyText.YELLOW + "Shift-right-click to paste row",
-                            LegacyText.RED + "Right-click to remove row"), actions)));
-            inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action",
-                    List.of(LegacyText.YELLOW + "Click to append")));
+                            GuiItems.hint("Shift-left-click", "copy row"),
+                            GuiItems.hint("Shift-right-click", "paste row"),
+                            GuiItems.danger("Right-click", "remove row")), actions)));
+            inventory.setItem(row * 9 + 1, addActionItem(actions.size(), MAX_ROW_ACTIONS));
             for (int column = 0; column < Math.min(7, actions.size()); column++) {
                 BehaviourAction action = actions.get(column);
-                inventory.setItem(row * 9 + column + 2,
-                        item(actionMaterial(action.type()), (column + 1) + ". " + action.type().displayName(),
-                                List.of(LegacyText.GRAY + actionValueDisplay(action),
-                                        LegacyText.YELLOW + "Left-click to replace",
-                                        LegacyText.RED + "Right-click to remove")));
+                inventory.setItem(row * 9 + column + 2, actionItem(action, column));
             }
         }
         if (events.isEmpty())
@@ -904,7 +948,7 @@ public final class GuiService implements Listener {
         if (available.isEmpty())
             inventory.setItem(22, item(Material.GRAY_DYE, "No Events Available", List.of()));
         if (page > 0)
-            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         inventory.setItem(51,
                 item(Material.EMERALD, "Create New Event", List.of(LegacyText.YELLOW + "Create and add an event row")));
@@ -987,7 +1031,7 @@ public final class GuiService implements Listener {
                     List.of(LegacyText.GRAY + pickerType.emptyMessage())));
         }
         if (valuePage > 0) {
-            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         }
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         if (pickerType == BehaviourValuePickerType.ROUTE) {
@@ -1052,33 +1096,33 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             NpcInstance instance = instances.get(index);
             inventory.setItem(index - from,
-                    item(Material.ARMOR_STAND, "NPC Instance",
+                    item(Material.ARMOR_STAND, "Instance " + (index + 1),
                             List.of(LegacyText.DARK_GRAY + instance.getId().toString(),
-                                    LegacyText.GRAY + formatLocation(instance.getStoredLocation()),
-                                    LegacyText.YELLOW + "Left-click: teleport to instance",
-                                    LegacyText.AQUA + "Middle-click: move instance to you",
-                                    LegacyText.RED + "Right-click: remove instance")));
+                                    LegacyText.GRAY + formatLocation(instance.getStoredLocation()), "",
+                                    GuiItems.hint("Left-click", "teleport to it"),
+                                    GuiItems.hint("Middle-click", "move it to you"),
+                                    GuiItems.danger("Right-click", "remove"))));
         }
         if (instances.isEmpty()) {
-            inventory.setItem(22, item(Material.GRAY_DYE, "No Instances",
-                    List.of(LegacyText.GRAY + "Use Spawn Another Here below to create one.")));
+            inventory.setItem(22, GuiItems.empty("No Instances", "Use Spawn Here below to create one"));
         }
         if (page > 0) {
             inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         }
         if (!instances.isEmpty()) {
-            inventory.setItem(47, item(Material.REDSTONE_BLOCK, "Remove All Instances", List
-                    .of(LegacyText.RED + "Removes every spawned copy", LegacyText.YELLOW + "Click for confirmation")));
-            inventory.setItem(51,
+            inventory.setItem(47,
+                    item(Material.REDSTONE_BLOCK, "Remove All Instances",
+                            List.of(LegacyText.RED + "Removes every spawned copy", "",
+                                    GuiItems.danger("Click", "remove (asks first)"))));
+            inventory.setItem(48,
                     item(Material.SUNFLOWER, "Refresh Instances",
-                            List.of(LegacyText.GRAY + "Re-applies name, skin, and equipment",
-                                    LegacyText.YELLOW + "Click to refresh all copies")));
+                            List.of(LegacyText.GRAY + "Re-applies name, skin, and equipment", "",
+                                    GuiItems.hint("Click", "refresh all copies"))));
         }
-        inventory.setItem(49, item(Material.BARRIER, "Back to Preset", List.of()));
-        inventory.setItem(50,
-                item(Material.COMPASS, "Spawn Another Here",
-                        List.of(LegacyText.GRAY + "Creates another visible persistent NPC",
-                                LegacyText.GRAY + "at your current location", LegacyText.YELLOW + "Click to spawn")));
+        inventory.setItem(49, GuiItems.back("the NPC menu"));
+        inventory.setItem(51,
+                item(Material.COMPASS, "Spawn Here", List.of(LegacyText.GRAY + "Spawns another persistent copy",
+                        LegacyText.GRAY + "at your location", "", GuiItems.hint("Click", "spawn"))));
         if (page + 1 < pages) {
             inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
         }
@@ -1097,25 +1141,6 @@ public final class GuiService implements Listener {
             handleReorderClick(event, player, reorderHolder);
         } else if (holder instanceof EditorHolder editorHolder) {
             handleEditorClick(event, player, editorHolder.key());
-        } else if (holder instanceof PoseHolder poseHolder) {
-            event.setCancelled(true);
-            if (!isTopInventoryClick(event))
-                return;
-            NpcDefinition definition = definitionRepository.find(poseHolder.key()).orElse(null);
-            if (definition == null) {
-                player.closeInventory();
-                return;
-            }
-            if (event.getRawSlot() == 22) {
-                openProperties(player, definition);
-                return;
-            }
-            int index = event.getRawSlot() - 10;
-            if (index < 0 || index >= NpcPose.values().length)
-                return;
-            definition.setPose(NpcPose.values()[index]);
-            saveRefresh(definition);
-            openPosePicker(player, definition);
         } else if (holder instanceof PropertiesHolder propertiesHolder) {
             handlePropertiesClick(event, player, propertiesHolder.key());
         } else if (holder instanceof FightingHolder fightingHolder) {
@@ -1266,37 +1291,47 @@ public final class GuiService implements Listener {
         if (!isTopInventoryClick(event)) {
             return;
         }
-        if (event.getRawSlot() == 45) {
-            routeGuiOpener.accept(player);
-            return;
-        }
-        if (event.getRawSlot() == 46) {
-            customEventGuiOpener.accept(player);
-            return;
-        }
-        if (event.getRawSlot() == 48) {
-            openAbilities(player);
-            return;
-        }
-        if (event.getRawSlot() == 50) {
-            openShops(player);
-            return;
-        }
-        if (event.getRawSlot() == 47) {
-            openMain(player, page - 1);
-            return;
-        }
-        if (event.getRawSlot() == 49) {
-            openReorder(player, page);
-            return;
-        }
-        if (event.getRawSlot() == 51) {
-            beginCreate(player);
-            return;
-        }
-        if (event.getRawSlot() == 53) {
-            openMain(player, page + 1);
-            return;
+        switch (event.getRawSlot()) {
+            case MAIN_PREVIOUS_SLOT -> {
+                if (page > 0)
+                    openMain(player, page - 1);
+                return;
+            }
+            case MAIN_ROUTES_SLOT -> {
+                routeGuiOpener.accept(player);
+                return;
+            }
+            case MAIN_LOCATIONS_SLOT -> {
+                if (locationsOpener != null)
+                    locationsOpener.accept(player);
+                return;
+            }
+            case MAIN_EVENTS_SLOT -> {
+                customEventGuiOpener.accept(player);
+                return;
+            }
+            case MAIN_OVERVIEW_SLOT -> {
+                openReorder(player, page);
+                return;
+            }
+            case MAIN_ABILITIES_SLOT -> {
+                openAbilities(player);
+                return;
+            }
+            case MAIN_SHOPS_SLOT -> {
+                openShops(player);
+                return;
+            }
+            case MAIN_CREATE_SLOT -> {
+                beginCreate(player);
+                return;
+            }
+            case MAIN_NEXT_SLOT -> {
+                openMain(player, page + 1);
+                return;
+            }
+            default -> {
+            }
         }
         List<NpcDefinition> definitions = new ArrayList<>(definitionRepository.findAll());
         int index = page * PAGE_SIZE + event.getRawSlot();
@@ -1356,15 +1391,17 @@ public final class GuiService implements Listener {
             player.closeInventory();
             return;
         }
+        Runnable reopen = () -> definitionRepository.find(key).ifPresent(current -> openEditor(player, current));
         switch (event.getRawSlot()) {
-            case 4 -> {
+            case EDITOR_SUMMARY_SLOT -> {
                 if (event.getClick() == ClickType.SHIFT_RIGHT) {
                     openConfirmation(player, definition, ConfirmationAction.DELETE_DEFINITION, 0, true);
                 } else {
                     openProperties(player, definition);
                 }
             }
-            case 10 -> chatInputService.request(player, "Enter NPC display name:", value -> {
+            case EDITOR_PROPERTIES_SLOT -> openProperties(player, definition);
+            case EDITOR_NAME_SLOT -> chatInputService.request(player, "Enter NPC display name:", value -> {
                 if (value.isBlank()) {
                     player.sendMessage(UiText.error("NPC display names cannot be blank."));
                     openEditor(player, definition);
@@ -1372,18 +1409,21 @@ public final class GuiService implements Listener {
                 }
                 definition.setDisplayName(value.trim());
                 saveRefresh(definition);
+                player.sendMessage(UiText.success("Renamed to '" + definition.getDisplayName() + "'."));
                 openEditor(player, definition);
-            });
-            case 11 -> chatInputService.request(player, "Enter an HTTPS skin image URL, texture hash, or 'default':",
-                    value -> updateSkin(player, definition, value));
-            case 12 -> {
+            }, reopen);
+            case EDITOR_SKIN_SLOT ->
+                chatInputService.request(player, "Enter an HTTPS skin image URL, texture hash, or 'default':",
+                        value -> updateSkin(player, definition, value), reopen);
+            case EDITOR_SPAWN_SLOT -> {
                 definition.setSpawnpoint(player.getLocation());
                 definitionRepository.save(definition);
+                GuiItems.click(player);
                 player.sendMessage(UiText.success("Preset spawnpoint updated. Existing instances were not moved."));
                 openEditor(player, definition);
             }
-            case 14 -> openInventoryEditor(player, definition);
-            case 16 -> {
+            case EDITOR_EQUIPMENT_SLOT -> openInventoryEditor(player, definition);
+            case EDITOR_INSTANCES_SLOT -> {
                 List<NpcInstance> instances = new ArrayList<>(instanceRegistry.findByDefinition(definition));
                 if (instances.isEmpty()) {
                     if (definition.getSpawnpoint() == null) {
@@ -1400,14 +1440,7 @@ public final class GuiService implements Listener {
                     }
                     openEditor(player, definition);
                 } else if (instances.size() == 1 && event.getClick() == ClickType.SHIFT_LEFT) {
-                    NpcInstance instance = instances.getFirst();
-                    Location destination = instanceRegistry.currentLocation(instance);
-                    player.closeInventory();
-                    if (destination.getWorld() != null && player.teleport(destination)) {
-                        player.sendMessage(UiText.success("Teleported to " + definition.getDisplayName() + "."));
-                    } else {
-                        player.sendMessage(UiText.error("Could not teleport to the NPC instance."));
-                    }
+                    teleportToInstance(player, instances.getFirst(), definition.getDisplayName());
                 } else if (instances.size() == 1 && event.getClick() == ClickType.MIDDLE) {
                     NpcInstance instance = instances.getFirst();
                     if (instanceRegistry.relocate(instance, player.getLocation())) {
@@ -1419,15 +1452,28 @@ public final class GuiService implements Listener {
                     openInstances(player, definition, 0);
                 }
             }
-            case 13 -> openBehaviours(player, definition, 0);
-            case 23 -> openAiControl(player, definition);
-            case 24 -> openShops(player, definition);
-            case 22 -> openCustomBehaviours(player, definition, 0);
-            case 21 -> npcRoutesOpener.accept(player, definition.getKey());
-            case 15 -> openFightingEditor(player, definition);
-            case 31 -> openMain(player);
+            case EDITOR_BEHAVIOUR_SLOT -> openBehaviours(player, definition, 0);
+            case EDITOR_CUSTOM_BEHAVIOUR_SLOT -> openCustomBehaviours(player, definition, 0);
+            case EDITOR_AI_SLOT -> openAiControl(player, definition);
+            case EDITOR_ROUTES_SLOT -> npcRoutesOpener.accept(player, definition.getKey());
+            case EDITOR_FIGHTING_SLOT -> openFightingEditor(player, definition);
+            case EDITOR_SHOPS_SLOT -> openShops(player, definition);
+            case EDITOR_BACK_SLOT -> openMain(player);
             default -> {
             }
+        }
+    }
+
+    /**
+     * Teleports to where the instance currently stands, not where it was stored.
+     */
+    private void teleportToInstance(Player player, NpcInstance instance, String name) {
+        Location destination = instanceRegistry.currentLocation(instance);
+        player.closeInventory();
+        if (destination != null && destination.getWorld() != null && player.teleport(destination)) {
+            player.sendMessage(UiText.success("Teleported to " + name + "."));
+        } else {
+            player.sendMessage(UiText.error("Could not teleport to the NPC instance; its world may not be loaded."));
         }
     }
 
@@ -1440,17 +1486,23 @@ public final class GuiService implements Listener {
             player.closeInventory();
             return;
         }
+        int direction = GuiItems.cycleDirection(event.getClick());
         switch (event.getRawSlot()) {
-            case 4 -> {
-                openPosePicker(player, definition);
-                return;
+            case PROPERTY_PUSHABLE_SLOT -> definition.setPushable(!definition.isPushable());
+            case PROPERTY_SHOW_NAME_SLOT -> definition.setShowName(!definition.isShowName());
+            case PROPERTY_LOOK_SLOT -> definition.setLookAtPlayer(!definition.isLookAtPlayer());
+            case PROPERTY_PICKUP_SLOT -> definition.setItemPickup(!definition.isItemPickup());
+            case PROPERTY_POSE_SLOT -> {
+                if (direction == 0)
+                    return;
+                definition.setPose(GuiItems.step(definition.getPose(), direction));
             }
-            case 9 -> definition.setPushable(!definition.isPushable());
-            case 11 -> definition.setShowName(!definition.isShowName());
-            case 13 -> definition.setLookAtPlayer(!definition.isLookAtPlayer());
-            case 15 -> definition.setItemPickup(!definition.isItemPickup());
-            case 17 -> definition.setColor(definition.getColor().next());
-            case 22 -> {
+            case PROPERTY_COLOR_SLOT -> {
+                if (direction == 0)
+                    return;
+                definition.setColor(GuiItems.step(definition.getColor(), direction));
+            }
+            case PROPERTY_BACK_SLOT -> {
                 openEditor(player, definition);
                 return;
             }
@@ -1458,6 +1510,7 @@ public final class GuiService implements Listener {
                 return;
             }
         }
+        GuiItems.click(player);
         saveRefresh(definition);
         openProperties(player, definition);
     }
@@ -1501,14 +1554,15 @@ public final class GuiService implements Listener {
             case 14 -> {
                 definition.setCombatProfile(combat.withShowBossBar(!combat.showBossBar()));
                 definitionRepository.save(definition);
+                GuiItems.click(player);
                 openFightingEditor(player, definition);
             }
             case 15 -> chatInputService.request(player, "Enter an alliance, or type clear to remove it:", value -> {
-                String alliance = value.equalsIgnoreCase("clear") ? null : value;
+                String alliance = value.equalsIgnoreCase("clear") || value.isBlank() ? null : value.trim();
                 definition.setCombatProfile(definition.getCombatProfile().withAlliance(alliance));
                 saveRefresh(definition);
                 openFightingEditor(player, definition);
-            });
+            }, () -> definitionRepository.find(key).ifPresent(current -> openFightingEditor(player, current)));
             case 16 -> openSpecialAttacks(player, new SpecialAttacksHolder(key, null));
             case 31 -> openEditor(player, definition);
             default -> {
@@ -1569,8 +1623,10 @@ public final class GuiService implements Listener {
             return;
         }
         CombatProfile combat = definition.getCombatProfile();
+        int direction = GuiItems.cycleDirection(event.getClick());
         CombatProfile updated = switch (event.getRawSlot()) {
-            case 10 -> combat.withAttackReaction(combat.attackReaction().next());
+            case 10 ->
+                direction == 0 ? null : combat.withAttackReaction(GuiItems.step(combat.attackReaction(), direction));
             case 12 -> combat.withTargetMobs(!combat.targetMobs());
             case 13 -> combat.withTargetAnimals(!combat.targetAnimals());
             case 14 -> combat.withTargetPlayers(!combat.targetPlayers());
@@ -1580,6 +1636,7 @@ public final class GuiService implements Listener {
         if (updated != null) {
             definition.setCombatProfile(updated);
             definitionRepository.save(definition);
+            GuiItems.click(player);
             openTargetsAndBehaviour(player, definition);
         } else if (event.getRawSlot() == 22) {
             openFightingEditor(player, definition);
@@ -1600,8 +1657,10 @@ public final class GuiService implements Listener {
             return;
         }
         FightOptions current = holder.options();
+        int direction = GuiItems.cycleDirection(event.getClick());
         FightOptions updated = switch (event.getRawSlot()) {
-            case 10 -> current.withAttackReaction(current.attackReaction().next());
+            case 10 ->
+                direction == 0 ? null : current.withAttackReaction(GuiItems.step(current.attackReaction(), direction));
             case 12 -> current.withMobs(!current.mobs());
             case 13 -> current.withAnimals(!current.animals());
             case 14 -> current.withPlayers(!current.players());
@@ -1610,6 +1669,7 @@ public final class GuiService implements Listener {
         };
         if (updated == null)
             return;
+        GuiItems.click(player);
         FightOptionsActionHolder refreshed = saveFightOptionsAction(holder, updated);
         if (refreshed != null)
             openFightOptionsAction(player, refreshed);
@@ -1759,9 +1819,12 @@ public final class GuiService implements Listener {
         }
         switch (event.getRawSlot()) {
             case 45 -> openInstances(player, definition, holder.page() - 1);
-            case 47 -> openConfirmation(player, definition, ConfirmationAction.DELETE_INSTANCES, holder.page());
+            case 47 -> {
+                if (!instanceRegistry.findByDefinition(definition).isEmpty())
+                    openConfirmation(player, definition, ConfirmationAction.DELETE_INSTANCES, holder.page());
+            }
             case 49 -> openEditor(player, definition);
-            case 50 -> {
+            case 51 -> {
                 if (instanceRegistry.spawnPersistent(definition, player.getLocation()) == null) {
                     player.sendMessage(UiText.error("Could not render another NPC instance."));
                 } else {
@@ -1769,7 +1832,9 @@ public final class GuiService implements Listener {
                 }
                 openInstances(player, definition, holder.page());
             }
-            case 51 -> {
+            case 48 -> {
+                if (instanceRegistry.findByDefinition(definition).isEmpty())
+                    return;
                 instanceRegistry.refreshDefinition(definition);
                 player.sendMessage(UiText.success(
                         "Refreshed " + instanceRegistry.findByDefinition(definition).size() + " instance(s)."));
@@ -1794,9 +1859,7 @@ public final class GuiService implements Listener {
                 } else if (event.isRightClick()) {
                     openInstanceDeleteConfirmation(player, definition, instance, holder.page());
                 } else {
-                    player.closeInventory();
-                    player.teleport(instance.getLocation());
-                    player.sendMessage(UiText.success("Teleported to NPC instance."));
+                    teleportToInstance(player, instance, "NPC instance");
                 }
             }
         }
@@ -1841,7 +1904,8 @@ public final class GuiService implements Listener {
             return;
         } else if (slot % 9 == 1) {
             // "Add Action" button in column 1 — always appends at the end
-            openActionPicker(player, definition, behaviourEvent, actions.size(), holder.page());
+            if (actions.size() < MAX_ROW_ACTIONS)
+                openActionPicker(player, definition, behaviourEvent, actions.size(), holder.page());
         } else if (column < 0 || column >= 7) {
             return;
         } else if (column < actions.size() && event.isRightClick()) {
@@ -1852,7 +1916,7 @@ public final class GuiService implements Listener {
                 && !event.isShiftClick()) {
             openQuestionEditor(player,
                     QuestionTarget.definition(definition.getKey(), behaviourEvent, null, column, holder.page()));
-        } else if (column <= actions.size()) {
+        } else if (column < actions.size()) {
             openActionPicker(player, definition, behaviourEvent, column, holder.page());
         }
     }
@@ -1902,7 +1966,8 @@ public final class GuiService implements Listener {
             definitionRepository.save(definition);
             openCustomBehaviours(player, definition, holder.page());
         } else if (slot % 9 == 1) {
-            openActionPicker(player, definition, null, eventName, actions.size(), holder.page());
+            if (actions.size() < MAX_ROW_ACTIONS)
+                openActionPicker(player, definition, null, eventName, actions.size(), holder.page());
         } else if (column < 0 || column >= 7) {
             return;
         } else if (column < actions.size() && event.isRightClick()) {
@@ -1913,7 +1978,7 @@ public final class GuiService implements Listener {
                 && !event.isShiftClick()) {
             openQuestionEditor(player,
                     QuestionTarget.definition(definition.getKey(), null, eventName, column, holder.page()));
-        } else if (column <= actions.size()) {
+        } else if (column < actions.size()) {
             openActionPicker(player, definition, null, eventName, column, holder.page());
         }
     }
@@ -1929,9 +1994,9 @@ public final class GuiService implements Listener {
             return;
         }
         int slot = click.getRawSlot();
-        if (slot == 47 || slot == 53) {
+        if (slot == 45 || slot == 53) {
             openCustomBehaviourEventPicker(player, definition, holder.behaviourPage(),
-                    holder.page() + (slot == 47 ? -1 : 1));
+                    holder.page() + (slot == 45 ? -1 : 1));
             return;
         }
         if (slot == 49) {
@@ -2066,7 +2131,7 @@ public final class GuiService implements Listener {
                 if (updated != null) {
                     openWaypointActions(player, action.routeKey(), updated);
                 }
-            });
+            }, () -> openRoutePointActionPicker(player, action));
         }
     }
 
@@ -2111,7 +2176,7 @@ public final class GuiService implements Listener {
         RoutePointActionPickerHolder action = new RoutePointActionPickerHolder(holder.routeKey(), current,
                 holder.actionIndex());
         int slot = event.getRawSlot();
-        if (slot == 47) {
+        if (slot == 45) {
             openRoutePointValuePicker(player, action, holder.pickerType(), holder.folder(), holder.page() - 1);
             return;
         }
@@ -2181,7 +2246,7 @@ public final class GuiService implements Listener {
             if (updated != null) {
                 openWaypointActions(player, holder.routeKey(), updated);
             }
-        });
+        }, () -> openRoutePointActionPicker(player, holder));
     }
 
     private RoutePoint setRoutePointAction(RoutePointActionPickerHolder holder, BehaviourActionType type,
@@ -2294,8 +2359,13 @@ public final class GuiService implements Listener {
             chatInputService.request(player, prompt, value -> {
                 setAction(definition, holder, type, value);
                 openBehaviourHome(player, definition, holder);
-            });
+            }, () -> reopenActionPicker(player, holder));
         }
+    }
+
+    private void reopenActionPicker(Player player, ActionPickerHolder holder) {
+        definitionRepository.find(holder.key()).ifPresentOrElse(current -> openActionPicker(player, current,
+                holder.event(), holder.customEvent(), holder.actionIndex(), holder.page()), () -> openMain(player));
     }
 
     private void requestWaitAction(Player player, NpcDefinition definition, ActionPickerHolder holder) {
@@ -2314,7 +2384,7 @@ public final class GuiService implements Listener {
             }
             setAction(definition, holder, BehaviourActionType.WAIT, normalized);
             openBehaviourHome(player, definition, holder);
-        });
+        }, () -> reopenActionPicker(player, holder));
     }
 
     private void requestQuestion(Player player, NpcDefinition definition, ActionPickerHolder holder) {
@@ -2323,7 +2393,7 @@ public final class GuiService implements Listener {
             setAction(definition, holder, action);
             openQuestionEditor(player, QuestionTarget.definition(definition.getKey(), holder.event(),
                     holder.customEvent(), holder.actionIndex(), holder.page()));
-        });
+        }, () -> reopenActionPicker(player, holder));
     }
 
     private void requestRouteQuestion(Player player, RoutePointActionPickerHolder holder) {
@@ -2331,7 +2401,7 @@ public final class GuiService implements Listener {
             RoutePoint updated = setRoutePointAction(holder, BehaviourAction.ask(NpcQuestion.create(prompt)));
             if (updated != null)
                 openQuestionEditor(player, QuestionTarget.route(holder.routeKey(), updated, holder.actionIndex()));
-        });
+        }, () -> openRoutePointActionPicker(player, holder));
     }
 
     private void requestAiTriggerPrompt(Player player, List<BehaviourAction> actions, int index,
@@ -2708,7 +2778,7 @@ public final class GuiService implements Listener {
                     List.of(LegacyText.GRAY + "Create locations from the Routes menu")));
         }
         if (page > 0)
-            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         inventory.setItem(49,
                 item(folder.isEmpty() ? Material.RECOVERY_COMPASS : Material.ARROW,
                         folder.isEmpty() ? "Back to Block Selection" : "Up One Group",
@@ -2742,7 +2812,7 @@ public final class GuiService implements Listener {
             return;
         }
         int slot = event.getRawSlot();
-        if (slot == 47) {
+        if (slot == 45) {
             openSavedLocationPicker(player, holder.token(), holder.folder(), holder.page() - 1);
             return;
         }
@@ -2847,7 +2917,7 @@ public final class GuiService implements Listener {
         ActionPickerHolder action = new ActionPickerHolder(holder.key(), holder.event(), holder.customEvent(),
                 holder.actionIndex(), holder.behaviourPage());
         int slot = event.getRawSlot();
-        if (slot == 47) {
+        if (slot == 45) {
             openBehaviourValuePicker(player, definition, action, holder.pickerType(), holder.folder(),
                     holder.valuePage() - 1);
             return;
@@ -2977,17 +3047,11 @@ public final class GuiService implements Listener {
                 }
             }
             if (cancelBranch || question.options().get(optionIndex).configured()) {
-                inventory.setItem(row * 9 + 1, item(Material.LIME_STAINED_GLASS_PANE, "Add Action",
-                        List.of(LegacyText.YELLOW + "Click to append")));
+                inventory.setItem(row * 9 + 1, addActionItem(branchActions.size(), NpcQuestion.MAX_BRANCH_ACTIONS));
             }
             for (int actionIndex = 0; actionIndex < branchActions.size(); actionIndex++) {
                 BehaviourAction branchAction = branchActions.get(actionIndex);
-                inventory.setItem(row * 9 + actionIndex + 2,
-                        item(actionMaterial(branchAction.type()),
-                                (actionIndex + 1) + ". " + branchAction.type().displayName(),
-                                List.of(LegacyText.GRAY + actionValueDisplay(branchAction),
-                                        LegacyText.YELLOW + "Left-click to replace",
-                                        LegacyText.RED + "Right-click to remove")));
+                inventory.setItem(row * 9 + actionIndex + 2, actionItem(branchAction, actionIndex));
             }
         }
         inventory.setItem(46, item(Material.WRITABLE_BOOK, "Edit Prompt",
@@ -3015,7 +3079,7 @@ public final class GuiService implements Listener {
             chatInputService.request(player, "Enter the question shown to the player:", value -> {
                 updateQuestion(holder.target(), question.withPrompt(value));
                 openQuestionEditor(player, holder.target());
-            });
+            }, () -> openQuestionEditor(player, holder.target()));
             return;
         }
         int row = slot / 9;
@@ -3048,9 +3112,10 @@ public final class GuiService implements Listener {
                     player.sendMessage(UiText.error(exception.getMessage()));
                 }
                 openQuestionEditor(player, holder.target());
-            });
+            }, () -> openQuestionEditor(player, holder.target()));
         } else if (column == 1) {
-            if (!cancelBranch && !question.options().get(optionIndex).configured())
+            if (!cancelBranch && !question.options().get(optionIndex).configured()
+                    || branchActions.size() >= NpcQuestion.MAX_BRANCH_ACTIONS)
                 return;
             openQuestionBranchPicker(player, holder.target(), branchIndex, branchActions.size());
         } else {
@@ -3159,7 +3224,7 @@ public final class GuiService implements Listener {
             }
             setQuestionBranchAction(holder, new BehaviourAction(selected, normalized));
             openAfterQuestionBranchPicker(player, holder);
-        });
+        }, () -> openQuestionBranchPicker(player, holder.target(), holder.optionIndex(), holder.actionIndex()));
     }
 
     private void openQuestionBranchRoutePicker(Player player, QuestionBranchPickerHolder action, String folder,
@@ -3183,7 +3248,7 @@ public final class GuiService implements Listener {
                     List.of(LegacyText.GRAY + "Create a route with the button below")));
         }
         if (page > 0)
-            inventory.setItem(47, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
         inventory.setItem(51,
                 item(Material.EMERALD, "Create Route", List.of(LegacyText.YELLOW + "Click, then enter its name")));
@@ -3198,7 +3263,7 @@ public final class GuiService implements Listener {
         if (!isTopInventoryClick(event))
             return;
         int slot = event.getRawSlot();
-        if (slot == 47) {
+        if (slot == 45) {
             openQuestionBranchRoutePicker(player, holder.action(), holder.folder(), holder.page() - 1);
             return;
         }
@@ -3435,18 +3500,14 @@ public final class GuiService implements Listener {
             openInstances(player, definition, holder.returnPage());
             return;
         }
-        int removed = instanceRegistry.deleteInstances(definition);
         if (holder.action() == ConfirmationAction.DELETE_DEFINITION) {
-            for (NpcRoute route : List.copyOf(routeRepository.findAll())) {
-                if (route.isOwnedBy(definition.getKey())) {
-                    behaviourService.removeRoute(route.getKey());
-                    routeRepository.delete(route);
-                }
-            }
-            definitionRepository.delete(definition);
-            player.sendMessage(UiText.success("Deleted preset and " + removed + " instance(s)."));
-            openMain(player);
+            int removed = instanceRegistry.findByDefinition(definition).size();
+            deleteDefinition(definition);
+            player.sendMessage(
+                    UiText.success("Deleted '" + definition.getDisplayName() + "' and " + removed + " instance(s)."));
+            openMain(player, holder.returnPage());
         } else {
+            int removed = instanceRegistry.deleteInstances(definition);
             player.sendMessage(UiText.success("Removed " + removed + " instance(s)."));
             openInstances(player, definition, holder.returnPage());
         }
@@ -3461,11 +3522,14 @@ public final class GuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(
                 new ConfirmationHolder(definition.getKey(), action, returnPage, returnToEditor, null), 27,
                 UiText.title("Confirm Deletion"));
-        String target = action == ConfirmationAction.DELETE_DEFINITION ? "preset and all instances" : "all instances";
+        inventory.setItem(13,
+                definitionIcon(definition, List.of(LegacyText.DARK_GRAY + "Key: " + definition.getKey(), LegacyText.GRAY
+                        + "Instances: " + LegacyText.WHITE + instanceRegistry.findByDefinition(definition).size())));
         inventory.setItem(11,
-                item(Material.LIME_CONCRETE, "Confirm", List.of(LegacyText.RED + "Permanently delete " + target)));
-        inventory.setItem(15,
-                item(Material.RED_CONCRETE, "Cancel", List.of(LegacyText.GRAY + "Nothing will be changed")));
+                GuiItems.confirm(action == ConfirmationAction.DELETE_DEFINITION
+                        ? List.of("Permanently deletes this preset,", "all its instances and its routes")
+                        : List.of("Removes every spawned instance")));
+        inventory.setItem(15, GuiItems.cancel());
         openInventory(player, inventory);
     }
 
@@ -3474,11 +3538,9 @@ public final class GuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(new ConfirmationHolder(definition.getKey(),
                 ConfirmationAction.DELETE_INSTANCE, returnPage, false, instance.getId()), 27,
                 UiText.title("Confirm Instance Removal"));
-        inventory.setItem(11,
-                item(Material.LIME_CONCRETE, "Confirm", List.of(LegacyText.RED + "Permanently remove this NPC instance",
-                        LegacyText.DARK_GRAY + instance.getId().toString())));
-        inventory.setItem(15,
-                item(Material.RED_CONCRETE, "Cancel", List.of(LegacyText.GRAY + "Nothing will be changed")));
+        inventory.setItem(11, GuiItems.confirm(
+                List.of("Permanently removes this NPC instance", LegacyText.DARK_GRAY + instance.getId().toString())));
+        inventory.setItem(15, GuiItems.cancel());
         openInventory(player, inventory);
     }
 
@@ -3585,16 +3647,16 @@ public final class GuiService implements Listener {
 
     private boolean isManagedHolder(InventoryHolder holder) {
         return holder instanceof MainHolder || holder instanceof ReorderHolder || holder instanceof EditorHolder
-                || holder instanceof PropertiesHolder || holder instanceof PoseHolder
-                || holder instanceof FightingHolder || holder instanceof TargetsHolder
-                || holder instanceof FightOptionsActionHolder || holder instanceof InstancesHolder
-                || holder instanceof BehaviourHolder || holder instanceof CustomBehaviourHolder
-                || holder instanceof CustomBehaviourEventPickerHolder || holder instanceof ActionPickerHolder
-                || holder instanceof AnimationPickerHolder || holder instanceof BehaviourValuePickerHolder
-                || holder instanceof RoutePointActionsHolder || holder instanceof RoutePointActionPickerHolder
-                || holder instanceof RoutePointAnimationPickerHolder || holder instanceof RoutePointValuePickerHolder
-                || holder instanceof SavedLocationPickerHolder || holder instanceof QuestionEditorHolder
-                || holder instanceof QuestionBranchPickerHolder || holder instanceof QuestionBranchRoutePickerHolder
+                || holder instanceof PropertiesHolder || holder instanceof FightingHolder
+                || holder instanceof TargetsHolder || holder instanceof FightOptionsActionHolder
+                || holder instanceof InstancesHolder || holder instanceof BehaviourHolder
+                || holder instanceof CustomBehaviourHolder || holder instanceof CustomBehaviourEventPickerHolder
+                || holder instanceof ActionPickerHolder || holder instanceof AnimationPickerHolder
+                || holder instanceof BehaviourValuePickerHolder || holder instanceof RoutePointActionsHolder
+                || holder instanceof RoutePointActionPickerHolder || holder instanceof RoutePointAnimationPickerHolder
+                || holder instanceof RoutePointValuePickerHolder || holder instanceof SavedLocationPickerHolder
+                || holder instanceof QuestionEditorHolder || holder instanceof QuestionBranchPickerHolder
+                || holder instanceof QuestionBranchRoutePickerHolder
                 || holder instanceof QuestionBranchAnimationPickerHolder || holder instanceof ConfirmationHolder
                 || aiGuiService.handles(holder);
     }
@@ -3614,13 +3676,7 @@ public final class GuiService implements Listener {
     }
 
     private ItemStack item(ItemStack template, String name, List<String> lore) {
-        ItemStack result = template.clone();
-        result.setAmount(1);
-        ItemMeta meta = result.getItemMeta();
-        meta.displayName(LegacyText.component(LegacyText.GOLD + name));
-        meta.lore(LegacyText.components(lore));
-        result.setItemMeta(meta);
-        return result;
+        return GuiItems.item(template, LegacyText.GOLD + name, lore);
     }
 
     private ItemStack label(String name, Material material) {
@@ -3628,12 +3684,7 @@ public final class GuiService implements Listener {
     }
 
     private ItemStack item(Material material, String name, List<String> lore) {
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(LegacyText.component(LegacyText.GOLD + name));
-        meta.lore(LegacyText.components(lore));
-        item.setItemMeta(meta);
-        return item;
+        return GuiItems.item(material, name, lore);
     }
 
     private ItemStack potionItem(PotionType potionType, String name, List<String> lore) {
@@ -3685,18 +3736,6 @@ public final class GuiService implements Listener {
             case FIGHT_BACK -> Material.SHIELD;
             case HUNTING -> Material.IRON_SWORD;
         };
-    }
-
-    private ItemStack toggleItem(Material material, String name, boolean enabled, String description) {
-        return toggleItem(material, name, enabled, List.of(LegacyText.GRAY + description));
-    }
-
-    private ItemStack toggleItem(Material material, String name, boolean enabled, List<String> description) {
-        List<String> lore = new ArrayList<>();
-        lore.add(enabled ? LegacyText.GREEN + "On" : LegacyText.RED + "Off");
-        lore.addAll(description);
-        lore.add(LegacyText.YELLOW + "Click to toggle");
-        return item(enabled ? material : Material.GRAY_DYE, name, lore);
     }
 
     private int enabledTargetCount(CombatProfile combat) {
@@ -3767,8 +3806,29 @@ public final class GuiService implements Listener {
         };
     }
 
+    private ItemStack actionItem(BehaviourAction action, int index) {
+        List<String> lore = new ArrayList<>(List.of(LegacyText.WHITE + actionValueDisplay(action), ""));
+        if (action.type() == BehaviourActionType.ASK_QUESTION) {
+            lore.add(GuiItems.hint("Left-click", "edit question"));
+            lore.add(GuiItems.hint("Shift-left-click", "replace"));
+        } else {
+            lore.add(GuiItems.hint("Left-click", "replace"));
+        }
+        lore.add(GuiItems.danger("Right-click", "remove"));
+        return item(actionMaterial(action.type()), (index + 1) + ". " + action.type().displayName(), lore);
+    }
+
+    private ItemStack addActionItem(int size, int max) {
+        if (size >= max)
+            return item(Material.GRAY_STAINED_GLASS_PANE, "Row Full",
+                    List.of(LegacyText.GRAY + "This row holds at most " + max + " actions",
+                            LegacyText.GRAY + "Remove or replace an action instead"));
+        return item(Material.LIME_STAINED_GLASS_PANE, "Add Action",
+                List.of(LegacyText.GRAY + "Actions run from left to right", "", GuiItems.hint("Click", "append")));
+    }
+
     private List<String> actionPickerLore(BehaviourActionType type) {
-        return List.of(LegacyText.GRAY + actionDescription(type), LegacyText.YELLOW + "Click to configure");
+        return List.of(LegacyText.GRAY + actionDescription(type), "", GuiItems.hint("Click", "choose"));
     }
 
     private String actionDescription(BehaviourActionType type) {
@@ -3858,10 +3918,10 @@ public final class GuiService implements Listener {
 
     private String reactionDescription(AttackReaction reaction) {
         return switch (reaction) {
-            case IGNORE -> LegacyText.GRAY + "Does not react when attacked";
-            case FLEE -> LegacyText.GRAY + "Runs away after taking entity damage";
-            case FIGHT_BACK -> LegacyText.GRAY + "Attacks an entity that damages it";
-            case HUNTING -> LegacyText.GRAY + "Actively hunts enabled attack targets";
+            case IGNORE -> "does not react when attacked";
+            case FLEE -> "runs away after taking damage";
+            case FIGHT_BACK -> "attacks whoever damages it";
+            case HUNTING -> "actively hunts enabled targets";
         };
     }
 
@@ -3895,9 +3955,6 @@ public final class GuiService implements Listener {
     }
 
     private record EditorHolder(String key) implements GuiHolder {
-    }
-
-    private record PoseHolder(String key) implements GuiHolder {
     }
 
     private record PropertiesHolder(String key) implements GuiHolder {

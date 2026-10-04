@@ -29,6 +29,13 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Changed
 
+- Menu overhaul: every menu shares one layout and visual language. Back sits in the bottom-centre slot, page arrows sit in the bottom corners with page numbers, and Create buttons sit to the right of Back. Item names and tooltips are no longer italic, click hints follow one format, empty lists explain what to do next, and deletions use the same confirmation screen everywhere.
+- On/off settings change their icon and name color with their state and explain both states in the tooltip. Multi-option settings (aggression, pose, name color, conversation mode, ability centre) are cycled in place: their tooltip lists every option with a `▶` marker, left-click selects the next and right-click the previous option. This replaces the separate pose picker.
+- The preset editor groups identity settings (name, skin, properties, equipment, spawnpoint, instances) above behaviour settings (events, custom events, AI, routes, combat, shops) and has a dedicated **Appearance & Properties** button.
+- The main menu adds a **Locations** button. An NPC's route list has a **Create Route** button.
+- The AI Behaviour menu shows the master switch, conversation mode, and memory together, and gives every AI capability its own icon. Memories show their category with a matching icon.
+- Turned-off attack targets show a poppy ("spared") instead of identical gray dye.
+
 - AI NPCs follow through on requested actions more reliably. Each function call now gets its own result. A response with a rejected call runs nothing and is sent back once with the reasons and valid targets, so an NPC no longer says "on my way" while its move is rejected. After acting, the model checks whether its speech promised anything it has not started.
 - Long-term AI memory keeps only key facts about people and agreements (treatment, deals, promises, meetings, news) and no longer stores reminders of what the NPC is currently doing.
 - AI turns must begin with a function call, so models can no longer answer in plain text that players never see.
@@ -43,6 +50,14 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 - Consolidate health, respawn time, and experience controls into one icon each with left/right adjustment, shift for five steps, middle-click input, and consistent coloured click labels.
 
 ### Fixed
+
+- Typing `cancel` or letting a chat prompt time out reopens the menu it came from instead of leaving every menu closed.
+- **Add Action** on a full behaviour, custom event, or question-answer row no longer opens the action picker and then silently discards the chosen action.
+- Deleting a preset from its confirmation screen can no longer fail when behaviours are not loaded yet, and returns to the page it was opened from.
+- Teleporting to an NPC from the instance list goes to where it currently stands, and reports an unloaded world instead of failing silently.
+- Remove All and Refresh on an empty instance list no longer open a deletion confirmation.
+- Cancelling an ability deletion started from the library returns to the library instead of opening the ability editor.
+- AI menu warnings now use the standard Blockfolk message style.
 
 - Preserve ongoing combat timers when the same opponent repeatedly attacks an NPC.
 
