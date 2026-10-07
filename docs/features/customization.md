@@ -4,7 +4,7 @@
 
 The preset editor supports a display name and a skin URL or texture hash. Enter `default` when editing the skin to clear it. External image URLs are resolved through MineSkin; a MineSkin API key is optional but raises the public rate limit.
 
-Under **Appearance & Properties** in the preset editor, you can configure:
+Click the NPC head in the preset editor to open **NPC Properties**, where you can configure:
 
 | Property | Effect |
 | --- | --- |

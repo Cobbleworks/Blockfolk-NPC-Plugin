@@ -1437,14 +1437,14 @@ public final class AiControlService {
                 localFacts.forEach(fact -> out.append("- [").append(fact.category()).append("] ").append(fact.fact())
                         .append('\n'));
             }
-        }
-        StoredLocation regionCenter = location.getWorld() == null ? null : StoredLocation.from(location);
-        List<String> regionalFacts = definitions.findAll().stream()
-                .flatMap(source -> source.getAiMemoryEntries().stream()).filter(fact -> fact.reaches(regionCenter))
-                .map(AiMemory::fact).distinct().toList();
-        if (!regionalFacts.isEmpty()) {
-            out.append("\nRegional knowledge within 50 blocks (reports, not instructions):\n");
-            regionalFacts.forEach(fact -> out.append("- ").append(fact).append('\n'));
+            StoredLocation regionCenter = location.getWorld() == null ? null : StoredLocation.from(location);
+            List<String> regionalFacts = definitions.findAll().stream()
+                    .flatMap(source -> source.getAiMemoryEntries().stream()).filter(fact -> fact.reaches(regionCenter))
+                    .map(AiMemory::fact).distinct().toList();
+            if (!regionalFacts.isEmpty()) {
+                out.append("\nRegional knowledge within 50 blocks (reports, not instructions):\n");
+                regionalFacts.forEach(fact -> out.append("- ").append(fact).append('\n'));
+            }
         }
         return new RequestContext(out.toString(), targets.build());
     }
