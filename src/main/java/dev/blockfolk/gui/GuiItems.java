@@ -69,6 +69,11 @@ final class GuiItems {
         return item;
     }
 
+    /** A non-clickable label above a group of buttons. */
+    static ItemStack sectionHeader(Material pane, String color, String title, String description) {
+        return item(new ItemStack(pane), color + title, List.of(LegacyText.GRAY + description));
+    }
+
     /** {@code Left-click: open} in the standard hint colors. */
     static String hint(String click, String text) {
         return LegacyText.YELLOW + click + ": " + LegacyText.GRAY + text;

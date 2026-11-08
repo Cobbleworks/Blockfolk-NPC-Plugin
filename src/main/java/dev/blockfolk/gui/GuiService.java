@@ -130,20 +130,29 @@ public final class GuiService implements Listener {
     private static final int MAIN_SHOPS_SLOT = 51;
     private static final int MAIN_CREATE_SLOT = 52;
     private static final int MAIN_NEXT_SLOT = 53;
+    /**
+     * The preset editor is four labelled columns between a top and bottom bar: a
+     * section header on row 1, then three buttons on rows 2 to 4.
+     */
+    private static final int EDITOR_SIZE = 54;
     private static final int EDITOR_SUMMARY_SLOT = 4;
-    private static final int EDITOR_NAME_SLOT = 10;
-    private static final int EDITOR_SKIN_SLOT = 11;
-    private static final int EDITOR_PROPERTIES_SLOT = 12;
-    private static final int EDITOR_EQUIPMENT_SLOT = 14;
-    private static final int EDITOR_SPAWN_SLOT = 15;
-    private static final int EDITOR_INSTANCES_SLOT = 16;
-    private static final int EDITOR_BEHAVIOUR_SLOT = 19;
-    private static final int EDITOR_CUSTOM_BEHAVIOUR_SLOT = 20;
-    private static final int EDITOR_AI_SLOT = 21;
-    private static final int EDITOR_ROUTES_SLOT = 23;
-    private static final int EDITOR_FIGHTING_SLOT = 24;
-    private static final int EDITOR_SHOPS_SLOT = 25;
-    private static final int EDITOR_BACK_SLOT = 31;
+    private static final int EDITOR_IDENTITY_HEADER_SLOT = 10;
+    private static final int EDITOR_WORLD_HEADER_SLOT = 12;
+    private static final int EDITOR_BEHAVIOUR_HEADER_SLOT = 14;
+    private static final int EDITOR_COMBAT_HEADER_SLOT = 16;
+    private static final int EDITOR_NAME_SLOT = 19;
+    private static final int EDITOR_SKIN_SLOT = 28;
+    private static final int EDITOR_PROPERTIES_SLOT = 37;
+    private static final int EDITOR_INSTANCES_SLOT = 21;
+    private static final int EDITOR_SPAWN_SLOT = 30;
+    private static final int EDITOR_ROUTES_SLOT = 39;
+    private static final int EDITOR_BEHAVIOUR_SLOT = 23;
+    private static final int EDITOR_CUSTOM_BEHAVIOUR_SLOT = 32;
+    private static final int EDITOR_AI_SLOT = 41;
+    private static final int EDITOR_FIGHTING_SLOT = 25;
+    private static final int EDITOR_EQUIPMENT_SLOT = 34;
+    private static final int EDITOR_SHOPS_SLOT = 43;
+    private static final int EDITOR_BACK_SLOT = GuiItems.BACK_SLOT;
     private static final int PROPERTY_PUSHABLE_SLOT = 10;
     private static final int PROPERTY_SHOW_NAME_SLOT = 11;
     private static final int PROPERTY_LOOK_SLOT = 12;
@@ -503,7 +512,7 @@ public final class GuiService implements Listener {
         if (aiControlService != null)
             aiControlService.resetDefinition(definition);
         int instances = instanceRegistry.findByDefinition(definition).size();
-        Inventory inventory = Bukkit.createInventory(new EditorHolder(definition.getKey()), 36,
+        Inventory inventory = Bukkit.createInventory(new EditorHolder(definition.getKey()), EDITOR_SIZE,
                 UiText.manageTitle(definition.getDisplayName()));
         inventory.setItem(EDITOR_SUMMARY_SLOT, definitionIcon(definition, List.of(
                 LegacyText.DARK_GRAY + "Key: " + definition.getKey(),
@@ -513,7 +522,14 @@ public final class GuiService implements Listener {
                 LegacyText.GRAY + "Spawn: " + LegacyText.WHITE + formatLocation(definition.getStoredSpawnpoint()), "",
                 GuiItems.hint("Click", "appearance & properties"),
                 GuiItems.danger("Shift-right-click", "delete this NPC"))));
-        // Row 1: who the NPC is and where it exists.
+        inventory.setItem(EDITOR_IDENTITY_HEADER_SLOT, GuiItems.sectionHeader(Material.LIGHT_BLUE_STAINED_GLASS_PANE,
+                LegacyText.AQUA, "Identity", "Name, skin, and appearance"));
+        inventory.setItem(EDITOR_WORLD_HEADER_SLOT, GuiItems.sectionHeader(Material.LIME_STAINED_GLASS_PANE,
+                LegacyText.GREEN, "World", "Where the NPC stands and walks"));
+        inventory.setItem(EDITOR_BEHAVIOUR_HEADER_SLOT, GuiItems.sectionHeader(Material.PURPLE_STAINED_GLASS_PANE,
+                LegacyText.LIGHT_PURPLE, "Behaviour", "How the NPC acts and reacts"));
+        inventory.setItem(EDITOR_COMBAT_HEADER_SLOT, GuiItems.sectionHeader(Material.RED_STAINED_GLASS_PANE,
+                LegacyText.RED, "Combat & Items", "Fighting, gear, loot, and trades"));
         inventory.setItem(EDITOR_NAME_SLOT, item(Material.NAME_TAG, "Display Name",
                 List.of(LegacyText.WHITE + definition.getDisplayName(), "", GuiItems.hint("Click", "rename"))));
         inventory
@@ -556,7 +572,6 @@ public final class GuiService implements Listener {
             }
             inventory.setItem(EDITOR_INSTANCES_SLOT, item(Material.ARMOR_STAND, "Instances", instanceLore));
         }
-        // Row 2: what the NPC does.
         int behaviourCount = MANUAL_BEHAVIOUR_EVENTS.stream()
                 .mapToInt(event -> definition.getBehaviourActions(event).size()).sum();
         inventory.setItem(EDITOR_BEHAVIOUR_SLOT,
@@ -616,6 +631,8 @@ public final class GuiService implements Listener {
         shopLore.add(GuiItems.hint("Click", "manage shops"));
         inventory.setItem(EDITOR_SHOPS_SLOT, item(Material.EMERALD, "Shops", shopLore));
         inventory.setItem(EDITOR_BACK_SLOT, GuiItems.back("the preset list"));
+        GuiLayout.fillRow(inventory, 0);
+        GuiLayout.fillMainBar(inventory);
         openInventory(player, inventory);
     }
 
