@@ -139,13 +139,13 @@ public final class CustomEventGuiService implements Listener {
                 inventory.setItem(index - from, reorderItem(event, index));
         }
         if (holder.page > 0)
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(45, GuiItems.previousPage(holder.page, pages));
         inventory.setItem(48, item(Material.LIME_CONCRETE, "Save Order",
                 List.of(LegacyText.GRAY + "Apply this order to the custom event browser")));
         inventory.setItem(50,
                 item(Material.RED_CONCRETE, "Cancel", List.of(LegacyText.GRAY + "Discard all ordering changes")));
         if (holder.page + 1 < pages)
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(53, GuiItems.nextPage(holder.page, pages));
         GuiLayout.fillMainBar(inventory);
     }
 

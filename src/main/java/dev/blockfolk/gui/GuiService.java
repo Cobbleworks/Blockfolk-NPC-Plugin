@@ -153,6 +153,16 @@ public final class GuiService implements Listener {
     private static final int EDITOR_EQUIPMENT_SLOT = 34;
     private static final int EDITOR_SHOPS_SLOT = 43;
     private static final int EDITOR_BACK_SLOT = GuiItems.BACK_SLOT;
+    private static final int FIGHTING_SURVIVAL_HEADER_SLOT = 10;
+    private static final int FIGHTING_HEALTH_SLOT = 12;
+    private static final int FIGHTING_RESPAWN_SLOT = 13;
+    private static final int FIGHTING_EXPERIENCE_SLOT = 14;
+    private static final int FIGHTING_BOSS_BAR_SLOT = 15;
+    private static final int FIGHTING_COMBAT_HEADER_SLOT = 19;
+    private static final int FIGHTING_TARGETS_SLOT = 21;
+    private static final int FIGHTING_ALLIANCE_SLOT = 22;
+    private static final int FIGHTING_ABILITIES_SLOT = 23;
+    private static final int FIGHTING_BACK_SLOT = 31;
     private static final int PROPERTY_PUSHABLE_SLOT = 10;
     private static final int PROPERTY_SHOW_NAME_SLOT = 11;
     private static final int PROPERTY_LOOK_SLOT = 12;
@@ -321,14 +331,7 @@ public final class GuiService implements Listener {
 
     private void openRoutePointActionPicker(Player player, RoutePointActionPickerHolder holder) {
         Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Choose Waypoint Action"));
-        for (Map.Entry<Integer, BehaviourActionType> entry : ACTION_PICKER_ACTIONS.entrySet()) {
-            BehaviourActionType type = entry.getValue();
-            inventory.setItem(entry.getKey(), item(actionMaterial(type), type.displayName(), actionPickerLore(type)));
-        }
-        inventory.setItem(ACTION_PICKER_ANIMATIONS_SLOT,
-                item(Material.ARMOR_STAND, "Animations", List.of(LegacyText.GRAY + "Poses, waving, and jumping",
-                        LegacyText.YELLOW + "Click to choose an animation")));
-        inventory.setItem(ACTION_PICKER_BACK_SLOT, item(Material.BARRIER, "Back", List.of()));
+        populateActionPicker(inventory, true, "the waypoint actions");
         openInventory(player, inventory);
     }
 
@@ -340,9 +343,9 @@ public final class GuiService implements Listener {
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
             BehaviourActionType type = ANIMATION_ACTIONS.get(index);
             inventory.setItem(slots[index],
-                    item(actionMaterial(type), type.displayName(), List.of(LegacyText.YELLOW + "Click to select")));
+                    item(actionMaterial(type), type.displayName(), List.of(GuiItems.hint("Click", "select"))));
         }
-        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(22, GuiItems.back("the action picker"));
         openInventory(player, inventory);
     }
 
@@ -363,9 +366,9 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             BehaviourPickerOption option = options.get(index);
             List<String> lore = new ArrayList<>(option.lore());
-            lore.add(LegacyText.YELLOW + (option.folder() ? "Click to open" : "Left-click: select"));
+            lore.add(option.folder() ? GuiItems.hint("Click", "open") : GuiItems.hint("Left-click", "select"));
             if (pickerType == BehaviourValuePickerType.ROUTE && !option.folder())
-                lore.add(LegacyText.AQUA + "Right-click: edit route");
+                lore.add(GuiItems.hint("Right-click", "edit route"));
             inventory.setItem(index - from, item(option.icon(), option.label(), lore));
         }
         if (options.isEmpty()) {
@@ -373,20 +376,20 @@ public final class GuiService implements Listener {
                     List.of(LegacyText.GRAY + pickerType.emptyMessage())));
         }
         if (page > 0) {
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(45, GuiItems.previousPage(page, pages));
         }
-        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(49, GuiItems.back("the action picker"));
         if (pickerType == BehaviourValuePickerType.ROUTE) {
             inventory.setItem(51,
-                    item(Material.EMERALD, "Create Route", List.of(LegacyText.YELLOW + "Click, then enter its name")));
+                    item(Material.EMERALD, "Create Route", List.of(GuiItems.hint("Click", "enter its name"))));
         } else if (pickerType == BehaviourValuePickerType.CUSTOM_EVENT) {
             inventory.setItem(51,
                     item(Material.EMERALD, "Create New Event",
                             List.of(LegacyText.GRAY + "Creates and selects a custom event",
-                                    LegacyText.YELLOW + "Click, then enter its name")));
+                                    GuiItems.hint("Click", "enter its name"))));
         }
         if (page + 1 < pages) {
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(53, GuiItems.nextPage(page, pages));
         }
         openInventory(player, inventory);
     }
@@ -482,14 +485,14 @@ public final class GuiService implements Listener {
             }
         }
         if (holder.page > 0) {
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(45, GuiItems.previousPage(holder.page, pages));
         }
         inventory.setItem(48, item(Material.LIME_CONCRETE, "Save Order",
                 List.of(LegacyText.GRAY + "Apply this order to the preset overview")));
         inventory.setItem(50,
                 item(Material.RED_CONCRETE, "Cancel", List.of(LegacyText.GRAY + "Discard all ordering changes")));
         if (holder.page + 1 < pages) {
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(53, GuiItems.nextPage(holder.page, pages));
         }
         GuiLayout.fillMainBar(inventory);
     }
@@ -632,7 +635,6 @@ public final class GuiService implements Listener {
         inventory.setItem(EDITOR_SHOPS_SLOT, item(Material.EMERALD, "Shops", shopLore));
         inventory.setItem(EDITOR_BACK_SLOT, GuiItems.back("the preset list"));
         GuiLayout.fillRow(inventory, 0);
-        GuiLayout.fillMainBar(inventory);
         openInventory(player, inventory);
     }
 
@@ -712,7 +714,7 @@ public final class GuiService implements Listener {
         inventory.setItem(41, label("Main Hand", Material.IRON_SWORD));
         inventory.setItem(42, label("Off Hand", Material.SHIELD));
         inventory.setItem(44, item(Material.BARREL, "Temporary Inventory",
-                List.of(LegacyText.GRAY + "Pre-fill the NPC's carried items", LegacyText.YELLOW + "Click to edit")));
+                List.of(LegacyText.GRAY + "Pre-fill the NPC's carried items", GuiItems.hint("Click", "edit"))));
         ItemStack[] armor = definition.getArmorContents();
         inventory.setItem(45, armor[3]);
         inventory.setItem(46, armor[2]);
@@ -720,8 +722,9 @@ public final class GuiService implements Listener {
         inventory.setItem(48, armor[0]);
         inventory.setItem(50, definition.getMainHand());
         inventory.setItem(51, definition.getOffHand());
-        inventory.setItem(53, item(Material.LIME_DYE, "Save Equipment & Loot",
-                List.of(LegacyText.GRAY + "Saves and refreshes every instance")));
+        inventory.setItem(53, item(Material.LIME_DYE, "Save & Back",
+                List.of(LegacyText.GRAY + "Saves, refreshes every instance, and", LegacyText.GRAY
+                        + "returns to the NPC menu", LegacyText.DARK_GRAY + "Closing the menu also saves")));
         openInventory(player, inventory);
     }
 
@@ -751,7 +754,7 @@ public final class GuiService implements Listener {
                 LegacyText.DARK_GRAY + "Set health to 0 for invulnerability",
                 LegacyText.GRAY + "Step: " + CombatProfile.HEALTH_STEP + " HP"));
         healthLore.addAll(NumericControl.lore());
-        inventory.setItem(10,
+        inventory.setItem(FIGHTING_HEALTH_SLOT,
                 combat.invulnerable()
                         ? item(Material.TOTEM_OF_UNDYING, "Max Health: " + healthLabel(combat), healthLore)
                         : potionItem(PotionType.HEALING, "Max Health: " + healthLabel(combat), healthLore));
@@ -764,22 +767,22 @@ public final class GuiService implements Listener {
                         : LegacyText.DARK_GRAY + "Preset spawn point is configured",
                 LegacyText.GRAY + "Step: " + CombatProfile.RESPAWN_STEP_SECONDS + " seconds"));
         respawnLore.addAll(NumericControl.lore());
-        inventory.setItem(11, item(Material.CLOCK, "Respawn Time: " + respawnLabel(combat), respawnLore));
+        inventory.setItem(FIGHTING_RESPAWN_SLOT, item(Material.CLOCK, "Respawn Time: " + respawnLabel(combat), respawnLore));
         List<String> experienceLore = new ArrayList<>(List.of(
                 combat.droppedExperience() == 0
                         ? LegacyText.GRAY + "This NPC drops no experience"
                         : LegacyText.GREEN + "Dropped when this NPC dies",
                 LegacyText.GRAY + "Step: " + CombatProfile.EXPERIENCE_STEP + " XP"));
         experienceLore.addAll(NumericControl.lore());
-        inventory.setItem(13,
+        inventory.setItem(FIGHTING_EXPERIENCE_SLOT,
                 item(Material.EXPERIENCE_BOTTLE, "Dropped Experience: " + experienceLabel(combat), experienceLore));
-        inventory.setItem(14, GuiItems.toggle(Material.WITHER_SKELETON_SKULL, Material.SKELETON_SKULL, "Boss Bar",
+        inventory.setItem(FIGHTING_BOSS_BAR_SLOT, GuiItems.toggle(Material.WITHER_SKELETON_SKULL, Material.SKELETON_SKULL, "Boss Bar",
                 combat.showBossBar(), "health bar for players within 16 blocks", "no health bar", List.of()));
-        inventory.setItem(12, item(Material.TARGET, "Targets & Behaviour", List.of(
+        inventory.setItem(FIGHTING_TARGETS_SLOT, item(Material.TARGET, "Targets & Behaviour", List.of(
                 LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName(),
                 LegacyText.GRAY + "Attack targets enabled: " + LegacyText.WHITE + enabledTargetCount(combat) + "/4", "",
                 GuiItems.hint("Click", "configure"))));
-        inventory.setItem(15,
+        inventory.setItem(FIGHTING_ALLIANCE_SLOT,
                 item(Material.NAME_TAG, "Alliance",
                         List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + allianceLabel(combat),
                                 LegacyText.GRAY + "NPCs with the same alliance will not fight",
@@ -787,8 +790,12 @@ public final class GuiService implements Listener {
                                 LegacyText.GRAY + "whose custom name matches the alliance",
                                 LegacyText.DARK_GRAY + "Matching ignores capitalization; any inventory slot works", "",
                                 GuiItems.hint("Click", "type an alliance"))));
-        inventory.setItem(16, specialAttacksItem(combat.specialAttacks()));
-        inventory.setItem(31, GuiItems.back("the NPC menu"));
+        inventory.setItem(FIGHTING_ABILITIES_SLOT, specialAttacksItem(combat.specialAttacks()));
+        inventory.setItem(FIGHTING_SURVIVAL_HEADER_SLOT, GuiItems.sectionHeader(Material.LIME_STAINED_GLASS_PANE,
+                LegacyText.GREEN, "Survival", "Health, respawning, and what it leaves behind"));
+        inventory.setItem(FIGHTING_COMBAT_HEADER_SLOT, GuiItems.sectionHeader(Material.RED_STAINED_GLASS_PANE,
+                LegacyText.RED, "Combat", "Who it fights and how"));
+        inventory.setItem(FIGHTING_BACK_SLOT, GuiItems.back("the NPC menu"));
         openInventory(player, inventory);
     }
 
@@ -896,11 +903,11 @@ public final class GuiService implements Listener {
             }
         }
         if (page > 0) {
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(45, GuiItems.previousPage(page, pages));
         }
-        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(49, GuiItems.back("the NPC menu"));
         if (page + 1 < pages) {
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(53, GuiItems.nextPage(page, pages));
         }
         openInventory(player, inventory);
     }
@@ -936,12 +943,12 @@ public final class GuiService implements Listener {
             inventory.setItem(22, item(Material.GRAY_DYE, "No Event Rows",
                     List.of(LegacyText.GRAY + "Choose Add Event to select a custom event")));
         if (page > 0)
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
-        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+            inventory.setItem(45, GuiItems.previousPage(page, pages));
+        inventory.setItem(49, GuiItems.back("the NPC menu"));
         inventory.setItem(51, item(Material.EMERALD, "Add Event",
-                List.of(LegacyText.YELLOW + "Choose a custom event for a new row")));
+                List.of(GuiItems.hint("Click", "choose a custom event for a new row"))));
         if (page + 1 < pages)
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(53, GuiItems.nextPage(page, pages));
         openInventory(player, inventory);
     }
 
@@ -966,17 +973,17 @@ public final class GuiService implements Listener {
                     item(customEventIcon(event), event.getName(),
                             List.of(LegacyText.GRAY
                                     + (event.getDescription().isBlank() ? "No description" : event.getDescription()),
-                                    LegacyText.YELLOW + "Click to add row")));
+                                    GuiItems.hint("Click", "add row"))));
         }
         if (available.isEmpty())
             inventory.setItem(22, item(Material.GRAY_DYE, "No Events Available", List.of()));
         if (page > 0)
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
-        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+            inventory.setItem(45, GuiItems.previousPage(page, pages));
+        inventory.setItem(49, GuiItems.back("Custom Behaviour"));
         inventory.setItem(51,
-                item(Material.EMERALD, "Create New Event", List.of(LegacyText.YELLOW + "Create and add an event row")));
+                item(Material.EMERALD, "Create New Event", List.of(GuiItems.hint("Click", "create and add an event row"))));
         if (page + 1 < pages)
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(53, GuiItems.nextPage(page, pages));
         openInventory(player, inventory);
     }
 
@@ -990,11 +997,19 @@ public final class GuiService implements Listener {
         Inventory inventory = Bukkit.createInventory(
                 new ActionPickerHolder(definition.getKey(), event, customEvent, actionIndex, page), 54,
                 UiText.title("Choose Action"));
-        populateActionPicker(inventory, true);
+        populateActionPicker(inventory, true, "the behaviour list");
         openInventory(player, inventory);
     }
 
-    private void populateActionPicker(Inventory inventory, boolean includeQuestion) {
+    private void populateActionPicker(Inventory inventory, boolean includeQuestion, String backDestination) {
+        inventory.setItem(0, GuiItems.sectionHeader(Material.LIGHT_BLUE_STAINED_GLASS_PANE, LegacyText.AQUA,
+                "Dialogue & Scripting", "Talk, ask, and trigger other systems"));
+        inventory.setItem(9, GuiItems.sectionHeader(Material.LIME_STAINED_GLASS_PANE, LegacyText.GREEN, "Movement",
+                "Routes, walking, and following"));
+        inventory.setItem(18, GuiItems.sectionHeader(Material.YELLOW_STAINED_GLASS_PANE, LegacyText.YELLOW,
+                "World & Items", "Blocks, inventories, and shops"));
+        inventory.setItem(27, GuiItems.sectionHeader(Material.RED_STAINED_GLASS_PANE, LegacyText.RED,
+                "Combat & Animations", "Fighting, abilities, and poses"));
         for (Map.Entry<Integer, BehaviourActionType> entry : ACTION_PICKER_ACTIONS.entrySet()) {
             BehaviourActionType type = entry.getValue();
             if (!includeQuestion && type == BehaviourActionType.ASK_QUESTION)
@@ -1003,8 +1018,8 @@ public final class GuiService implements Listener {
         }
         inventory.setItem(ACTION_PICKER_ANIMATIONS_SLOT,
                 item(Material.ARMOR_STAND, "Animations", List.of(LegacyText.GRAY + "Poses, waving, and jumping",
-                        LegacyText.YELLOW + "Click to choose an animation")));
-        inventory.setItem(ACTION_PICKER_BACK_SLOT, item(Material.BARRIER, "Back", List.of()));
+                        GuiItems.hint("Click", "choose an animation"))));
+        inventory.setItem(ACTION_PICKER_BACK_SLOT, GuiItems.back(backDestination));
     }
 
     private void openAnimationPicker(Player player, ActionPickerHolder action) {
@@ -1014,9 +1029,9 @@ public final class GuiService implements Listener {
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
             BehaviourActionType type = ANIMATION_ACTIONS.get(index);
             inventory.setItem(slots[index],
-                    item(actionMaterial(type), type.displayName(), List.of(LegacyText.YELLOW + "Click to select")));
+                    item(actionMaterial(type), type.displayName(), List.of(GuiItems.hint("Click", "select"))));
         }
-        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(22, GuiItems.back("the action picker"));
         openInventory(player, inventory);
     }
 
@@ -1044,9 +1059,9 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             BehaviourPickerOption option = options.get(index);
             List<String> lore = new ArrayList<>(option.lore());
-            lore.add(LegacyText.YELLOW + (option.folder() ? "Click to open" : "Left-click: select"));
+            lore.add(option.folder() ? GuiItems.hint("Click", "open") : GuiItems.hint("Left-click", "select"));
             if (pickerType == BehaviourValuePickerType.ROUTE && !option.folder())
-                lore.add(LegacyText.AQUA + "Right-click: edit route");
+                lore.add(GuiItems.hint("Right-click", "edit route"));
             inventory.setItem(index - from, item(option.icon(), option.label(), lore));
         }
         if (options.isEmpty()) {
@@ -1054,20 +1069,20 @@ public final class GuiService implements Listener {
                     List.of(LegacyText.GRAY + pickerType.emptyMessage())));
         }
         if (valuePage > 0) {
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(45, GuiItems.previousPage(valuePage, pages));
         }
-        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(49, GuiItems.back("the action picker"));
         if (pickerType == BehaviourValuePickerType.ROUTE) {
             inventory.setItem(51,
-                    item(Material.EMERALD, "Create Route", List.of(LegacyText.YELLOW + "Click, then enter its name")));
+                    item(Material.EMERALD, "Create Route", List.of(GuiItems.hint("Click", "enter its name"))));
         } else if (pickerType == BehaviourValuePickerType.CUSTOM_EVENT) {
             inventory.setItem(51,
                     item(Material.EMERALD, "Create New Event",
                             List.of(LegacyText.GRAY + "Creates and selects a custom event",
-                                    LegacyText.YELLOW + "Click, then enter its name")));
+                                    GuiItems.hint("Click", "enter its name"))));
         }
         if (valuePage + 1 < pages) {
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(53, GuiItems.nextPage(valuePage, pages));
         }
         openInventory(player, inventory);
     }
@@ -1130,7 +1145,7 @@ public final class GuiService implements Listener {
             inventory.setItem(22, GuiItems.empty("No Instances", "Use Spawn Here below to create one"));
         }
         if (page > 0) {
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(45, GuiItems.previousPage(page, pages));
         }
         if (!instances.isEmpty()) {
             inventory.setItem(47,
@@ -1147,7 +1162,7 @@ public final class GuiService implements Listener {
                 item(Material.COMPASS, "Spawn Here", List.of(LegacyText.GRAY + "Spawns another persistent copy",
                         LegacyText.GRAY + "at your location", "", GuiItems.hint("Click", "spawn"))));
         if (page + 1 < pages) {
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(53, GuiItems.nextPage(page, pages));
         }
         openInventory(player, inventory);
     }
@@ -1550,7 +1565,7 @@ public final class GuiService implements Listener {
         }
         CombatProfile combat = definition.getCombatProfile();
         int slot = event.getRawSlot();
-        if (slot == 10 || slot == 11 || slot == 13) {
+        if (slot == FIGHTING_HEALTH_SLOT || slot == FIGHTING_RESPAWN_SLOT || slot == FIGHTING_EXPERIENCE_SLOT) {
             if (event.getClick() == ClickType.MIDDLE) {
                 requestCombatValue(player, key, slot);
                 return;
@@ -1558,46 +1573,46 @@ public final class GuiService implements Listener {
             int direction = NumericControl.direction(event.getClick());
             if (direction == 0)
                 return;
-            int step = slot == 10
+            int step = slot == FIGHTING_HEALTH_SLOT
                     ? CombatProfile.HEALTH_STEP
-                    : slot == 11 ? CombatProfile.RESPAWN_STEP_SECONDS : CombatProfile.EXPERIENCE_STEP;
-            int current = slot == 10
+                    : slot == FIGHTING_RESPAWN_SLOT ? CombatProfile.RESPAWN_STEP_SECONDS : CombatProfile.EXPERIENCE_STEP;
+            int current = slot == FIGHTING_HEALTH_SLOT
                     ? combat.maxHealth()
-                    : slot == 11 ? combat.respawnSeconds() : combat.droppedExperience();
-            int max = slot == 10 ? CombatProfile.MAX_HEALTH : Integer.MAX_VALUE;
+                    : slot == FIGHTING_RESPAWN_SLOT ? combat.respawnSeconds() : combat.droppedExperience();
+            int max = slot == FIGHTING_HEALTH_SLOT ? CombatProfile.MAX_HEALTH : Integer.MAX_VALUE;
             int value = (int) Math.clamp((long) current + (long) direction * step * (event.isShiftClick() ? 5 : 1), 0,
                     max);
             setCombatValue(player, definition, slot, value);
             return;
         }
         switch (slot) {
-            case 12 -> {
+            case FIGHTING_TARGETS_SLOT -> {
                 openTargetsAndBehaviour(player, definition);
             }
-            case 14 -> {
+            case FIGHTING_BOSS_BAR_SLOT -> {
                 definition.setCombatProfile(combat.withShowBossBar(!combat.showBossBar()));
                 definitionRepository.save(definition);
                 GuiItems.click(player);
                 openFightingEditor(player, definition);
             }
-            case 15 -> chatInputService.request(player, "Enter an alliance, or type clear to remove it:", value -> {
+            case FIGHTING_ALLIANCE_SLOT -> chatInputService.request(player, "Enter an alliance, or type clear to remove it:", value -> {
                 String alliance = value.equalsIgnoreCase("clear") || value.isBlank() ? null : value.trim();
                 definition.setCombatProfile(definition.getCombatProfile().withAlliance(alliance));
                 saveRefresh(definition);
                 openFightingEditor(player, definition);
             }, () -> definitionRepository.find(key).ifPresent(current -> openFightingEditor(player, current)));
-            case 16 -> openSpecialAttacks(player, new SpecialAttacksHolder(key, null));
-            case 31 -> openEditor(player, definition);
+            case FIGHTING_ABILITIES_SLOT -> openSpecialAttacks(player, new SpecialAttacksHolder(key, null));
+            case FIGHTING_BACK_SLOT -> openEditor(player, definition);
             default -> {
             }
         }
     }
 
     private void requestCombatValue(Player player, String key, int slot) {
-        String label = slot == 10
+        String label = slot == FIGHTING_HEALTH_SLOT
                 ? "maximum health in HP"
-                : slot == 11 ? "respawn time in seconds" : "dropped experience";
-        int max = slot == 10 ? CombatProfile.MAX_HEALTH : Integer.MAX_VALUE;
+                : slot == FIGHTING_RESPAWN_SLOT ? "respawn time in seconds" : "dropped experience";
+        int max = slot == FIGHTING_HEALTH_SLOT ? CombatProfile.MAX_HEALTH : Integer.MAX_VALUE;
         chatInputService.request(player, "Enter " + label + " (0 to " + max + "):", value -> {
             NpcDefinition current = definitionRepository.find(key).orElse(null);
             if (current == null) {
@@ -1619,12 +1634,12 @@ public final class GuiService implements Listener {
     private void setCombatValue(Player player, NpcDefinition definition, int slot, int value) {
         CombatProfile current = definition.getCombatProfile();
         definition.setCombatProfile(switch (slot) {
-            case 10 -> current.withMaxHealth(value);
-            case 11 -> current.withRespawnSeconds(value);
-            case 13 -> current.withDroppedExperience(value);
+            case FIGHTING_HEALTH_SLOT -> current.withMaxHealth(value);
+            case FIGHTING_RESPAWN_SLOT -> current.withRespawnSeconds(value);
+            case FIGHTING_EXPERIENCE_SLOT -> current.withDroppedExperience(value);
             default -> current;
         });
-        if (slot == 10)
+        if (slot == FIGHTING_HEALTH_SLOT)
             saveRefresh(definition);
         else
             definitionRepository.save(definition);
@@ -2786,7 +2801,7 @@ public final class GuiService implements Listener {
                 inventory.setItem(index - from,
                         item(Material.CHEST, entry.label(),
                                 List.of(LegacyText.GRAY + "" + entry.childCount() + " location(s)",
-                                        LegacyText.YELLOW + "Click to open")));
+                                        GuiItems.hint("Click", "open"))));
                 continue;
             }
             NamedLocation named = entry.location();
@@ -2794,14 +2809,14 @@ public final class GuiService implements Listener {
             inventory.setItem(index - from,
                     item(icon == null ? new ItemStack(Material.LODESTONE) : icon, entry.label(),
                             List.of(LegacyText.GRAY + named.location().display(),
-                                    LegacyText.YELLOW + "Click to set Move To position")));
+                                    GuiItems.hint("Click", "set Move To position"))));
         }
         if (entries.isEmpty()) {
             inventory.setItem(22, item(Material.BARRIER, "No Saved Locations",
                     List.of(LegacyText.GRAY + "Create locations from the Routes menu")));
         }
         if (page > 0)
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(45, GuiItems.previousPage(page, pages));
         inventory.setItem(49,
                 item(folder.isEmpty() ? Material.RECOVERY_COMPASS : Material.ARROW,
                         folder.isEmpty() ? "Back to Block Selection" : "Up One Group",
@@ -2809,7 +2824,7 @@ public final class GuiService implements Listener {
                                 ? LegacyText.GRAY + "Keep using the compass in the world"
                                 : LegacyText.GRAY + "Return to the parent location group")));
         if (page + 1 < pages)
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(53, GuiItems.nextPage(page, pages));
         openInventory(player, inventory);
     }
 
@@ -3060,13 +3075,13 @@ public final class GuiService implements Listener {
                     inventory.setItem(row * 9,
                             item(Material.LIME_DYE, option.label(),
                                     actionSummaryLore(List.of(LegacyText.GRAY + "Answer " + (optionIndex + 1),
-                                            LegacyText.YELLOW + "Click to change label",
-                                            LegacyText.RED + "Shift-right-click to clear"), branchActions)));
+                                            GuiItems.hint("Click", "change label"),
+                                            GuiItems.danger("Shift-right-click", "clear")), branchActions)));
                 } else {
                     inventory.setItem(row * 9,
                             item(Material.GRAY_DYE, "Answer " + (optionIndex + 1) + ": Not Set",
                                     List.of(LegacyText.GRAY + "This answer is not shown to players",
-                                            LegacyText.YELLOW + "Click to set its label")));
+                                            GuiItems.hint("Click", "set its label"))));
                 }
             }
             if (cancelBranch || question.options().get(optionIndex).configured()) {
@@ -3078,8 +3093,8 @@ public final class GuiService implements Listener {
             }
         }
         inventory.setItem(46, item(Material.WRITABLE_BOOK, "Edit Prompt",
-                List.of(LegacyText.WHITE + question.prompt(), LegacyText.YELLOW + "Click to edit")));
-        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+                List.of(LegacyText.WHITE + question.prompt(), GuiItems.hint("Click", "edit"))));
+        inventory.setItem(49, GuiItems.back("the action list"));
         openInventory(player, inventory);
     }
 
@@ -3159,7 +3174,7 @@ public final class GuiService implements Listener {
     private void openQuestionBranchPicker(Player player, QuestionTarget target, int optionIndex, int actionIndex) {
         Inventory inventory = Bukkit.createInventory(new QuestionBranchPickerHolder(target, optionIndex, actionIndex),
                 54, UiText.title("Choose Action"));
-        populateActionPicker(inventory, false);
+        populateActionPicker(inventory, false, "the question editor");
         openInventory(player, inventory);
     }
 
@@ -3262,8 +3277,8 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             BehaviourPickerOption option = options.get(index);
             List<String> lore = new ArrayList<>(option.lore());
-            lore.add(LegacyText.YELLOW + "Left-click: select");
-            lore.add(LegacyText.AQUA + "Right-click: edit route");
+            lore.add(GuiItems.hint("Left-click", "select"));
+            lore.add(GuiItems.hint("Right-click", "edit route"));
             inventory.setItem(index - from, item(option.icon(), option.label(), lore));
         }
         if (options.isEmpty()) {
@@ -3271,12 +3286,12 @@ public final class GuiService implements Listener {
                     List.of(LegacyText.GRAY + "Create a route with the button below")));
         }
         if (page > 0)
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
-        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+            inventory.setItem(45, GuiItems.previousPage(page, pages));
+        inventory.setItem(49, GuiItems.back("the action picker"));
         inventory.setItem(51,
-                item(Material.EMERALD, "Create Route", List.of(LegacyText.YELLOW + "Click, then enter its name")));
+                item(Material.EMERALD, "Create Route", List.of(GuiItems.hint("Click", "enter its name"))));
         if (page + 1 < pages)
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(53, GuiItems.nextPage(page, pages));
         openInventory(player, inventory);
     }
 
@@ -3346,9 +3361,9 @@ public final class GuiService implements Listener {
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
             BehaviourActionType type = ANIMATION_ACTIONS.get(index);
             inventory.setItem(slots[index],
-                    item(actionMaterial(type), type.displayName(), List.of(LegacyText.YELLOW + "Click to select")));
+                    item(actionMaterial(type), type.displayName(), List.of(GuiItems.hint("Click", "select"))));
         }
-        inventory.setItem(22, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(22, GuiItems.back("the action picker"));
         openInventory(player, inventory);
     }
 

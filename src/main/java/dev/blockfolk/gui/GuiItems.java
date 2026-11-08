@@ -163,7 +163,7 @@ final class GuiItems {
         List<String> lines = new ArrayList<>();
         for (String line : lore)
             lines.add(LegacyText.GRAY + line);
-        lines.add(LegacyText.YELLOW + "Click to create");
+        lines.add(hint("Click", "create"));
         return item(Material.EMERALD, name, lines);
     }
 
@@ -175,7 +175,7 @@ final class GuiItems {
         List<String> lore = new ArrayList<>();
         consequences.forEach(line -> lore.add(LegacyText.RED + line));
         lore.add("");
-        lore.add(LegacyText.YELLOW + "Click to confirm");
+        lore.add(hint("Click", "confirm"));
         return item(new ItemStack(Material.LIME_CONCRETE), LegacyText.GREEN + "Confirm", lore);
     }
 

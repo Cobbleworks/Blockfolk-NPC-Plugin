@@ -45,18 +45,20 @@ final class AiGuiService {
 
     private static final String CONTEXT_INPUT_KEY = "context";
     private static final int CONTEXT_MAX_LENGTH = 8192;
-    private static final int IDENTITY_SLOT = 2;
-    private static final int BEHAVIOUR_SLOT = 3;
-    private static final int GOAL_SLOT = 4;
-    private static final int INFORMATION_SLOT = 5;
-    private static final int LIKES_DISLIKES_SLOT = 6;
-    private static final int STATUS_SLOT = 11;
-    private static final int CONVERSATION_SLOT = 13;
-    private static final int MEMORY_SLOT = 15;
-    private static final int ACTIONS_HEADER_SLOT = 22;
+    private static final int SETTINGS_HEADER_SLOT = 1;
+    private static final int CHARACTER_HEADER_SLOT = 10;
+    private static final int IDENTITY_SLOT = 12;
+    private static final int BEHAVIOUR_SLOT = 13;
+    private static final int GOAL_SLOT = 14;
+    private static final int INFORMATION_SLOT = 15;
+    private static final int LIKES_DISLIKES_SLOT = 16;
+    private static final int STATUS_SLOT = 3;
+    private static final int CONVERSATION_SLOT = 4;
+    private static final int MEMORY_SLOT = 5;
+    private static final int ACTIONS_HEADER_SLOT = 19;
     private static final int BACK_SLOT = 49;
     private static final int ADD_MEMORY_SLOT = 51;
-    private static final int[] ACTION_SLOTS = {28, 29, 30, 31, 32, 33, 34, 38, 39, 40, 41, 42};
+    private static final int[] ACTION_SLOTS = {21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 39, 40};
     private static final List<AiActionType> ACTION_TYPES = Arrays.stream(AiActionType.values())
             .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM
                     && type != AiActionType.STOP_COMBAT && type != AiActionType.UNFOLLOW
@@ -130,10 +132,12 @@ final class AiGuiService {
                 new GuiItems.Option(Material.ENDER_CHEST, "Private", "each player talks separately",
                         LegacyText.LIGHT_PURPLE)),
                 settings.sharedConversation() ? 0 : 1, List.of("Per spawned instance of this NPC")));
-        inventory.setItem(ACTIONS_HEADER_SLOT,
-                item(Material.KNOWLEDGE_BOOK, "Allowed AI Actions",
-                        List.of(LegacyText.GRAY + "What the AI may do when it responds",
-                                LegacyText.GRAY + "Toggle each capability below")));
+        inventory.setItem(SETTINGS_HEADER_SLOT, GuiItems.sectionHeader(Material.LIGHT_BLUE_STAINED_GLASS_PANE,
+                LegacyText.AQUA, "Status & Memory", "Turn the AI on and set how it remembers"));
+        inventory.setItem(CHARACTER_HEADER_SLOT, GuiItems.sectionHeader(Material.LIME_STAINED_GLASS_PANE,
+                LegacyText.GREEN, "Character", "Who the NPC is; fill in at least one"));
+        inventory.setItem(ACTIONS_HEADER_SLOT, GuiItems.sectionHeader(Material.PURPLE_STAINED_GLASS_PANE,
+                LegacyText.LIGHT_PURPLE, "Allowed AI Actions", "What the AI may do when it responds"));
         for (int index = 0; index < ACTION_TYPES.size(); index++) {
             AiActionType type = ACTION_TYPES.get(index);
             if (type == AiActionType.DO_NOTHING) {
@@ -299,7 +303,7 @@ final class AiGuiService {
             AiControlSettings settings = definition.getAiControlSettings();
             if (!settings.enabled() && !settings.hasContext()) {
                 player.sendMessage(
-                        UiText.warning("Fill in at least one context section (top row) before activating AI."));
+                        UiText.warning("Fill in at least one Character section before activating AI."));
                 return;
             }
             definition.setAiControlSettings(settings.withEnabled(!settings.enabled()));
