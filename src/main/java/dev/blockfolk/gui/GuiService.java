@@ -153,16 +153,23 @@ public final class GuiService implements Listener {
     private static final int EDITOR_EQUIPMENT_SLOT = 34;
     private static final int EDITOR_SHOPS_SLOT = 43;
     private static final int EDITOR_BACK_SLOT = GuiItems.BACK_SLOT;
-    private static final int FIGHTING_SURVIVAL_HEADER_SLOT = 10;
-    private static final int FIGHTING_HEALTH_SLOT = 12;
-    private static final int FIGHTING_RESPAWN_SLOT = 13;
-    private static final int FIGHTING_EXPERIENCE_SLOT = 14;
-    private static final int FIGHTING_BOSS_BAR_SLOT = 15;
-    private static final int FIGHTING_COMBAT_HEADER_SLOT = 19;
-    private static final int FIGHTING_TARGETS_SLOT = 21;
-    private static final int FIGHTING_ALLIANCE_SLOT = 22;
-    private static final int FIGHTING_ABILITIES_SLOT = 23;
-    private static final int FIGHTING_BACK_SLOT = 31;
+    /**
+     * Fighting & Survival is two labelled columns: Survival on the left, Combat on
+     * the right. Headers sit in the top bar, buttons run down rows 2 to 5, and a
+     * divider separates the columns.
+     */
+    private static final int FIGHTING_SIZE = 54;
+    private static final int FIGHTING_DIVIDER_COLUMN = 4;
+    private static final int FIGHTING_SURVIVAL_HEADER_SLOT = 2;
+    private static final int FIGHTING_HEALTH_SLOT = 11;
+    private static final int FIGHTING_RESPAWN_SLOT = 20;
+    private static final int FIGHTING_EXPERIENCE_SLOT = 29;
+    private static final int FIGHTING_COMBAT_HEADER_SLOT = 6;
+    private static final int FIGHTING_TARGETS_SLOT = 15;
+    private static final int FIGHTING_ALLIANCE_SLOT = 24;
+    private static final int FIGHTING_ABILITIES_SLOT = 33;
+    private static final int FIGHTING_BOSS_BAR_SLOT = 42;
+    private static final int FIGHTING_BACK_SLOT = GuiItems.BACK_SLOT;
     private static final int PROPERTY_PUSHABLE_SLOT = 10;
     private static final int PROPERTY_SHOW_NAME_SLOT = 11;
     private static final int PROPERTY_LOOK_SLOT = 12;
@@ -745,7 +752,7 @@ public final class GuiService implements Listener {
 
     public void openFightingEditor(Player player, NpcDefinition definition) {
         CombatProfile combat = definition.getCombatProfile();
-        Inventory inventory = Bukkit.createInventory(new FightingHolder(definition.getKey()), 36,
+        Inventory inventory = Bukkit.createInventory(new FightingHolder(definition.getKey()), FIGHTING_SIZE,
                 UiText.title("Fighting & Survival", definition.getDisplayName()));
         List<String> healthLore = new ArrayList<>(List.of(
                 combat.invulnerable()
@@ -796,6 +803,9 @@ public final class GuiService implements Listener {
         inventory.setItem(FIGHTING_COMBAT_HEADER_SLOT, GuiItems.sectionHeader(Material.RED_STAINED_GLASS_PANE,
                 LegacyText.RED, "Combat", "Who it fights and how"));
         inventory.setItem(FIGHTING_BACK_SLOT, GuiItems.back("the NPC menu"));
+        GuiLayout.fillRow(inventory, 0);
+        GuiLayout.fillColumn(inventory, FIGHTING_DIVIDER_COLUMN);
+        GuiLayout.fillMainBar(inventory);
         openInventory(player, inventory);
     }
 
