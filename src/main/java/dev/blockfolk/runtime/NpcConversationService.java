@@ -204,8 +204,10 @@ public final class NpcConversationService {
         List<Location> speakerLocations = round.lines.stream().map(Line::speaker).distinct()
                 .map(instances::findById).flatMap(Optional::stream).map(instances::currentLocation).toList();
         double range = settings().hearingRange();
+        List<UUID> lineSpeakers = round.lines.stream().map(Line::speaker).toList();
         List<NpcInstance> candidates = round.listeners.stream().map(instances::findById).flatMap(Optional::stream)
-                .filter(this::respondsToNpc).filter(candidate -> {
+                .filter(candidate -> heardOthers(candidate.getId(), lineSpeakers)).filter(this::respondsToNpc)
+                .filter(candidate -> {
                     Location location = instances.currentLocation(candidate);
                     return speakerLocations.stream().anyMatch(speakerLocation -> speakerLocation
                             .getWorld() == location.getWorld()
@@ -287,6 +289,15 @@ public final class NpcConversationService {
         if (aiControlService != null) {
             aiControlService.cancelNpcConversation(key);
         }
+    }
+
+    /**
+     * An NPC never responds to its own output (AI speech, Send Dialog, or Holo
+     * Dialog such as idle flavour text): it only takes part in a round that
+     * contains a line from another NPC.
+     */
+    static boolean heardOthers(UUID listener, List<UUID> lineSpeakers) {
+        return lineSpeakers.stream().anyMatch(speaker -> !speaker.equals(listener));
     }
 
     static String stripFormatting(String text) {
