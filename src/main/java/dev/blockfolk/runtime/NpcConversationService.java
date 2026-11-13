@@ -32,7 +32,8 @@ import dev.blockfolk.repository.NpcDefinitionRepository;
  * Lets AI NPCs with "Respond to NPCs" enabled answer what nearby NPCs say.
  *
  * <p>
- * Every visible NPC line (AI speech, Send Dialog, Holo Dialog) is offered here.
+ * Every NPC chat line (AI speech and Send Dialog) is offered here. Holo
+ * Dialog is not: it is often repeating flavour text.
  * Listeners in hearing range respond together in one coordinated AI request
  * after a short delay, so lines spoken at the same time get one answer. The
  * {@link NpcConversationTracker} caps how many response rounds one
@@ -292,9 +293,8 @@ public final class NpcConversationService {
     }
 
     /**
-     * An NPC never responds to its own output (AI speech, Send Dialog, or Holo
-     * Dialog such as idle flavour text): it only takes part in a round that
-     * contains a line from another NPC.
+     * An NPC never responds to its own lines (AI speech or Send Dialog): it only
+     * takes part in a round that contains a line from another NPC.
      */
     static boolean heardOthers(UUID listener, List<UUID> lineSpeakers) {
         return lineSpeakers.stream().anyMatch(speaker -> !speaker.equals(listener));

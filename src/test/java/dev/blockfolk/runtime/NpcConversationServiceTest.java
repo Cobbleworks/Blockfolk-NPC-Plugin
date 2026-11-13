@@ -16,7 +16,7 @@ class NpcConversationServiceTest {
 
     @Test
     void npcNeverRespondsToItsOwnLines() {
-        // For example repeated idle Holo Dialog flavour text.
+        // For example a repeated Send Dialog line on an idle routine.
         assertFalse(NpcConversationService.heardOthers(TAVERN_KEEPER, List.of(TAVERN_KEEPER, TAVERN_KEEPER)));
     }
 

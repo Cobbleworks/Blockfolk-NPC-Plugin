@@ -54,7 +54,7 @@ Enable **Respond to Nearby Chat** for direct player conversation within eight bl
 
 ### Conversations between NPCs
 
-Enable **Respond to Nearby NPCs** to let an NPC answer what other NPCs say within 12 blocks. AI speech, **Send Dialog**, and **Show Holo Dialog** lines all count, so a scripted line can start an AI conversation. Lines spoken as part of a player's chat turn do not, because that chat turn already lets nearby NPCs join in.
+Enable **Respond to Nearby NPCs** to let an NPC answer what other NPCs say within 12 blocks. AI speech and **Send Dialog** lines count, so a scripted line can start an AI conversation. **Show Holo Dialog** lines are ignored, so repeating flavour text above an NPC never starts or interrupts a conversation. Lines spoken as part of a player's chat turn do not, because that chat turn already lets nearby NPCs join in.
 
 For example, give a cowboy an **On Nearby NPC** row with an AI Trigger ("Confront bandits; greet everyone else") and enable **Respond to Nearby NPCs** on the bandit. When the bandit walks up, the cowboy speaks first and the bandit answers. Enable the switch on both NPCs for a back-and-forth. Several NPCs in range respond together as a group, in one coordinated request like nearby chat. The NPC named in the latest line is the intended responder, otherwise the closest one. Responding NPCs can use any of their enabled capabilities, so two NPCs can talk about a lever and then pull it with **Interact**.
 

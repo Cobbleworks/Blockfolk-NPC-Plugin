@@ -786,10 +786,8 @@ public final class NpcBehaviourService implements Listener {
                 sendDialog(event, instance, definition, action.value(), actor);
                 npcSpoke(instance, definition, action.value());
             }
-            case SHOW_HOLO_DIALOG -> {
-                dialogService.showHologram(instance, definition, action.value());
-                npcSpoke(instance, definition, action.value());
-            }
+            // Holo Dialog is often repeating flavour text, so NPCs do not answer it.
+            case SHOW_HOLO_DIALOG -> dialogService.showHologram(instance, definition, action.value());
             case ASK_QUESTION -> {
                 /* Asynchronous and handled by executeSequence. */ }
             case SET_ROUTE -> {
