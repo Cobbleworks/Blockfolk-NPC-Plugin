@@ -45,13 +45,13 @@ public final class ShopGuiService implements Listener {
     static final int TRADES_PER_PAGE = 10;
     static final int MAX_PAGES = 5;
     private static final int LIST_PAGE_SIZE = 45;
-    private static final int BACK_SLOT = 45;
+    private static final int PREVIOUS_SLOT = 45;
     private static final int HELP_SLOT = 46;
     private static final int USAGE_SLOT = 47;
     private static final int TITLE_SLOT = 48;
-    private static final int SAVE_SLOT = 49;
+    private static final int BACK_SLOT = 49;
     private static final int PREVIEW_SLOT = 50;
-    private static final int PREVIOUS_SLOT = 51;
+    private static final int SAVE_SLOT = 51;
     private static final int NEXT_SLOT = 53;
     private static final int LIST_PREVIOUS_SLOT = 45;
     private static final int LIST_BACK_SLOT = 49;
@@ -181,22 +181,22 @@ public final class ShopGuiService implements Listener {
         for (int index = page * LIST_PAGE_SIZE; index < Math.min(all.size(), (page + 1) * LIST_PAGE_SIZE); index++) {
             Shop shop = all.get(index);
             List<String> lore = summary(shop);
-            lore.add(LegacyText.YELLOW + "Left-click: edit trades");
-            lore.add(LegacyText.AQUA + "Right-click: preview");
-            lore.add(LegacyText.GREEN + "Shift-left-click: duplicate");
-            lore.add(LegacyText.RED + "Shift-right-click: delete");
+            lore.add("");
+            lore.add(GuiItems.hint("Left-click", "edit trades"));
+            lore.add(GuiItems.hint("Right-click", "preview"));
+            lore.add(GuiItems.hint("Shift-left-click", "duplicate"));
+            lore.add(GuiItems.danger("Shift-right-click", "delete"));
             inventory.setItem(index % LIST_PAGE_SIZE, shopIcon(shop, lore));
         }
         if (all.isEmpty())
-            inventory.setItem(22, item(Material.BARRIER, "No Shops", List.of("Use Create Shop below to add one.")));
+            inventory.setItem(22, GuiItems.empty("No Shops Yet", "Use Create Shop below to add one"));
         listFooter(inventory, page, all.size());
         inventory.setItem(HELP_SLOT,
                 item(Material.BOOK, "How Shops Work",
                         List.of("Shops are shared between NPCs.",
                                 "Give an NPC the " + LegacyText.WHITE + "Open Shop" + LegacyText.GRAY + " action",
                                 "and choose a shop, e.g. on right-click.")));
-        inventory.setItem(LIST_CREATE_SLOT,
-                item(Material.EMERALD, "Create Shop", List.of(LegacyText.YELLOW + "Click, then enter its name")));
+        inventory.setItem(LIST_CREATE_SLOT, GuiItems.create("Create Shop", "Then name it and add trades"));
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
@@ -209,15 +209,15 @@ public final class ShopGuiService implements Listener {
         for (int index = page * LIST_PAGE_SIZE; index < Math.min(all.size(), (page + 1) * LIST_PAGE_SIZE); index++) {
             Shop shop = all.get(index);
             List<String> lore = summary(shop);
-            lore.add(LegacyText.YELLOW + "Left-click: select");
-            lore.add(LegacyText.AQUA + "Right-click: edit trades");
+            lore.add("");
+            lore.add(GuiItems.hint("Left-click", "select"));
+            lore.add(GuiItems.hint("Right-click", "edit trades"));
             inventory.setItem(index % LIST_PAGE_SIZE, shopIcon(shop, lore));
         }
         if (all.isEmpty())
-            inventory.setItem(22, item(Material.BARRIER, "No Shops", List.of("Use Create Shop below to add one.")));
+            inventory.setItem(22, GuiItems.empty("No Shops Yet", "Use Create Shop below to add one"));
         listFooter(inventory, page, all.size());
-        inventory.setItem(LIST_CREATE_SLOT, item(Material.EMERALD, "Create Shop",
-                List.of("Creates a shop and opens its trades", LegacyText.YELLOW + "Click, then enter its name")));
+        inventory.setItem(LIST_CREATE_SLOT, GuiItems.create("Create Shop", "Creates a shop and opens its trades"));
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
@@ -228,19 +228,21 @@ public final class ShopGuiService implements Listener {
             holder.back().accept(player);
             return;
         }
-        Inventory inventory = Bukkit.createInventory(holder, 27, UiText.title("Delete Shop?", shop.name()));
+        Inventory inventory = Bukkit.createInventory(holder, 27, UiText.title("Delete Shop", shop.name()));
         List<String> users = usage(shop.key());
-        List<String> lore = new ArrayList<>(List.of("Removes the shop and all its trades."));
+        List<String> lore = new ArrayList<>(List.of("Removes the shop and all its trades"));
         if (users.isEmpty()) {
-            lore.add("No NPC uses this shop.");
+            lore.add(LegacyText.GRAY + "No NPC uses this shop");
         } else {
-            lore.add(LegacyText.RED + "Open Shop actions of these will stop working:");
+            lore.add("Open Shop actions of these will stop working:");
             users.stream().limit(8).forEach(name -> lore.add(LegacyText.WHITE + "• " + name));
             if (users.size() > 8)
                 lore.add(LegacyText.GRAY + "…and " + (users.size() - 8) + " more");
         }
-        inventory.setItem(11, item(Material.TNT, "Delete", lore));
-        inventory.setItem(15, item(Material.BARRIER, "Cancel", List.of()));
+        inventory.setItem(11, GuiItems.confirm(lore));
+        inventory.setItem(13, shopIcon(shop, summary(shop)));
+        inventory.setItem(15, GuiItems.cancel());
+        GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
 
@@ -262,7 +264,7 @@ public final class ShopGuiService implements Listener {
                 inventory.setItem(base + 4, item(Material.BLACK_STAINED_GLASS_PANE, " ", List.of()));
         }
         refreshArrows(inventory);
-        inventory.setItem(BACK_SLOT, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(BACK_SLOT, item(Material.BARRIER, "Back", List.of("Saves this page first")));
         inventory.setItem(HELP_SLOT, item(Material.BOOK, "How Shops Work",
                 List.of("Place items into a trade row:", LegacyText.WHITE + "cost, second cost (optional), result",
                         "Trades have unlimited stock.", "Players open the shop through the",
@@ -282,16 +284,21 @@ public final class ShopGuiService implements Listener {
         inventory.setItem(USAGE_SLOT, item(Material.PLAYER_HEAD, "Used By " + users.size(), usageLore));
         inventory.setItem(TITLE_SLOT,
                 item(Material.NAME_TAG, "Shop Name", List.of("Current: " + LegacyText.WHITE + shop.name(),
-                        "Shown as the trading screen title.", LegacyText.YELLOW + "Click to rename")));
-        inventory.setItem(SAVE_SLOT, item(Material.WRITABLE_BOOK, "Save", List.of("Closing the menu also saves.")));
+                        "Shown as the trading screen title", "", GuiItems.hint("Click", "rename"))));
+        inventory.setItem(SAVE_SLOT, item(Material.WRITABLE_BOOK, "Save",
+                List.of("Closing the menu also saves", "", GuiItems.hint("Click", "save now"))));
         inventory.setItem(PREVIEW_SLOT,
-                item(Material.EMERALD, "Preview Shop", List.of("Opens the trading screen as players see it.",
-                        "Complete trades: " + LegacyText.WHITE + shop.validOffers().size())));
+                item(Material.EMERALD, "Preview Shop",
+                        List.of("Opens the trading screen as players see it",
+                                "Complete trades: " + LegacyText.WHITE + shop.validOffers().size(), "",
+                                GuiItems.hint("Click", "preview"))));
         if (page > 0)
-            inventory.setItem(PREVIOUS_SLOT, item(Material.ARROW, "Previous Page", List.of()));
+            inventory.setItem(PREVIOUS_SLOT,
+                    item(Material.ARROW, "Previous Page", List.of("Page " + page + " of " + MAX_PAGES)));
         if (page + 1 < MAX_PAGES)
-            inventory.setItem(NEXT_SLOT, item(Material.ARROW, "Next Page",
-                    List.of("Page " + (page + 2), "Opens once this page holds " + TRADES_PER_PAGE + " trades.")));
+            inventory.setItem(NEXT_SLOT,
+                    item(Material.ARROW, "Next Page", List.of("Page " + (page + 2) + " of " + MAX_PAGES,
+                            "Opens once this page holds " + TRADES_PER_PAGE + " trades")));
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
@@ -584,20 +591,16 @@ public final class ShopGuiService implements Listener {
     private static ItemStack shopIcon(Shop shop, List<String> lore) {
         ItemStack icon = shop.validOffers().stream().findFirst().map(ShopOffer::result)
                 .orElseGet(() -> new ItemStack(Material.EMERALD));
-        icon.setAmount(1);
-        var meta = icon.getItemMeta();
-        meta.displayName(LegacyText.component(LegacyText.WHITE + shop.name()));
-        meta.lore(lore.stream().map(line -> LegacyText.component(LegacyText.GRAY + line)).toList());
-        icon.setItemMeta(meta);
-        return icon;
+        return GuiItems.item(icon, LegacyText.GOLD + shop.name(), gray(lore));
     }
 
     private static void listFooter(Inventory inventory, int page, int size) {
+        int pages = Math.max(1, (size + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE);
         if (page > 0)
-            inventory.setItem(LIST_PREVIOUS_SLOT, item(Material.ARROW, "Previous Page", List.of()));
-        inventory.setItem(LIST_BACK_SLOT, item(Material.BARRIER, "Back", List.of()));
+            inventory.setItem(LIST_PREVIOUS_SLOT, GuiItems.previousPage(page, pages));
+        inventory.setItem(LIST_BACK_SLOT, GuiItems.back(""));
         if ((page + 1) * LIST_PAGE_SIZE < size)
-            inventory.setItem(LIST_NEXT_SLOT, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(LIST_NEXT_SLOT, GuiItems.nextPage(page, pages));
     }
 
     private static void refreshArrows(Inventory inventory) {
@@ -621,11 +624,12 @@ public final class ShopGuiService implements Listener {
     }
 
     private static ItemStack item(Material material, String name, List<String> lore) {
-        ItemStack item = new ItemStack(material);
-        var meta = item.getItemMeta();
-        meta.displayName(LegacyText.component(LegacyText.WHITE + name));
-        meta.lore(lore.stream().map(line -> LegacyText.component(LegacyText.GRAY + line)).toList());
-        item.setItemMeta(meta);
-        return item;
+        return GuiItems.item(material, name, gray(lore));
+    }
+
+    /** Lore lines default to gray unless they start with their own color. */
+    private static List<String> gray(List<String> lore) {
+        return lore.stream().map(line -> line.isEmpty() || line.startsWith("\u00a7") ? line : LegacyText.GRAY + line)
+                .toList();
     }
 }

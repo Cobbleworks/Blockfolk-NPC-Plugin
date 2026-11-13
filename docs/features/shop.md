@@ -4,7 +4,7 @@ Shops use the vanilla villager trading screen. They are shared: build a shop onc
 
 ## Set up a shop
 
-1. Run `/bf shop` or click **Shops** in the main menu to open the shop library, then click **Create Shop** and enter a name. You can also run `/bf shop create <name>`.
+1. Run `/bf shops` or `/bf shop` to open the shop library, then click **Create Shop** and enter a name. You can also run `/bf shop create <name>`.
 2. Each row of the trade editor holds two trades. A trade has three item slots: **cost**, an optional **second cost**, and the **result**. Place the items you want, with the amounts you want, directly into the slots. The pane between the costs and the result turns green when the trade is ready and red when it is incomplete.
 3. Optionally click **Shop Name** to rename the shop. The name is the trading screen title.
 4. Click **Preview Shop** to see the trading screen exactly as players will see it.
@@ -55,6 +55,7 @@ Development builds stored one shop inside each NPC preset. On startup, each such
 | Command | Description |
 | --- | --- |
 | `/bf shop` | Open the shop library. |
+| `/bf shops` | Open the shop library. |
 | `/bf shop create <name>` | Create a shop and open its trade editor. |
 | `/bf shop <shop>` | Open a shop's trade editor. |
 | `/bf shop <shop> rename <name>` | Rename a shop; the name is the trading screen title. |

@@ -14,6 +14,7 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Animals;
+import org.bukkit.entity.Enemy;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Mob;
@@ -61,6 +62,17 @@ public final class NpcCombatService implements Listener {
     private static final double CHASE_PROGRESS_DISTANCE_SQUARED = 0.5 * 0.5;
     private static final int FLEE_TICKS = 8 * 20;
     private static final double BOSS_BAR_RANGE_SQUARED = 16.0 * 16.0;
+    /** Allies within this range join a fight when one of them is attacked. */
+    private static final double ALLY_RALLY_RANGE_SQUARED = 16.0 * 16.0;
+    /** How long an attacker stays remembered as the next opponent. */
+    private static final int THREAT_MEMORY_TICKS = 10 * 20;
+    /**
+     * A new attacker must be this many blocks closer before an NPC turns away from
+     * its opponent.
+     */
+    private static final double TARGET_SWITCH_MARGIN = 3.0;
+    /** An opponent unseen for this long may be dropped for a fresh attacker. */
+    private static final int TARGET_SWITCH_UNSEEN_TICKS = 20;
 
     private final Plugin plugin;
     private final NpcDefinitionRepository definitionRepository;
@@ -73,6 +85,8 @@ public final class NpcCombatService implements Listener {
     private final Map<UUID, BossBar> bossBars = new HashMap<>();
     private final Map<UUID, FightOptions> fightOptionsOverrides = new HashMap<>();
     private final Map<TargetKey, Long> unreachableUntil = new HashMap<>();
+    /** Recent attackers per instance, with the tick of their last hit. */
+    private final Map<UUID, Map<UUID, Long>> threats = new HashMap<>();
     private NpcBehaviourService behaviourService;
     private BukkitTask task;
     private long currentTick;
@@ -130,6 +144,7 @@ public final class NpcCombatService implements Listener {
         bossBars.clear();
         fightOptionsOverrides.clear();
         unreachableUntil.clear();
+        threats.clear();
     }
 
     public boolean isEngaged(NpcInstance instance) {
@@ -284,17 +299,158 @@ public final class NpcCombatService implements Listener {
         }
 
         LivingEntity attacker = resolveAttacker(event.getDamager());
-        if (attacker == null || !isAttackable(instance, attacker)) {
+        if (attacker == null) {
             return;
         }
+        NpcInstance attackerInstance = instanceRegistry.findByEntityId(attacker.getEntityId()).orElse(null);
+        if (attackerInstance != null && !attackerInstance.getId().equals(instance.getId())
+                && definitionRepository.find(attackerInstance.getDefinitionKey())
+                        .map(attackerDefinition -> allied(attackerDefinition, definition)).orElse(false)) {
+            // Stray arrows and swings never hurt allies.
+            event.setCancelled(true);
+            return;
+        }
+        if (!isAttackable(instance, attacker)) {
+            return;
+        }
+        defend(instance, definition, attacker, true);
+        rallyAllies(instance, definition, attacker);
+    }
+
+    /**
+     * NPCs never hurt players who carry their alliance, and defend them from
+     * attackers.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onAlliedPlayerDamage(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof Player player))
+            return;
+        LivingEntity attacker = resolveAttacker(event.getDamager());
+        if (attacker == null || attacker.equals(player))
+            return;
+        Map<String, Boolean> carried = new HashMap<>();
+        NpcInstance attackerInstance = instanceRegistry.findByEntityId(attacker.getEntityId()).orElse(null);
+        if (attackerInstance != null) {
+            String alliance = definitionRepository.find(attackerInstance.getDefinitionKey())
+                    .map(definition -> definition.getCombatProfile().alliance()).orElse(null);
+            if (alliance != null && carries(carried, player, alliance)) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+        for (NpcInstance defender : instanceRegistry.findActive()) {
+            NpcDefinition definition = definitionRepository.find(defender.getDefinitionKey()).orElse(null);
+            String alliance = definition == null ? null : definition.getCombatProfile().alliance();
+            if (alliance == null || definition.getCombatProfile().invulnerable() || !isNear(defender, player)
+                    || !isAttackable(defender, attacker) || !carries(carried, player, alliance))
+                continue;
+            defend(defender, definition, attacker, false);
+        }
+    }
+
+    private boolean carries(Map<String, Boolean> cache, Player player, String alliance) {
+        return cache.computeIfAbsent(alliance.toLowerCase(java.util.Locale.ROOT),
+                ignored -> carriesAlliance(player, alliance));
+    }
+
+    /**
+     * Reacts to an attacker according to the NPC's aggression. {@code direct} is
+     * false when the NPC answers a call for help: then it never flees.
+     */
+    private void defend(NpcInstance instance, NpcDefinition definition, LivingEntity attacker, boolean direct) {
+        rememberThreat(instance, attacker);
         FightOptions options = fightOptions(instance, definition.getCombatProfile());
         AttackReaction reaction = options.attackReaction();
         boolean selectedTarget = isSelectedTarget(attacker, options);
         if (reaction == AttackReaction.FLEE && !selectedTarget) {
-            engage(instance, definition, CombatMode.FLEE, attacker);
-        } else if (reaction == AttackReaction.FIGHT_BACK || selectedTarget) {
-            engage(instance, definition, CombatMode.FIGHT, attacker);
+            if (direct)
+                engage(instance, definition, CombatMode.FLEE, attacker);
+        } else if (reaction == AttackReaction.FIGHT_BACK || reaction == AttackReaction.HUNTING || selectedTarget) {
+            engageAttacker(instance, definition, attacker);
         }
+    }
+
+    /**
+     * Fights an attacker, but keeps the current opponent unless it is gone, out of
+     * sight, or clearly further away; the attacker is remembered for later.
+     */
+    private void engageAttacker(NpcInstance instance, NpcDefinition definition, LivingEntity attacker) {
+        CombatState current = states.get(instance.getId());
+        LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
+        if (npc != null && current != null && current.mode == CombatMode.FIGHT
+                && !current.entityId.equals(attacker.getUniqueId())
+                && !shouldSwitchTarget(instance, npc, current, attacker))
+            return;
+        engage(instance, definition, CombatMode.FIGHT, attacker);
+    }
+
+    private boolean shouldSwitchTarget(NpcInstance instance, LivingEntity npc, CombatState state,
+            LivingEntity candidate) {
+        if (!(Bukkit.getEntity(state.entityId) instanceof LivingEntity opponent) || !isAttackable(instance, opponent)
+                || opponent.getWorld() != npc.getWorld() || candidate.getWorld() != npc.getWorld())
+            return true;
+        if (currentTick - state.lastSeenAt > TARGET_SWITCH_UNSEEN_TICKS)
+            return true;
+        double opponentDistance = npc.getLocation().distance(opponent.getLocation());
+        double candidateDistance = npc.getLocation().distance(candidate.getLocation());
+        return candidateDistance + TARGET_SWITCH_MARGIN < opponentDistance;
+    }
+
+    /** Calls allied NPCs near the victim into the fight. */
+    private void rallyAllies(NpcInstance victim, NpcDefinition victimDefinition, LivingEntity attacker) {
+        LivingEntity victimEntity = instanceRegistry.findEntity(victim).orElse(null);
+        if (victimEntity == null)
+            return;
+        for (NpcInstance ally : instanceRegistry.findActive()) {
+            if (ally.getId().equals(victim.getId()))
+                continue;
+            NpcDefinition allyDefinition = definitionRepository.find(ally.getDefinitionKey()).orElse(null);
+            if (allyDefinition == null || allyDefinition.getCombatProfile().invulnerable()
+                    || !allied(victimDefinition, allyDefinition) || !isNear(ally, victimEntity)
+                    || !isAttackable(ally, attacker))
+                continue;
+            defend(ally, allyDefinition, attacker, false);
+        }
+    }
+
+    private boolean isNear(NpcInstance instance, Entity other) {
+        LivingEntity npc = instanceRegistry.findEntity(instance).orElse(null);
+        return npc != null && npc.isValid() && !npc.isDead() && npc.getWorld() == other.getWorld()
+                && npc.getLocation().distanceSquared(other.getLocation()) <= ALLY_RALLY_RANGE_SQUARED;
+    }
+
+    /**
+     * Instances of one preset always stand together; others when they share an
+     * alliance.
+     */
+    private static boolean allied(NpcDefinition first, NpcDefinition second) {
+        return first.getKey().equals(second.getKey()) || first.getCombatProfile().alliedWith(second.getCombatProfile());
+    }
+
+    private void rememberThreat(NpcInstance instance, LivingEntity attacker) {
+        threats.computeIfAbsent(instance.getId(), ignored -> new HashMap<>()).put(attacker.getUniqueId(), currentTick);
+    }
+
+    /**
+     * Turns to the closest recent attacker still in reach; false when there is
+     * none.
+     */
+    private boolean engageNextThreat(NpcInstance instance, NpcDefinition definition, LivingEntity npc) {
+        Map<UUID, Long> remembered = threats.get(instance.getId());
+        if (remembered == null)
+            return false;
+        remembered.entrySet().removeIf(entry -> currentTick - entry.getValue() > THREAT_MEMORY_TICKS);
+        LivingEntity next = remembered.keySet().stream().map(Bukkit::getEntity).filter(LivingEntity.class::isInstance)
+                .map(LivingEntity.class::cast)
+                .filter(threat -> threat.getWorld() == npc.getWorld() && isAttackable(instance, threat))
+                .filter(threat -> threat.getLocation().distanceSquared(npc.getLocation()) <= SIGHT_RANGE * SIGHT_RANGE)
+                .filter(threat -> !isTemporarilyUnreachable(instance, threat))
+                .min(Comparator.comparingDouble(threat -> threat.getLocation().distanceSquared(npc.getLocation())))
+                .orElse(null);
+        if (next == null)
+            return false;
+        engage(instance, definition, CombatMode.FIGHT, next);
+        return true;
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -326,6 +482,7 @@ public final class NpcCombatService implements Listener {
         }
         event.setDroppedExp(definition == null ? 0 : definition.getCombatProfile().droppedExperience());
         clearState(instance);
+        threats.remove(instance.getId());
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (definition == null || definition.getCombatProfile().respawnSeconds() == 0) {
                 instanceRegistry.deleteInstance(instance.getId());
@@ -412,6 +569,7 @@ public final class NpcCombatService implements Listener {
             }
         }
         states.keySet().retainAll(activeInstances);
+        threats.keySet().retainAll(activeInstances);
         specialAttackService.retainInstances(activeInstances);
         fightOptionsOverrides.keySet().retainAll(activeInstances);
         bossBars.entrySet().removeIf(entry -> {
@@ -478,7 +636,8 @@ public final class NpcCombatService implements Listener {
         if (!(entity instanceof LivingEntity target) || !isAttackable(instance, target)
                 || target.getWorld() != npc.getWorld()
                 || target.getLocation().distanceSquared(npc.getLocation()) > MAX_CHASE_RANGE_SQUARED) {
-            clearState(instance);
+            if (!engageNextThreat(instance, definition, npc))
+                clearState(instance);
             return;
         }
         makeMobFightBack(target, npc);
@@ -591,7 +750,8 @@ public final class NpcCombatService implements Listener {
         if (mode == CombatMode.FIGHT) {
             instanceRegistry.findEntity(instance).ifPresent(npc -> makeMobFightBack(entity, npc));
         }
-        if (enteringCombat) {
+        // Switching opponents mid-fight is not entering combat again.
+        if (previous == null || previous.mode != mode) {
             if (behaviourService != null) {
                 behaviourService.trigger(dev.blockfolk.model.BehaviourEvent.COMBAT_ENTERED, instance, entity);
             }
@@ -625,7 +785,8 @@ public final class NpcCombatService implements Listener {
         if (target instanceof Animals) {
             return options.animals();
         }
-        return target instanceof Mob && options.mobs();
+        // Villagers, golems, and other peaceful mobs are only fought when they attack.
+        return target instanceof Enemy && options.mobs();
     }
 
     private FightOptions fightOptions(NpcInstance instance, CombatProfile profile) {
@@ -653,8 +814,7 @@ public final class NpcCombatService implements Listener {
             NpcDefinition targetDefinition = definitionRepository.find(targetInstance.getDefinitionKey()).orElse(null);
             NpcDefinition attackerDefinition = definitionRepository.find(attacker.getDefinitionKey()).orElse(null);
             return targetDefinition != null && !targetDefinition.getCombatProfile().invulnerable()
-                    && (attackerDefinition == null
-                            || !attackerDefinition.getCombatProfile().alliedWith(targetDefinition.getCombatProfile()));
+                    && (attackerDefinition == null || !allied(attackerDefinition, targetDefinition));
         }
         return target instanceof Mob;
     }

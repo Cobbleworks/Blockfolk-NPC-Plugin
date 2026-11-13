@@ -139,11 +139,20 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, Long> lastWorldTimes = new HashMap<>();
     private final Map<UUID, Set<UUID>> observedEntities = new HashMap<>();
     private final Map<UUID, Long> entityNearbyCooldownUntilTick = new HashMap<>();
+    private final Map<UUID, Set<UUID>> observedNpcs = new HashMap<>();
+    private final Map<UUID, Long> npcNearbyCooldownUntilTick = new HashMap<>();
     private final Map<UUID, Location> playerLocationSnapshots = new ConcurrentHashMap<>();
+    /**
+     * Players whose chat would only reach private AI conversations with nobody
+     * else in earshot. Rebuilt on the main thread and read by the async chat
+     * event, which must not touch NPC or world state itself.
+     */
+    private volatile Set<UUID> privateChatPlayers = Set.of();
     private final long proximityCooldownTicks;
     private NpcCombatService combatService;
     private NpcShopService shopService;
     private AiControlService aiControlService;
+    private NpcConversationService conversationService;
     private BukkitTask behaviourTask;
     private long currentTick;
     private int proximityTick;
@@ -179,6 +188,15 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
+    public void setConversationService(NpcConversationService conversationService) {
+        this.conversationService = conversationService;
+        if (conversationService != null) {
+            conversationService.setDecisionHandler((instance, result) -> definitions
+                    .find(instance.getDefinitionKey())
+                    .ifPresent(definition -> applyAiDecision(null, result, instance, definition, null, false)));
+        }
+    }
+
     public void start() {
         stop();
         Bukkit.getOnlinePlayers()
@@ -206,7 +224,11 @@ public final class NpcBehaviourService implements Listener {
         lastWorldTimes.clear();
         observedEntities.clear();
         entityNearbyCooldownUntilTick.clear();
+        observedNpcs.clear();
+        npcNearbyCooldownUntilTick.clear();
         playerLocationSnapshots.clear();
+        if (conversationService != null)
+            conversationService.stop();
     }
 
     public void trigger(BehaviourEvent event, NpcInstance instance, Entity actor) {
@@ -317,6 +339,10 @@ public final class NpcBehaviourService implements Listener {
         proximityCooldownUntilTick.keySet().removeIf(key -> key.instanceId().equals(instance.getId()));
         observedEntities.remove(instance.getId());
         entityNearbyCooldownUntilTick.remove(instance.getId());
+        observedNpcs.remove(instance.getId());
+        npcNearbyCooldownUntilTick.remove(instance.getId());
+        if (conversationService != null)
+            conversationService.forget(instance);
         if (aiControlService != null)
             aiControlService.forget(instance);
     }
@@ -602,21 +628,27 @@ public final class NpcBehaviourService implements Listener {
                 chatLocation == null ? player.getLocation().clone() : chatLocation));
     }
 
+    /**
+     * Hides a private AI conversation from the rest of the server: when every
+     * NPC that would answer keeps private conversations and no other player is
+     * close enough to hear the exchange, only the speaker (and the console)
+     * receives the chat line.
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPrivateConversationChat(AsyncChatEvent event) {
+        UUID speaker = event.getPlayer().getUniqueId();
+        if (!privateChatPlayers.contains(speaker))
+            return;
+        event.viewers().removeIf(viewer -> viewer instanceof Player other && !other.getUniqueId().equals(speaker));
+    }
+
     private void handlePlayerChat(Player player, String message, Location chatLocation) {
         if (isChatMuted(player))
             return;
-        List<NpcInstance> nearby = nearbyChatInstances(instances.findActive(), chatLocation);
-        List<NpcInstance> aiGroup = new ArrayList<>();
-        for (NpcInstance instance : nearby) {
-            NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-            if (definition == null)
-                continue;
-            if (aiControlService != null && definition.getAiControlSettings().enabled()
-                    && definition.getAiControlSettings().respondToChat()) {
-                aiGroup.add(instance);
-            }
-        }
+        List<NpcInstance> aiGroup = aiChatResponders(instances.findActive(), chatLocation);
         if (aiControlService != null && !aiGroup.isEmpty()) {
+            if (conversationService != null)
+                conversationService.interrupt(aiGroup);
             aiControlService.invokeChatGroup(message, aiGroup, player,
                     (instance, result) -> definitions.find(instance.getDefinitionKey())
                             .ifPresent(definition -> applyAiDecision(BehaviourEvent.PLAYER_CHAT, result, instance,
@@ -634,6 +666,70 @@ public final class NpcBehaviourService implements Listener {
             player.getPersistentDataContainer().set(mutedChatKey, PersistentDataType.BYTE, (byte) 1);
         else
             player.getPersistentDataContainer().remove(mutedChatKey);
+    }
+
+    /** AI NPCs that would answer chat sent from this location, closest first. */
+    private List<NpcInstance> aiChatResponders(Collection<NpcInstance> candidates, Location chatLocation) {
+        if (aiControlService == null)
+            return List.of();
+        List<NpcInstance> responders = new ArrayList<>();
+        for (NpcInstance instance : nearbyChatInstances(candidates, chatLocation)) {
+            NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+            if (definition != null && definition.getAiControlSettings().enabled()
+                    && definition.getAiControlSettings().respondToChat()) {
+                responders.add(instance);
+            }
+        }
+        return responders;
+    }
+
+    private void tickPrivateChatPlayers() {
+        if (aiControlService == null) {
+            privateChatPlayers = Set.of();
+            return;
+        }
+        Collection<NpcInstance> active = instances.findActive();
+        Map<UUID, Location> playerLocations = new HashMap<>();
+        for (Player player : Bukkit.getOnlinePlayers())
+            playerLocations.put(player.getUniqueId(), player.getLocation());
+        Set<UUID> eligible = new HashSet<>();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (isChatMuted(player))
+                continue;
+            Location location = playerLocations.get(player.getUniqueId());
+            List<NpcInstance> responders = aiChatResponders(active, location);
+            if (responders.isEmpty() || responders.stream().anyMatch(instance -> definitions
+                    .find(instance.getDefinitionKey())
+                    .map(definition -> definition.getAiControlSettings().sharedConversation()).orElse(true)))
+                continue;
+            List<Location> others = playerLocations.entrySet().stream()
+                    .filter(entry -> !entry.getKey().equals(player.getUniqueId())).map(Map.Entry::getValue).toList();
+            List<Location> npcLocations = responders.stream().map(NpcInstance::getLocation).toList();
+            if (!conversationOverheard(location, npcLocations, others))
+                eligible.add(player.getUniqueId());
+        }
+        privateChatPlayers = Set.copyOf(eligible);
+    }
+
+    /**
+     * Whether another player could follow a conversation: they are within dialog
+     * range of the speaker, or of an NPC that would answer aloud.
+     */
+    static boolean conversationOverheard(Location speaker, Collection<Location> npcLocations,
+            Collection<Location> otherPlayers) {
+        for (Location other : otherPlayers) {
+            if (withinDialogRange(other, speaker))
+                return true;
+            for (Location npc : npcLocations) {
+                if (withinDialogRange(other, npc))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean withinDialogRange(Location one, Location two) {
+        return one.getWorld() == two.getWorld() && coordinateDistanceSquared(one, two) <= DIALOG_RANGE_SQUARED;
     }
 
     static List<NpcInstance> nearbyChatInstances(Collection<NpcInstance> candidates, Location chatLocation) {
@@ -686,7 +782,11 @@ public final class NpcBehaviourService implements Listener {
     private void execute(BehaviourEvent event, BehaviourAction action, NpcInstance instance, NpcDefinition definition,
             Entity actor, String eventDetail) {
         switch (action.type()) {
-            case SEND_DIALOG -> sendDialog(event, instance, definition, action.value(), actor);
+            case SEND_DIALOG -> {
+                sendDialog(event, instance, definition, action.value(), actor);
+                npcSpoke(instance, definition, action.value());
+            }
+            // Holo Dialog is often repeating flavour text, so NPCs do not answer it.
             case SHOW_HOLO_DIALOG -> dialogService.showHologram(instance, definition, action.value());
             case ASK_QUESTION -> {
                 /* Asynchronous and handled by executeSequence. */ }
@@ -789,6 +889,9 @@ public final class NpcBehaviourService implements Listener {
                         aiControlService.rememberNpcSpeech(instance, definition,
                                 actor instanceof Player player ? player : null, action.text());
                     }
+                    // Replies in a player's chat are coordinated by the chat group itself.
+                    if (event != BehaviourEvent.PLAYER_CHAT)
+                        npcSpoke(instance, definition, action.text());
                 }
                 case PLAY_ANIMATION -> playAiAnimation(instance, action.animation());
                 case START_COMBAT -> {
@@ -947,6 +1050,7 @@ public final class NpcBehaviourService implements Listener {
         if (++playerLookTick >= PLAYER_LOOK_INTERVAL_TICKS) {
             playerLookTick = 0;
             tickPlayerLook();
+            tickPrivateChatPlayers();
         }
         if (++itemPickupTick >= ITEM_PICKUP_INTERVAL_TICKS) {
             itemPickupTick = 0;
@@ -955,6 +1059,7 @@ public final class NpcBehaviourService implements Listener {
         if (++entityNearbyTick >= 20) {
             entityNearbyTick = 0;
             tickEntityNearby();
+            tickNpcNearby();
         }
         boolean cleanRuntimeState = currentTick % 20L == 0L;
         Set<UUID> active = cleanRuntimeState ? new HashSet<>() : null;
@@ -981,6 +1086,8 @@ public final class NpcBehaviourService implements Listener {
             idleCycles.keySet().retainAll(active);
             observedEntities.keySet().retainAll(active);
             entityNearbyCooldownUntilTick.keySet().retainAll(active);
+            observedNpcs.keySet().retainAll(active);
+            npcNearbyCooldownUntilTick.keySet().retainAll(active);
         }
     }
 
@@ -1014,6 +1121,57 @@ public final class NpcBehaviourService implements Listener {
                                 + " entered the observation radius. Distance: "
                                 + Math.round(entity.getLocation().distance(center)) + " blocks.");
             });
+        }
+    }
+
+    /**
+     * Fires On Nearby NPC when another Blockfolk NPC comes close. Runs only while
+     * a player is nearby; without one the observation resets, so NPCs standing
+     * together greet each other once a player arrives.
+     */
+    private void tickNpcNearby() {
+        if (conversationService == null)
+            return;
+        List<NpcInstance> active = List.copyOf(instances.findActive());
+        double range = conversationService.encounterRange();
+        for (NpcInstance instance : active) {
+            NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+            if (definition == null || definition.getBehaviourActions(BehaviourEvent.NPC_NEARBY).isEmpty())
+                continue;
+            Location center = instances.currentLocation(instance);
+            if (center.getWorld() == null || !conversationService.playerNearby(center)) {
+                observedNpcs.remove(instance.getId());
+                continue;
+            }
+            List<NpcInstance> nearby = active.stream().filter(other -> !other.getId().equals(instance.getId()))
+                    .filter(other -> {
+                        Location location = instances.currentLocation(other);
+                        return location.getWorld() == center.getWorld()
+                                && location.distanceSquared(center) <= range * range;
+                    })
+                    .sorted(Comparator.comparingDouble(
+                            other -> instances.currentLocation(other).distanceSquared(center)))
+                    .toList();
+            Set<UUID> current = nearby.stream().map(NpcInstance::getId)
+                    .collect(java.util.stream.Collectors.toSet());
+            Set<UUID> previous = observedNpcs.put(instance.getId(), current);
+            if (previous == null)
+                previous = Set.of();
+            if (currentTick < npcNearbyCooldownUntilTick.getOrDefault(instance.getId(), 0L))
+                continue;
+            for (NpcInstance other : nearby) {
+                if (previous.contains(other.getId()) || !conversationService.claimEncounter(instance, other))
+                    continue;
+                Entity entity = instances.findEntity(other).orElse(null);
+                if (entity == null)
+                    continue;
+                String name = definitions.find(other.getDefinitionKey()).map(NpcDefinition::getDisplayName)
+                        .map(dev.blockfolk.ai.NpcResponseIds::plainName).orElse(other.getDefinitionKey());
+                npcNearbyCooldownUntilTick.put(instance.getId(), currentTick + 20L * 20L);
+                trigger(BehaviourEvent.NPC_NEARBY, instance, entity, "The NPC " + name + " came within "
+                        + Math.round(instances.currentLocation(other).distance(center)) + " blocks.");
+                break;
+            }
         }
     }
 
@@ -2194,6 +2352,11 @@ public final class NpcBehaviourService implements Listener {
                 messages.forEach(player::sendMessage);
             }
         }
+    }
+
+    private void npcSpoke(NpcInstance instance, NpcDefinition definition, String line) {
+        if (conversationService != null)
+            conversationService.npcSpoke(instance, definition, line);
     }
 
     private String placeholders(String value, NpcInstance instance, NpcDefinition definition, Entity actor) {

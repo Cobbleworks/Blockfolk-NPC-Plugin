@@ -6,6 +6,9 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Added
 
+- Chat with an NPC that uses **Private** AI conversation is no longer sent to the whole server when no other player is within 16 blocks of the speaker or the answering NPCs. Only the speaker sees their own message.
+- Conversations between AI NPCs. **Respond to Nearby NPCs** in AI Behaviour lets an NPC answer what nearby NPCs say, including scripted Send Dialog lines. Holo Dialog flavour text is ignored. Several listeners respond together as a group. Each conversation is limited by a reply cap (6 by default), a time limit, and a cooldown, and only runs while a player is nearby. Configure the limits under `ai-control.npc-conversations`.
+- **On Nearby NPC** behaviour event that runs when another Blockfolk NPC comes within eight blocks while a player is nearby. Each pair of NPCs fires it once per cooldown.
 - Shared shops: item-for-item trades with unlimited stock, shown in the vanilla trading screen and reusable by any number of NPCs. Manage them in the shop library under `/bf shop` or **Shops** in the main menu, and use `/bf shop create <name>` or `/bf shop <shop> [rename|preview]`. Stored in `shops.yml`.
 - Open Shop behaviour action that opens a chosen shop for the triggering player, for example on right-click or from a question answer. Shops configured on a preset by earlier development builds move into the library automatically, and that preset's Open Shop actions are pointed at them.
 - `/bf config ai model` without a model shows the model currently in use.
@@ -29,6 +32,20 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Changed
 
+- Menu overhaul: every menu shares one layout and visual language. Back sits in the bottom-centre slot, page arrows sit in the bottom corners with page numbers, and Create buttons sit to the right of Back. Item names and tooltips are no longer italic, click hints follow one format, empty lists explain what to do next, and deletions use the same confirmation screen everywhere.
+- On/off settings change their icon and name color with their state and explain both states in the tooltip. Multi-option settings (aggression, pose, name color, conversation mode, ability centre) are cycled in place: their tooltip lists every option with a `▶` marker, left-click selects the next and right-click the previous option. This replaces the separate pose picker.
+- The preset editor is organised into four labelled columns: **Identity** (name, skin, properties), **World** (instances, spawnpoint, routes), **Behaviour** (events, custom events, AI), and **Combat & Items** (fighting, equipment, shops). Click the NPC head to open **NPC Properties**.
+- Fighting & Survival is split into two labelled columns: **Survival** (health, respawn, experience) on the left and **Combat** (targets, alliance, abilities, boss bar) on the right.
+- AI Behaviour and the action picker group their buttons under labelled sections. Page arrows show page numbers and Back buttons say where they lead.
+- The main menu adds a **Locations** button. An NPC's route list has a **Create Route** button.
+- The AI Behaviour menu shows the master switch, conversation mode, and memory together, and gives every AI capability its own icon. Memories show their category with a matching icon.
+- Turned-off attack targets show a poppy ("spared") instead of identical gray dye.
+- The preset list keeps its second-last row as a divider above the navigation bar, showing 36 presets per page.
+- Allies fight together: when an NPC is attacked, allied NPCs within 16 blocks join in according to their aggression, and nearby allies defend players who carry their alliance. Spawned copies of one preset are always allied, and alliance names ignore capitalization.
+- Hunting NPCs retaliate against any attacker, not only enabled target categories.
+- NPCs under attack from several sides keep their opponent unless a new attacker is clearly closer, and turn to the closest recent attacker after a kill instead of leaving combat. **On Combat Entered** no longer fires again when an NPC merely switches opponents.
+- The Mobs target category covers hostile mobs only. Villagers, iron golems, and other peaceful mobs are no longer hunted or hit by area abilities aimed at other targets, but can still be fought when they attack.
+
 - AI NPCs follow through on requested actions more reliably. Each function call now gets its own result. A response with a rejected call runs nothing and is sent back once with the reasons and valid targets, so an NPC no longer says "on my way" while its move is rejected. After acting, the model checks whether its speech promised anything it has not started.
 - Long-term AI memory keeps only key facts about people and agreements (treatment, deals, promises, meetings, news) and no longer stores reminders of what the NPC is currently doing.
 - AI turns must begin with a function call, so models can no longer answer in plain text that players never see.
@@ -43,6 +60,18 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 - Consolidate health, respawn time, and experience controls into one icon each with left/right adjustment, shift for five steps, middle-click input, and consistent coloured click labels.
 
 ### Fixed
+
+- Remove the duplicate properties button from the preset editor; the NPC head opens the properties menu.
+- NPCs with memory disabled no longer receive regional knowledge in their AI context.
+- Typing `cancel` or letting a chat prompt time out reopens the menu it came from instead of leaving every menu closed.
+- **Add Action** on a full behaviour, custom event, or question-answer row no longer opens the action picker and then silently discards the chosen action.
+- Deleting a preset from its confirmation screen can no longer fail when behaviours are not loaded yet, and returns to the page it was opened from.
+- Teleporting to an NPC from the instance list goes to where it currently stands, and reports an unloaded world instead of failing silently.
+- Remove All and Refresh on an empty instance list no longer open a deletion confirmation.
+- Cancelling an ability deletion started from the library returns to the library instead of opening the ability editor.
+- AI menu warnings now use the standard Blockfolk message style.
+- Allied NPCs no longer damage each other or alliance-carrying players with stray arrows or swings.
+- Hunting NPCs of the same preset no longer attack each other when Target Other NPCs is enabled.
 
 - Preserve ongoing combat timers when the same opponent repeatedly attacks an NPC.
 

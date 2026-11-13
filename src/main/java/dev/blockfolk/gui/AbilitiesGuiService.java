@@ -90,7 +90,8 @@ public final class AbilitiesGuiService implements Listener {
             this(key, tab, back, new HashMap<>());
         }
     }
-    private record DeleteHolder(String key, Consumer<Player> back) implements Holder {
+    /** {@code cancel} reopens wherever the deletion was started from. */
+    private record DeleteHolder(String key, Consumer<Player> back, Consumer<Player> cancel) implements Holder {
     }
     private record AssignHolder(SpecialAttackOptions options, Consumer<SpecialAttackOptions> save,
             Consumer<Player> back, int page) implements Holder {
@@ -138,8 +139,7 @@ public final class AbilitiesGuiService implements Listener {
             inventory.setItem(i % PAGE_SIZE, abilityItem(attack, attack.name(), lore));
         }
         if (attacks.isEmpty())
-            inventory.setItem(22,
-                    item(Material.BARRIER, "No Abilities", List.of("Create an ability in /bf abilities first")));
+            inventory.setItem(22, GuiItems.empty("No Abilities Yet", "Create one in the ability library first"));
         footer(inventory, page, attacks.size());
         show(player, inventory);
     }
@@ -151,13 +151,15 @@ public final class AbilitiesGuiService implements Listener {
         for (int i = page * PAGE_SIZE; i < Math.min(attacks.size(), (page + 1) * PAGE_SIZE); i++) {
             FighterAttack attack = attacks.get(i);
             List<String> lore = summary(attack);
-            lore.add(hint("Left-click", "Edit this shared ability"));
-            lore.add(hint("Shift-right-click", "Delete this shared ability"));
+            lore.add("");
+            lore.add(hint("Left-click", "edit"));
+            lore.add(LegacyText.RED + "Shift-right-click: " + LegacyText.GRAY + "delete");
             lore.addAll(iconHints());
             inventory.setItem(i % PAGE_SIZE, abilityItem(attack, attack.name(), lore));
         }
-        inventory.setItem(51,
-                item(Material.EMERALD, "Create Ability", List.of("Choose a starting template, then enter a name")));
+        if (attacks.isEmpty())
+            inventory.setItem(22, GuiItems.empty("No Abilities Yet", "Use Create Ability below to add one"));
+        inventory.setItem(51, GuiItems.create("Create Ability", "Choose a starting template, then a name"));
         footer(inventory, page, attacks.size());
         show(player, inventory);
     }
@@ -170,7 +172,7 @@ public final class AbilitiesGuiService implements Listener {
             lore.add(hint("Click", "Start from this template"));
             inventory.setItem(i, abilityItem(attack, attack.name(), lore));
         }
-        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+        inventory.setItem(49, GuiItems.back(""));
         show(player, inventory);
     }
     private void assignments(Player player, AssignHolder holder) {
@@ -251,7 +253,7 @@ public final class AbilitiesGuiService implements Listener {
             case EFFECTS -> effectsTab(screen, holder, attack);
             case VISUALS -> visualsTab(screen, holder, attack);
         }
-        screen.button(49, item(Material.BARRIER, "Back", List.of()), (event, p) -> holder.back().accept(p));
+        screen.button(49, GuiItems.back(""), (event, p) -> holder.back().accept(p));
         GuiLayout.fillRow(inventory, 0);
         show(player, inventory);
     }
@@ -271,7 +273,7 @@ public final class AbilitiesGuiService implements Listener {
         screen.set(24, item(Material.BOOK, "Shared Ability", List.of("Edits apply to every NPC assigned this attack",
                 "Use the tabs above to configure it", "NPC usage frequency is set on the assignment screen")));
         screen.button(53, item(Material.TNT, "Delete Ability", List.of("Requires confirmation")),
-                (event, p) -> confirmDelete(p, holder));
+                (event, p) -> confirmDelete(p, holder, owner -> edit(owner, holder)));
     }
 
     private void shapeTab(Screen screen, EditHolder holder, FighterAttack attack) {
@@ -284,13 +286,13 @@ public final class AbilitiesGuiService implements Listener {
         List<IntConsumer> controls = new ArrayList<>();
         Shape shape = attack.shape();
         if (shape.supportsOrigin())
-            controls.add(slot -> screen.button(slot,
-                    item(attack.origin() == Origin.NPC ? Material.ARMOR_STAND : Material.RECOVERY_COMPASS,
-                            "Centre: " + (attack.origin() == Origin.NPC ? "Caster" : "Target"),
-                            List.of(attack.origin() == Origin.NPC
-                                    ? "The area follows the NPC while it casts"
-                                    : "The area marks the opponent's position", hint("Click", "Switch centre"))),
-                    (event, p) -> change(p, holder, a -> a.toBuilder().origin(a.origin().next()).build())));
+            controls.add(slot -> screen.button(slot, GuiItems.cycle("Centre",
+                    List.of(new GuiItems.Option(Material.ARMOR_STAND, "Caster", "follows the NPC while it casts"),
+                            new GuiItems.Option(Material.RECOVERY_COMPASS, "Target", "marks the opponent's position")),
+                    attack.origin() == Origin.NPC ? 0 : 1, List.of("Where the area is centred")), (event, p) -> {
+                        if (GuiItems.cycleDirection(event.getClick()) != 0)
+                            change(p, holder, a -> a.toBuilder().origin(a.origin().next()).build());
+                    }));
         controls.add(slot -> number(screen, holder, slot, Material.SPYGLASS, "Activation Range", attack.range(),
                 "blocks", 1, FighterAttack.MAX_RANGE, 1, rangeHelp(shape), v -> a -> a.toBuilder().range(v).build()));
         controls.add(slot -> number(screen, holder, slot, Material.LEAD, "Minimum Range", attack.minRange(), "blocks",
@@ -398,15 +400,15 @@ public final class AbilitiesGuiService implements Listener {
 
     private void effectToggle(Screen screen, EditHolder holder, int slot, Effect effect, FighterAttack attack) {
         boolean enabled = attack.effects().contains(effect);
-        List<String> lore = new ArrayList<>(List.of(effectDescription(effect),
-                enabled ? LegacyText.GREEN + "✔ Enabled" : LegacyText.RED + "✘ Disabled"));
+        List<String> notes = new ArrayList<>();
         if (effect == Effect.KNOCKBACK || effect == Effect.PULL)
-            lore.add(LegacyText.DARK_GRAY + "Replaces " + (effect == Effect.PULL ? "Knockback" : "Pull"));
+            notes.add(LegacyText.DARK_GRAY + "Replaces " + (effect == Effect.PULL ? "Knockback" : "Pull"));
         if (effect.category() != EffectCategory.CASTER && !attack.shape().hitsVictims())
-            lore.add(LegacyText.GOLD + "No effect: " + label(attack.shape()) + " does not hit others");
-        lore.add(hint("Click", enabled ? "Disable" : "Enable"));
-        ItemStack item = item(effectIcon(effect), label(effect), lore);
-        screen.button(slot, enabled ? glint(item) : item, (event, p) -> change(p, holder, a -> {
+            notes.add(LegacyText.GOLD + "No effect: " + label(attack.shape()) + " does not hit others");
+        // Effects keep their own icon when off so the grid stays readable.
+        ItemStack item = GuiItems.toggle(effectIcon(effect), effectIcon(effect), label(effect), enabled,
+                effectDescription(effect).toLowerCase(Locale.ROOT), "not applied", notes);
+        screen.button(slot, item, (event, p) -> change(p, holder, a -> {
             Set<Effect> effects = EnumSet.noneOf(Effect.class);
             effects.addAll(a.effects());
             if (!effects.remove(effect)) {
@@ -441,11 +443,18 @@ public final class AbilitiesGuiService implements Listener {
                                 "so players learn to react to it", "Use Preview to see the shape in the world")));
     }
 
-    private void confirmDelete(Player player, EditHolder holder) {
-        Inventory inventory = menu(new DeleteHolder(holder.key(), holder.back()), "Delete Shared Ability?");
-        inventory.setItem(11, item(Material.TNT, "Delete", List.of("Assigned NPCs will stop using this attack",
-                "The definition will be removed from the library")));
-        inventory.setItem(15, item(Material.BARRIER, "Cancel", List.of()));
+    private void confirmDelete(Player player, EditHolder holder, Consumer<Player> cancel) {
+        FighterAttack attack = repository.find(holder.key()).orElse(null);
+        if (attack == null) {
+            holder.back().accept(player);
+            return;
+        }
+        Inventory inventory = Bukkit.createInventory(new DeleteHolder(holder.key(), holder.back(), cancel), 27,
+                UiText.title("Delete Ability", attack.name()));
+        inventory.setItem(11,
+                GuiItems.confirm(List.of("Removes this ability from the library", "Assigned NPCs will stop using it")));
+        inventory.setItem(13, abilityItem(attack, attack.name(), summary(attack)));
+        inventory.setItem(15, GuiItems.cancel());
         show(player, inventory);
     }
 
@@ -484,8 +493,9 @@ public final class AbilitiesGuiService implements Listener {
                     repository.save(attack.withIcon(player.getInventory().getItemInMainHand()));
                     library(player, library.page(), library.back());
                 } else if (event.isShiftClick() && event.isRightClick())
-                    confirmDelete(player, new EditHolder(attack.key(), Tab.OVERVIEW,
-                            p -> library(p, library.page(), library.back())));
+                    confirmDelete(player,
+                            new EditHolder(attack.key(), Tab.OVERVIEW, p -> library(p, library.page(), library.back())),
+                            p -> library(p, library.page(), library.back()));
                 else if (event.isLeftClick())
                     edit(player, new EditHolder(attack.key(), Tab.OVERVIEW,
                             p -> library(p, library.page(), library.back())));
@@ -535,10 +545,12 @@ public final class AbilitiesGuiService implements Listener {
                         assign.page() + (slot == 45 ? -1 : 1)));
         } else if (holder instanceof DeleteHolder delete) {
             if (slot == 11) {
+                String name = abilityName(delete.key());
                 repository.delete(delete.key());
+                player.sendMessage(UiText.success("Deleted ability '" + name + "'."));
                 delete.back().accept(player);
             } else if (slot == 15)
-                edit(player, new EditHolder(delete.key(), Tab.OVERVIEW, delete.back()));
+                delete.cancel().accept(player);
         }
     }
 
@@ -640,11 +652,12 @@ public final class AbilitiesGuiService implements Listener {
         player.openInventory(inventory);
     }
     private static void footer(Inventory inventory, int page, int size) {
+        int pages = Math.max(1, (size + PAGE_SIZE - 1) / PAGE_SIZE);
         if (page > 0)
-            inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
-        inventory.setItem(49, item(Material.BARRIER, "Back", List.of()));
+            inventory.setItem(45, GuiItems.previousPage(page, pages));
+        inventory.setItem(49, GuiItems.back(""));
         if ((page + 1) * PAGE_SIZE < size)
-            inventory.setItem(53, item(Material.ARROW, "Next Page", List.of()));
+            inventory.setItem(53, GuiItems.nextPage(page, pages));
     }
 
     static List<String> summary(FighterAttack attack) {
@@ -924,10 +937,7 @@ public final class AbilitiesGuiService implements Listener {
     }
 
     private static ItemStack decorate(ItemStack item, String name, List<String> lore) {
-        var meta = item.getItemMeta();
-        meta.displayName(LegacyText.component(LegacyText.WHITE + name));
-        meta.lore(lore.stream().map(line -> LegacyText.component(LegacyText.GRAY + line)).toList());
-        item.setItemMeta(meta);
-        return item;
+        return GuiItems.item(item, LegacyText.GOLD + name, lore.stream()
+                .map(line -> line.isEmpty() || line.startsWith("\u00a7") ? line : LegacyText.GRAY + line).toList());
     }
 }

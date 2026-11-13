@@ -26,12 +26,14 @@ Pending combat respawns survive server restarts and keep the persistent instance
 
 | Mode | Behaviour |
 | --- | --- |
-| Ignore | Does not retaliate or seek targets. |
-| Fights Back | Retaliates after being attacked. |
-| Flee | Moves away after being attacked. |
-| Hunting | Proactively seeks enabled target categories. |
+| Ignore | Does not seek targets; only fights attackers from an enabled target category. |
+| Fights Back | Retaliates against any attacker. |
+| Flee | Moves away from attackers, except those from an enabled target category, which it fights. |
+| Hunting | Proactively seeks enabled target categories and retaliates against any attacker. |
 
-Target categories are non-animal mobs, animals, survival/adventure players, and other vulnerable Blockfolk NPCs.
+Target categories are hostile mobs, animals, survival/adventure players, and other vulnerable Blockfolk NPCs. Peaceful mobs such as villagers and iron golems are never hunted, but an NPC that fights back still defends itself against them.
+
+An NPC under attack from several sides keeps its current opponent unless that opponent is gone, out of sight for a second, or a new attacker is more than three blocks closer. Every attacker is remembered for ten seconds: when the current opponent dies or escapes, the NPC turns to the closest remembered attacker instead of leaving combat.
 
 ## Abilities
 
@@ -43,10 +45,15 @@ See [Abilities](/features/abilities) for the attack editor, templates, and casti
 
 ## Alliances
 
-NPCs with the same non-empty alliance value do not fight each other. Use a consistent spelling across the presets
-that should cooperate. A player can appear allied to an NPC by carrying an item whose custom display name matches
+NPCs with the same non-empty alliance value do not fight each other, and neither do spawned copies of the same preset.
+Alliance names ignore capitalization.
+
+Allies fight together. When an NPC is attacked, allied NPCs within 16 blocks join the fight if their aggression is
+Fights Back or Hunting (or the attacker is one of their enabled target categories). Allies answering a call for help
+never flee. Damage between allies, such as a stray arrow, is cancelled. A player can appear allied to an NPC by carrying an item whose custom display name matches
 that NPC's alliance. The comparison ignores capitalization and checks every inventory slot; allied NPCs will neither
-choose that player as a target nor retaliate against them.
+choose that player as a target nor retaliate against them. Allied NPCs within 16 blocks also defend such a player
+from attackers, and their stray hits do not harm them.
 
 ## Runtime combat actions
 

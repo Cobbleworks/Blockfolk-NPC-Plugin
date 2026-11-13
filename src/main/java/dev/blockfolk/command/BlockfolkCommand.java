@@ -188,6 +188,10 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             guiService.openAbilities(player);
             return true;
         }
+        if (args.length == 1 && args[0].equalsIgnoreCase("shops")) {
+            guiService.openShops(player);
+            return true;
+        }
         if (args.length == 1 && args[0].equalsIgnoreCase("routes")) {
             routeGuiService.openRoutes(player);
             return true;
@@ -248,7 +252,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return true;
         }
         player.sendMessage(UiText.info(
-                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|shop [create <name>|<shop> [rename <name>|preview]]|abilities|routes|locations|config ai <model|mute-me|memory forgetnearby <radius>>]"));
+                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|shop [create <name>|<shop> [rename <name>|preview]]|shops|abilities|routes|locations|config ai <model|mute-me|memory forgetnearby <radius>>]"));
         return true;
     }
 
@@ -505,6 +509,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             suggestions.add("events");
             suggestions.add("npc");
             suggestions.add("shop");
+            suggestions.add("shops");
             suggestions.add("config");
             return filter(suggestions, args[0]);
         }

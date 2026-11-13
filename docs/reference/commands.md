@@ -8,6 +8,7 @@
 | `/bf locations` | Open global locations. |
 | `/bf routes` | Open routes. |
 | `/bf abilities` | Open the shared attack library and editor. |
+| `/bf shops` | Open the shared shop library. |
 | `/bf shop` | Open the shared shop library. |
 | `/bf shop create <name>` | Create a shop and open its trade editor. |
 | `/bf shop <shop>` | Open a shop's trade editor. |

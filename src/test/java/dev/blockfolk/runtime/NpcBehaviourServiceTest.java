@@ -69,6 +69,21 @@ class NpcBehaviourServiceTest {
         assertNull(NpcBehaviourService.plantingForSeed(Material.WHEAT_SEEDS, Material.DIRT));
     }
 
+    @Test
+    void privateConversationIsOverheardOnlyWithinDialogRangeOfSpeakerOrNpc() {
+        Location speaker = new Location(null, 0.0, 64.0, 0.0);
+        List<Location> npcs = List.of(new Location(null, 6.0, 64.0, 0.0));
+
+        assertFalse(NpcBehaviourService.conversationOverheard(speaker, npcs, List.of()));
+        assertFalse(NpcBehaviourService.conversationOverheard(speaker, npcs,
+                List.of(new Location(null, 22.01, 64.0, 0.0))));
+        // Close enough to hear the NPC's reply, though 22 blocks from the speaker.
+        assertTrue(NpcBehaviourService.conversationOverheard(speaker, npcs,
+                List.of(new Location(null, 22.0, 64.0, 0.0))));
+        assertTrue(NpcBehaviourService.conversationOverheard(speaker, npcs,
+                List.of(new Location(null, -16.0, 64.0, 0.0))));
+    }
+
     private static NpcInstance instanceAt(String key, double x) {
         return new NpcInstance(UUID.randomUUID(), key, new Location(null, x, 64.0, 0.0));
     }

@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Set;
 
 /** Readable, unique aliases for NPCs within one AI request. */
-final class NpcResponseIds {
+public final class NpcResponseIds {
 
     private static final int MAX_NAME_LENGTH = 40;
 
@@ -55,7 +55,7 @@ final class NpcResponseIds {
         return normalized.isEmpty() ? "unnamed" : normalized;
     }
 
-    static String plainName(String name) {
+    public static String plainName(String name) {
         return name == null ? "" : name.replaceAll("(?i)§[0-9a-fk-or]", "");
     }
 }

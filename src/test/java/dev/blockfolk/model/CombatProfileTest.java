@@ -91,6 +91,7 @@ class CombatProfileTest {
 
         assertTrue(guards.alliedWith(CombatProfile.disabled().withAlliance("guards")));
         assertFalse(guards.alliedWith(CombatProfile.disabled().withAlliance("raiders")));
+        assertTrue(guards.alliedWith(CombatProfile.disabled().withAlliance("Guards")));
         assertFalse(CombatProfile.disabled().alliedWith(CombatProfile.disabled()));
         assertNull(guards.withAlliance("   ").alliance());
     }

@@ -3,6 +3,7 @@ package dev.blockfolk.util;
 import java.util.List;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
@@ -29,8 +30,12 @@ public final class LegacyText {
     private LegacyText() {
     }
 
+    /**
+     * Deserializes GUI text. Item names and lore are italic by default in the
+     * client, so italics are switched off unless the text sets them itself.
+     */
     public static Component component(String text) {
-        return LEGACY.deserialize(text);
+        return LEGACY.deserialize(text).decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE);
     }
 
     public static List<Component> components(List<String> lines) {

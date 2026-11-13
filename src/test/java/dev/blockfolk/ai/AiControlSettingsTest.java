@@ -42,7 +42,7 @@ class AiControlSettingsTest {
     void olderSingleActionSettingsEnableBothSidesOfPair() {
         AiControlSettings settings = new AiControlSettings("", "", "", "", "",
                 EnumSet.of(AiActionType.STOP_COMBAT, AiActionType.FOLLOW, AiActionType.PAUSE_ROUTE), false, true, false,
-                false);
+                false, false);
 
         assertTrue(settings.allowedActions().containsAll(EnumSet.of(AiActionType.START_COMBAT, AiActionType.STOP_COMBAT,
                 AiActionType.FOLLOW, AiActionType.UNFOLLOW, AiActionType.START_ROUTE, AiActionType.PAUSE_ROUTE)));
@@ -93,5 +93,14 @@ class AiControlSettingsTest {
 
         assertTrue(settings.sharedConversation());
         assertFalse(AiControlSettings.defaults().sharedConversation());
+    }
+
+    @Test
+    void npcResponsesAreOptInAndPreservedByOtherChanges() {
+        AiControlSettings settings = AiControlSettings.defaults().withRespondToNpc(true).withIdentity("A bandit")
+                .withRespondToChat(false).toggle(AiActionType.FOLLOW).withMemoryEnabled(true);
+
+        assertTrue(settings.respondToNpc());
+        assertFalse(AiControlSettings.defaults().respondToNpc());
     }
 }

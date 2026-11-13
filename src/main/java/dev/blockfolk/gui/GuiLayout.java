@@ -26,6 +26,15 @@ final class GuiLayout {
         }
     }
 
+    /** Fills empty slots of one column with neutral panes. */
+    static void fillColumn(Inventory inventory, int column) {
+        for (int slot = column; slot < inventory.getSize(); slot += 9) {
+            if (inventory.getItem(slot) == null) {
+                inventory.setItem(slot, filler());
+            }
+        }
+    }
+
     private static ItemStack filler() {
         ItemStack item = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
         ItemMeta meta = item.getItemMeta();

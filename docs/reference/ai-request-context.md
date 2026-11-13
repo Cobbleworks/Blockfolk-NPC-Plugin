@@ -8,6 +8,8 @@ An NPC preset must be active, have at least one context section, and have a trig
 
 One chat message creates one coordinated request for up to five eligible NPCs. The named NPC, or the closest one when no NPC is named, is the intended speaker and appears first. If that NPC is busy, the chat turn waits in a bounded queue. Other busy NPCs can join a later turn.
 
+**Respond to Nearby NPCs** uses the same coordinated request for lines spoken by other NPCs. The event lists the new lines and the reply number out of `ai-control.npc-conversations.max-replies`. Its system rules ask the NPCs to move the conversation toward an end. The intended responder is never the NPC that spoke last.
+
 ## Messages sent to OpenRouter
 
 Each request contains:
@@ -73,13 +75,15 @@ Blockfolk keeps:
 
 - up to ten recent event summaries for five minutes;
 - recent conversation lines up to `ai-control.conversation-history-limit`, which defaults to `20`;
-- up to 45 optional long-term preset facts when memory is enabled, plus nearby Regional facts from other presets.
+- when memory is enabled, up to 45 long-term preset facts plus nearby Regional facts from other presets.
 
-Enabled long-term memory reviews the recent conversation after 20 seconds without a new player chat message. Follow-up messages reset the timer; the review waits for pending chat responses to finish. Up to 20 conversation lines are available and the previous exchange overlaps the next review. The review saves only key facts about people and agreements (treatment, deals, promises, meetings, notable news), never reminders of in-progress tasks or small talk. It can save up to three Personal, Regional, or Temporal facts, and usually saves none or one. Personal and Temporal facts appear only in the source NPC preset’s context. Regional facts are anchored where they were learned and appear in every AI NPC context within 50 blocks, including NPCs with memory saving disabled. Temporal facts expire after 24 hours. At the 45-fact limit, saving a new fact replaces the oldest Temporal fact if one exists; otherwise, it replaces the oldest fact. Saved Regional facts produce a "spreading rumors" notice; other saved facts produce a "remembered this" notice. This review is separate from gameplay actions.
+Enabled long-term memory reviews the recent conversation after 20 seconds without a new player chat message. Follow-up messages reset the timer; the review waits for pending chat responses to finish. Up to 20 conversation lines are available and the previous exchange overlaps the next review. The review saves only key facts about people and agreements (treatment, deals, promises, meetings, notable news), never reminders of in-progress tasks or small talk. It can save up to three Personal, Regional, or Temporal facts, and usually saves none or one. Personal and Temporal facts appear only in the source NPC preset’s context. Regional facts are anchored where they were learned and appear in AI NPC contexts within 50 blocks only when the receiving NPC has memory enabled. Temporal facts expire after 24 hours. At the 45-fact limit, saving a new fact replaces the oldest Temporal fact if one exists; otherwise, it replaces the oldest fact. Saved Regional facts produce a "spreading rumors" notice; other saved facts produce a "remembered this" notice. This review is separate from gameplay actions.
 
 Private conversation is scoped to one player and one spawned NPC. Shared conversation is scoped to one spawned NPC and is visible to every player speaking with that instance. Conversations are not shared between separate spawned copies of the preset.
 
 In coordinated group chat, every participating NPC remembers every spoken line from that group turn. Each line includes the speaking NPC's display name.
+
+Conversations between NPCs are scoped to the group of NPCs that started them. Every NPC in the conversation that hears a line within `hearing-range` remembers it. The same group gets the same conversation the next time it talks. When an NPC is triggered by another NPC, for example through **On Nearby NPC**, its context includes the recent conversation between the two.
 
 Opening the preset editor clears runtime event and conversation memory, pending requests, and queued interactions for all its instances. Long-term preset facts remain until edited or cleared.
 

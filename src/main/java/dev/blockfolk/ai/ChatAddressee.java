@@ -4,12 +4,12 @@ import java.util.List;
 import java.util.Locale;
 
 /** Finds a named NPC in a chat line, falling back to the nearest candidate. */
-final class ChatAddressee {
+public final class ChatAddressee {
 
     private ChatAddressee() {
     }
 
-    static int select(String message, List<String> names) {
+    public static int select(String message, List<String> names) {
         if (names.isEmpty())
             return -1;
         String line = message == null ? "" : message.toLowerCase(Locale.ROOT);
