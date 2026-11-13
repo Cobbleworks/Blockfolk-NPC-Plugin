@@ -267,7 +267,7 @@ class AiDecisionParserTest {
 
     private static AiControlSettings settings(String identity, String behaviour, String goal,
             EnumSet<AiActionType> actions) {
-        return new AiControlSettings(identity, behaviour, "", goal, "", actions, true, true, false, false);
+        return new AiControlSettings(identity, behaviour, "", goal, "", actions, true, true, false, false, false);
     }
 
     @Test

@@ -598,7 +598,7 @@ public final class GuiService implements Listener {
         AiControlSettings ai = definition.getAiControlSettings();
         String aiStatus = !ai.enabled()
                 ? LegacyText.RED + "Paused"
-                : aiGuiService.hasTrigger(definition) || ai.respondToChat()
+                : aiGuiService.hasTrigger(definition) || ai.respondToChat() || ai.respondToNpc()
                         ? LegacyText.GREEN + "Active"
                         : LegacyText.GOLD + "No Triggers";
         List<String> aiLore = new ArrayList<>(List.of(LegacyText.GRAY + "Status: " + aiStatus,
@@ -3812,6 +3812,7 @@ public final class GuiService implements Listener {
             case SUNSET -> Material.SUNFLOWER;
             case PLAYER_CHAT -> Material.WRITABLE_BOOK;
             case ENTITY_NEARBY -> Material.OBSERVER;
+            case NPC_NEARBY -> Material.VILLAGER_SPAWN_EGG;
             case NEARBY_AGGRESSION -> Material.IRON_AXE;
         };
     }

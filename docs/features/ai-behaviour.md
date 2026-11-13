@@ -52,6 +52,33 @@ extra guidance.
 
 Enable **Respond to Nearby Chat** for direct player conversation within eight blocks. One chat message creates a coordinated request for up to five eligible NPCs. A named NPC is the intended speaker; otherwise the closest NPC is. If that NPC is busy, the turn waits for it rather than moving to another speaker.
 
+### Conversations between NPCs
+
+Enable **Respond to Nearby NPCs** to let an NPC answer what other NPCs say within 12 blocks. AI speech, **Send Dialog**, and **Show Holo Dialog** lines all count, so a scripted line can start an AI conversation. Lines spoken as part of a player's chat turn do not, because that chat turn already lets nearby NPCs join in.
+
+For example, give a cowboy an **On Nearby NPC** row with an AI Trigger ("Confront bandits; greet everyone else") and enable **Respond to Nearby NPCs** on the bandit. When the bandit walks up, the cowboy speaks first and the bandit answers. Enable the switch on both NPCs for a back-and-forth. Several NPCs in range respond together as a group, in one coordinated request like nearby chat. The NPC named in the latest line is the intended responder, otherwise the closest one. Responding NPCs can use any of their enabled capabilities, so two NPCs can talk about a lever and then pull it with **Interact**.
+
+Conversations between NPCs are limited so they cannot loop:
+
+- **Reply cap:** each conversation allows `max-replies` response rounds, 6 by default. The model is told how many remain and closes the conversation on the last one.
+- **Time limit:** a conversation ends after `max-duration-seconds`, or after 30 seconds without a new line.
+- **Cooldown:** when a conversation ends, its NPCs wait `cooldown-seconds` before talking to each other again.
+- **Player nearby:** NPCs only talk to each other while a player is within `player-range` blocks.
+- **Player interrupts:** when a player chats with an NPC, its NPC conversation ends and the NPC answers the player.
+
+```yaml
+ai-control:
+  npc-conversations:
+    max-replies: 6
+    max-duration-seconds: 120
+    cooldown-seconds: 120
+    reply-delay-seconds: 2
+    hearing-range: 12
+    player-range: 32
+```
+
+Set `max-replies` to `0` to turn NPC replies off server-wide. Each NPC in the conversation remembers its lines. The same NPCs share their conversation history the next time they talk, and memory reviews can save facts from it like a player conversation. Players within 16 blocks see the memory notice.
+
 ### NPC names and aliases
 
 Group requests use readable Response IDs such as `npc_mr_mario` to route function calls to the right NPC. If multiple participating NPCs have the same normalized name, their IDs become `npc_mr_mario_01`, `npc_mr_mario_02`, and so on for that request. The display name appears beside the ID in both the system context and participant heading. The player's exact chat message is included, so a message such as “Mr. Mario, how is your day?” selects **Mr. Mario** as the intended speaker.
@@ -81,7 +108,7 @@ Conversation can be:
 - **Private** — each player has a separate conversation with that NPC instance;
 - **Shared** — all players contribute to one conversation on that instance.
 
-Long-term memory is separately optional. It stores up to 45 facts on the preset, shared by its instances and retained across restarts. The AI reviews up to 20 recent conversation lines after 20 seconds without a new player chat message; each follow-up message resets this timer. It saves only key facts about people and agreements, such as how someone treated the NPC, deals and promises, agreed meetings, and important news. It does not store reminders of what the NPC is currently doing; follow-through happens during its action turns. Most conversations save nothing; at most three facts are saved. Facts are classified as Personal (red, private knowledge and deals), Regional (green, local news shared with AI NPCs that have memory enabled within 50 blocks of where it was learned), or Temporal (blue, changing facts that expire after 24 hours). NPCs with memory disabled do not receive regional facts. At capacity, saving a new fact replaces the oldest Temporal fact if one exists; otherwise, it replaces the oldest fact. Existing facts without a category become Personal. Players see "NPC is telling the others..." when a Regional fact is saved and "NPC remembered this..." for Personal or Temporal facts. Administrators can add, edit, reclassify with shift-left-click, delete, or clear facts in the memory menu. Newly added facts start as Personal; manually reclassified Regional facts are centered on the administrator’s position.
+Long-term memory is separately optional. It stores up to 45 facts on the preset, shared by its instances and retained across restarts. The AI reviews up to 20 recent conversation lines after 20 seconds without a new player chat message; each follow-up message resets this timer. It saves only key facts about people and agreements, such as how someone treated the NPC, deals and promises, agreed meetings, and important news. It does not store reminders of what the NPC is currently doing; follow-through happens during its action turns. Most conversations save nothing; at most three facts are saved. Facts are classified as Personal (red, private knowledge and deals), Regional (green, local news shared with AI NPCs that have memory enabled within 50 blocks of where it was learned), or Temporal (blue, changing facts that expire after 24 hours). NPCs with memory disabled do not receive regional facts. At capacity, saving a new fact replaces the oldest Temporal fact if one exists; otherwise, it replaces the oldest fact. Existing facts without a category become Personal. Players see "NPC is telling the others..." when a Regional fact is saved and "NPC remembered this..." for Personal or Temporal facts. For conversations between NPCs, players within 16 blocks of the NPC see these notices. Administrators can add, edit, reclassify with shift-left-click, delete, or clear facts in the memory menu. Newly added facts start as Personal; manually reclassified Regional facts are centered on the administrator’s position.
 
 The number of recent conversation lines supplied to the model is set globally with `ai-control.conversation-history-limit`. Its default is `20`; when the limit is exceeded, the oldest lines are discarded first.
 

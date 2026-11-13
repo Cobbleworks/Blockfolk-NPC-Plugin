@@ -8,6 +8,8 @@ An NPC preset must be active, have at least one context section, and have a trig
 
 One chat message creates one coordinated request for up to five eligible NPCs. The named NPC, or the closest one when no NPC is named, is the intended speaker and appears first. If that NPC is busy, the chat turn waits in a bounded queue. Other busy NPCs can join a later turn.
 
+**Respond to Nearby NPCs** uses the same coordinated request for lines spoken by other NPCs. The event lists the new lines and the reply number out of `ai-control.npc-conversations.max-replies`. Its system rules ask the NPCs to move the conversation toward an end. The intended responder is never the NPC that spoke last.
+
 ## Messages sent to OpenRouter
 
 Each request contains:
@@ -80,6 +82,8 @@ Enabled long-term memory reviews the recent conversation after 20 seconds withou
 Private conversation is scoped to one player and one spawned NPC. Shared conversation is scoped to one spawned NPC and is visible to every player speaking with that instance. Conversations are not shared between separate spawned copies of the preset.
 
 In coordinated group chat, every participating NPC remembers every spoken line from that group turn. Each line includes the speaking NPC's display name.
+
+Conversations between NPCs are scoped to the group of NPCs that started them. Every NPC in the conversation that hears a line within `hearing-range` remembers it. The same group gets the same conversation the next time it talks. When an NPC is triggered by another NPC, for example through **On Nearby NPC**, its context includes the recent conversation between the two.
 
 Opening the preset editor clears runtime event and conversation memory, pending requests, and queued interactions for all its instances. Long-term preset facts remain until edited or cleared.
 

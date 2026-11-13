@@ -58,7 +58,9 @@ final class AiGuiService {
     private static final int ACTIONS_HEADER_SLOT = 19;
     private static final int BACK_SLOT = 49;
     private static final int ADD_MEMORY_SLOT = 51;
-    private static final int[] ACTION_SLOTS = {21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 39, 40};
+    /** Sits next to Respond to Nearby Chat; the action toggles follow it. */
+    private static final int NPC_RESPONSE_SLOT = 22;
+    private static final int[] ACTION_SLOTS = {21, 23, 24, 25, 30, 31, 32, 33, 34, 39, 40, 41};
     private static final List<AiActionType> ACTION_TYPES = Arrays.stream(AiActionType.values())
             .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM
                     && type != AiActionType.STOP_COMBAT && type != AiActionType.UNFOLLOW
@@ -154,8 +156,13 @@ final class AiGuiService {
                             chatToggle ? "only speaks when triggered" : "never used",
                             chatToggle ? List.of() : List.of(capabilityDescription(type))));
         }
+        inventory.setItem(NPC_RESPONSE_SLOT, GuiItems.toggle(Material.VILLAGER_SPAWN_EGG, Material.GRAY_DYE,
+                "Respond to Nearby NPCs", settings.respondToNpc(), "answers what nearby NPCs say",
+                "ignores other NPCs' speech",
+                List.of("Enable on two NPCs for a back-and-forth", "Only while a player is nearby",
+                        "Replies per conversation: see config.yml")));
         inventory.setItem(BACK_SLOT, GuiItems.back("the NPC menu"));
-        boolean hasTrigger = hasTrigger(definition) || settings.respondToChat();
+        boolean hasTrigger = hasTrigger(definition) || settings.respondToChat() || settings.respondToNpc();
         String status = !settings.enabled() ? "Paused" : hasTrigger ? "Active" : "No Triggers";
         String statusColor = !settings.enabled() ? LegacyText.RED : hasTrigger ? LegacyText.GREEN : LegacyText.GOLD;
         Material statusMaterial = !settings.enabled()
@@ -168,7 +175,7 @@ final class AiGuiService {
                         + "Paused: makes no AI requests",
                 "", LegacyText.GRAY + "Applies to every spawned instance"));
         if (settings.enabled() && !hasTrigger)
-            statusLore.add(LegacyText.GOLD + "Add an AI Trigger action or enable chat");
+            statusLore.add(LegacyText.GOLD + "Add an AI Trigger action or enable chat or NPC responses");
         if (aiControl != null && !aiControl.configured())
             statusLore.add(LegacyText.RED + "OpenRouter is not ready: " + aiControl.configurationIssue());
         statusLore.add("");
@@ -295,6 +302,10 @@ final class AiGuiService {
                 return;
             AiControlSettings settings = definition.getAiControlSettings();
             definition.setAiControlSettings(settings.withSharedConversation(!settings.sharedConversation()));
+            GuiItems.click(player);
+        } else if (slot == NPC_RESPONSE_SLOT) {
+            AiControlSettings settings = definition.getAiControlSettings();
+            definition.setAiControlSettings(settings.withRespondToNpc(!settings.respondToNpc()));
             GuiItems.click(player);
         } else if (slot == BACK_SLOT) {
             back.accept(player, definition);

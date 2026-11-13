@@ -9,7 +9,7 @@ The standard editor provides these triggers:
 - lifecycle: **On Spawn**, **On Idle**, and **On Death**;
 - players: **On Left-Click**, **On Right-Click**, **On Player Approach**, and **On Player Leaves**;
 - combat and health: **On Damage Taken**, **On Nearby Aggression**, **On Low Health**, **On Heal**, **On Combat Entered**, and **On Combat Exited**;
-- world: **On Entity Nearby**, **On Drop Item**, and **On Receive Item**;
+- world: **On Entity Nearby**, **On Nearby NPC**, **On Drop Item**, and **On Receive Item**;
 - time: **At Sunrise**, **At Noon**, and **At Sunset**.
 
 Nearby chat is configured from the AI menu rather than shown as a deterministic behaviour row.
@@ -17,6 +17,8 @@ Nearby chat is configured from the AI menu rather than shown as a deterministic 
 **On Damage Taken** runs when an NPC takes damage from an entity or the environment. When an attacker is known, actions receive that entity as their trigger, and AI Trigger includes its name and the damage amount in the event context. Saved **On NPC Attacked** actions are moved before existing damage actions when the preset loads. A row holds seven actions; if the combined routines exceed that limit, the server logs a warning and saves a copy of the original preset with a `.pre-damage-merge.bak` suffix.
 
 **On Nearby Aggression** runs when another living entity, including an animal, player, or NPC, takes damage or is hit by an entity within eight blocks. The victim is the action trigger; AI Trigger receives the victim, damage amount, and attacker when known. Cancelled damage events do not trigger it.
+
+**On Entity Nearby** ignores Blockfolk NPCs. Use **On Nearby NPC** for them: it runs when another Blockfolk NPC comes within eight blocks, with that NPC as the action trigger. It only runs while a player is within `ai-control.npc-conversations.player-range` (32 blocks by default); NPCs that were already standing together fire it once a player arrives. After it fires for two NPCs, neither fires it for the other again until `ai-control.npc-conversations.cooldown-seconds` has passed, so two NPCs meeting at the same moment do not both react. Combined with AI Trigger and **Respond to Nearby NPCs**, it starts [conversations between NPCs](./ai-behaviour.md#conversations-between-npcs).
 
 ## Actions
 

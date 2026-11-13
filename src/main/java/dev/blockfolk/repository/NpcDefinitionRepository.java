@@ -144,6 +144,7 @@ public final class NpcDefinitionRepository {
         configuration.set("ai-control.goal", ai.goal().isBlank() ? null : ai.goal());
         configuration.set("ai-control.information", ai.information().isBlank() ? null : ai.information());
         configuration.set("ai-control.respond-to-chat", ai.respondToChat());
+        configuration.set("ai-control.respond-to-npc", ai.respondToNpc());
         configuration.set("ai-control.memory.enabled", ai.memoryEnabled());
         configuration.set("ai-control.conversation.shared", ai.sharedConversation());
         configuration.set("ai-control.memory.facts", definition.getAiMemoryEntries().stream().map(memory -> {
@@ -326,7 +327,8 @@ public final class NpcDefinitionRepository {
                 allowedAiActions, configuration.getBoolean("ai-control.enabled", false),
                 configuration.getBoolean("ai-control.respond-to-chat", true),
                 configuration.getBoolean("ai-control.memory.enabled", false),
-                configuration.getBoolean("ai-control.conversation.shared", false)));
+                configuration.getBoolean("ai-control.conversation.shared", false),
+                configuration.getBoolean("ai-control.respond-to-npc", false)));
         List<AiMemory> memories = new ArrayList<>();
         for (Object item : configuration.getList("ai-control.memory.facts", List.of())) {
             if (item instanceof String legacy) {

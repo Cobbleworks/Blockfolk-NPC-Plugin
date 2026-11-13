@@ -26,3 +26,19 @@ ai-control:
   invocation-cooldown-seconds: 2
   # Recent conversation lines supplied to the model per NPC conversation. Set to 0 to disable history.
   conversation-history-limit: 20
+  # NPC-to-NPC conversations. NPCs with "Respond to NPCs" enabled answer what nearby NPCs say,
+  # including scripted Send Dialog and Holo Dialog lines.
+  npc-conversations:
+    # Response rounds one conversation may trigger before it ends. Set to 0 to turn NPC replies off.
+    max-replies: 6
+    # Hard time limit for one conversation.
+    max-duration-seconds: 120
+    # After a conversation ends, the same NPCs wait this long before talking again. Also limits how
+    # often "On Nearby NPC" fires for the same pair.
+    cooldown-seconds: 120
+    # Pause after a line before listeners answer, so players can read it.
+    reply-delay-seconds: 2
+    # Blocks within which other NPCs hear a spoken line.
+    hearing-range: 12
+    # NPC conversations and "On Nearby NPC" only run while a player is within this many blocks.
+    player-range: 32

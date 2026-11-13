@@ -23,6 +23,7 @@ import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.runtime.NativeNpcNavigationService;
 import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.runtime.NpcCombatService;
+import dev.blockfolk.runtime.NpcConversationService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
 import dev.blockfolk.runtime.NpcQuestionService;
 import dev.blockfolk.runtime.NpcRenderer;
@@ -32,6 +33,7 @@ import dev.blockfolk.util.ResolvedSkin;
 import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
 import dev.blockfolk.ai.AiControlService;
+import dev.blockfolk.ai.NpcConversationSettings;
 import dev.blockfolk.ai.AiMemoryStore;
 import dev.blockfolk.ai.OpenRouterClient;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
@@ -127,6 +129,22 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 locationRepository, openRouterClient, getConfig().getInt("ai-control.invocation-cooldown-seconds", 2),
                 getConfig().getInt("ai-control.conversation-history-limit", AiMemoryStore.DEFAULT_MAX_MESSAGES));
         behaviourService.setAiControlService(aiControlService);
+        NpcConversationService conversationService = new NpcConversationService(this, definitionRepository,
+                instanceRegistry, new NpcConversationSettings(
+                        getConfig().getInt("ai-control.npc-conversations.max-replies",
+                                NpcConversationSettings.DEFAULT_MAX_REPLIES),
+                        getConfig().getInt("ai-control.npc-conversations.max-duration-seconds",
+                                NpcConversationSettings.DEFAULT_MAX_DURATION_SECONDS),
+                        getConfig().getInt("ai-control.npc-conversations.cooldown-seconds",
+                                NpcConversationSettings.DEFAULT_COOLDOWN_SECONDS),
+                        getConfig().getDouble("ai-control.npc-conversations.reply-delay-seconds",
+                                NpcConversationSettings.DEFAULT_REPLY_DELAY_SECONDS),
+                        getConfig().getDouble("ai-control.npc-conversations.hearing-range",
+                                NpcConversationSettings.DEFAULT_HEARING_RANGE),
+                        getConfig().getDouble("ai-control.npc-conversations.player-range",
+                                NpcConversationSettings.DEFAULT_PLAYER_RANGE)));
+        conversationService.setAiControlService(aiControlService);
+        behaviourService.setConversationService(conversationService);
         aiControlService.setRouteState(behaviourService::hasRoute);
         aiControlService.setNavigationPurpose((instance, definition) -> {
             if (combatService.isEngaged(instance)) {

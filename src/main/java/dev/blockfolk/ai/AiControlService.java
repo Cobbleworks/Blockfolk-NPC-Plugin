@@ -105,6 +105,18 @@ public final class AiControlService {
             answer unless silence clearly suits its character; then call do_nothing for it. Other NPCs join only
             when it feels natural and may have no calls at all. Each NPC's targets come from its own context.
             """ + CORE_RULES;
+    private static final String NPC_GROUP_RESULT_RULES = """
+            You handle a conversation between Minecraft NPCs: another NPC just spoke near the listed NPCs, and
+            players may be watching.
+            Every function call needs the npc argument: the Response ID of the NPC performing it. Response IDs
+            identify NPCs in this conversation; display names are what players see.
+            The first participant is the intended responder (named in the latest line, or the closest one). It
+            should respond in character, or call do_nothing when the conversation is over or silence suits it.
+            Other NPCs join only when it feels natural and may have no calls at all. Each NPC's targets come from
+            its own context.
+            The conversation has a limited number of replies. Move it toward a natural end, never repeat
+            greetings or earlier lines, and close it when the last reply is reached.
+            """ + CORE_RULES;
     private static final String CORRECTION_NOTE = "Nothing from your previous response was executed because "
             + "some calls were rejected (see each result). Send the complete corrected set of function calls now, "
             + "including say if the NPC should speak.";
@@ -161,6 +173,8 @@ public final class AiControlService {
     private final Map<IdleConversation, Long> idleDreamVersions = new HashMap<>();
     private final Map<IdleConversation, StoredLocation> idleDreamOrigins = new HashMap<>();
     private final Map<UUID, List<String>> pendingMemoryNotices = new HashMap<>();
+    /** Conversation keys of NPC-to-NPC conversations; they are not player UUIDs. */
+    private final Set<UUID> npcConversationScopes = new HashSet<>();
     private long nextChatTurnSequence;
     private final long cooldownMillis;
     private Consumer<NpcInstance> processingStarted = ignored -> {
@@ -485,9 +499,8 @@ public final class AiControlService {
         List<GroupParticipant> eligibleParticipants = candidates.stream()
                 .map(instance -> definitions.find(instance.getDefinitionKey()).map(
                         definition -> new GroupParticipant(instance, definition, definition.getAiControlSettings())))
-                .flatMap(java.util.Optional::stream).filter(participant -> participant.settings().enabled()
-                        && participant.settings().hasContext() && participant.settings().respondToChat())
-                .toList();
+                .flatMap(java.util.Optional::stream)
+                .filter(participant -> respondsTo(false, participant.settings())).toList();
         if (eligibleParticipants.isEmpty()) {
             return;
         }
@@ -506,14 +519,85 @@ public final class AiControlService {
 
         int addressee = ChatAddressee.select(message,
                 eligibleParticipants.stream().map(participant -> participant.definition().getDisplayName()).toList());
-        UUID groupKey = player.getUniqueId();
-        PendingGroupInvocation invocation = new PendingGroupInvocation(message, List.copyOf(candidates), player,
-                resultHandler, eligibleParticipants.get(addressee).instance().getId(), System.currentTimeMillis(),
-                ++nextChatTurnSequence);
+        GroupSource source = GroupSource.player(player, message);
+        enqueueGroup(new PendingGroupInvocation(source, List.copyOf(candidates), resultHandler,
+                eligibleParticipants.get(addressee).instance().getId(), System.currentTimeMillis(),
+                ++nextChatTurnSequence));
+    }
+
+    /**
+     * Lets nearby NPCs respond to lines another NPC just spoke. One coordinated
+     * request decides who answers, so several listeners form a group
+     * conversation instead of talking over each other.
+     *
+     * @param conversationKey
+     *            memory and queue key of the NPC conversation
+     * @param candidates
+     *            listeners, intended responder first
+     * @param lastSpeaker
+     *            entity of the NPC that spoke last, bound as the triggering
+     *            entity
+     * @param eventDetail
+     *            the new lines and the remaining reply budget
+     */
+    public void invokeNpcConversation(UUID conversationKey, List<NpcInstance> candidates, Entity lastSpeaker,
+            String eventDetail, BiConsumer<NpcInstance, AiDecisionResult> resultHandler) {
+        List<NpcInstance> eligible = candidates.stream()
+                .filter(instance -> definitions.find(instance.getDefinitionKey())
+                        .map(definition -> respondsTo(true, definition.getAiControlSettings())).orElse(false))
+                .toList();
+        if (eligible.isEmpty() || !client.configured()) {
+            return;
+        }
+        npcConversationScopes.add(conversationKey);
+        enqueueGroup(new PendingGroupInvocation(GroupSource.npcConversation(conversationKey, lastSpeaker, eventDetail),
+                eligible, resultHandler, eligible.getFirst().getId(), System.currentTimeMillis(),
+                ++nextChatTurnSequence));
+    }
+
+    /** Drops queued NPC conversation rounds; a request already running finishes. */
+    public void cancelNpcConversation(UUID conversationKey) {
+        pendingGroups.remove(conversationKey);
+    }
+
+    /**
+     * Records a line spoken in an NPC conversation for every NPC that heard it, so
+     * later rounds and memory dreams see the whole conversation.
+     */
+    public void rememberNpcConversationLine(UUID conversationKey, java.util.Collection<NpcInstance> hearers,
+            String line) {
+        if (line == null || line.isBlank()) {
+            return;
+        }
+        npcConversationScopes.add(conversationKey);
+        for (NpcInstance hearer : hearers) {
+            NpcDefinition definition = definitions.find(hearer.getDefinitionKey()).orElse(null);
+            if (definition == null) {
+                continue;
+            }
+            AiControlSettings settings = definition.getAiControlSettings();
+            if (!settings.enabled() || !settings.hasContext()) {
+                continue;
+            }
+            memory.rememberMessage(hearer.getId(), conversationKey, settings.sharedConversation(), line,
+                    settings.memoryEnabled());
+            if (settings.memoryEnabled()) {
+                scheduleIdleDream(hearer, conversationKey, settings.sharedConversation(), DREAM_IDLE_TICKS);
+            }
+        }
+    }
+
+    private static boolean respondsTo(boolean npcConversation, AiControlSettings settings) {
+        return settings.enabled() && settings.hasContext()
+                && (npcConversation ? settings.respondToNpc() : settings.respondToChat());
+    }
+
+    private void enqueueGroup(PendingGroupInvocation invocation) {
+        UUID groupKey = invocation.source().scopeId();
         boolean queued = pendingGroups
                 .computeIfAbsent(groupKey, ignored -> new PendingAiQueue<>(MAX_PENDING_INTERACTIONS)).offer(invocation);
         if (!queued) {
-            plugin.getLogger().warning("AI Behaviour chat queue full for player " + player.getName());
+            plugin.getLogger().warning("AI Behaviour chat queue full for " + invocation.source().description());
             return;
         }
         startNextGroup(groupKey);
@@ -529,11 +613,10 @@ public final class AiControlService {
             pendingGroups.remove(groupKey);
             return;
         }
-        if (!invocation.player().isOnline()
-                || System.currentTimeMillis() - invocation.queuedAt() > PENDING_CHAT_LIFETIME_MILLIS) {
-            if (invocation.player().isOnline()) {
-                plugin.getLogger()
-                        .warning("AI Behaviour chat turn expired for player " + invocation.player().getName());
+        GroupSource source = invocation.source();
+        if (!source.valid() || System.currentTimeMillis() - invocation.queuedAt() > PENDING_CHAT_LIFETIME_MILLIS) {
+            if (source.valid()) {
+                plugin.getLogger().warning("AI Behaviour chat turn expired for " + source.description());
             }
             queue.poll();
             if (queue.isEmpty()) {
@@ -546,9 +629,8 @@ public final class AiControlService {
                 .filter(instance -> instances.findById(instance.getId()).isPresent())
                 .map(instance -> definitions.find(instance.getDefinitionKey()).map(
                         definition -> new GroupParticipant(instance, definition, definition.getAiControlSettings())))
-                .flatMap(java.util.Optional::stream).filter(participant -> participant.settings().enabled()
-                        && participant.settings().hasContext() && participant.settings().respondToChat())
-                .toList();
+                .flatMap(java.util.Optional::stream)
+                .filter(participant -> respondsTo(source.npcConversation(), participant.settings())).toList();
         GroupParticipant primary = eligibleParticipants.stream()
                 .filter(participant -> participant.instance().getId().equals(invocation.primaryId())).findFirst()
                 .orElse(null);
@@ -598,15 +680,14 @@ public final class AiControlService {
         Map<String, GroupParticipant> aliases = new java.util.LinkedHashMap<>();
         Map<UUID, Long> requestGenerations = new HashMap<>();
         Map<UUID, AiTargetSnapshot> targetsByInstance = new HashMap<>();
-        StringBuilder system = new StringBuilder(GROUP_RESULT_RULES);
+        StringBuilder system = new StringBuilder(
+                source.npcConversation() ? NPC_GROUP_RESULT_RULES : GROUP_RESULT_RULES);
         List<String> responseIds = NpcResponseIds
                 .forNames(participants.stream().map(participant -> participant.definition().getDisplayName()).toList());
         String primaryResponseId = responseIds.getFirst();
         system.append("\nUse the intended speaker's Response ID in its action calls: ").append(primaryResponseId);
-        String eventDetail = "Player " + invocation.player().getName() + " said: \"" + invocation.message() + "\"";
-        String participantHeading = participants.size() == 1
-                ? "\n\nNPC responding to the player:\n"
-                : "\n\nNearby NPC group (intended speaker first):\n";
+        String eventDetail = source.eventDetail();
+        String participantHeading = participantHeading(source, participants.size());
         StringBuilder context = new StringBuilder("Event:\n").append(eventDetail).append(participantHeading);
         Set<String> participantWorlds = new java.util.LinkedHashSet<>();
         try {
@@ -623,10 +704,12 @@ public final class AiControlService {
                 system.append("\n\nResponse ID: ").append(alias).append("\nDisplay name: ")
                         .append(NpcResponseIds.plainName(participant.definition().getDisplayName())).append("\n")
                         .append(participant.settings().systemContext());
-                rememberPlayerMessage(participant.instance(), invocation.player(), invocation.message());
+                if (source.player() != null) {
+                    rememberPlayerMessage(participant.instance(), source.player(), source.chatMessage());
+                }
                 RequestContext participantContext = buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail, null,
-                        participant.instance(), participant.definition(), invocation.player(), participant.settings(),
-                        false);
+                        participant.instance(), participant.definition(), source.actor(), participant.settings(),
+                        false, source.scopeId());
                 memory.rememberEvent(participant.instance().getId(), eventDetail);
                 targetsByInstance.put(participant.instance().getId(), participantContext.targets());
                 context.append("\n=== ").append(NpcResponseIds.plainName(participant.definition().getDisplayName()))
@@ -669,11 +752,13 @@ public final class AiControlService {
             OpenRouterClient.ActionSession session = client.actionSession(system.toString(), context.toString(),
                     groupTools, true);
             completeGroupActionChain(session, aliases, requestGenerations, targetsByInstance, targetsByAlias,
-                    settingsByAlias, availableByAlias, primaryResponseId, invocation.player(),
-                    invocation.resultHandler(), eventDetail, 0, new HashMap<>(), new HashSet<>(), false)
+                    settingsByAlias, availableByAlias, primaryResponseId, source, invocation.resultHandler(),
+                    eventDetail, 0, new HashMap<>(), new HashSet<>(), false)
                     .whenComplete((ignored, error) -> {
                         if (error != null) {
-                            logRequestFailure("AI Behaviour chat request", error);
+                            logRequestFailure(source.npcConversation()
+                                    ? "AI Behaviour NPC conversation request"
+                                    : "AI Behaviour chat request", error);
                         }
                         if (plugin.isEnabled()) {
                             Bukkit.getScheduler().runTask(plugin, () -> {
@@ -712,6 +797,17 @@ public final class AiControlService {
         }
     }
 
+    private static String participantHeading(GroupSource source, int participants) {
+        if (source.npcConversation()) {
+            return participants == 1
+                    ? "\n\nNPC responding:\n"
+                    : "\n\nNearby NPC group (intended responder first):\n";
+        }
+        return participants == 1
+                ? "\n\nNPC responding to the player:\n"
+                : "\n\nNearby NPC group (intended speaker first):\n";
+    }
+
     private void logRequestFailure(String requestDescription, Throwable error) {
         Throwable cause = error;
         while (cause.getCause() != null && cause.getCause() != cause) {
@@ -732,7 +828,7 @@ public final class AiControlService {
             Map<String, GroupParticipant> aliases, Map<UUID, Long> requestGenerations,
             Map<UUID, AiTargetSnapshot> targetsByInstance, Map<String, AiTargetSnapshot> targetsByAlias,
             Map<String, AiControlSettings> settingsByAlias, Map<String, Set<AiActionType>> availableByAlias,
-            String primaryResponseId, Player player, BiConsumer<NpcInstance, AiDecisionResult> resultHandler,
+            String primaryResponseId, GroupSource source, BiConsumer<NpcInstance, AiDecisionResult> resultHandler,
             String eventDetail, int round, Map<String, Integer> actionsUsed, Set<String> speakers, boolean retried) {
         return session.complete().thenCompose(turn -> {
             if (turn.calls().isEmpty() && round > 0) {
@@ -746,7 +842,7 @@ public final class AiControlService {
                         + "); asking the model to fix it.");
                 requestCorrection(session, turn, parsed);
                 return completeGroupActionChain(session, aliases, requestGenerations, targetsByInstance, targetsByAlias,
-                        settingsByAlias, availableByAlias, primaryResponseId, player, resultHandler, eventDetail, round,
+                        settingsByAlias, availableByAlias, primaryResponseId, source, resultHandler, eventDetail, round,
                         actionsUsed, speakers, true);
             }
             if (turn.truncated() || !parsed.usable()) {
@@ -781,12 +877,10 @@ public final class AiControlService {
             }
             Bukkit.getScheduler().runTask(plugin, () -> {
                 try {
-                    applyGroupDecisions(aliases, accepted, requestGenerations, targetsByInstance, player,
+                    applyGroupDecisions(aliases, accepted, requestGenerations, targetsByInstance, source,
                             resultHandler);
                     StringBuilder updated = new StringBuilder("Event:\n").append(eventDetail)
-                            .append(aliases.size() == 1
-                                    ? "\n\nNPC responding to the player:\n"
-                                    : "\n\nNearby NPC group (intended speaker first):\n");
+                            .append(participantHeading(source, aliases.size()));
                     for (Map.Entry<String, GroupParticipant> entry : aliases.entrySet()) {
                         GroupParticipant participant = entry.getValue();
                         UUID id = participant.instance().getId();
@@ -795,8 +889,8 @@ public final class AiControlService {
                             continue;
                         }
                         RequestContext fresh = buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail, null,
-                                participant.instance(), participant.definition(), player, participant.settings(),
-                                false);
+                                participant.instance(), participant.definition(), source.actor(),
+                                participant.settings(), false, source.scopeId());
                         targetsByInstance.put(id, fresh.targets());
                         targetsByAlias.put(entry.getKey(), fresh.targets());
                         updated.append("\n=== ")
@@ -837,7 +931,7 @@ public final class AiControlService {
                                 .trim(),
                         true);
                 return completeGroupActionChain(session, aliases, requestGenerations, targetsByInstance, targetsByAlias,
-                        settingsByAlias, availableByAlias, primaryResponseId, player, resultHandler, eventDetail,
+                        settingsByAlias, availableByAlias, primaryResponseId, source, resultHandler, eventDetail,
                         round + 1, actionsUsed, speakers, false);
             });
         });
@@ -850,7 +944,7 @@ public final class AiControlService {
     }
 
     private void applyGroupDecisions(Map<String, GroupParticipant> aliases, Map<String, AiDecision> decisions,
-            Map<UUID, Long> requestGenerations, Map<UUID, AiTargetSnapshot> targetsByInstance, Player player,
+            Map<UUID, Long> requestGenerations, Map<UUID, AiTargetSnapshot> targetsByInstance, GroupSource source,
             BiConsumer<NpcInstance, AiDecisionResult> resultHandler) {
         Map<String, GroupParticipant> validParticipants = new java.util.LinkedHashMap<>();
         aliases.forEach((alias, participant) -> {
@@ -863,7 +957,11 @@ public final class AiControlService {
 
         // Every participant remembers every spoken line from this coordinated turn.
         // This is the actual cross-NPC awareness grouping is intended to provide.
-        for (Map.Entry<String, AiDecision> response : decisions.entrySet()) {
+        // NPC conversation lines are recorded when spoken, for everyone in hearing
+        // range, so they are skipped here.
+        for (Map.Entry<String, AiDecision> response : source.npcConversation()
+                ? Map.<String, AiDecision>of().entrySet()
+                : decisions.entrySet()) {
             GroupParticipant speaker = validParticipants.get(response.getKey());
             if (speaker == null) {
                 continue;
@@ -874,7 +972,7 @@ public final class AiControlService {
                 }
                 String line = NpcResponseIds.plainName(speaker.definition().getDisplayName()) + ": " + action.text();
                 validParticipants.values()
-                        .forEach(listener -> memory.rememberMessage(listener.instance().getId(), player.getUniqueId(),
+                        .forEach(listener -> memory.rememberMessage(listener.instance().getId(), source.scopeId(),
                                 listener.settings().sharedConversation(), line, listener.settings().memoryEnabled()));
             }
         }
@@ -1009,8 +1107,8 @@ public final class AiControlService {
         }
     }
 
-    private void notifyDreamParticipants(AiMemoryStore.DreamBatch batch, NpcDefinition definition, boolean regional,
-            boolean local) {
+    private void notifyDreamParticipants(AiMemoryStore.DreamBatch batch, NpcInstance instance,
+            NpcDefinition definition, boolean regional, boolean local) {
         List<String> notices = new ArrayList<>();
         if (regional) {
             notices.add(definition.getDisplayName() + " is telling the others...");
@@ -1018,12 +1116,30 @@ public final class AiControlService {
         if (local) {
             notices.add(definition.getDisplayName() + " remembered this...");
         }
+        Set<UUID> notified = new HashSet<>();
+        boolean npcConversation = false;
         for (UUID participantId : batch.participants()) {
+            if (npcConversationScopes.contains(participantId)) {
+                npcConversation = true;
+                continue;
+            }
+            notified.add(participantId);
             Player player = Bukkit.getPlayer(participantId);
             if (player != null && player.isOnline()) {
                 notices.forEach(message -> sendMemoryNotice(player, message));
             } else {
                 pendingMemoryNotices.computeIfAbsent(participantId, ignored -> new ArrayList<>()).addAll(notices);
+            }
+        }
+        if (!npcConversation) {
+            return;
+        }
+        // NPC conversations have no participating player; tell whoever watched.
+        Location origin = instances.currentLocation(instance);
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (!notified.contains(player.getUniqueId()) && player.getWorld() == origin.getWorld()
+                    && player.getLocation().distanceSquared(origin) <= 16 * 16) {
+                notices.forEach(message -> sendMemoryNotice(player, message));
             }
         }
     }
@@ -1157,7 +1273,7 @@ public final class AiControlService {
                 // An empty facts list is a successful review and advances the batch.
                 memory.completeDreamBatch(batch);
                 if (regional || local) {
-                    notifyDreamParticipants(batch, current, regional, local);
+                    notifyDreamParticipants(batch, instance, current, regional, local);
                 }
             });
         });
@@ -1345,6 +1461,17 @@ public final class AiControlService {
 
     private RequestContext buildContext(BehaviourEvent event, String detail, String guidance, NpcInstance instance,
             NpcDefinition definition, Entity actor, AiControlSettings settings, boolean includeEvent) {
+        return buildContext(event, detail, guidance, instance, definition, actor, settings, includeEvent, null);
+    }
+
+    /**
+     * @param conversationScope
+     *            conversation whose recent lines to include; null derives it from
+     *            the actor (a player, or another Blockfolk NPC)
+     */
+    private RequestContext buildContext(BehaviourEvent event, String detail, String guidance, NpcInstance instance,
+            NpcDefinition definition, Entity actor, AiControlSettings settings, boolean includeEvent,
+            UUID conversationScope) {
         AiTargetSnapshot.Builder targets = AiTargetSnapshot.builder();
         if (actor != null) {
             targets.bindEntity("triggering_entity", actor);
@@ -1419,13 +1546,25 @@ public final class AiControlService {
             out.append("\nRecent event memory:\n");
             events.forEach(item -> out.append("- ").append(item).append('\n'));
         }
-        if (actor instanceof Player player) {
-            List<String> conversation = memory.recentConversation(instance.getId(), player.getUniqueId(),
+        UUID scope = conversationScope;
+        String partner = "nearby NPCs";
+        if (actor instanceof Player player && (scope == null || scope.equals(player.getUniqueId()))) {
+            scope = player.getUniqueId();
+            partner = player.getName();
+        } else if (scope == null && actor != null) {
+            // An NPC triggered by another NPC (for example On Nearby NPC) sees what
+            // the two of them said last time.
+            scope = instances.findByEntityId(actor.getEntityId())
+                    .map(other -> NpcConversationTracker.conversationKey(List.of(instance.getId(), other.getId())))
+                    .orElse(null);
+        }
+        if (scope != null) {
+            List<String> conversation = memory.recentConversation(instance.getId(), scope,
                     settings.sharedConversation());
             if (!conversation.isEmpty()) {
                 out.append(settings.sharedConversation()
                         ? "\nRecent shared conversation:\n"
-                        : "\nRecent conversation with " + player.getName() + ":\n");
+                        : "\nRecent conversation with " + partner + ":\n");
                 conversation.forEach(item -> out.append("- ").append(item).append('\n'));
             }
         }
@@ -1973,9 +2112,47 @@ public final class AiControlService {
 
     }
 
-    private record PendingGroupInvocation(String message, List<NpcInstance> candidates, Player player,
+    private record PendingGroupInvocation(GroupSource source, List<NpcInstance> candidates,
             BiConsumer<NpcInstance, AiDecisionResult> resultHandler, UUID primaryId, long queuedAt, long sequence) {
 
+    }
+
+    /**
+     * Who started a coordinated group turn: a player's chat message, or lines
+     * spoken in an NPC conversation.
+     *
+     * @param scopeId
+     *            group queue and conversation memory key: the player's UUID, or
+     *            the NPC conversation key
+     * @param player
+     *            the chatting player, or null for an NPC conversation
+     * @param actor
+     *            entity bound as the triggering entity
+     * @param chatMessage
+     *            the player's message, or null
+     */
+    private record GroupSource(UUID scopeId, Player player, Entity actor, String eventDetail, String chatMessage) {
+
+        static GroupSource player(Player player, String message) {
+            return new GroupSource(player.getUniqueId(), player, player,
+                    "Player " + player.getName() + " said: \"" + message + "\"", message);
+        }
+
+        static GroupSource npcConversation(UUID conversationKey, Entity lastSpeaker, String eventDetail) {
+            return new GroupSource(conversationKey, null, lastSpeaker, eventDetail, null);
+        }
+
+        boolean npcConversation() {
+            return player == null;
+        }
+
+        boolean valid() {
+            return player == null || player.isOnline();
+        }
+
+        String description() {
+            return player == null ? "NPC conversation " + scopeId : "player " + player.getName();
+        }
     }
 
     private record RequestContext(String prompt, AiTargetSnapshot targets) {

@@ -6,6 +6,8 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Added
 
+- Conversations between AI NPCs. **Respond to Nearby NPCs** in AI Behaviour lets an NPC answer what nearby NPCs say, including scripted Send Dialog and Holo Dialog lines. Several listeners respond together as a group. Each conversation is limited by a reply cap (6 by default), a time limit, and a cooldown, and only runs while a player is nearby. Configure the limits under `ai-control.npc-conversations`.
+- **On Nearby NPC** behaviour event that runs when another Blockfolk NPC comes within eight blocks while a player is nearby. Each pair of NPCs fires it once per cooldown.
 - Shared shops: item-for-item trades with unlimited stock, shown in the vanilla trading screen and reusable by any number of NPCs. Manage them in the shop library under `/bf shop` or **Shops** in the main menu, and use `/bf shop create <name>` or `/bf shop <shop> [rename|preview]`. Stored in `shops.yml`.
 - Open Shop behaviour action that opens a chosen shop for the triggering player, for example on right-click or from a question answer. Shops configured on a preset by earlier development builds move into the library automatically, and that preset's Open Shop actions are pointed at them.
 - `/bf config ai model` without a model shows the model currently in use.

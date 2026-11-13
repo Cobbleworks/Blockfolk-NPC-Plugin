@@ -30,8 +30,14 @@ Gameplay requests use native function calls with temperature `0.3`; memory revie
 | --- | ---: | --- |
 | `ai-control.invocation-cooldown-seconds` | `2` | Per-NPC protection in addition to event-specific trigger throttling. |
 | `ai-control.conversation-history-limit` | `20` | Recent conversation lines retained per NPC conversation. `0` disables history. |
+| `ai-control.npc-conversations.max-replies` | `6` | Response rounds one conversation between NPCs may trigger. `0` turns NPC replies off. |
+| `ai-control.npc-conversations.max-duration-seconds` | `120` | Hard time limit for one conversation between NPCs. |
+| `ai-control.npc-conversations.cooldown-seconds` | `120` | Wait before the same NPCs talk again, and before **On Nearby NPC** fires again for the same pair. |
+| `ai-control.npc-conversations.reply-delay-seconds` | `2` | Pause after a line before listening NPCs respond. |
+| `ai-control.npc-conversations.hearing-range` | `12` | Blocks within which NPCs hear another NPC speak. |
+| `ai-control.npc-conversations.player-range` | `32` | Conversations between NPCs and **On Nearby NPC** only run with a player this close. |
 
-NPC-specific context, memory, inventory access, chat response, and allowed actions are configured through each preset's [AI Behaviour menu](/features/ai-behaviour), not in this file.
+NPC-specific context, memory, inventory access, chat and NPC responses, and allowed actions are configured through each preset's [AI Behaviour menu](/features/ai-behaviour), not in this file.
 
 ## Complete default file
 
@@ -52,4 +58,11 @@ openrouter:
 ai-control:
   invocation-cooldown-seconds: 2
   conversation-history-limit: 20
+  npc-conversations:
+    max-replies: 6
+    max-duration-seconds: 120
+    cooldown-seconds: 120
+    reply-delay-seconds: 2
+    hearing-range: 12
+    player-range: 32
 ```
