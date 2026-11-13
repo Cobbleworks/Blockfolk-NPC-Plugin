@@ -126,8 +126,6 @@ public final class GuiService implements Listener {
     private static final int MAIN_LOCATIONS_SLOT = 47;
     private static final int MAIN_EVENTS_SLOT = 48;
     private static final int MAIN_OVERVIEW_SLOT = 49;
-    private static final int MAIN_ABILITIES_SLOT = 50;
-    private static final int MAIN_SHOPS_SLOT = 51;
     private static final int MAIN_CREATE_SLOT = 52;
     private static final int MAIN_NEXT_SLOT = 53;
     /**
@@ -449,12 +447,6 @@ public final class GuiService implements Listener {
                                         + instanceRegistry.findActive().size(),
                                 LegacyText.GRAY + "Page " + (page + 1) + " of " + pages, "",
                                 GuiItems.hint("Click", "reorder NPC presets"))));
-        inventory.setItem(MAIN_ABILITIES_SLOT,
-                item(Material.BLAZE_POWDER, "Abilities", List.of(LegacyText.GRAY + "Shared combat abilities for NPCs",
-                        "", GuiItems.hint("Click", "open the ability library"))));
-        inventory.setItem(MAIN_SHOPS_SLOT,
-                item(Material.EMERALD_BLOCK, "Shops", List.of(LegacyText.GRAY + "Shared shops NPCs can open", "",
-                        GuiItems.hint("Click", "open the shop library"))));
         inventory.setItem(MAIN_CREATE_SLOT, GuiItems.create("Create NPC", "Creates a new NPC preset"));
         if (page + 1 < pages)
             inventory.setItem(MAIN_NEXT_SLOT, GuiItems.nextPage(page, pages));
@@ -1360,14 +1352,6 @@ public final class GuiService implements Listener {
             }
             case MAIN_OVERVIEW_SLOT -> {
                 openReorder(player, page);
-                return;
-            }
-            case MAIN_ABILITIES_SLOT -> {
-                openAbilities(player);
-                return;
-            }
-            case MAIN_SHOPS_SLOT -> {
-                openShops(player);
                 return;
             }
             case MAIN_CREATE_SLOT -> {

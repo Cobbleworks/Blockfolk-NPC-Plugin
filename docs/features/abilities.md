@@ -1,6 +1,6 @@
 # Abilities
 
-**Abilities** is the shared ability library for NPC combat. Open it from the **Abilities** button in `/bf`, or use `/bf abilities`. Creating and editing attacks requires `blockfolk.admin`.
+**Abilities** is the shared ability library for NPC combat. Open it with `/bf abilities`. Creating and editing attacks requires `blockfolk.admin`.
 
 ## Build and assign an attack
 
