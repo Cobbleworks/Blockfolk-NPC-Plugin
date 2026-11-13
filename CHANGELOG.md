@@ -7,7 +7,7 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 ### Added
 
 - NPCs can ride minecarts and boats. The new **Board Vehicles** property in NPC Properties makes an NPC get into an empty minecart, boat, or raft it touches, also while walking a route. Activator rails, breaking the vehicle, or a restart get it out again, and its route resumes from the nearest waypoint. With the property off, passing carts and boats no longer pick the NPC up.
-- AI NPCs know whether they are riding and which minecarts and boats are nearby. The **Enter/Exit Vehicle** AI capability lets them walk to a listed vehicle and get in, or get out.
+- AI NPCs know whether they are riding and which minecarts and boats are nearby. The **Enter/Exit Vehicle** AI capability lets them walk to a listed vehicle and get in, or get out. Any AI walking action (Move To, Follow, Flee, Interact, Return Home, Start Route) also gets a riding NPC out first.
 - Chat with an NPC that uses **Private** AI conversation is no longer sent to the whole server when no other player is within 16 blocks of the speaker or the answering NPCs. Only the speaker sees their own message.
 - Conversations between AI NPCs. **Respond to Nearby NPCs** in AI Behaviour lets an NPC answer what nearby NPCs say, including scripted Send Dialog lines. Holo Dialog flavour text is ignored. Several listeners respond together as a group. Each conversation is limited by a reply cap (6 by default), a time limit, and a cooldown, and only runs while a player is nearby. Configure the limits under `ai-control.npc-conversations`.
 - **On Nearby NPC** behaviour event that runs when another Blockfolk NPC comes within eight blocks while a player is nearby. Each pair of NPCs fires it once per cooldown.

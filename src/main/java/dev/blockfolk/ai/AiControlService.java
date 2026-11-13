@@ -2013,7 +2013,8 @@ public final class AiControlService {
                 .append(speedSquared > MOVING_VEHICLE_SPEED_SQUARED
                         ? "moving at about " + Math.round(Math.sqrt(speedSquared) * 20.0) + " blocks per second"
                         : "standing still")
-                .append("; it cannot walk until it gets out\n");
+                .append("; walking actions (move_to, follow, flee_from, interact, return_home, start_route) ")
+                .append("get it out first\n");
     }
 
     public List<NamedLocation> nearbyLocations(Location center) {

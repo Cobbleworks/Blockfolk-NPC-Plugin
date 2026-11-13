@@ -933,9 +933,10 @@ public final class NpcBehaviourService implements Listener {
                     fleeFrom(instance, target);
                 }
                 case FOLLOW -> {
-                    if (target instanceof Player player)
+                    if (target instanceof Player player) {
+                        leaveVehicleToWalk(instance);
                         startFollowing(instance, player);
-                    else
+                    } else
                         aiControlService.noteOutcome(instance,
                                 "follow " + action.target() + " failed: only players can be followed.");
                 }
@@ -943,6 +944,7 @@ public final class NpcBehaviourService implements Listener {
                 case INTERACT -> startAiInteraction(instance, action.target(), result.targets());
                 case MOVE_TO ->
                     resolveAiMoveTarget(action.target(), result.targets()).ifPresentOrElse(targetLocation -> {
+                        leaveVehicleToWalk(instance);
                         stopFollowing(instance);
                         moveTargets.put(instance.getId(), targetLocation);
                         aiMoveTargets.put(instance.getId(), targetLocation);
@@ -952,11 +954,13 @@ public final class NpcBehaviourService implements Listener {
                             "move_to " + action.target() + " failed: that target is no longer present."));
                 case MINE_BLOCKS -> mineNearbyBlocks(instance, action.target(), true, definition.isItemPickup());
                 case RETURN_HOME -> {
+                    leaveVehicleToWalk(instance);
                     stopFollowing(instance);
                     moveTargets.put(instance.getId(), instance.getSpawnLocation());
                     instances.stopNavigating(instance);
                 }
                 case START_ROUTE -> {
+                    leaveVehicleToWalk(instance);
                     routePaused.remove(instance.getId());
                     instances.stopNavigating(instance);
                 }
@@ -985,6 +989,15 @@ public final class NpcBehaviourService implements Listener {
         if (aiControlService != null)
             aiControlService.invoke(event, eventDetail, guidance, instance, definition, actor,
                     result -> applyAiDecision(event, result, instance, definition, actor, true));
+    }
+
+    /**
+     * An AI order to walk somewhere outranks a ride: the NPC gets out of its
+     * minecart or boat first, even without the Enter/Exit Vehicle capability.
+     */
+    private void leaveVehicleToWalk(NpcInstance instance) {
+        if (vehicleService != null)
+            vehicleService.exit(instance);
     }
 
     private void enterAiVehicle(NpcInstance instance, String alias, Entity vehicle) {
@@ -1073,6 +1086,7 @@ public final class NpcBehaviourService implements Listener {
     private void fleeFrom(NpcInstance instance, Entity target) {
         if (target == null || target.getWorld() != instance.getLocation().getWorld())
             return;
+        leaveVehicleToWalk(instance);
         Location origin = instance.getLocation();
         Vector away = origin.toVector().subtract(target.getLocation().toVector()).setY(0);
         if (away.lengthSquared() < 0.01)
@@ -1483,6 +1497,7 @@ public final class NpcBehaviourService implements Listener {
                 : request.blockLocation().getBlock();
         if (target == null || !isUsableInteractionTarget(target, request.kind()))
             return false;
+        leaveVehicleToWalk(instance);
         stopFollowing(instance);
         moveTargets.remove(instance.getId());
         instances.stand(instance);

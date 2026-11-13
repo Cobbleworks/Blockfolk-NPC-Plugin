@@ -45,7 +45,7 @@ The request includes, when available:
 - current and maximum health;
 - combat and route state, including an active walking destination when pathfinding;
 - whether the NPC is in water or burning, plus active status effects;
-- the minecart or boat it is riding, whether that vehicle is moving, and that a rider cannot walk;
+- the minecart or boat it is riding, whether that vehicle is moving, and that walking actions get it out first;
 - main-hand material;
 - occupied temporary-inventory slots when that access is enabled.
 

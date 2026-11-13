@@ -131,8 +131,8 @@ final class AiActionTools {
                     + "can then walk to. Use it when a player names the place the NPC is standing, such as "
                     + "\"this is my home\". Use / to group names, e.g. town/market.";
             case DROP_ITEM -> "Drop one item stack from the temporary inventory.";
-            case ENTER_VEHICLE -> "Walk to a listed minecart or boat and get in. While riding, the NPC cannot walk "
-                    + "and the vehicle only moves when pushed, on powered rails, or paddled by a player.";
+            case ENTER_VEHICLE -> "Walk to a listed minecart or boat and get in. The vehicle only moves when pushed, "
+                    + "on powered rails, or paddled by a player; any walking action gets the NPC out again.";
             case EXIT_VEHICLE -> "Get out of the minecart or boat the NPC is riding.";
             case DO_NOTHING -> "Deliberately take no action and stay silent. Never combine with other calls.";
         };
