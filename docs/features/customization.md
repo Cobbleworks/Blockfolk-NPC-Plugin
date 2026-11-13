@@ -12,12 +12,27 @@ Click the NPC head in the preset editor to open **NPC Properties**, where you ca
 | Show Name | Displays the name hologram above the NPC. |
 | Look at Player | Turns toward the nearest player with a subtle body turn. |
 | Item Pickup | Collects nearby item entities into that instance's temporary inventory. |
+| Board Vehicles | Gets into an empty minecart or boat it walks or stands next to, including while following a route. Off by default. |
 | Pose | Standing, Crouching, Sleeping, Sitting, Swimming / Crawling, or Fall Flying. |
 | Name Color | The color used for the visible NPC name. |
 
 On/off settings switch with a click; their icon, name color, and tooltip show the current state. Multi-option settings such as Pose and Name Color list every option in their tooltip with a `▶` marker on the current one: left-click selects the next option, right-click the previous one.
 
 The selected pose is saved in the preset, applies to all its instances, and survives respawns and restarts. Sitting bends the legs using an invisible seat; changing poses or deleting the NPC removes that seat. Swimming / Crawling uses the same horizontal player pose, while Fall Flying supplies the elytra-style pose without initiating flight. These options cover all five native poses accepted by Paper's mannequin entity plus mounted sitting. Wave and Jump remain available under behavior **Animations**, which now also includes Sitting.
+
+## Riding minecarts and boats
+
+With **Board Vehicles** on, an NPC climbs into any empty minecart, boat, or raft it touches, whether it is standing idle or walking a route. Seated NPCs (Sitting pose) and NPCs in combat stay put. While riding, the NPC cannot walk: its route, Move To, and Follow wait until the ride ends. The vehicle moves only on powered rails, when pushed, or when a player paddles a boat the NPC shares.
+
+Rides end through the world:
+
+- an **activator rail** that is powered ejects the NPC as the cart passes over it;
+- breaking the minecart or boat drops the NPC where it was;
+- a server restart or plugin reload puts every NPC back on foot beside its vehicle.
+
+After getting out, a route restarts from the waypoint nearest the drop-off. The NPC waits three seconds before boarding again and never climbs back into the vehicle it just left while it is still within four blocks of it, so a cart stopped at an activator rail does not swallow it again.
+
+With the setting off, minecarts and boats that bump into the NPC no longer scoop it up. AI NPCs can still get in or out on request through the **Enter/Exit Vehicle** capability (see [AI Behaviour](ai-behaviour.md)).
 
 ## Equipment & Loot
 

@@ -185,6 +185,12 @@ public final class NpcInstanceRegistry implements Listener {
     }
 
     public void saveAndDespawnAll() {
+        // Riders restart on foot: step out at the vehicle's dismount spot and
+        // save that position instead of the seat.
+        for (NpcInstance instance : instances.values()) {
+            if (renderer.leaveVehicle(instance))
+                currentLocation(instance);
+        }
         instanceRepository.saveAll(instances.values());
         for (NpcInstance instance : instances.values()) {
             renderer.destroy(instance);
@@ -270,6 +276,13 @@ public final class NpcInstanceRegistry implements Listener {
         if (!instances.containsKey(instance.getId())) {
             return NativeNpcNavigationService.NavigationStatus.STALLED;
         }
+        if (isRiding(instance)) {
+            // A rider cannot walk. Its position comes from the vehicle, and
+            // teleporting it to the navigator would pull it out of the seat.
+            navigationService.stop(instance);
+            currentLocation(instance);
+            return NativeNpcNavigationService.NavigationStatus.STALLED;
+        }
         // The mannequin may have been pushed while its navigator was idle (including
         // while an asynchronous AI request was in flight). Capture that rendered
         // position before starting or continuing pathfinding.
@@ -287,6 +300,39 @@ public final class NpcInstanceRegistry implements Listener {
 
     public void stopNavigating(NpcInstance instance) {
         navigationService.stop(instance);
+    }
+
+    /**
+     * Discards the invisible navigator so the next walk starts from the mannequin's
+     * current position, for example after a ride ended far away.
+     */
+    public void resetNavigation(NpcInstance instance) {
+        navigationService.destroy(instance);
+    }
+
+    /** The minecart or boat this NPC is riding, if any. */
+    public Optional<Entity> vehicle(NpcInstance instance) {
+        if (!instances.containsKey(instance.getId()))
+            return Optional.empty();
+        return renderer.vehicle(instance);
+    }
+
+    public boolean isRiding(NpcInstance instance) {
+        return vehicle(instance).isPresent();
+    }
+
+    public boolean board(NpcInstance instance, Entity vehicle) {
+        if (!instances.containsKey(instance.getId()))
+            return false;
+        navigationService.destroy(instance);
+        return renderer.board(instance, vehicle);
+    }
+
+    public boolean leaveVehicle(NpcInstance instance) {
+        if (!instances.containsKey(instance.getId()) || !renderer.leaveVehicle(instance))
+            return false;
+        currentLocation(instance);
+        return true;
     }
 
     static double slowedNavigationSpeed(double speed, int slownessAmplifier) {

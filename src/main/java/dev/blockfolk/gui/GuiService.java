@@ -172,6 +172,7 @@ public final class GuiService implements Listener {
     private static final int PROPERTY_SHOW_NAME_SLOT = 11;
     private static final int PROPERTY_LOOK_SLOT = 12;
     private static final int PROPERTY_PICKUP_SLOT = 13;
+    private static final int PROPERTY_VEHICLES_SLOT = 14;
     private static final int PROPERTY_POSE_SLOT = 15;
     private static final int PROPERTY_COLOR_SLOT = 16;
     private static final int PROPERTY_BACK_SLOT = 22;
@@ -388,10 +389,8 @@ public final class GuiService implements Listener {
             inventory.setItem(51,
                     item(Material.EMERALD, "Create Route", List.of(GuiItems.hint("Click", "enter its name"))));
         } else if (pickerType == BehaviourValuePickerType.CUSTOM_EVENT) {
-            inventory.setItem(51,
-                    item(Material.EMERALD, "Create New Event",
-                            List.of(LegacyText.GRAY + "Creates and selects a custom event",
-                                    GuiItems.hint("Click", "enter its name"))));
+            inventory.setItem(51, item(Material.EMERALD, "Create New Event", List.of(
+                    LegacyText.GRAY + "Creates and selects a custom event", GuiItems.hint("Click", "enter its name"))));
         }
         if (page + 1 < pages) {
             inventory.setItem(53, GuiItems.nextPage(page, pages));
@@ -543,12 +542,12 @@ public final class GuiService implements Listener {
                                                         GuiItems.hint("Click", "set a URL or texture hash"),
                                                         LegacyText.DARK_GRAY + "Enter 'default' to clear it")),
                                         definition));
-        inventory.setItem(EDITOR_PROPERTIES_SLOT, item(Material.ARMOR_STAND, "Appearance & Properties",
-                List.of(LegacyText.GRAY + "Pose: " + LegacyText.WHITE + definition.getPose().displayName(),
-                        LegacyText.GRAY + "Name color: " + LegacyText.WHITE + definition.getColor().displayName(),
-                        onOff("Pushable", definition.isPushable()), onOff("Name shown", definition.isShowName()),
-                        onOff("Looks at players", definition.isLookAtPlayer()),
-                        onOff("Item pickup", definition.isItemPickup()), "", GuiItems.hint("Click", "configure"))));
+        inventory.setItem(EDITOR_PROPERTIES_SLOT, item(Material.ARMOR_STAND, "Appearance & Properties", List.of(
+                LegacyText.GRAY + "Pose: " + LegacyText.WHITE + definition.getPose().displayName(),
+                LegacyText.GRAY + "Name color: " + LegacyText.WHITE + definition.getColor().displayName(),
+                onOff("Pushable", definition.isPushable()), onOff("Name shown", definition.isShowName()),
+                onOff("Looks at players", definition.isLookAtPlayer()), onOff("Item pickup", definition.isItemPickup()),
+                onOff("Boards vehicles", definition.isAutoBoardVehicles()), "", GuiItems.hint("Click", "configure"))));
         inventory.setItem(EDITOR_EQUIPMENT_SLOT, item(Material.CHEST, "Equipment & Loot", List.of(
                 LegacyText.GRAY + "Armor, hands, loot, and temporary inventory", "", GuiItems.hint("Click", "edit"))));
         inventory.setItem(EDITOR_SPAWN_SLOT,
@@ -672,6 +671,11 @@ public final class GuiService implements Listener {
                 GuiItems.toggle(Material.HOPPER, Material.CAULDRON, "Item Pickup", definition.isItemPickup(),
                         "collects nearby dropped items", "ignores dropped items",
                         List.of("Items go to the instance's temporary inventory")));
+        inventory.setItem(PROPERTY_VEHICLES_SLOT,
+                GuiItems.toggle(Material.MINECART, Material.RAIL, "Board Vehicles", definition.isAutoBoardVehicles(),
+                        "gets into empty minecarts and boats it passes", "ignores minecarts and boats",
+                        List.of("Also while walking a route", "Leaves at activator rails, when the vehicle",
+                                "breaks, or on restart")));
         List<GuiItems.Option> poses = java.util.Arrays.stream(NpcPose.values())
                 .map(pose -> new GuiItems.Option(pose.material(), pose.displayName(), null)).toList();
         inventory.setItem(PROPERTY_POSE_SLOT, GuiItems.cycle("Pose", poses, definition.getPose().ordinal(),
@@ -721,9 +725,11 @@ public final class GuiService implements Listener {
         inventory.setItem(48, armor[0]);
         inventory.setItem(50, definition.getMainHand());
         inventory.setItem(51, definition.getOffHand());
-        inventory.setItem(53, item(Material.LIME_DYE, "Save & Back",
-                List.of(LegacyText.GRAY + "Saves, refreshes every instance, and", LegacyText.GRAY
-                        + "returns to the NPC menu", LegacyText.DARK_GRAY + "Closing the menu also saves")));
+        inventory.setItem(53,
+                item(Material.LIME_DYE, "Save & Back",
+                        List.of(LegacyText.GRAY + "Saves, refreshes every instance, and",
+                                LegacyText.GRAY + "returns to the NPC menu",
+                                LegacyText.DARK_GRAY + "Closing the menu also saves")));
         openInventory(player, inventory);
     }
 
@@ -766,7 +772,8 @@ public final class GuiService implements Listener {
                         : LegacyText.DARK_GRAY + "Preset spawn point is configured",
                 LegacyText.GRAY + "Step: " + CombatProfile.RESPAWN_STEP_SECONDS + " seconds"));
         respawnLore.addAll(NumericControl.lore());
-        inventory.setItem(FIGHTING_RESPAWN_SLOT, item(Material.CLOCK, "Respawn Time: " + respawnLabel(combat), respawnLore));
+        inventory.setItem(FIGHTING_RESPAWN_SLOT,
+                item(Material.CLOCK, "Respawn Time: " + respawnLabel(combat), respawnLore));
         List<String> experienceLore = new ArrayList<>(List.of(
                 combat.droppedExperience() == 0
                         ? LegacyText.GRAY + "This NPC drops no experience"
@@ -775,8 +782,9 @@ public final class GuiService implements Listener {
         experienceLore.addAll(NumericControl.lore());
         inventory.setItem(FIGHTING_EXPERIENCE_SLOT,
                 item(Material.EXPERIENCE_BOTTLE, "Dropped Experience: " + experienceLabel(combat), experienceLore));
-        inventory.setItem(FIGHTING_BOSS_BAR_SLOT, GuiItems.toggle(Material.WITHER_SKELETON_SKULL, Material.SKELETON_SKULL, "Boss Bar",
-                combat.showBossBar(), "health bar for players within 16 blocks", "no health bar", List.of()));
+        inventory.setItem(FIGHTING_BOSS_BAR_SLOT,
+                GuiItems.toggle(Material.WITHER_SKELETON_SKULL, Material.SKELETON_SKULL, "Boss Bar",
+                        combat.showBossBar(), "health bar for players within 16 blocks", "no health bar", List.of()));
         inventory.setItem(FIGHTING_TARGETS_SLOT, item(Material.TARGET, "Targets & Behaviour", List.of(
                 LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName(),
                 LegacyText.GRAY + "Attack targets enabled: " + LegacyText.WHITE + enabledTargetCount(combat) + "/4", "",
@@ -982,8 +990,8 @@ public final class GuiService implements Listener {
         if (page > 0)
             inventory.setItem(45, GuiItems.previousPage(page, pages));
         inventory.setItem(49, GuiItems.back("Custom Behaviour"));
-        inventory.setItem(51,
-                item(Material.EMERALD, "Create New Event", List.of(GuiItems.hint("Click", "create and add an event row"))));
+        inventory.setItem(51, item(Material.EMERALD, "Create New Event",
+                List.of(GuiItems.hint("Click", "create and add an event row"))));
         if (page + 1 < pages)
             inventory.setItem(53, GuiItems.nextPage(page, pages));
         openInventory(player, inventory);
@@ -1018,9 +1026,8 @@ public final class GuiService implements Listener {
                 continue;
             inventory.setItem(entry.getKey(), item(actionMaterial(type), type.displayName(), actionPickerLore(type)));
         }
-        inventory.setItem(ACTION_PICKER_ANIMATIONS_SLOT,
-                item(Material.ARMOR_STAND, "Animations", List.of(LegacyText.GRAY + "Poses, waving, and jumping",
-                        GuiItems.hint("Click", "choose an animation"))));
+        inventory.setItem(ACTION_PICKER_ANIMATIONS_SLOT, item(Material.ARMOR_STAND, "Animations", List
+                .of(LegacyText.GRAY + "Poses, waving, and jumping", GuiItems.hint("Click", "choose an animation"))));
         inventory.setItem(ACTION_PICKER_BACK_SLOT, GuiItems.back(backDestination));
     }
 
@@ -1078,10 +1085,8 @@ public final class GuiService implements Listener {
             inventory.setItem(51,
                     item(Material.EMERALD, "Create Route", List.of(GuiItems.hint("Click", "enter its name"))));
         } else if (pickerType == BehaviourValuePickerType.CUSTOM_EVENT) {
-            inventory.setItem(51,
-                    item(Material.EMERALD, "Create New Event",
-                            List.of(LegacyText.GRAY + "Creates and selects a custom event",
-                                    GuiItems.hint("Click", "enter its name"))));
+            inventory.setItem(51, item(Material.EMERALD, "Create New Event", List.of(
+                    LegacyText.GRAY + "Creates and selects a custom event", GuiItems.hint("Click", "enter its name"))));
         }
         if (valuePage + 1 < pages) {
             inventory.setItem(53, GuiItems.nextPage(valuePage, pages));
@@ -1524,6 +1529,7 @@ public final class GuiService implements Listener {
             case PROPERTY_SHOW_NAME_SLOT -> definition.setShowName(!definition.isShowName());
             case PROPERTY_LOOK_SLOT -> definition.setLookAtPlayer(!definition.isLookAtPlayer());
             case PROPERTY_PICKUP_SLOT -> definition.setItemPickup(!definition.isItemPickup());
+            case PROPERTY_VEHICLES_SLOT -> definition.setAutoBoardVehicles(!definition.isAutoBoardVehicles());
             case PROPERTY_POSE_SLOT -> {
                 if (direction == 0)
                     return;
@@ -1569,7 +1575,9 @@ public final class GuiService implements Listener {
                 return;
             int step = slot == FIGHTING_HEALTH_SLOT
                     ? CombatProfile.HEALTH_STEP
-                    : slot == FIGHTING_RESPAWN_SLOT ? CombatProfile.RESPAWN_STEP_SECONDS : CombatProfile.EXPERIENCE_STEP;
+                    : slot == FIGHTING_RESPAWN_SLOT
+                            ? CombatProfile.RESPAWN_STEP_SECONDS
+                            : CombatProfile.EXPERIENCE_STEP;
             int current = slot == FIGHTING_HEALTH_SLOT
                     ? combat.maxHealth()
                     : slot == FIGHTING_RESPAWN_SLOT ? combat.respawnSeconds() : combat.droppedExperience();
@@ -1589,12 +1597,13 @@ public final class GuiService implements Listener {
                 GuiItems.click(player);
                 openFightingEditor(player, definition);
             }
-            case FIGHTING_ALLIANCE_SLOT -> chatInputService.request(player, "Enter an alliance, or type clear to remove it:", value -> {
-                String alliance = value.equalsIgnoreCase("clear") || value.isBlank() ? null : value.trim();
-                definition.setCombatProfile(definition.getCombatProfile().withAlliance(alliance));
-                saveRefresh(definition);
-                openFightingEditor(player, definition);
-            }, () -> definitionRepository.find(key).ifPresent(current -> openFightingEditor(player, current)));
+            case FIGHTING_ALLIANCE_SLOT ->
+                chatInputService.request(player, "Enter an alliance, or type clear to remove it:", value -> {
+                    String alliance = value.equalsIgnoreCase("clear") || value.isBlank() ? null : value.trim();
+                    definition.setCombatProfile(definition.getCombatProfile().withAlliance(alliance));
+                    saveRefresh(definition);
+                    openFightingEditor(player, definition);
+                }, () -> definitionRepository.find(key).ifPresent(current -> openFightingEditor(player, current)));
             case FIGHTING_ABILITIES_SLOT -> openSpecialAttacks(player, new SpecialAttacksHolder(key, null));
             case FIGHTING_BACK_SLOT -> openEditor(player, definition);
             default -> {
@@ -2792,10 +2801,8 @@ public final class GuiService implements Listener {
         for (int index = from; index < to; index++) {
             LocationBrowserModel.Entry entry = entries.get(index);
             if (entry.folder()) {
-                inventory.setItem(index - from,
-                        item(Material.CHEST, entry.label(),
-                                List.of(LegacyText.GRAY + "" + entry.childCount() + " location(s)",
-                                        GuiItems.hint("Click", "open"))));
+                inventory.setItem(index - from, item(Material.CHEST, entry.label(), List.of(
+                        LegacyText.GRAY + "" + entry.childCount() + " location(s)", GuiItems.hint("Click", "open"))));
                 continue;
             }
             NamedLocation named = entry.location();

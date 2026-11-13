@@ -9,7 +9,8 @@ public enum AiActionType {
             "Flee"), FOLLOW("Follow"), UNFOLLOW("Unfollow"), INTERACT("Interact"), MOVE_TO("Move To"), MINE_BLOCKS(
                     "Mine Blocks"), RETURN_HOME("Return Home"), START_ROUTE("Start Route"), PAUSE_ROUTE(
                             "Pause Route"), REMEMBER_FACT("Remember Fact"), REMEMBER_LOCATION(
-                                    "Remember Location"), DROP_ITEM("Drop Item"), DO_NOTHING("Do Nothing");
+                                    "Remember Location"), DROP_ITEM("Drop Item"), ENTER_VEHICLE(
+                                            "Enter Vehicle"), EXIT_VEHICLE("Exit Vehicle"), DO_NOTHING("Do Nothing");
 
     private final String displayName;
 

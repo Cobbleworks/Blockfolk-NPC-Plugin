@@ -22,6 +22,7 @@ public record AiControlSettings(String identity, String behaviour, String likesD
         normalizePair(normalized, AiActionType.START_COMBAT, AiActionType.STOP_COMBAT);
         normalizePair(normalized, AiActionType.FOLLOW, AiActionType.UNFOLLOW);
         normalizePair(normalized, AiActionType.START_ROUTE, AiActionType.PAUSE_ROUTE);
+        normalizePair(normalized, AiActionType.ENTER_VEHICLE, AiActionType.EXIT_VEHICLE);
         normalized.add(AiActionType.SAY);
         normalized.add(AiActionType.DO_NOTHING);
         allowedActions = Set.copyOf(normalized);
@@ -149,6 +150,8 @@ public record AiControlSettings(String identity, String behaviour, String likesD
             case UNFOLLOW -> AiActionType.FOLLOW;
             case START_ROUTE -> AiActionType.PAUSE_ROUTE;
             case PAUSE_ROUTE -> AiActionType.START_ROUTE;
+            case ENTER_VEHICLE -> AiActionType.EXIT_VEHICLE;
+            case EXIT_VEHICLE -> AiActionType.ENTER_VEHICLE;
             default -> null;
         };
     }

@@ -143,9 +143,9 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, Long> npcNearbyCooldownUntilTick = new HashMap<>();
     private final Map<UUID, Location> playerLocationSnapshots = new ConcurrentHashMap<>();
     /**
-     * Players whose chat would only reach private AI conversations with nobody
-     * else in earshot. Rebuilt on the main thread and read by the async chat
-     * event, which must not touch NPC or world state itself.
+     * Players whose chat would only reach private AI conversations with nobody else
+     * in earshot. Rebuilt on the main thread and read by the async chat event,
+     * which must not touch NPC or world state itself.
      */
     private volatile Set<UUID> privateChatPlayers = Set.of();
     private final long proximityCooldownTicks;
@@ -153,6 +153,7 @@ public final class NpcBehaviourService implements Listener {
     private NpcShopService shopService;
     private AiControlService aiControlService;
     private NpcConversationService conversationService;
+    private NpcVehicleService vehicleService;
     private BukkitTask behaviourTask;
     private long currentTick;
     private int proximityTick;
@@ -181,6 +182,20 @@ public final class NpcBehaviourService implements Listener {
         this.combatService = combatService;
     }
 
+    public void setVehicleService(NpcVehicleService vehicleService) {
+        this.vehicleService = vehicleService;
+    }
+
+    /**
+     * Ends the walk toward a vehicle once the NPC got in, so it does not walk on to
+     * the boarding spot after the ride.
+     */
+    public void finishVehicleWalk(NpcInstance instance) {
+        moveTargets.remove(instance.getId());
+        aiMoveTargets.remove(instance.getId());
+        instances.stopNavigating(instance);
+    }
+
     public void setAiControlService(AiControlService aiControlService) {
         this.aiControlService = aiControlService;
         if (aiControlService != null) {
@@ -191,8 +206,7 @@ public final class NpcBehaviourService implements Listener {
     public void setConversationService(NpcConversationService conversationService) {
         this.conversationService = conversationService;
         if (conversationService != null) {
-            conversationService.setDecisionHandler((instance, result) -> definitions
-                    .find(instance.getDefinitionKey())
+            conversationService.setDecisionHandler((instance, result) -> definitions.find(instance.getDefinitionKey())
                     .ifPresent(definition -> applyAiDecision(null, result, instance, definition, null, false)));
         }
     }
@@ -629,10 +643,10 @@ public final class NpcBehaviourService implements Listener {
     }
 
     /**
-     * Hides a private AI conversation from the rest of the server: when every
-     * NPC that would answer keeps private conversations and no other player is
-     * close enough to hear the exchange, only the speaker (and the console)
-     * receives the chat line.
+     * Hides a private AI conversation from the rest of the server: when every NPC
+     * that would answer keeps private conversations and no other player is close
+     * enough to hear the exchange, only the speaker (and the console) receives the
+     * chat line.
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPrivateConversationChat(AsyncChatEvent event) {
@@ -698,9 +712,9 @@ public final class NpcBehaviourService implements Listener {
                 continue;
             Location location = playerLocations.get(player.getUniqueId());
             List<NpcInstance> responders = aiChatResponders(active, location);
-            if (responders.isEmpty() || responders.stream().anyMatch(instance -> definitions
-                    .find(instance.getDefinitionKey())
-                    .map(definition -> definition.getAiControlSettings().sharedConversation()).orElse(true)))
+            if (responders.isEmpty()
+                    || responders.stream().anyMatch(instance -> definitions.find(instance.getDefinitionKey())
+                            .map(definition -> definition.getAiControlSettings().sharedConversation()).orElse(true)))
                 continue;
             List<Location> others = playerLocations.entrySet().stream()
                     .filter(entry -> !entry.getKey().equals(player.getUniqueId())).map(Map.Entry::getValue).toList();
@@ -954,6 +968,12 @@ public final class NpcBehaviourService implements Listener {
                 case REMEMBER_LOCATION ->
                     aiControlService.rememberLocation(instance, definition, action.locationName());
                 case DROP_ITEM -> dropAiInventoryItem(instance, action.target());
+                case ENTER_VEHICLE -> enterAiVehicle(instance, action.target(), target);
+                case EXIT_VEHICLE -> {
+                    if (vehicleService == null || !vehicleService.exit(instance))
+                        aiControlService.noteOutcome(instance,
+                                "exit_vehicle failed: the NPC is not riding a minecart or boat.");
+                }
                 case DO_NOTHING -> {
                 }
             }
@@ -965,6 +985,29 @@ public final class NpcBehaviourService implements Listener {
         if (aiControlService != null)
             aiControlService.invoke(event, eventDetail, guidance, instance, definition, actor,
                     result -> applyAiDecision(event, result, instance, definition, actor, true));
+    }
+
+    private void enterAiVehicle(NpcInstance instance, String alias, Entity vehicle) {
+        if (vehicleService == null)
+            return;
+        NpcVehicleService.RequestResult result = vehicleService.requestBoard(instance, vehicle);
+        switch (result) {
+            case BOARDED -> stopFollowing(instance);
+            case WALKING -> {
+                stopFollowing(instance);
+                aiInteractions.remove(instance.getId());
+                moveTargets.put(instance.getId(), vehicle.getLocation());
+                aiMoveTargets.put(instance.getId(), vehicle.getLocation());
+                instances.stand(instance);
+                instances.stopNavigating(instance);
+            }
+            case ALREADY_RIDING -> aiControlService.noteOutcome(instance,
+                    "enter_vehicle " + alias + " failed: the NPC is already riding; call exit_vehicle first.");
+            case GONE -> aiControlService.noteOutcome(instance,
+                    "enter_vehicle " + alias + " failed: that vehicle is no longer present.");
+            case REFUSED -> aiControlService.noteOutcome(instance,
+                    "enter_vehicle " + alias + " failed: the vehicle has no free seat.");
+        }
     }
 
     private Entity resolveAiTarget(String alias, AiTargetSnapshot targets) {
@@ -1066,7 +1109,8 @@ public final class NpcBehaviourService implements Listener {
         for (NpcInstance instance : instances.findActive()) {
             if (cleanRuntimeState)
                 active.add(instance.getId());
-            if (!tickAiInteraction(instance)) {
+            // A rider cannot walk; walking goals wait until the ride ends.
+            if (!instances.isRiding(instance) && !tickAiInteraction(instance)) {
                 tickMoveTo(instance);
                 tickFollow(instance);
             }
@@ -1125,8 +1169,8 @@ public final class NpcBehaviourService implements Listener {
     }
 
     /**
-     * Fires On Nearby NPC when another Blockfolk NPC comes close. Runs only while
-     * a player is nearby; without one the observation resets, so NPCs standing
+     * Fires On Nearby NPC when another Blockfolk NPC comes close. Runs only while a
+     * player is nearby; without one the observation resets, so NPCs standing
      * together greet each other once a player arrives.
      */
     private void tickNpcNearby() {
@@ -1149,11 +1193,10 @@ public final class NpcBehaviourService implements Listener {
                         return location.getWorld() == center.getWorld()
                                 && location.distanceSquared(center) <= range * range;
                     })
-                    .sorted(Comparator.comparingDouble(
-                            other -> instances.currentLocation(other).distanceSquared(center)))
+                    .sorted(Comparator
+                            .comparingDouble(other -> instances.currentLocation(other).distanceSquared(center)))
                     .toList();
-            Set<UUID> current = nearby.stream().map(NpcInstance::getId)
-                    .collect(java.util.stream.Collectors.toSet());
+            Set<UUID> current = nearby.stream().map(NpcInstance::getId).collect(java.util.stream.Collectors.toSet());
             Set<UUID> previous = observedNpcs.put(instance.getId(), current);
             if (previous == null)
                 previous = Set.of();

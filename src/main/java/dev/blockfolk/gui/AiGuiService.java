@@ -60,11 +60,11 @@ final class AiGuiService {
     private static final int ADD_MEMORY_SLOT = 51;
     /** Sits next to Respond to Nearby Chat; the action toggles follow it. */
     private static final int NPC_RESPONSE_SLOT = 22;
-    private static final int[] ACTION_SLOTS = {21, 23, 24, 25, 30, 31, 32, 33, 34, 39, 40, 41};
+    private static final int[] ACTION_SLOTS = {21, 23, 24, 25, 30, 31, 32, 33, 34, 39, 40, 41, 42};
     private static final List<AiActionType> ACTION_TYPES = Arrays.stream(AiActionType.values())
             .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM
                     && type != AiActionType.STOP_COMBAT && type != AiActionType.UNFOLLOW
-                    && type != AiActionType.PAUSE_ROUTE)
+                    && type != AiActionType.PAUSE_ROUTE && type != AiActionType.EXIT_VEHICLE)
             .toList();
 
     private final NpcDefinitionRepository definitions;
@@ -156,11 +156,11 @@ final class AiGuiService {
                             chatToggle ? "only speaks when triggered" : "never used",
                             chatToggle ? List.of() : List.of(capabilityDescription(type))));
         }
-        inventory.setItem(NPC_RESPONSE_SLOT, GuiItems.toggle(Material.VILLAGER_SPAWN_EGG, Material.GRAY_DYE,
-                "Respond to Nearby NPCs", settings.respondToNpc(), "answers what nearby NPCs say",
-                "ignores other NPCs' speech",
-                List.of("Enable on two NPCs for a back-and-forth", "Only while a player is nearby",
-                        "Replies per conversation: see config.yml")));
+        inventory.setItem(NPC_RESPONSE_SLOT,
+                GuiItems.toggle(Material.VILLAGER_SPAWN_EGG, Material.GRAY_DYE, "Respond to Nearby NPCs",
+                        settings.respondToNpc(), "answers what nearby NPCs say", "ignores other NPCs' speech",
+                        List.of("Enable on two NPCs for a back-and-forth", "Only while a player is nearby",
+                                "Replies per conversation: see config.yml")));
         inventory.setItem(BACK_SLOT, GuiItems.back("the NPC menu"));
         boolean hasTrigger = hasTrigger(definition) || settings.respondToChat() || settings.respondToNpc();
         String status = !settings.enabled() ? "Paused" : hasTrigger ? "Active" : "No Triggers";
@@ -201,6 +201,7 @@ final class AiGuiService {
             case REMEMBER_FACT -> Material.WRITABLE_BOOK;
             case REMEMBER_LOCATION -> Material.FILLED_MAP;
             case DROP_ITEM -> Material.DROPPER;
+            case ENTER_VEHICLE, EXIT_VEHICLE -> Material.MINECART;
             case DO_NOTHING -> Material.CLOCK;
         };
     }
@@ -313,8 +314,7 @@ final class AiGuiService {
         } else if (slot == STATUS_SLOT) {
             AiControlSettings settings = definition.getAiControlSettings();
             if (!settings.enabled() && !settings.hasContext()) {
-                player.sendMessage(
-                        UiText.warning("Fill in at least one Character section before activating AI."));
+                player.sendMessage(UiText.warning("Fill in at least one Character section before activating AI."));
                 return;
             }
             definition.setAiControlSettings(settings.withEnabled(!settings.enabled()));
@@ -507,6 +507,8 @@ final class AiGuiService {
             case REMEMBER_FACT -> "Saves a durable fact for future conversations";
             case REMEMBER_LOCATION -> "Saves this NPC's position with a label for all NPCs to use";
             case DROP_ITEM -> "Drops a carried item from Temporary Inventory";
+            case ENTER_VEHICLE -> "Gets into a nearby minecart or boat, or out again";
+            case EXIT_VEHICLE -> "Gets out of the minecart or boat it is riding";
             case DO_NOTHING -> "Takes no action when a response is not needed";
         };
     }
@@ -516,6 +518,7 @@ final class AiGuiService {
             case START_COMBAT -> "Start/Stop Combat";
             case FOLLOW -> "Follow/Unfollow";
             case START_ROUTE -> "Start/Pause Route";
+            case ENTER_VEHICLE -> "Enter/Exit Vehicle";
             default -> type.displayName();
         };
     }

@@ -12,6 +12,7 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Pose;
@@ -76,6 +77,11 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     public boolean spawn(NpcInstance instance, NpcDefinition definition) {
         Mannequin existing = findEntity(instance, true);
         if (existing != null) {
+            // A mannequin saved inside a minecart or boat (for example after a crash)
+            // starts out on foot, like every other restart.
+            Entity vehicle = existing.getVehicle();
+            if (NpcVehicles.isTransport(vehicle))
+                existing.leaveVehicle();
             applyDefinition(existing, instance, definition, false);
             return true;
         }
@@ -179,6 +185,39 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     }
 
     @Override
+    public Optional<Entity> vehicle(NpcInstance instance) {
+        Mannequin mannequin = findEntity(instance);
+        return mannequin == null ? Optional.empty() : Optional.ofNullable(transport(mannequin));
+    }
+
+    @Override
+    public boolean board(NpcInstance instance, Entity vehicle) {
+        Mannequin mannequin = findEntity(instance);
+        if (mannequin == null || !NpcVehicles.isTransport(vehicle) || !vehicle.isValid()
+                || vehicle.getWorld() != mannequin.getWorld())
+            return false;
+        // The sitting pose rides an armor stand; it must be vacated first.
+        removeSeats(instance, mannequin);
+        if (mannequin.isInsideVehicle())
+            return false;
+        if (jumpTicksByInstance.remove(instance.getId()) != null)
+            mannequin.setGravity(true);
+        mannequin.setPose(Pose.STANDING, false);
+        return vehicle.addPassenger(mannequin);
+    }
+
+    @Override
+    public boolean leaveVehicle(NpcInstance instance) {
+        Mannequin mannequin = findEntity(instance);
+        return mannequin != null && transport(mannequin) != null && mannequin.leaveVehicle();
+    }
+
+    private static Entity transport(Mannequin mannequin) {
+        Entity vehicle = mannequin.getVehicle();
+        return NpcVehicles.isTransport(vehicle) ? vehicle : null;
+    }
+
+    @Override
     public void pose(NpcInstance instance, Pose pose) {
         Mannequin mannequin = findEntity(instance);
         if (mannequin != null && Mannequin.validPoses().contains(pose)) {
@@ -229,7 +268,8 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
             return;
         }
         mannequin.setPose(Pose.STANDING, true);
-        if (seat(mannequin) != null)
+        // A minecart or boat rider already sits; a second seat cannot be added.
+        if (seat(mannequin) != null || transport(mannequin) != null)
             return;
         removeSeats(instance, mannequin);
         ArmorStand stand = mannequin.getWorld().spawn(instance.getLocation(), ArmorStand.class, spawned -> {
@@ -263,7 +303,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     @Override
     public void jump(NpcInstance instance) {
         Mannequin mannequin = findEntity(instance);
-        if (mannequin != null && seat(mannequin) == null && mannequin.isOnGround()
+        if (mannequin != null && !mannequin.isInsideVehicle() && mannequin.isOnGround()
                 && !jumpTicksByInstance.containsKey(instance.getId())) {
             jumpTicksByInstance.putIfAbsent(instance.getId(), 0);
             // The scripted jump supplies its own vertical motion for 12 ticks.
@@ -371,7 +411,10 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     private void applyDefinition(Mannequin mannequin, NpcInstance instance, NpcDefinition definition,
             boolean healToFull) {
         removeSeats(instance, mannequin);
-        mannequin.teleport(instance.getLocation());
+        // Teleporting a rider would pull it out of its minecart or boat; a
+        // preset edit must not end the ride.
+        if (transport(mannequin) == null)
+            mannequin.teleport(instance.getLocation());
         mannequin.setPersistent(true);
         mannequin.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
         mannequin.customName(Component.text(definition.getDisplayName()));

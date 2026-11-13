@@ -61,6 +61,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private RouteGuiService routeGuiService;
     private CustomEventGuiService customEventGuiService;
     private RouteMovementService routeMovementService;
+    private dev.blockfolk.runtime.NpcVehicleService vehicleService;
     private NpcCombatService combatService;
     private dev.blockfolk.repository.ShopRepository shopRepository;
     private dev.blockfolk.runtime.NpcShopService shopService;
@@ -130,7 +131,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 getConfig().getInt("ai-control.conversation-history-limit", AiMemoryStore.DEFAULT_MAX_MESSAGES));
         behaviourService.setAiControlService(aiControlService);
         NpcConversationService conversationService = new NpcConversationService(this, definitionRepository,
-                instanceRegistry, new NpcConversationSettings(
+                instanceRegistry,
+                new NpcConversationSettings(
                         getConfig().getInt("ai-control.npc-conversations.max-replies",
                                 NpcConversationSettings.DEFAULT_MAX_REPLIES),
                         getConfig().getInt("ai-control.npc-conversations.max-duration-seconds",
@@ -165,10 +167,21 @@ public final class BlockfolkPlugin extends JavaPlugin {
             behaviourService.forget(instance);
             behaviourService.trigger(BehaviourEvent.SPAWN, instance, null);
         });
-        instanceRegistry.setRemovalListener(behaviourService::forget);
         routeMovementService = new RouteMovementService(this, definitionRepository, routeRepository, instanceRegistry,
                 combatService, behaviourService);
         instanceRegistry.setRelocationListener(routeMovementService::resetProgress);
+        vehicleService = new dev.blockfolk.runtime.NpcVehicleService(this, definitionRepository, instanceRegistry);
+        vehicleService.setBusyCheck(combatService::isEngaged);
+        vehicleService.setWalkingCheck(behaviourService::isMovingTo);
+        // After a ride the route restarts from the waypoint nearest the drop-off.
+        vehicleService.setExitListener(routeMovementService::resetProgress);
+        vehicleService.setRequestedBoardListener(behaviourService::finishVehicleWalk);
+        vehicleService.setOutcomeListener(aiControlService::noteOutcome);
+        behaviourService.setVehicleService(vehicleService);
+        instanceRegistry.setRemovalListener(instance -> {
+            behaviourService.forget(instance);
+            vehicleService.forget(instance);
+        });
 
         routeRepository.loadAll();
         locationRepository.loadAll();
@@ -194,6 +207,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 beautyQuestsIntegration.register();
                 instanceRegistry.setRemovalListener(instance -> {
                     behaviourService.forget(instance);
+                    vehicleService.forget(instance);
                     beautyQuestsIntegration.npcRemoved(instance);
                 });
             } catch (LinkageError | RuntimeException exception) {
@@ -219,6 +233,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(combatService, this);
         getServer().getPluginManager().registerEvents(behaviourService, this);
         getServer().getPluginManager().registerEvents(instanceRegistry, this);
+        getServer().getPluginManager().registerEvents(vehicleService, this);
 
         npcRenderer.start();
         dialogService.start();
@@ -229,6 +244,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         questionService.start();
         behaviourService.start();
         routeMovementService.start();
+        vehicleService.start();
         getLogger().info(() -> "Blockfolk enabled with " + definitionRepository.findAll().size() + " NPC definitions.");
     }
 
@@ -253,6 +269,9 @@ public final class BlockfolkPlugin extends JavaPlugin {
         }
         if (routeMovementService != null) {
             routeMovementService.stop();
+        }
+        if (vehicleService != null) {
+            vehicleService.stop();
         }
         if (chatInputService != null) {
             chatInputService.cancelAll();

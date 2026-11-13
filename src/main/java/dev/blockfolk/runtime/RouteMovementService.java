@@ -69,6 +69,11 @@ public final class RouteMovementService {
     }
 
     private void move(NpcInstance instance) {
+        if (instanceRegistry.isRiding(instance)) {
+            // The vehicle carries the NPC. Progress is reset when the ride
+            // ends, so the route resumes from the nearest waypoint there.
+            return;
+        }
         if (combatService.isEngaged(instance) || behaviourService.isFollowing(instance)
                 || behaviourService.isMovingTo(instance) || behaviourService.isRunningWaypointActions(instance)) {
             // Another runtime activity temporarily owns navigation. Keep the

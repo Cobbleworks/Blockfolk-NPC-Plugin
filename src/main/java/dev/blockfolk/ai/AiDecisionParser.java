@@ -134,7 +134,8 @@ public final class AiDecisionParser {
 
     private static boolean requiresTarget(AiActionType type) {
         return type == AiActionType.FLEE_FROM || type == AiActionType.FOLLOW || type == AiActionType.MOVE_TO
-                || type == AiActionType.DROP_ITEM || type == AiActionType.MINE_BLOCKS;
+                || type == AiActionType.DROP_ITEM || type == AiActionType.MINE_BLOCKS
+                || type == AiActionType.ENTER_VEHICLE;
     }
 
     private static boolean validTarget(AiActionType type, String target) {
@@ -142,6 +143,8 @@ public final class AiDecisionParser {
             return target.matches("inventory_slot_[1-9][0-9]*");
         if (type == AiActionType.MINE_BLOCKS)
             return target.matches("[a-z0-9_]{1,64}");
+        if (type == AiActionType.ENTER_VEHICLE)
+            return target.matches("nearby_vehicle_[1-9][0-9]*");
         if (type == AiActionType.INTERACT) {
             return target.equals("nearest_switch") || target.matches("nearby_(lever|button)_[1-9][0-9]*")
                     || target.matches("(take_from|store_in)_container(?:_[1-9][0-9]*)?");
@@ -172,6 +175,7 @@ public final class AiDecisionParser {
         if (targets == null)
             return true;
         return switch (type) {
+            case ENTER_VEHICLE -> targets.entityId(target).isPresent();
             case START_COMBAT, FLEE_FROM, FOLLOW ->
                 targets.entityId(target).isPresent() || targets.npcInstanceId(target).isPresent();
             case MOVE_TO -> targets.entityId(target).isPresent() || targets.npcInstanceId(target).isPresent()

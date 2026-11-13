@@ -27,7 +27,8 @@ class AiControlSettingsTest {
     void pairedCapabilitiesToggleTogether() {
         AiControlSettings settings = AiControlSettings.defaults();
         AiActionType[][] pairs = {{AiActionType.START_COMBAT, AiActionType.STOP_COMBAT},
-                {AiActionType.FOLLOW, AiActionType.UNFOLLOW}, {AiActionType.START_ROUTE, AiActionType.PAUSE_ROUTE}};
+                {AiActionType.FOLLOW, AiActionType.UNFOLLOW}, {AiActionType.START_ROUTE, AiActionType.PAUSE_ROUTE},
+                {AiActionType.ENTER_VEHICLE, AiActionType.EXIT_VEHICLE}};
         for (AiActionType[] pair : pairs) {
             settings = settings.toggle(pair[0]);
             assertTrue(settings.allowedActions().contains(pair[0]));

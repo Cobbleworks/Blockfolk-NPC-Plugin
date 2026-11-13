@@ -35,6 +35,7 @@ public final class NpcDefinition {
     private boolean lookAtPlayer;
     private boolean itemPickup;
     private boolean pushable;
+    private boolean autoBoardVehicles;
     private NpcColor color;
     private NpcPose pose = NpcPose.STANDING;
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
@@ -81,6 +82,7 @@ public final class NpcDefinition {
         copy.setLookAtPlayer(lookAtPlayer);
         copy.setItemPickup(itemPickup);
         copy.setPushable(pushable);
+        copy.setAutoBoardVehicles(autoBoardVehicles);
         copy.setColor(color);
         copy.setPose(pose);
         copy.setAiControlSettings(aiControlSettings);
@@ -247,6 +249,18 @@ public final class NpcDefinition {
 
     public void setPushable(boolean pushable) {
         this.pushable = pushable;
+    }
+
+    /**
+     * Whether the NPC climbs into empty minecarts and boats it walks or stands next
+     * to.
+     */
+    public boolean isAutoBoardVehicles() {
+        return autoBoardVehicles;
+    }
+
+    public void setAutoBoardVehicles(boolean autoBoardVehicles) {
+        this.autoBoardVehicles = autoBoardVehicles;
     }
 
     public NpcColor getColor() {

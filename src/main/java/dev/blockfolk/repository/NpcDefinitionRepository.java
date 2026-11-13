@@ -134,6 +134,7 @@ public final class NpcDefinitionRepository {
         configuration.set("properties.look-at-player", definition.isLookAtPlayer());
         configuration.set("properties.item-pickup", definition.isItemPickup());
         configuration.set("properties.pushable", definition.isPushable());
+        configuration.set("properties.auto-board-vehicles", definition.isAutoBoardVehicles());
         configuration.set("properties.pose", definition.getPose().name());
         configuration.set("properties.color", definition.getColor().name().toLowerCase(Locale.ROOT));
         AiControlSettings ai = definition.getAiControlSettings();
@@ -306,6 +307,7 @@ public final class NpcDefinitionRepository {
         definition.setLookAtPlayer(configuration.getBoolean("properties.look-at-player", true));
         definition.setItemPickup(configuration.getBoolean("properties.item-pickup", false));
         definition.setPushable(configuration.getBoolean("properties.pushable", true));
+        definition.setAutoBoardVehicles(configuration.getBoolean("properties.auto-board-vehicles", false));
         definition.setPose(NpcPose.fromStored(configuration.getString("properties.pose")));
         definition.setColor(NpcColor.fromStored(configuration.getString("properties.color")));
         java.util.EnumSet<AiActionType> allowedAiActions = java.util.EnumSet.noneOf(AiActionType.class);

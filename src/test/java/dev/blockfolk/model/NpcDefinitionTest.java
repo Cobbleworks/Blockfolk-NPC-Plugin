@@ -21,6 +21,7 @@ class NpcDefinitionTest {
         assertTrue(definition.isLookAtPlayer());
         assertFalse(definition.isItemPickup());
         assertTrue(definition.isPushable());
+        assertFalse(definition.isAutoBoardVehicles());
         assertEquals(NpcColor.ORANGE, definition.getColor());
     }
 
@@ -189,6 +190,7 @@ class NpcDefinitionTest {
         source.setLookAtPlayer(false);
         source.setItemPickup(true);
         source.setPushable(false);
+        source.setAutoBoardVehicles(true);
         source.setColor(NpcColor.BLUE);
         source.setBehaviourActions(BehaviourEvent.RIGHT_CLICK,
                 List.of(new BehaviourAction(BehaviourActionType.WAVE, null)));
@@ -199,6 +201,7 @@ class NpcDefinitionTest {
         assertFalse(copy.isLookAtPlayer());
         assertTrue(copy.isItemPickup());
         assertFalse(copy.isPushable());
+        assertTrue(copy.isAutoBoardVehicles());
         assertEquals(NpcColor.BLUE, copy.getColor());
         assertEquals(source.getBehaviourActions(BehaviourEvent.RIGHT_CLICK),
                 copy.getBehaviourActions(BehaviourEvent.RIGHT_CLICK));

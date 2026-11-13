@@ -290,6 +290,33 @@ class AiDecisionParserTest {
     }
 
     @Test
+    void enterVehicleNeedsAListedVehicleAndExitNeedsNoTarget() {
+        AiControlSettings settings = settings("Ferryman", "", "", EnumSet.of(AiActionType.ENTER_VEHICLE));
+        AiTargetSnapshot snapshot = new AiTargetSnapshot(Map.of("nearby_vehicle_1", UUID.randomUUID()), Map.of(),
+                Map.of());
+
+        AiParseResult<AiDecision> listed = AiDecisionParser.parseDetailed(
+                "{\"actions\":[{\"type\":\"enter_vehicle\",\"target\":\"nearby_vehicle_1\"}]}", settings, snapshot);
+        AiParseResult<AiDecision> unlisted = AiDecisionParser.parseDetailed(
+                "{\"actions\":[{\"type\":\"enter_vehicle\",\"target\":\"nearby_vehicle_2\"}]}", settings, snapshot);
+        AiParseResult<AiDecision> entity = AiDecisionParser.parseDetailed(
+                "{\"actions\":[{\"type\":\"enter_vehicle\",\"target\":\"nearby_entity_1\"}]}", settings, snapshot);
+        AiParseResult<AiDecision> missing = AiDecisionParser
+                .parseDetailed("{\"actions\":[{\"type\":\"enter_vehicle\"}]}", settings, snapshot);
+        AiParseResult<AiDecision> exit = AiDecisionParser.parseDetailed("{\"actions\":[{\"type\":\"exit_vehicle\"}]}",
+                settings, snapshot);
+
+        assertEquals(AiActionType.ENTER_VEHICLE, listed.value().actions().getFirst().type());
+        assertEquals("nearby_vehicle_1", listed.value().actions().getFirst().target());
+        org.junit.jupiter.api.Assertions
+                .assertTrue(unlisted.outcomes().getFirst().rejection().contains("nearby_vehicle_1"));
+        org.junit.jupiter.api.Assertions.assertFalse(entity.outcomes().getFirst().isAccepted());
+        org.junit.jupiter.api.Assertions.assertFalse(missing.outcomes().getFirst().isAccepted());
+        // Allowing enter_vehicle also allows getting back out.
+        assertEquals(AiActionType.EXIT_VEHICLE, exit.value().actions().getFirst().type());
+    }
+
+    @Test
     void disabledActionIsRejectedWithAReason() {
         AiControlSettings settings = settings("Guard", "", "", EnumSet.of(AiActionType.SAY));
         AiParseResult<AiDecision> parsed = AiDecisionParser

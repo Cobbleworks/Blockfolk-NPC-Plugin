@@ -3,6 +3,7 @@ package dev.blockfolk.runtime;
 import java.util.Optional;
 
 import org.bukkit.Location;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Pose;
 
@@ -32,6 +33,27 @@ public interface NpcRenderer {
     }
 
     Optional<LivingEntity> findLivingEntity(NpcInstance instance);
+
+    /**
+     * The minecart or boat the NPC is riding, if any. The sitting seat is not a
+     * vehicle.
+     */
+    default Optional<Entity> vehicle(NpcInstance instance) {
+        return Optional.empty();
+    }
+
+    /**
+     * Seats the NPC in a minecart or boat. Returns false when the vehicle refused
+     * it.
+     */
+    default boolean board(NpcInstance instance, Entity vehicle) {
+        return false;
+    }
+
+    /** Leaves the ridden minecart or boat at a safe dismount spot. */
+    default boolean leaveVehicle(NpcInstance instance) {
+        return false;
+    }
 
     void pose(NpcInstance instance, Pose pose);
 

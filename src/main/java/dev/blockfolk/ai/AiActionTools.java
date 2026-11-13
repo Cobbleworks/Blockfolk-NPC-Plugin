@@ -57,7 +57,7 @@ final class AiActionTools {
                 required.add("animation");
             }
             case START_COMBAT, INTERACT -> properties.add("target", stringProperty(targetDescription(action)));
-            case FLEE_FROM, FOLLOW, MOVE_TO, MINE_BLOCKS, DROP_ITEM -> {
+            case FLEE_FROM, FOLLOW, MOVE_TO, MINE_BLOCKS, DROP_ITEM, ENTER_VEHICLE -> {
                 properties.add("target", stringProperty(targetDescription(action)));
                 required.add("target");
             }
@@ -99,6 +99,7 @@ final class AiActionTools {
                     + (int) AiTargetSnapshot.MAX_COORDINATE_DISTANCE + " blocks.";
             case MINE_BLOCKS -> "ores, trees, mineable_blocks, or a listed nearby material name.";
             case DROP_ITEM -> "A listed inventory_slot_N.";
+            case ENTER_VEHICLE -> "A listed nearby_vehicle_N.";
             default -> "A listed target alias.";
         };
     }
@@ -130,6 +131,9 @@ final class AiActionTools {
                     + "can then walk to. Use it when a player names the place the NPC is standing, such as "
                     + "\"this is my home\". Use / to group names, e.g. town/market.";
             case DROP_ITEM -> "Drop one item stack from the temporary inventory.";
+            case ENTER_VEHICLE -> "Walk to a listed minecart or boat and get in. While riding, the NPC cannot walk "
+                    + "and the vehicle only moves when pushed, on powered rails, or paddled by a player.";
+            case EXIT_VEHICLE -> "Get out of the minecart or boat the NPC is riding.";
             case DO_NOTHING -> "Deliberately take no action and stay silent. Never combine with other calls.";
         };
     }

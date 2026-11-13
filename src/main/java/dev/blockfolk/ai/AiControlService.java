@@ -50,6 +50,7 @@ import dev.blockfolk.repository.LocationRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.runtime.NpcCombatService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
+import dev.blockfolk.runtime.NpcVehicles;
 import dev.blockfolk.util.EntityHealth;
 import dev.blockfolk.util.TextUtil;
 import net.kyori.adventure.text.Component;
@@ -66,6 +67,11 @@ public final class AiControlService {
     private static final double PERCEPTION_RADIUS = 16.0;
     private static final double LOCATION_PERCEPTION_RADIUS = AiTargetSnapshot.MAX_COORDINATE_DISTANCE;
     private static final int MAX_NEARBY_LOCATIONS = 20;
+    private static final int MAX_NEARBY_VEHICLES = 5;
+    /**
+     * Velocity (blocks per tick, squared) above which a vehicle counts as moving.
+     */
+    private static final double MOVING_VEHICLE_SPEED_SQUARED = 0.01 * 0.01;
     private static final int MAX_CHAT_GROUP_SIZE = 5;
     private static final int MAX_PENDING_INTERACTIONS = 8;
     private static final int MAX_ACTION_ROUNDS = 3;
@@ -464,6 +470,8 @@ public final class AiControlService {
             case MOVE_TO, RETURN_HOME, FLEE_FROM ->
                 "Started: " + function + target + ". The NPC is now walking; see Navigation in the updated state.";
             case FOLLOW -> "Started: following" + target + ".";
+            case ENTER_VEHICLE -> "Started: " + function + target
+                    + ". The NPC gets in once it reaches the vehicle; see Vehicle in the updated state.";
             case INTERACT -> "Started: " + function + target + ". It may take a moment to walk there.";
             case START_COMBAT -> "Started: combat" + (target.isEmpty() ? " with the nearest attackable entity" : target)
                     + ". See Combat in the updated state.";
@@ -499,8 +507,8 @@ public final class AiControlService {
         List<GroupParticipant> eligibleParticipants = candidates.stream()
                 .map(instance -> definitions.find(instance.getDefinitionKey()).map(
                         definition -> new GroupParticipant(instance, definition, definition.getAiControlSettings())))
-                .flatMap(java.util.Optional::stream)
-                .filter(participant -> respondsTo(false, participant.settings())).toList();
+                .flatMap(java.util.Optional::stream).filter(participant -> respondsTo(false, participant.settings()))
+                .toList();
         if (eligibleParticipants.isEmpty()) {
             return;
         }
@@ -527,16 +535,15 @@ public final class AiControlService {
 
     /**
      * Lets nearby NPCs respond to lines another NPC just spoke. One coordinated
-     * request decides who answers, so several listeners form a group
-     * conversation instead of talking over each other.
+     * request decides who answers, so several listeners form a group conversation
+     * instead of talking over each other.
      *
      * @param conversationKey
      *            memory and queue key of the NPC conversation
      * @param candidates
      *            listeners, intended responder first
      * @param lastSpeaker
-     *            entity of the NPC that spoke last, bound as the triggering
-     *            entity
+     *            entity of the NPC that spoke last, bound as the triggering entity
      * @param eventDetail
      *            the new lines and the remaining reply budget
      */
@@ -708,8 +715,8 @@ public final class AiControlService {
                     rememberPlayerMessage(participant.instance(), source.player(), source.chatMessage());
                 }
                 RequestContext participantContext = buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail, null,
-                        participant.instance(), participant.definition(), source.actor(), participant.settings(),
-                        false, source.scopeId());
+                        participant.instance(), participant.definition(), source.actor(), participant.settings(), false,
+                        source.scopeId());
                 memory.rememberEvent(participant.instance().getId(), eventDetail);
                 targetsByInstance.put(participant.instance().getId(), participantContext.targets());
                 context.append("\n=== ").append(NpcResponseIds.plainName(participant.definition().getDisplayName()))
@@ -753,8 +760,7 @@ public final class AiControlService {
                     groupTools, true);
             completeGroupActionChain(session, aliases, requestGenerations, targetsByInstance, targetsByAlias,
                     settingsByAlias, availableByAlias, primaryResponseId, source, invocation.resultHandler(),
-                    eventDetail, 0, new HashMap<>(), new HashSet<>(), false)
-                    .whenComplete((ignored, error) -> {
+                    eventDetail, 0, new HashMap<>(), new HashSet<>(), false).whenComplete((ignored, error) -> {
                         if (error != null) {
                             logRequestFailure(source.npcConversation()
                                     ? "AI Behaviour NPC conversation request"
@@ -799,9 +805,7 @@ public final class AiControlService {
 
     private static String participantHeading(GroupSource source, int participants) {
         if (source.npcConversation()) {
-            return participants == 1
-                    ? "\n\nNPC responding:\n"
-                    : "\n\nNearby NPC group (intended responder first):\n";
+            return participants == 1 ? "\n\nNPC responding:\n" : "\n\nNearby NPC group (intended responder first):\n";
         }
         return participants == 1
                 ? "\n\nNPC responding to the player:\n"
@@ -1107,8 +1111,8 @@ public final class AiControlService {
         }
     }
 
-    private void notifyDreamParticipants(AiMemoryStore.DreamBatch batch, NpcInstance instance,
-            NpcDefinition definition, boolean regional, boolean local) {
+    private void notifyDreamParticipants(AiMemoryStore.DreamBatch batch, NpcInstance instance, NpcDefinition definition,
+            boolean regional, boolean local) {
         List<String> notices = new ArrayList<>();
         if (regional) {
             notices.add(definition.getDisplayName() + " is telling the others...");
@@ -1510,6 +1514,7 @@ public final class AiControlService {
                     .toList();
             out.append("Status effects: ").append(effects.isEmpty() ? "none" : String.join(", ", effects)).append('\n');
         }
+        appendVehicle(out, instance);
         out.append("Navigation: ");
         Location destination = instances.activeNavigationTarget(instance).orElse(null);
         if (destination != null && destination.getWorld() == world) {
@@ -1600,6 +1605,14 @@ public final class AiControlService {
         if (hasInventoryItems(instance)) {
             actions.add(AiActionType.DROP_ITEM);
         }
+        if (instances.isRiding(instance)) {
+            actions.remove(AiActionType.ENTER_VEHICLE);
+        } else {
+            actions.remove(AiActionType.EXIT_VEHICLE);
+            if (actions.contains(AiActionType.ENTER_VEHICLE)
+                    && nearbyVehicles(instance, instances.currentLocation(instance)).isEmpty())
+                actions.remove(AiActionType.ENTER_VEHICLE);
+        }
         actions.add(AiActionType.DO_NOTHING);
         return actions;
     }
@@ -1656,6 +1669,24 @@ public final class AiControlService {
                         .append(", ").append(distance(entity.getLocation(), center)).append(" blocks")
                         .append(entity instanceof LivingEntity ? ", living target alias" : "")
                         .append(entity.equals(actor) ? ", triggering entity" : "").append('\n');
+            }
+        }
+
+        List<Entity> nearbyVehicles = nearbyVehicles(instance, center);
+        if (!nearbyVehicles.isEmpty()) {
+            out.append("Nearby vehicles:\n");
+            for (int index = 0; index < nearbyVehicles.size(); index++) {
+                Entity vehicle = nearbyVehicles.get(index);
+                String alias = "nearby_vehicle_" + (index + 1);
+                targets.bindEntity(alias, vehicle);
+                targets.preferredSynonym(vehicle.getType().name(), alias);
+                int passengers = vehicle.getPassengers().size();
+                out.append("- ").append(alias).append(": ").append(NpcVehicles.describe(vehicle)).append(", ")
+                        .append(distance(vehicle.getLocation(), center)).append(" blocks ")
+                        .append(direction(vehicle.getLocation(), center)).append(", ")
+                        .append(passengers == 0 ? "empty" : passengers + " rider" + (passengers == 1 ? "" : "s"))
+                        .append(vehicle.getVelocity().lengthSquared() > MOVING_VEHICLE_SPEED_SQUARED ? ", moving" : "")
+                        .append('\n');
             }
         }
 
@@ -1951,8 +1982,38 @@ public final class AiControlService {
         return center.getWorld().getNearbyEntities(center, PERCEPTION_RADIUS, PERCEPTION_RADIUS, PERCEPTION_RADIUS)
                 .stream().filter(entity -> !(entity instanceof Player))
                 .filter(entity -> !npcEntityIds.contains(entity.getEntityId()) && !instances.isNavigationEntity(entity))
+                // Minecarts and boats have their own list with riding details.
+                .filter(entity -> !NpcVehicles.isTransport(entity))
                 .sorted(Comparator.comparingDouble(entity -> entity.getLocation().distanceSquared(center))).limit(5)
                 .toList();
+    }
+
+    /** Minecarts and boats around the NPC, excluding the one it rides. */
+    private List<Entity> nearbyVehicles(NpcInstance instance, Location center) {
+        if (center.getWorld() == null)
+            return List.of();
+        Entity ridden = instances.vehicle(instance).orElse(null);
+        return center.getWorld()
+                .getNearbyEntities(center, PERCEPTION_RADIUS, PERCEPTION_RADIUS, PERCEPTION_RADIUS,
+                        NpcVehicles::isTransport)
+                .stream().filter(vehicle -> !vehicle.equals(ridden))
+                .sorted(Comparator.comparingDouble(vehicle -> vehicle.getLocation().distanceSquared(center)))
+                .limit(MAX_NEARBY_VEHICLES).toList();
+    }
+
+    private void appendVehicle(StringBuilder out, NpcInstance instance) {
+        out.append("Vehicle: ");
+        Entity vehicle = instances.vehicle(instance).orElse(null);
+        if (vehicle == null) {
+            out.append("none (on foot)\n");
+            return;
+        }
+        double speedSquared = vehicle.getVelocity().lengthSquared();
+        out.append("riding a ").append(NpcVehicles.describe(vehicle)).append(", ")
+                .append(speedSquared > MOVING_VEHICLE_SPEED_SQUARED
+                        ? "moving at about " + Math.round(Math.sqrt(speedSquared) * 20.0) + " blocks per second"
+                        : "standing still")
+                .append("; it cannot walk until it gets out\n");
     }
 
     public List<NamedLocation> nearbyLocations(Location center) {
@@ -2122,8 +2183,8 @@ public final class AiControlService {
      * spoken in an NPC conversation.
      *
      * @param scopeId
-     *            group queue and conversation memory key: the player's UUID, or
-     *            the NPC conversation key
+     *            group queue and conversation memory key: the player's UUID, or the
+     *            NPC conversation key
      * @param player
      *            the chatting player, or null for an NPC conversation
      * @param actor
