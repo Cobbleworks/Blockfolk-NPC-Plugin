@@ -142,6 +142,12 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, Set<UUID>> observedNpcs = new HashMap<>();
     private final Map<UUID, Long> npcNearbyCooldownUntilTick = new HashMap<>();
     private final Map<UUID, Location> playerLocationSnapshots = new ConcurrentHashMap<>();
+    /**
+     * Players whose chat would only reach private AI conversations with nobody
+     * else in earshot. Rebuilt on the main thread and read by the async chat
+     * event, which must not touch NPC or world state itself.
+     */
+    private volatile Set<UUID> privateChatPlayers = Set.of();
     private final long proximityCooldownTicks;
     private NpcCombatService combatService;
     private NpcShopService shopService;
@@ -622,20 +628,24 @@ public final class NpcBehaviourService implements Listener {
                 chatLocation == null ? player.getLocation().clone() : chatLocation));
     }
 
+    /**
+     * Hides a private AI conversation from the rest of the server: when every
+     * NPC that would answer keeps private conversations and no other player is
+     * close enough to hear the exchange, only the speaker (and the console)
+     * receives the chat line.
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPrivateConversationChat(AsyncChatEvent event) {
+        UUID speaker = event.getPlayer().getUniqueId();
+        if (!privateChatPlayers.contains(speaker))
+            return;
+        event.viewers().removeIf(viewer -> viewer instanceof Player other && !other.getUniqueId().equals(speaker));
+    }
+
     private void handlePlayerChat(Player player, String message, Location chatLocation) {
         if (isChatMuted(player))
             return;
-        List<NpcInstance> nearby = nearbyChatInstances(instances.findActive(), chatLocation);
-        List<NpcInstance> aiGroup = new ArrayList<>();
-        for (NpcInstance instance : nearby) {
-            NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-            if (definition == null)
-                continue;
-            if (aiControlService != null && definition.getAiControlSettings().enabled()
-                    && definition.getAiControlSettings().respondToChat()) {
-                aiGroup.add(instance);
-            }
-        }
+        List<NpcInstance> aiGroup = aiChatResponders(instances.findActive(), chatLocation);
         if (aiControlService != null && !aiGroup.isEmpty()) {
             if (conversationService != null)
                 conversationService.interrupt(aiGroup);
@@ -656,6 +666,70 @@ public final class NpcBehaviourService implements Listener {
             player.getPersistentDataContainer().set(mutedChatKey, PersistentDataType.BYTE, (byte) 1);
         else
             player.getPersistentDataContainer().remove(mutedChatKey);
+    }
+
+    /** AI NPCs that would answer chat sent from this location, closest first. */
+    private List<NpcInstance> aiChatResponders(Collection<NpcInstance> candidates, Location chatLocation) {
+        if (aiControlService == null)
+            return List.of();
+        List<NpcInstance> responders = new ArrayList<>();
+        for (NpcInstance instance : nearbyChatInstances(candidates, chatLocation)) {
+            NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+            if (definition != null && definition.getAiControlSettings().enabled()
+                    && definition.getAiControlSettings().respondToChat()) {
+                responders.add(instance);
+            }
+        }
+        return responders;
+    }
+
+    private void tickPrivateChatPlayers() {
+        if (aiControlService == null) {
+            privateChatPlayers = Set.of();
+            return;
+        }
+        Collection<NpcInstance> active = instances.findActive();
+        Map<UUID, Location> playerLocations = new HashMap<>();
+        for (Player player : Bukkit.getOnlinePlayers())
+            playerLocations.put(player.getUniqueId(), player.getLocation());
+        Set<UUID> eligible = new HashSet<>();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (isChatMuted(player))
+                continue;
+            Location location = playerLocations.get(player.getUniqueId());
+            List<NpcInstance> responders = aiChatResponders(active, location);
+            if (responders.isEmpty() || responders.stream().anyMatch(instance -> definitions
+                    .find(instance.getDefinitionKey())
+                    .map(definition -> definition.getAiControlSettings().sharedConversation()).orElse(true)))
+                continue;
+            List<Location> others = playerLocations.entrySet().stream()
+                    .filter(entry -> !entry.getKey().equals(player.getUniqueId())).map(Map.Entry::getValue).toList();
+            List<Location> npcLocations = responders.stream().map(NpcInstance::getLocation).toList();
+            if (!conversationOverheard(location, npcLocations, others))
+                eligible.add(player.getUniqueId());
+        }
+        privateChatPlayers = Set.copyOf(eligible);
+    }
+
+    /**
+     * Whether another player could follow a conversation: they are within dialog
+     * range of the speaker, or of an NPC that would answer aloud.
+     */
+    static boolean conversationOverheard(Location speaker, Collection<Location> npcLocations,
+            Collection<Location> otherPlayers) {
+        for (Location other : otherPlayers) {
+            if (withinDialogRange(other, speaker))
+                return true;
+            for (Location npc : npcLocations) {
+                if (withinDialogRange(other, npc))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean withinDialogRange(Location one, Location two) {
+        return one.getWorld() == two.getWorld() && coordinateDistanceSquared(one, two) <= DIALOG_RANGE_SQUARED;
     }
 
     static List<NpcInstance> nearbyChatInstances(Collection<NpcInstance> candidates, Location chatLocation) {
@@ -978,6 +1052,7 @@ public final class NpcBehaviourService implements Listener {
         if (++playerLookTick >= PLAYER_LOOK_INTERVAL_TICKS) {
             playerLookTick = 0;
             tickPlayerLook();
+            tickPrivateChatPlayers();
         }
         if (++itemPickupTick >= ITEM_PICKUP_INTERVAL_TICKS) {
             itemPickupTick = 0;
