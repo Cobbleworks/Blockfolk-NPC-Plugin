@@ -61,7 +61,7 @@ General perception uses a 16-block radius. Players, NPCs, and other entities bey
 - up to five other nearby entities, excluding minecarts and boats, visible Blockfolk entities, and their navigation helpers;
 - up to eight nearest buttons and levers when **Interact** is enabled;
 - up to eight nearest doors, including whether each is open or closed;
-- up to five containers with bounded content summaries when **Interact** and **Temporary Inventory** are enabled;
+- up to five containers with their contents (up to 16 item kinds each) when **Interact** and **Temporary Inventory** are enabled;
 - up to five non-empty signs with front/back text;
 - reachable ores, logs, and pickaxe-mineable blocks when **Mine Blocks** is enabled.
 

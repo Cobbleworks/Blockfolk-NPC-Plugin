@@ -121,6 +121,22 @@ class OpenRouterClientTest {
     }
 
     @Test
+    void preservesContainerItemAndAmountFromNativeCall() {
+        AiControlSettings settings = AiControlSettings.defaults().toggle(AiActionType.INTERACT);
+        JsonArray tools = AiActionTools.definitions(settings.allowedActions(), List.of());
+        String normalized = OpenRouterClient.responseActions("""
+                {"choices":[{"message":{"tool_calls":[
+                  {"function":{"name":"interact","arguments":"{\\"target\\":\\"take_from_container_1\\",\\"item\\":\\"bread\\",\\"amount\\":3}"}}
+                ]},"finish_reason":"tool_calls"}]}
+                """, false, tools);
+
+        AiDecision.Action action = AiDecisionParser.parse(normalized, settings).actions().getFirst();
+        assertEquals(AiActionType.INTERACT, action.type());
+        assertEquals("bread", action.item());
+        assertEquals(3, action.amount());
+    }
+
+    @Test
     void textOnlyGameplayResponseIsUnusableForRetry() {
         JsonArray tools = AiActionTools.definitions(EnumSet.of(AiActionType.DO_NOTHING), List.of());
         String normalized = OpenRouterClient.responseActions("""

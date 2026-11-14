@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -1008,7 +1009,8 @@ public final class NpcBehaviourService implements Listener {
                         aiControlService.noteAction(instance, "You stopped following.");
                     stopFollowing(instance);
                 }
-                case INTERACT -> startAiInteraction(instance, action.target(), result.targets());
+                case INTERACT -> startAiInteraction(instance, action.target(), action.item(), action.amount(),
+                        result.targets());
                 case MOVE_TO ->
                     resolveAiMoveTarget(action.target(), result.targets()).ifPresentOrElse(targetLocation -> {
                         leaveVehicleToWalk(instance);
@@ -1574,20 +1576,31 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private void startAiInteraction(NpcInstance instance, String requestedTarget, AiTargetSnapshot targets) {
+    private void startAiInteraction(NpcInstance instance, String requestedTarget, String requestedItem,
+            Integer amount, AiTargetSnapshot targets) {
         String normalizedTarget = requestedTarget == null ? "nearest_switch" : requestedTarget;
         AiInteractionKind kind = normalizedTarget.startsWith("take_from_container")
                 ? AiInteractionKind.TAKE_FROM_CONTAINER
                 : normalizedTarget.startsWith("store_in_container")
                         ? AiInteractionKind.STORE_IN_CONTAINER
                         : AiInteractionKind.SWITCH;
+        Material item = null;
+        if (requestedItem != null && kind != AiInteractionKind.SWITCH) {
+            item = Material.matchMaterial(requestedItem);
+            if (item == null || !item.isItem() || item.isAir()) {
+                aiControlService.noteOutcome(instance, "interact " + normalizedTarget + " failed: '" + requestedItem
+                        + "' is not a known item; use a material id such as oak_log.");
+                return;
+            }
+        }
         Location explicitLocation = targets == null ? null : targets.location(normalizedTarget).orElse(null);
         boolean requiresExplicitLocation = normalizedTarget.startsWith("nearby_lever_")
                 || normalizedTarget.startsWith("nearby_button_")
                 || normalizedTarget.matches("(?:take_from|store_in)_container_[1-9][0-9]*");
         if (requiresExplicitLocation && explicitLocation == null)
             return;
-        AiInteractionRequest request = new AiInteractionRequest(kind, explicitLocation);
+        AiInteractionRequest request = new AiInteractionRequest(kind, explicitLocation, item,
+                item == null ? null : amount);
         AiInteraction active = aiInteractions.get(instance.getId());
         if (active != null) {
             if (sameInteraction(active, request))
@@ -1608,7 +1621,8 @@ public final class NpcBehaviourService implements Listener {
 
     private boolean sameInteraction(AiInteraction active, AiInteractionRequest request) {
         return active.kind() == request.kind()
-                && (request.blockLocation() == null || active.blockLocation().equals(request.blockLocation()));
+                && (request.blockLocation() == null || active.blockLocation().equals(request.blockLocation()))
+                && active.item() == request.item() && Objects.equals(active.amount(), request.amount());
     }
 
     private boolean beginAiInteraction(NpcInstance instance, AiInteractionRequest request) {
@@ -1616,7 +1630,7 @@ public final class NpcBehaviourService implements Listener {
         Block target = request.blockLocation() == null
                 ? request.kind() == AiInteractionKind.SWITCH
                         ? findNearestSwitch(current)
-                        : findNearestContainer(current, instance, request.kind())
+                        : findNearestContainer(current, instance, request.kind(), request.item())
                 : request.blockLocation().getBlock();
         if (target == null || !isUsableInteractionTarget(target, request.kind()))
             return false;
@@ -1625,7 +1639,8 @@ public final class NpcBehaviourService implements Listener {
         instances.stand(instance);
         instances.stopNavigating(instance);
         aiInteractions.put(instance.getId(),
-                new AiInteraction(request.kind(), target.getLocation(), interactionDestinations(target, current), 0));
+                new AiInteraction(request.kind(), target.getLocation(), interactionDestinations(target, current), 0,
+                        request.item(), request.amount()));
         return true;
     }
 
@@ -1645,7 +1660,7 @@ public final class NpcBehaviourService implements Listener {
         }
         Location switchCenter = target.getLocation().add(0.5, 0.5, 0.5);
         if (current.distanceSquared(switchCenter) <= SWITCH_USE_RANGE_SQUARED) {
-            performAiInteraction(instance, target, interaction.kind());
+            performAiInteraction(instance, target, interaction);
             return finishAiInteraction(instance);
         }
         // Stay aboard and wait for the vehicle to bring the target within reach.
@@ -1662,7 +1677,7 @@ public final class NpcBehaviourService implements Listener {
         if (status == NativeNpcNavigationService.NavigationStatus.ARRIVED) {
             Location reached = instances.currentLocation(instance);
             if (reached.distanceSquared(switchCenter) <= SWITCH_USE_RANGE_SQUARED) {
-                performAiInteraction(instance, target, interaction.kind());
+                performAiInteraction(instance, target, interaction);
                 return finishAiInteraction(instance);
             }
             return tryNextInteractionDestination(instance, interaction);
@@ -1701,7 +1716,8 @@ public final class NpcBehaviourService implements Listener {
         return kind == AiInteractionKind.SWITCH ? isUsableSwitch(block) : block.getState() instanceof Container;
     }
 
-    private void performAiInteraction(NpcInstance instance, Block block, AiInteractionKind kind) {
+    private void performAiInteraction(NpcInstance instance, Block block, AiInteraction interaction) {
+        AiInteractionKind kind = interaction.kind();
         if (kind == AiInteractionKind.SWITCH) {
             toggleSwitch(block);
             if (aiControlService != null)
@@ -1711,9 +1727,9 @@ public final class NpcBehaviourService implements Listener {
         if (!(block.getState() instanceof Container container))
             return;
         if (kind == AiInteractionKind.TAKE_FROM_CONTAINER) {
-            takeFromContainer(instance, container);
+            takeFromContainer(instance, container, interaction.item(), interaction.amount());
         } else {
-            storeInContainer(instance, container);
+            storeInContainer(instance, container, interaction.item(), interaction.amount());
         }
     }
 
@@ -1742,7 +1758,8 @@ public final class NpcBehaviourService implements Listener {
         return nearest;
     }
 
-    private Block findNearestContainer(Location center, NpcInstance instance, AiInteractionKind kind) {
+    private Block findNearestContainer(Location center, NpcInstance instance, AiInteractionKind kind,
+            Material item) {
         if (center.getWorld() == null)
             return null;
         Block nearest = null;
@@ -1758,7 +1775,7 @@ public final class NpcBehaviourService implements Listener {
                         continue;
                     Block block = center.getWorld().getBlockAt(center.getBlockX() + x, blockY, center.getBlockZ() + z);
                     if (!(block.getState() instanceof Container container)
-                            || !isUsableContainer(container.getInventory(), instance, kind))
+                            || !isUsableContainer(container.getInventory(), instance, kind, item))
                         continue;
                     nearest = block;
                     nearestDistance = distance;
@@ -1768,16 +1785,18 @@ public final class NpcBehaviourService implements Listener {
         return nearest;
     }
 
-    private boolean isUsableContainer(Inventory inventory, NpcInstance instance, AiInteractionKind kind) {
+    /** {@code item} narrows the check to that material when not null. */
+    private boolean isUsableContainer(Inventory inventory, NpcInstance instance, AiInteractionKind kind,
+            Material item) {
         if (kind == AiInteractionKind.TAKE_FROM_CONTAINER) {
-            for (ItemStack item : inventory.getContents()) {
-                if (item != null && !item.getType().isAir())
+            for (ItemStack stored : inventory.getContents()) {
+                if (stored != null && !stored.getType().isAir() && (item == null || stored.getType() == item))
                     return true;
             }
             return false;
         }
         for (ItemStack carried : instance.getTemporaryInventoryContents()) {
-            if (carried == null || carried.getType().isAir())
+            if (carried == null || carried.getType().isAir() || (item != null && carried.getType() != item))
                 continue;
             if (inventory.firstEmpty() >= 0)
                 return true;
@@ -1941,8 +1960,75 @@ public final class NpcBehaviourService implements Listener {
         takeFromInventory(instance, source.inventory(), source.containerLocation(), actor);
     }
 
-    private void takeFromContainer(NpcInstance instance, Container container) {
-        takeFromInventory(instance, container.getInventory(), container.getLocation(), null);
+    /**
+     * Takes {@code amount} of {@code item} (all of it when null) from a container,
+     * or the first stack when {@code item} is null, and tells the AI what fell
+     * short.
+     */
+    private void takeFromContainer(NpcInstance instance, Container container, Material item, Integer amount) {
+        if (item == null) {
+            takeFromInventory(instance, container.getInventory(), container.getLocation(), null);
+            return;
+        }
+        Inventory source = container.getInventory();
+        String name = containerName(container.getLocation());
+        String itemName = readableMaterial(item);
+        animateContainerInteraction(container.getLocation());
+        int available = countItem(source.getContents(), item);
+        if (available == 0) {
+            noteInteractionOutcome(instance, "Taking " + itemName + " from " + name + " failed: it holds none. It holds "
+                    + describeContents(source.getContents()) + ".");
+            return;
+        }
+        Inventory carried = Bukkit.createInventory(null, 27);
+        carried.setContents(instance.getTemporaryInventoryContents());
+        int wanted = amount == null ? Integer.MAX_VALUE : amount;
+        int taken = 0;
+        boolean refused = false;
+        boolean full = false;
+        for (int slot = 0; slot < source.getSize() && taken < wanted; slot++) {
+            ItemStack stack = source.getItem(slot);
+            if (stack == null || stack.getType() != item)
+                continue;
+            ItemStack offered = stack.clone();
+            offered.setAmount(Math.min(stack.getAmount(), wanted - taken));
+            InventoryMoveItemEvent moveEvent = new InventoryMoveItemEvent(source, offered.clone(), carried, true);
+            Bukkit.getPluginManager().callEvent(moveEvent);
+            if (moveEvent.isCancelled() || !moveEvent.getItem().isSimilar(stack)
+                    || moveEvent.getItem().getAmount() > offered.getAmount()) {
+                refused = true;
+                break;
+            }
+            offered = moveEvent.getItem().clone();
+            int leftover = carried.addItem(offered.clone()).values().stream().mapToInt(ItemStack::getAmount).sum();
+            int moved = offered.getAmount() - leftover;
+            if (moved > 0) {
+                if (moved >= stack.getAmount())
+                    source.setItem(slot, null);
+                else {
+                    ItemStack rest = stack.clone();
+                    rest.setAmount(stack.getAmount() - moved);
+                    source.setItem(slot, rest);
+                }
+                taken += moved;
+            }
+            if (leftover > 0) {
+                full = true;
+                break;
+            }
+        }
+        if (taken > 0)
+            updateTemporaryInventory(instance, carried.getContents(), null, InventoryChange.Cause.TAKEN, name);
+        String reason = refused ? "the container refused" : full ? "your inventory is full" : null;
+        if (taken == 0)
+            noteInteractionOutcome(instance, "Taking " + itemName + " from " + name + " failed: "
+                    + (reason == null ? "nothing could be moved" : reason) + ".");
+        else if (amount != null && taken < amount)
+            noteInteractionOutcome(instance, "You took only " + taken + " of the " + amount + " " + itemName
+                    + " you wanted: " + (reason == null ? name + " held only " + available : reason) + ".");
+        else if (amount == null && reason != null)
+            noteInteractionOutcome(instance, "You took " + taken + " " + itemName + " but left "
+                    + (available - taken) + " behind: " + reason + ".");
     }
 
     private void takeFromInventory(NpcInstance instance, Inventory source, Location containerLocation, Entity actor) {
@@ -1978,15 +2064,31 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private void storeInContainer(NpcInstance instance, Container container) {
+    /**
+     * Stores {@code amount} of {@code filter} (all of it when null), or everything
+     * carried when {@code filter} is null, and tells the AI what fell short.
+     */
+    private void storeInContainer(NpcInstance instance, Container container, Material filter, Integer amount) {
         Inventory carried = Bukkit.createInventory(null, 27);
         carried.setContents(instance.getTemporaryInventoryContents());
         Inventory destination = container.getInventory();
+        String name = containerName(container.getLocation());
+        String what = filter == null ? "your items" : readableMaterial(filter);
+        int carriedAmount = filter == null ? countItems(carried.getContents()) : countItem(carried.getContents(), filter);
+        if (carriedAmount == 0) {
+            noteInteractionOutcome(instance, "Storing " + what + " in " + name + " failed: you carry none.");
+            return;
+        }
+        int wanted = amount == null ? Integer.MAX_VALUE : amount;
+        int stored = 0;
         boolean moved = false;
-        for (int slot = 0; slot < carried.getSize(); slot++) {
-            ItemStack item = carried.getItem(slot);
-            if (item == null || item.getType().isAir())
+        for (int slot = 0; slot < carried.getSize() && stored < wanted; slot++) {
+            ItemStack carriedStack = carried.getItem(slot);
+            if (carriedStack == null || carriedStack.getType().isAir()
+                    || (filter != null && carriedStack.getType() != filter))
                 continue;
+            ItemStack item = carriedStack.clone();
+            item.setAmount(Math.min(carriedStack.getAmount(), wanted - stored));
             InventoryMoveItemEvent moveEvent = new InventoryMoveItemEvent(carried, item.clone(), destination, true);
             Bukkit.getPluginManager().callEvent(moveEvent);
             if (moveEvent.isCancelled() || !moveEvent.getItem().isSimilar(item)
@@ -1997,21 +2099,69 @@ public final class NpcBehaviourService implements Listener {
             Map<Integer, ItemStack> leftovers = destination.addItem(offered);
             ItemStack leftover = leftovers.isEmpty() ? null : leftovers.values().iterator().next();
             int transferred = before - (leftover == null ? 0 : leftover.getAmount());
-            int remainingCarried = item.getAmount() - transferred;
+            int remainingCarried = carriedStack.getAmount() - transferred;
             if (remainingCarried <= 0)
                 carried.setItem(slot, null);
             else {
-                ItemStack remaining = item.clone();
+                ItemStack remaining = carriedStack.clone();
                 remaining.setAmount(remainingCarried);
                 carried.setItem(slot, remaining);
             }
-            moved |= leftover == null || leftover.getAmount() < before;
+            stored += Math.max(0, transferred);
+            moved |= transferred > 0;
         }
-        if (!moved)
-            return;
         animateContainerInteraction(container.getLocation());
-        updateTemporaryInventory(instance, carried.getContents(), null, InventoryChange.Cause.STORED,
-                containerName(container.getLocation()));
+        if (moved)
+            updateTemporaryInventory(instance, carried.getContents(), null, InventoryChange.Cause.STORED, name);
+        int target = amount == null ? carriedAmount : Math.min(amount, carriedAmount);
+        if (!moved)
+            noteInteractionOutcome(instance, "Storing " + what + " in " + name + " failed: it is full or refused them.");
+        else if (stored < target)
+            noteInteractionOutcome(instance, "You stored only " + stored + " of " + target + " "
+                    + (filter == null ? "items" : what) + " in " + name + ": it is full or refused the rest.");
+        else if (amount != null && amount > carriedAmount)
+            noteInteractionOutcome(instance, "You stored all " + carriedAmount + " " + what + " you carried, fewer than the "
+                    + amount + " asked for.");
+    }
+
+    private void noteInteractionOutcome(NpcInstance instance, String outcome) {
+        if (aiControlService != null)
+            aiControlService.noteOutcome(instance, outcome);
+    }
+
+    private static int countItem(ItemStack[] contents, Material material) {
+        int count = 0;
+        for (ItemStack item : contents) {
+            if (item != null && item.getType() == material)
+                count += item.getAmount();
+        }
+        return count;
+    }
+
+    private static int countItems(ItemStack[] contents) {
+        int count = 0;
+        for (ItemStack item : contents) {
+            if (item != null && !item.getType().isAir())
+                count += item.getAmount();
+        }
+        return count;
+    }
+
+    /** "12 oak log, 3 coal", or "nothing". */
+    private static String describeContents(ItemStack[] contents) {
+        Map<Material, Integer> totals = new java.util.LinkedHashMap<>();
+        for (ItemStack item : contents) {
+            if (item != null && !item.getType().isAir())
+                totals.merge(item.getType(), item.getAmount(), Integer::sum);
+        }
+        if (totals.isEmpty())
+            return "nothing";
+        return totals.entrySet().stream().map(entry -> entry.getValue() + " " + readableMaterial(entry.getKey()))
+                .collect(java.util.stream.Collectors.joining(", "));
+    }
+
+    private static String readableMaterial(Material material) {
+        return material.name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
     }
 
     private InventorySource nearbySourceInventory(NpcInstance instance, Entity actor) {
@@ -2579,18 +2729,20 @@ public final class NpcBehaviourService implements Listener {
         SWITCH, TAKE_FROM_CONTAINER, STORE_IN_CONTAINER
     }
 
+    /** {@code item} and {@code amount} narrow a container transfer; null means any item / all of it. */
     private record AiInteraction(AiInteractionKind kind, Location blockLocation, List<Location> navigationTargets,
-            int destinationIndex) {
+            int destinationIndex, Material item, Integer amount) {
         private Location navigationTarget() {
             return navigationTargets.get(destinationIndex);
         }
 
         private AiInteraction nextDestination() {
-            return new AiInteraction(kind, blockLocation, navigationTargets, destinationIndex + 1);
+            return new AiInteraction(kind, blockLocation, navigationTargets, destinationIndex + 1, item, amount);
         }
     }
 
-    private record AiInteractionRequest(AiInteractionKind kind, Location blockLocation) {
+    private record AiInteractionRequest(AiInteractionKind kind, Location blockLocation, Material item,
+            Integer amount) {
         private AiInteractionRequest {
             blockLocation = blockLocation == null ? null : blockLocation.clone();
         }

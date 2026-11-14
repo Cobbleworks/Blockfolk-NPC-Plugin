@@ -6,6 +6,7 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Added
 
+- AI NPCs choose exactly which items to take from or store in a container. The Interact function takes an optional `item` (such as `oak_log`) and `amount`, so an NPC can fetch 12 logs or put away only its iron ingots instead of always taking the first stack or storing everything. The NPC learns on its next turn when a transfer falls short and why. Container contents in the AI context now list up to 16 item kinds instead of 8.
 - Damaged NPCs show a small health bar above their name and dialog line, like `[■■■■□□□□□□]`, until they are back to full health. Players see it within 16 blocks. Configure it under `health-bars` in `config.yml`.
 - **Keep Chunks Loaded** property in NPC Properties. NPCs with it on keep the chunks around them loaded as they walk, so routes and long walks continue with no player nearby. The radius is set by `chunk-loading.radius` in `config.yml` (3×3 chunks by default). Off by default. NPC Properties now has two rows: behaviour switches on top, appearance below.
 - NPCs can ride minecarts and boats. The new **Board Vehicles** property in NPC Properties makes an NPC get into an empty minecart, boat, or raft it touches, also while walking a route. Activator rails, breaking the vehicle, or a restart get it out again, and its route resumes from the nearest waypoint. With the property off, passing carts and boats no longer pick the NPC up.

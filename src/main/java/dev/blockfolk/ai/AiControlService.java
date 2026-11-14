@@ -66,6 +66,8 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 public final class AiControlService {
 
     private static final double PERCEPTION_RADIUS = 16.0;
+    /** Item kinds listed per nearby container; the rest are summarized as a count. */
+    private static final int MAX_LISTED_CONTAINER_KINDS = 16;
     private static final double LOCATION_PERCEPTION_RADIUS = AiTargetSnapshot.MAX_COORDINATE_DISTANCE;
     private static final int MAX_NEARBY_LOCATIONS = 20;
     private static final int MAX_NEARBY_VEHICLES = 5;
@@ -477,12 +479,18 @@ public final class AiControlService {
             case FOLLOW -> "Started: following" + target + ".";
             case ENTER_VEHICLE -> "Started: " + function + target
                     + ". The NPC gets in once it reaches the vehicle; see Vehicle in the updated state.";
-            case INTERACT -> "Started: " + function + target
+            case INTERACT -> "Started: " + function + target + transferDetail(action)
                     + ". On foot, the NPC walks there; while riding, it waits until the target is within reach.";
             case START_COMBAT -> "Started: combat" + (target.isEmpty() ? " with the nearest attackable entity" : target)
                     + ". See Combat in the updated state.";
             default -> "Done: " + function + target + ".";
         };
+    }
+
+    private static String transferDetail(AiDecision.Action action) {
+        if (action.item() == null)
+            return "";
+        return " (" + (action.amount() == null ? "all " : action.amount() + " ") + readable(action.item()) + ")";
     }
 
     private static String followUpNote(String updatedState, String extra) {
@@ -1949,7 +1957,7 @@ public final class AiControlService {
         if (containers.isEmpty()) {
             return;
         }
-        out.append("Nearby containers usable with INTERACT:\n");
+        out.append("Nearby containers usable with INTERACT (pass item and amount to move only what is needed):\n");
         int index = 0;
         for (NearbyContainer container : containers.stream()
                 .sorted(Comparator.comparingDouble(NearbyContainer::distance)).limit(5).toList()) {
@@ -1969,10 +1977,14 @@ public final class AiControlService {
                 out.append("empty");
             } else {
                 container.contents().entrySet().stream()
-                        .sorted(Map.Entry.<Material, Integer>comparingByValue().reversed()).limit(8)
+                        .sorted(Map.Entry.<Material, Integer>comparingByValue().reversed())
+                        .limit(MAX_LISTED_CONTAINER_KINDS)
                         .forEach(entry -> out.append(entry.getValue()).append(' ')
                                 .append(readable(entry.getKey().name())).append(", "));
                 out.setLength(out.length() - 2);
+                int hidden = container.contents().size() - MAX_LISTED_CONTAINER_KINDS;
+                if (hidden > 0)
+                    out.append(", and ").append(hidden).append(" more kind").append(hidden == 1 ? "" : "s");
             }
             out.append("; targets: ").append(takeAlias).append(", ").append(storeAlias).append('\n');
         }

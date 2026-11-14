@@ -56,7 +56,19 @@ final class AiActionTools {
                 properties.add("animation", animation);
                 required.add("animation");
             }
-            case START_COMBAT, INTERACT -> properties.add("target", stringProperty(targetDescription(action)));
+            case START_COMBAT -> properties.add("target", stringProperty(targetDescription(action)));
+            case INTERACT -> {
+                properties.add("target", stringProperty(targetDescription(action)));
+                properties.add("item", stringProperty("Containers only: the item to take or store, as its "
+                        + "material id such as oak_log or iron_ingot, matching a listed container's contents or "
+                        + "the temporary inventory. Omit to store everything carried, or to take the first stack."));
+                JsonObject amount = new JsonObject();
+                amount.addProperty("type", "integer");
+                amount.addProperty("minimum", 1);
+                amount.addProperty("description", "Containers only, with item: how many to move. "
+                        + "Omit to move all of that item (as much as fits).");
+                properties.add("amount", amount);
+            }
             case FLEE_FROM, FOLLOW, MOVE_TO, MINE_BLOCKS, DROP_ITEM, ENTER_VEHICLE -> {
                 properties.add("target", stringProperty(targetDescription(action)));
                 required.add("target");
@@ -118,6 +130,8 @@ final class AiActionTools {
             case UNFOLLOW -> "Stop following the current player.";
             case INTERACT -> "Walk to and operate a nearby lever or button, or take items from / store items in "
                     + "a nearby container. While riding, stay aboard and wait until the target is within reach. "
+                    + "For containers, name the item (and optionally amount) to move exactly what is needed; "
+                    + "call it once per item kind to move several kinds. "
                     + "For several switches, call it once per switch in the requested order. "
                     + "It may take time; do not repeat a target that is already in progress.";
             case MOVE_TO -> "Walk to a place, player, NPC, or entity. Call this whenever the NPC should go, "

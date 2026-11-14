@@ -105,6 +105,8 @@ Enable **Temporary Inventory** when the AI should see and manipulate the items c
 
 Nearby containers include their custom names in the NPC's context when set. With container interaction enabled, players can refer to a named container such as “Food Supplies”; the NPC matches that name to the listed container target for taking or storing items.
 
+The AI sees each nearby container's contents (up to 16 item kinds per container) and picks exactly what to move: it names the item, such as `oak_log`, and optionally an amount. Without an amount it moves all of that item that fits. Without an item, taking grabs the first stack and storing puts away everything carried. When a transfer falls short, for example because the container holds less than asked or the NPC's inventory is full, the NPC learns why on its next turn.
+
 ## Conversation and memory
 
 Conversation can be:

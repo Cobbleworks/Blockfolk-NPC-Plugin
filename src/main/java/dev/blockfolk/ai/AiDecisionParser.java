@@ -20,6 +20,8 @@ public final class AiDecisionParser {
     private static final int MAX_HINT_ALIASES = 12;
     private static final Set<String> TARGETS = Set.of("triggering_player", "triggering_entity", "nearest_player",
             "nearest_attackable", "current_target");
+    /** Largest container transfer worth asking for: a full 27-slot inventory of 64-stacks. */
+    static final int MAX_TRANSFER_AMOUNT = 27 * 64;
     private static final Set<String> ANIMATIONS = Set.of("wave", "jump", "sneak", "stand");
 
     private AiDecisionParser() {
@@ -128,8 +130,28 @@ public final class AiDecisionParser {
                     "'" + target + "' is not present in the current context" + hint(type, targets));
         if (type == AiActionType.PLAY_ANIMATION && (animation == null || !ANIMATIONS.contains(animation)))
             return AiCallOutcome.rejected(call, function, "animation must be wave, jump, sneak, or stand");
+        String rawItem = string(object, "item", true);
+        String item = itemId(rawItem);
+        boolean amountGiven = object.has("amount") && !object.get("amount").isJsonNull()
+                && !"all".equalsIgnoreCase(string(object, "amount", true));
+        Integer amount = amount(object);
+        if ((rawItem != null && !rawItem.isBlank()) || amountGiven) {
+            boolean containerTarget = type == AiActionType.INTERACT && target != null
+                    && target.matches("(take_from|store_in)_container(?:_[1-9][0-9]*)?");
+            if (!containerTarget)
+                return AiCallOutcome.rejected(call, function,
+                        "item and amount apply only to take_from_container / store_in_container targets");
+            if (item == null && rawItem != null && !rawItem.isBlank())
+                return AiCallOutcome.rejected(call, function,
+                        "item must be a material id such as oak_log or iron_ingot");
+            if (amountGiven && amount == null)
+                return AiCallOutcome.rejected(call, function,
+                        "amount must be a whole number from 1 to " + MAX_TRANSFER_AMOUNT + ", or omitted for all");
+            if (amount != null && item == null)
+                return AiCallOutcome.rejected(call, function, "amount needs an item; name the item to move");
+        }
         return AiCallOutcome.accepted(call, function,
-                new AiDecision.Action(type, text, target, animation, locationName));
+                new AiDecision.Action(type, text, target, animation, locationName, item, amount));
     }
 
     private static boolean requiresTarget(AiActionType type) {
@@ -202,6 +224,37 @@ public final class AiDecisionParser {
         if (valid.isEmpty())
             return fixed.isEmpty() ? "; no valid targets are currently in range" : fixed;
         return "; valid targets: " + String.join(", ", valid) + fixed;
+    }
+
+    /**
+     * Normalizes a model-supplied item name ("Oak Log", "minecraft:oak_log") to a
+     * material id, or null when it is missing or cannot be one.
+     */
+    static String itemId(String raw) {
+        if (raw == null || raw.isBlank())
+            return null;
+        String id = raw.trim().toLowerCase(Locale.ROOT);
+        if (id.startsWith("minecraft:"))
+            id = id.substring("minecraft:".length());
+        id = id.replaceAll("[\\s-]+", "_");
+        return id.matches("[a-z0-9_]{1,64}") ? id : null;
+    }
+
+    /** A positive transfer amount, or null when absent, "all", or invalid. */
+    private static Integer amount(JsonObject object) {
+        try {
+            if (!object.has("amount") || !object.get("amount").isJsonPrimitive())
+                return null;
+            String raw = object.get("amount").getAsString().trim();
+            if (raw.equalsIgnoreCase("all"))
+                return null;
+            double value = Double.parseDouble(raw);
+            if (value != Math.rint(value) || value < 1 || value > MAX_TRANSFER_AMOUNT)
+                return null;
+            return (int) value;
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 
     private static String string(JsonObject object, String name, boolean normalize) {

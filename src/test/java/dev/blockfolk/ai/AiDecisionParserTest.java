@@ -1,6 +1,7 @@
 package dev.blockfolk.ai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.util.EnumSet;
 import java.util.List;
@@ -345,5 +346,41 @@ class AiDecisionParserTest {
                 """, AiControlSettings.defaults());
 
         assertEquals(AiDecisionParser.OVER_LIMIT_REJECTION, parsed.outcomes().get(3).rejection());
+    }
+
+    @Test
+    void acceptsItemAndAmountForContainerTransfers() {
+        AiControlSettings interact = settings("Caretaker", "", "", EnumSet.of(AiActionType.INTERACT));
+
+        AiDecision decision = AiDecisionParser.parse("""
+                {"actions":[
+                  {"type":"INTERACT","target":"take_from_container_1","item":"Oak Log","amount":12},
+                  {"type":"INTERACT","target":"store_in_container_2","item":"minecraft:iron_ingot"},
+                  {"type":"INTERACT","target":"take_from_container_1","item":"coal","amount":"all"}
+                ]}
+                """, interact);
+
+        assertEquals(List.of("oak_log", "iron_ingot", "coal"),
+                decision.actions().stream().map(AiDecision.Action::item).toList());
+        assertEquals(12, decision.actions().get(0).amount());
+        assertNull(decision.actions().get(1).amount());
+        assertNull(decision.actions().get(2).amount());
+    }
+
+    @Test
+    void rejectsItemOutsideContainersAndBadAmounts() {
+        AiControlSettings interact = settings("Caretaker", "", "", EnumSet.of(AiActionType.INTERACT));
+
+        AiParseResult<AiDecision> result = AiDecisionParser.parseDetailed("""
+                {"actions":[
+                  {"type":"INTERACT","target":"nearby_lever_1","item":"oak_log"},
+                  {"type":"INTERACT","target":"take_from_container_1","item":"oak_log","amount":0},
+                  {"type":"INTERACT","target":"take_from_container_1","amount":5},
+                  {"type":"INTERACT","target":"take_from_container_1","item":"oak log!!"}
+                ]}
+                """, interact);
+
+        assertEquals(AiActionType.DO_NOTHING, result.value().actions().getFirst().type());
+        assertEquals(4, result.outcomes().stream().filter(outcome -> !outcome.isAccepted()).count());
     }
 }
