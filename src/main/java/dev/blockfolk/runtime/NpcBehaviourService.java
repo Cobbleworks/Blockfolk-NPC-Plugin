@@ -153,6 +153,7 @@ public final class NpcBehaviourService implements Listener {
     private NpcShopService shopService;
     private AiControlService aiControlService;
     private NpcConversationService conversationService;
+    private NpcPerception perception;
     private NpcVehicleService vehicleService;
     private BukkitTask behaviourTask;
     private long currentTick;
@@ -201,6 +202,15 @@ public final class NpcBehaviourService implements Listener {
         if (aiControlService != null) {
             aiControlService.setProcessingHandlers(dialogService::showProcessing, dialogService::hideProcessing);
         }
+    }
+
+    public void setPerception(NpcPerception perception) {
+        this.perception = perception;
+    }
+
+    /** Whether the NPC notices an entity in range: close by or in line of sight. */
+    private boolean perceives(NpcInstance observer, Entity target) {
+        return perception == null || perception.perceives(observer, target);
     }
 
     public void setConversationService(NpcConversationService conversationService) {
@@ -636,7 +646,8 @@ public final class NpcBehaviourService implements Listener {
                 continue;
             }
             NpcDefinition definition = definitions.find(observer.getDefinitionKey()).orElse(null);
-            if (definition != null && !definition.getBehaviourActions(BehaviourEvent.NEARBY_AGGRESSION).isEmpty()) {
+            if (definition != null && !definition.getBehaviourActions(BehaviourEvent.NEARBY_AGGRESSION).isEmpty()
+                    && (perceives(observer, victim) || attacker != null && perceives(observer, attacker))) {
                 trigger(BehaviourEvent.NEARBY_AGGRESSION, observer, victim, detail);
             }
         }
@@ -1261,6 +1272,8 @@ public final class NpcBehaviourService implements Listener {
                     .filter(entity -> entity instanceof LivingEntity && !(entity instanceof Player))
                     .filter(entity -> !npcEntityIds.contains(entity.getEntityId()))
                     .filter(entity -> !instances.isNavigationEntity(entity))
+                    // Entities behind walls or on another floor are not noticed until seen.
+                    .filter(entity -> perceives(instance, entity))
                     .sorted(Comparator.comparingDouble(entity -> entity.getLocation().distanceSquared(center)))
                     .toList();
             Set<UUID> current = nearby.stream().map(Entity::getUniqueId).collect(java.util.stream.Collectors.toSet());
@@ -1305,6 +1318,8 @@ public final class NpcBehaviourService implements Listener {
                         return location.getWorld() == center.getWorld()
                                 && location.distanceSquared(center) <= range * range;
                     })
+                    // An NPC behind a wall or on another floor is not noticed until seen.
+                    .filter(other -> perception == null || perception.perceives(instance, other))
                     .sorted(Comparator
                             .comparingDouble(other -> instances.currentLocation(other).distanceSquared(center)))
                     .toList();

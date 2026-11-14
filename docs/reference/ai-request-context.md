@@ -53,7 +53,7 @@ Player coordinates are not included.
 
 ## Perceived surroundings
 
-General perception uses a 16-block radius and includes:
+General perception uses a 16-block radius. Players, NPCs, and other entities beyond `perception.awareness-range` (4 blocks by default) are listed only when the NPC has line of sight to them; the triggering player or entity is always listed. It includes:
 
 - up to five nearest players, including name, distance, held item, and whether they triggered the request;
 - up to three nearest Blockfolk NPCs, including display name, distance, and combat state;

@@ -53,6 +53,7 @@ public final class NpcConversationService {
     private final Map<UUID, PendingRound> pendingRounds = new HashMap<>();
     private final Map<UUID, Gaze> gazes = new HashMap<>();
     private AiControlService aiControlService;
+    private NpcPerception perception;
     private BiConsumer<NpcInstance, AiDecisionResult> decisionHandler = (instance, result) -> {
     };
 
@@ -66,6 +67,11 @@ public final class NpcConversationService {
 
     public void setAiControlService(AiControlService aiControlService) {
         this.aiControlService = aiControlService;
+    }
+
+    /** Listeners must be close to the speaker or see it to hear its lines. */
+    public void setPerception(NpcPerception perception) {
+        this.perception = perception;
     }
 
     /** Applies the AI's decisions for one responding NPC. */
@@ -344,7 +350,8 @@ public final class NpcConversationService {
         return instances.findActive().stream().filter(other -> !other.getId().equals(speaker.getId())).filter(other -> {
             Location location = instances.currentLocation(other);
             return location.getWorld() == origin.getWorld() && location.distanceSquared(origin) <= range * range;
-        }).sorted(Comparator.comparingDouble(other -> distanceSquared(other, origin))).toList();
+        }).filter(other -> perception == null || perception.perceives(other, speaker))
+                .sorted(Comparator.comparingDouble(other -> distanceSquared(other, origin))).toList();
     }
 
     private boolean respondsToNpc(NpcInstance instance) {

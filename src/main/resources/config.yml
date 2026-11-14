@@ -14,6 +14,14 @@ health-bars:
   enabled: true
   # Blocks within which players see the bar.
   view-distance: 16
+# What NPCs notice: other NPCs, players and mobs for On Nearby NPC, On Entity Nearby, On Nearby Aggression,
+# the AI's list of what is nearby, and who hears an NPC speak. Combat targeting always needs line of sight.
+perception:
+  # NPCs only notice what they can see, so walls and floors hide what is behind them.
+  # Set to false to let NPCs notice everything in range, also through walls.
+  line-of-sight: true
+  # Blocks within which NPCs notice things without seeing them, like footsteps through a door.
+  awareness-range: 4
 
 # Optional AI behaviour. Configure this per NPC preset in its dedicated
 # AI Behaviour menu. No requests are made for paused presets.

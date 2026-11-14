@@ -50,6 +50,7 @@ import dev.blockfolk.repository.LocationRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.runtime.NpcCombatService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
+import dev.blockfolk.runtime.NpcPerception;
 import dev.blockfolk.runtime.NpcVehicles;
 import dev.blockfolk.util.EntityHealth;
 import dev.blockfolk.util.TextUtil;
@@ -159,6 +160,7 @@ public final class AiControlService {
     private final Plugin plugin;
     private final NpcDefinitionRepository definitions;
     private final NpcInstanceRegistry instances;
+    private NpcPerception perception;
     private final NpcCombatService combat;
     private final LocationRepository locations;
     private final OpenRouterClient client;
@@ -1674,7 +1676,7 @@ public final class AiControlService {
             return;
         }
         out.append("\nNearby players:\n");
-        List<Player> nearbyPlayers = nearbyPlayers(center);
+        List<Player> nearbyPlayers = nearbyPlayers(instance, center, actor);
         for (int index = 0; index < nearbyPlayers.size(); index++) {
             Player player = nearbyPlayers.get(index);
             targets.bindEntity("nearby_player_" + (index + 1), player);
@@ -1689,7 +1691,7 @@ public final class AiControlService {
                     .append(readable(player.getInventory().getItemInMainHand().getType().name())).append('\n');
         }
         out.append("Nearby Blockfolk NPCs:\n");
-        List<NpcInstance> nearbyNpcs = nearbyNpcs(instance);
+        List<NpcInstance> nearbyNpcs = nearbyNpcs(instance, actor);
         List<String> nearbyNpcNames = nearbyNpcs.stream().map(other -> definitions.find(other.getDefinitionKey())
                 .map(NpcDefinition::getDisplayName).map(NpcResponseIds::plainName).orElse(other.getDefinitionKey()))
                 .toList();
@@ -1704,7 +1706,7 @@ public final class AiControlService {
                     .append(combat != null && combat.isEngaged(other) ? "in combat" : "not in combat").append('\n');
         }
 
-        List<Entity> nearbyEntities = nearbyEntities(center);
+        List<Entity> nearbyEntities = nearbyEntities(instance, center, actor);
         if (!nearbyEntities.isEmpty()) {
             out.append("Nearby entities:\n");
             for (int index = 0; index < nearbyEntities.size(); index++) {
@@ -2002,26 +2004,42 @@ public final class AiControlService {
         return false;
     }
 
-    public List<Player> nearbyPlayers(Location center) {
+    /**
+     * The NPC's perception: what is in range and close by or in line of sight. The
+     * triggering entity is always included, since the NPC just noticed it.
+     */
+    public void setPerception(NpcPerception perception) {
+        this.perception = perception;
+    }
+
+    private boolean perceives(NpcInstance observer, Entity target, Entity actor) {
+        return target.equals(actor) || perception == null || perception.perceives(observer, target);
+    }
+
+    private List<Player> nearbyPlayers(NpcInstance instance, Location center, Entity actor) {
         if (center.getWorld() == null) {
             return List.of();
         }
+        // Sorted before the sight check, so line-of-sight traces stop at the limit.
         return center.getWorld().getPlayers().stream()
                 .filter(player -> player.getLocation().distanceSquared(center) <= PERCEPTION_RADIUS * PERCEPTION_RADIUS)
-                .sorted(Comparator.comparingDouble(player -> player.getLocation().distanceSquared(center))).limit(5)
-                .toList();
+                .sorted(Comparator.comparingDouble(player -> player.getLocation().distanceSquared(center)))
+                .filter(player -> perceives(instance, player, actor)).limit(5).toList();
     }
 
-    public List<NpcInstance> nearbyNpcs(NpcInstance instance) {
+    private List<NpcInstance> nearbyNpcs(NpcInstance instance, Entity actor) {
         Location center = instance.getLocation();
         return instances.findActive().stream().filter(other -> !other.getId().equals(instance.getId()))
                 .filter(other -> other.getLocation().getWorld() == center.getWorld())
                 .filter(other -> other.getLocation().distanceSquared(center) <= PERCEPTION_RADIUS * PERCEPTION_RADIUS)
-                .sorted(Comparator.comparingDouble(other -> other.getLocation().distanceSquared(center))).limit(3)
-                .toList();
+                .sorted(Comparator.comparingDouble(other -> other.getLocation().distanceSquared(center)))
+                .filter(other -> perception == null
+                        || actor != null && other.getEntityId() == actor.getEntityId()
+                        || perception.perceives(instance, other))
+                .limit(3).toList();
     }
 
-    public List<Entity> nearbyEntities(Location center) {
+    private List<Entity> nearbyEntities(NpcInstance instance, Location center, Entity actor) {
         if (center.getWorld() == null) {
             return List.of();
         }
@@ -2034,8 +2052,8 @@ public final class AiControlService {
                 .filter(entity -> !npcEntityIds.contains(entity.getEntityId()) && !instances.isNavigationEntity(entity))
                 // Minecarts and boats have their own list with riding details.
                 .filter(entity -> !NpcVehicles.isTransport(entity))
-                .sorted(Comparator.comparingDouble(entity -> entity.getLocation().distanceSquared(center))).limit(5)
-                .toList();
+                .sorted(Comparator.comparingDouble(entity -> entity.getLocation().distanceSquared(center)))
+                .filter(entity -> perceives(instance, entity, actor)).limit(5).toList();
     }
 
     /** Minecarts and boats around the NPC, excluding the one it rides. */

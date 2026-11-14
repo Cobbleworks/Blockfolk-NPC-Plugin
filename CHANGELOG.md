@@ -38,6 +38,7 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 - Player chat is answered by one NPC, the one named in the message or the closest one, instead of a group request in which other NPCs rarely spoke. Nearby NPCs with **Respond to Nearby NPCs** now hear that reply, together with the player's message, and can chime in, which starts a conversation between NPCs. Replies to a player skip the NPC conversation cooldown.
 - NPCs in a conversation with other NPCs look at whoever is speaking.
+- NPCs no longer notice NPCs, players, and mobs behind walls or on other floors. Beyond 4 blocks they need line of sight for **On Entity Nearby**, **On Nearby NPC**, **On Nearby Aggression**, the nearby lists given to AI, and hearing other NPCs talk. Configure it under `perception` in `config.yml`, or set `perception.line-of-sight: false` for the old behaviour.
 - AI NPCs remember what happened in a fight. **On Combat Exited** now says why combat ended (opponent defeated, killed by someone else, got away, unreachable, escaped, stopped, or the NPC died), and every kill is added to the NPC's recent event memory, including kills by abilities and lingering fire or poison.
 - **On Receive Item** and **On Drop Item** tell the AI which items moved, how many, and how, for example "You picked up 3 iron ingot from the ground." or "Alex took 2 bread out of your inventory."
 - Recent event memory in AI requests shows how long ago each event happened, oldest first.

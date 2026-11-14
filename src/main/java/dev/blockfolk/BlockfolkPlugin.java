@@ -123,6 +123,11 @@ public final class BlockfolkPlugin extends JavaPlugin {
         behaviourService = new NpcBehaviourService(this, definitionRepository, instanceRegistry, dialogService,
                 questionService, getConfig().getInt("proximity-transition-cooldown-seconds", 3));
         behaviourService.setCombatService(combatService);
+        dev.blockfolk.runtime.NpcPerception perception = new dev.blockfolk.runtime.NpcPerception(instanceRegistry,
+                getConfig().getBoolean("perception.line-of-sight", true),
+                getConfig().getDouble("perception.awareness-range",
+                        dev.blockfolk.runtime.NpcPerception.DEFAULT_AWARENESS_RANGE));
+        behaviourService.setPerception(perception);
         behaviourService.setShopService(shopService);
         routeGuiService.setBehaviourService(behaviourService);
         OpenRouterClient openRouterClient = new OpenRouterClient(
@@ -134,6 +139,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 locationRepository, openRouterClient, getConfig().getInt("ai-control.invocation-cooldown-seconds", 2),
                 getConfig().getInt("ai-control.conversation-history-limit", AiMemoryStore.DEFAULT_MAX_MESSAGES));
         behaviourService.setAiControlService(aiControlService);
+        aiControlService.setPerception(perception);
         NpcConversationService conversationService = new NpcConversationService(this, definitionRepository,
                 instanceRegistry,
                 new NpcConversationSettings(
@@ -150,6 +156,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                         getConfig().getDouble("ai-control.npc-conversations.player-range",
                                 NpcConversationSettings.DEFAULT_PLAYER_RANGE)));
         conversationService.setAiControlService(aiControlService);
+        conversationService.setPerception(perception);
         behaviourService.setConversationService(conversationService);
         aiControlService.setRouteState(behaviourService::hasRoute);
         aiControlService.setNavigationPurpose((instance, definition) -> {
