@@ -13,6 +13,7 @@ Click the NPC head in the preset editor to open **NPC Properties**, where you ca
 | Look at Player | Turns toward the nearest player with a subtle body turn. |
 | Item Pickup | Collects nearby item entities into that instance's temporary inventory. |
 | Board Vehicles | Gets into an empty minecart or boat it walks or stands next to, including while following a route. Off by default. |
+| Keep Chunks Loaded | Keeps the chunks around each instance loaded as it moves, so it keeps walking with no player nearby. Off by default. |
 | Pose | Standing, Crouching, Sleeping, Sitting, Swimming / Crawling, or Fall Flying. |
 | Name Color | The color used for the visible NPC name. |
 
@@ -34,6 +35,14 @@ Rides end through the world:
 After getting out, a route restarts from the waypoint nearest the drop-off. The NPC waits three seconds before boarding again and never climbs back into the vehicle it just left while it is still within four blocks of it, so a cart stopped at an activator rail does not swallow it again.
 
 With the setting off, minecarts and boats that bump into the NPC no longer scoop it up. AI NPCs can still get in or out on request through the **Enter/Exit Vehicle** capability (see [AI Behaviour](ai-behaviour.md)).
+
+## Keeping chunks loaded
+
+Normally an NPC stops when no player is close enough to keep its chunk loaded: it freezes where it stands and carries on once a player comes back. Turn on **Keep Chunks Loaded** for NPCs that walk long routes or travel far on their own. Each instance of the preset then holds the chunks around itself loaded, and the loaded area moves with it; chunks it leaves behind are released. Chunks ahead are loaded in the background, so a walking NPC does not stall the server.
+
+The setting also keeps the NPC's pathfinding running when no player is within the server's entity activation range. Riding NPCs keep their surroundings loaded too.
+
+How many chunks each NPC keeps loaded is set by `chunk-loading.radius` in `config.yml`: `0` is only its own chunk, `1` (the default) a 3×3 area, up to `3` for 7×7. Every loaded chunk costs server performance, so enable the setting only for presets that need it. Turning it off, deleting the NPC, or a pending respawn releases its chunks.
 
 ## Equipment & Loot
 

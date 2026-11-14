@@ -18,6 +18,8 @@ import org.bukkit.entity.Husk;
 import org.bukkit.entity.Pig;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 
 import com.destroystokyo.paper.entity.Pathfinder;
 
@@ -44,6 +46,7 @@ public final class NativeNpcNavigationService {
     private final Map<UUID, UUID> navigatorIdsByInstance = new HashMap<>();
     private final Map<UUID, NavigationState> states = new HashMap<>();
     private final Set<UUID> configuredNavigators = new HashSet<>();
+    private final Set<UUID> alwaysActiveInstances = new HashSet<>();
 
     public NativeNpcNavigationService(Plugin plugin) {
         this.plugin = plugin;
@@ -61,6 +64,7 @@ public final class NativeNpcNavigationService {
         if (navigator == null) {
             return new NavigationUpdate(NavigationStatus.STALLED, instance.getLocation());
         }
+        syncActivation(navigator, alwaysActiveInstances.contains(instance.getId()));
         // A stopped navigator is intentionally kept for reuse. The visible mannequin
         // can still be displaced by collisions while idle, so a new navigation run
         // must begin at the mannequin rather than snapping it back to the old husk.
@@ -142,6 +146,32 @@ public final class NativeNpcNavigationService {
         }
         navigatorIdsByInstance.remove(instance.getId());
         states.remove(instance.getId());
+    }
+
+    /**
+     * Sets which instances' navigators keep pathfinding while no player is near.
+     * Applied the next time each instance navigates.
+     */
+    public void setAlwaysActive(Set<UUID> instanceIds) {
+        alwaysActiveInstances.clear();
+        alwaysActiveInstances.addAll(instanceIds);
+    }
+
+    /**
+     * Paper's entity activation range stops mobs far from players from running
+     * their AI, which freezes pathfinding. Living entities with any status effect
+     * stay active, so navigators of NPCs that keep their chunks loaded carry a
+     * hidden, harmless Luck effect.
+     */
+    private static void syncActivation(Pig navigator, boolean alwaysActive) {
+        PotionEffect current = navigator.getPotionEffect(PotionEffectType.LUCK);
+        boolean marked = current != null && current.isInfinite();
+        if (alwaysActive && !marked) {
+            navigator.addPotionEffect(
+                    new PotionEffect(PotionEffectType.LUCK, PotionEffect.INFINITE_DURATION, 0, true, false, false));
+        } else if (!alwaysActive && marked) {
+            navigator.removePotionEffect(PotionEffectType.LUCK);
+        }
     }
 
     public boolean isNavigator(Entity entity) {

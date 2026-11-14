@@ -62,6 +62,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private CustomEventGuiService customEventGuiService;
     private RouteMovementService routeMovementService;
     private dev.blockfolk.runtime.NpcVehicleService vehicleService;
+    private dev.blockfolk.runtime.NpcChunkLoadService chunkLoadService;
     private NpcCombatService combatService;
     private dev.blockfolk.repository.ShopRepository shopRepository;
     private dev.blockfolk.runtime.NpcShopService shopService;
@@ -178,6 +179,9 @@ public final class BlockfolkPlugin extends JavaPlugin {
         vehicleService.setRequestedBoardListener(behaviourService::finishVehicleWalk);
         vehicleService.setOutcomeListener(aiControlService::noteOutcome);
         behaviourService.setVehicleService(vehicleService);
+        chunkLoadService = new dev.blockfolk.runtime.NpcChunkLoadService(this, definitionRepository, instanceRegistry,
+                navigationService,
+                getConfig().getInt("chunk-loading.radius", dev.blockfolk.runtime.NpcChunkLoadService.DEFAULT_RADIUS));
         instanceRegistry.setRemovalListener(instance -> {
             behaviourService.forget(instance);
             vehicleService.forget(instance);
@@ -234,6 +238,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(behaviourService, this);
         getServer().getPluginManager().registerEvents(instanceRegistry, this);
         getServer().getPluginManager().registerEvents(vehicleService, this);
+        getServer().getPluginManager().registerEvents(chunkLoadService, this);
 
         npcRenderer.start();
         dialogService.start();
@@ -245,6 +250,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         behaviourService.start();
         routeMovementService.start();
         vehicleService.start();
+        chunkLoadService.start();
         getLogger().info(() -> "Blockfolk enabled with " + definitionRepository.findAll().size() + " NPC definitions.");
     }
 
@@ -283,6 +289,9 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 getLogger().log(Level.SEVERE, "Failed to save NPC instances during shutdown.", exception);
             }
         }
+        // Release tickets only after the NPCs were saved and despawned.
+        if (chunkLoadService != null)
+            chunkLoadService.stop();
         if (definitionRepository != null)
             definitionRepository.flush();
         if (instanceRepository != null)

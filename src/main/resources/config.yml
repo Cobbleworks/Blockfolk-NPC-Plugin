@@ -5,6 +5,10 @@ question-timeout-seconds: 30
 proximity-transition-cooldown-seconds: 3
 # Optional. External image URLs work without a key at MineSkin's public rate limit.
 mineskin-api-key: ""
+# NPCs with "Keep Chunks Loaded" (NPC Properties) hold the chunks around them loaded as they walk.
+chunk-loading:
+  # Chunks loaded in every direction around such an NPC: 0 = only its own chunk, 1 = 3x3, 2 = 5x5, 3 = 7x7.
+  radius: 1
 
 # Optional AI behaviour. Configure this per NPC preset in its dedicated
 # AI Behaviour menu. No requests are made for paused presets.

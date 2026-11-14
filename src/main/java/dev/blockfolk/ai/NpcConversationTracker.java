@@ -18,9 +18,9 @@ import java.util.stream.Collectors;
  *
  * <p>
  * Each conversation ("exchange") counts the response rounds it has triggered.
- * It ends when the reply cap or time limit is reached, or after a quiet
- * period. When it ends, every pair of its participants is put on cooldown, and
- * the On Nearby NPC event is locked for each pair for the same duration.
+ * It ends when the reply cap or time limit is reached, or after a quiet period.
+ * When it ends, every pair of its participants is put on cooldown, and the On
+ * Nearby NPC event is locked for each pair for the same duration.
  */
 public final class NpcConversationTracker {
 
@@ -86,8 +86,8 @@ public final class NpcConversationTracker {
     }
 
     /**
-     * The memory key of the speaker's current conversation, even when its reply
-     * cap is reached, so its final lines are still remembered.
+     * The memory key of the speaker's current conversation, even when its reply cap
+     * is reached, so its final lines are still remembered.
      */
     public Optional<UUID> conversationOf(UUID npc, long now) {
         expire(now);
@@ -101,8 +101,8 @@ public final class NpcConversationTracker {
 
     /**
      * Whether {@code observer} may fire On Nearby NPC for {@code other}. A
-     * successful claim locks the pair in both directions, so two NPCs meeting
-     * at the same moment do not both open a conversation.
+     * successful claim locks the pair in both directions, so two NPCs meeting at
+     * the same moment do not both open a conversation.
      */
     public boolean claimEncounter(UUID observer, UUID other, long now) {
         expire(now);
@@ -186,8 +186,8 @@ public final class NpcConversationTracker {
     }
 
     /**
-     * The same group of NPCs always gets the same key, so a pair that talks
-     * again later still sees its recent conversation, and memory stays bounded.
+     * The same group of NPCs always gets the same key, so a pair that talks again
+     * later still sees its recent conversation, and memory stays bounded.
      */
     static UUID conversationKey(Collection<UUID> participants) {
         String joined = participants.stream().map(UUID::toString).sorted().collect(Collectors.joining(","));

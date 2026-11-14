@@ -36,6 +36,7 @@ public final class NpcDefinition {
     private boolean itemPickup;
     private boolean pushable;
     private boolean autoBoardVehicles;
+    private boolean keepChunksLoaded;
     private NpcColor color;
     private NpcPose pose = NpcPose.STANDING;
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
@@ -83,6 +84,7 @@ public final class NpcDefinition {
         copy.setItemPickup(itemPickup);
         copy.setPushable(pushable);
         copy.setAutoBoardVehicles(autoBoardVehicles);
+        copy.setKeepChunksLoaded(keepChunksLoaded);
         copy.setColor(color);
         copy.setPose(pose);
         copy.setAiControlSettings(aiControlSettings);
@@ -261,6 +263,18 @@ public final class NpcDefinition {
 
     public void setAutoBoardVehicles(boolean autoBoardVehicles) {
         this.autoBoardVehicles = autoBoardVehicles;
+    }
+
+    /**
+     * Whether every instance keeps the chunks around itself loaded, so it keeps
+     * walking when no player is nearby.
+     */
+    public boolean isKeepChunksLoaded() {
+        return keepChunksLoaded;
+    }
+
+    public void setKeepChunksLoaded(boolean keepChunksLoaded) {
+        this.keepChunksLoaded = keepChunksLoaded;
     }
 
     public NpcColor getColor() {

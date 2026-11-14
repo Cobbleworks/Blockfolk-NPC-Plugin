@@ -6,6 +6,7 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Added
 
+- **Keep Chunks Loaded** property in NPC Properties. NPCs with it on keep the chunks around them loaded as they walk, so routes and long walks continue with no player nearby. The radius is set by `chunk-loading.radius` in `config.yml` (3×3 chunks by default). Off by default. NPC Properties now has two rows: behaviour switches on top, appearance below.
 - NPCs can ride minecarts and boats. The new **Board Vehicles** property in NPC Properties makes an NPC get into an empty minecart, boat, or raft it touches, also while walking a route. Activator rails, breaking the vehicle, or a restart get it out again, and its route resumes from the nearest waypoint. With the property off, passing carts and boats no longer pick the NPC up.
 - AI NPCs know whether they are riding and which minecarts and boats are nearby. The **Enter/Exit Vehicle** AI capability lets them walk to a listed vehicle and get in, or get out. Any AI walking action (Move To, Follow, Flee, Interact, Return Home, Start Route) also gets a riding NPC out first.
 - Chat with an NPC that uses **Private** AI conversation is no longer sent to the whole server when no other player is within 16 blocks of the speaker or the answering NPCs. Only the speaker sees their own message.

@@ -32,12 +32,12 @@ import dev.blockfolk.repository.NpcDefinitionRepository;
  * Lets AI NPCs with "Respond to NPCs" enabled answer what nearby NPCs say.
  *
  * <p>
- * Every NPC chat line (AI speech and Send Dialog) is offered here. Holo
- * Dialog is not: it is often repeating flavour text.
- * Listeners in hearing range respond together in one coordinated AI request
- * after a short delay, so lines spoken at the same time get one answer. The
- * {@link NpcConversationTracker} caps how many response rounds one
- * conversation gets, and nothing happens without a player nearby.
+ * Every NPC chat line (AI speech and Send Dialog) is offered here. Holo Dialog
+ * is not: it is often repeating flavour text. Listeners in hearing range
+ * respond together in one coordinated AI request after a short delay, so lines
+ * spoken at the same time get one answer. The {@link NpcConversationTracker}
+ * caps how many response rounds one conversation gets, and nothing happens
+ * without a player nearby.
  */
 public final class NpcConversationService {
 
@@ -104,8 +104,8 @@ public final class NpcConversationService {
         if (pending != null) {
             // Lines spoken before the pending round starts are answered together.
             pending.lines.add(new Line(speaker.getId(), spoken));
-            hearers.stream().filter(this::respondsToNpc).map(NpcInstance::getId)
-                    .filter(existingParticipants::contains).forEach(pending.listeners::add);
+            hearers.stream().filter(this::respondsToNpc).map(NpcInstance::getId).filter(existingParticipants::contains)
+                    .forEach(pending.listeners::add);
             remember(pending.key, speaker, hearers, existingParticipants, line);
             return;
         }
@@ -202,17 +202,17 @@ public final class NpcConversationService {
         if (origin.getWorld() == null || !playerNearby(origin)) {
             return;
         }
-        List<Location> speakerLocations = round.lines.stream().map(Line::speaker).distinct()
-                .map(instances::findById).flatMap(Optional::stream).map(instances::currentLocation).toList();
+        List<Location> speakerLocations = round.lines.stream().map(Line::speaker).distinct().map(instances::findById)
+                .flatMap(Optional::stream).map(instances::currentLocation).toList();
         double range = settings().hearingRange();
         List<UUID> lineSpeakers = round.lines.stream().map(Line::speaker).toList();
         List<NpcInstance> candidates = round.listeners.stream().map(instances::findById).flatMap(Optional::stream)
                 .filter(candidate -> heardOthers(candidate.getId(), lineSpeakers)).filter(this::respondsToNpc)
                 .filter(candidate -> {
                     Location location = instances.currentLocation(candidate);
-                    return speakerLocations.stream().anyMatch(speakerLocation -> speakerLocation
-                            .getWorld() == location.getWorld()
-                            && speakerLocation.distanceSquared(location) <= range * range);
+                    return speakerLocations.stream()
+                            .anyMatch(speakerLocation -> speakerLocation.getWorld() == location.getWorld()
+                                    && speakerLocation.distanceSquared(location) <= range * range);
                 }).sorted(Comparator.comparingDouble(candidate -> distanceSquared(candidate, origin))).toList();
         // The intended responder is never the NPC that just spoke: it is the one
         // named in the latest line, or the closest listener.
@@ -254,18 +254,15 @@ public final class NpcConversationService {
 
     private List<NpcInstance> hearers(NpcInstance speaker, Location origin) {
         double range = settings().hearingRange();
-        return instances.findActive().stream().filter(other -> !other.getId().equals(speaker.getId()))
-                .filter(other -> {
-                    Location location = instances.currentLocation(other);
-                    return location.getWorld() == origin.getWorld()
-                            && location.distanceSquared(origin) <= range * range;
-                }).sorted(Comparator.comparingDouble(other -> distanceSquared(other, origin))).toList();
+        return instances.findActive().stream().filter(other -> !other.getId().equals(speaker.getId())).filter(other -> {
+            Location location = instances.currentLocation(other);
+            return location.getWorld() == origin.getWorld() && location.distanceSquared(origin) <= range * range;
+        }).sorted(Comparator.comparingDouble(other -> distanceSquared(other, origin))).toList();
     }
 
     private boolean respondsToNpc(NpcInstance instance) {
         return definitions.find(instance.getDefinitionKey()).map(NpcDefinition::getAiControlSettings)
-                .map(settings -> settings.enabled() && settings.hasContext() && settings.respondToNpc())
-                .orElse(false);
+                .map(settings -> settings.enabled() && settings.hasContext() && settings.respondToNpc()).orElse(false);
     }
 
     private String displayName(NpcInstance instance) {

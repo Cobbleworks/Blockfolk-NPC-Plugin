@@ -168,14 +168,19 @@ public final class GuiService implements Listener {
     private static final int FIGHTING_ABILITIES_SLOT = 33;
     private static final int FIGHTING_BOSS_BAR_SLOT = 42;
     private static final int FIGHTING_BACK_SLOT = GuiItems.BACK_SLOT;
-    private static final int PROPERTY_PUSHABLE_SLOT = 10;
-    private static final int PROPERTY_SHOW_NAME_SLOT = 11;
+    /**
+     * NPC Properties: behaviour switches in the top row, appearance in the second.
+     */
+    private static final int PROPERTY_SIZE = 36;
+    private static final int PROPERTY_PUSHABLE_SLOT = 11;
     private static final int PROPERTY_LOOK_SLOT = 12;
     private static final int PROPERTY_PICKUP_SLOT = 13;
     private static final int PROPERTY_VEHICLES_SLOT = 14;
-    private static final int PROPERTY_POSE_SLOT = 15;
-    private static final int PROPERTY_COLOR_SLOT = 16;
-    private static final int PROPERTY_BACK_SLOT = 22;
+    private static final int PROPERTY_CHUNKS_SLOT = 15;
+    private static final int PROPERTY_SHOW_NAME_SLOT = 20;
+    private static final int PROPERTY_POSE_SLOT = 22;
+    private static final int PROPERTY_COLOR_SLOT = 24;
+    private static final int PROPERTY_BACK_SLOT = 31;
     private static final int MAX_ROW_ACTIONS = 7;
     private static final int ACTION_PICKER_ANIMATIONS_SLOT = 32;
     private static final int ACTION_PICKER_BACK_SLOT = 49;
@@ -542,12 +547,15 @@ public final class GuiService implements Listener {
                                                         GuiItems.hint("Click", "set a URL or texture hash"),
                                                         LegacyText.DARK_GRAY + "Enter 'default' to clear it")),
                                         definition));
-        inventory.setItem(EDITOR_PROPERTIES_SLOT, item(Material.ARMOR_STAND, "Appearance & Properties", List.of(
-                LegacyText.GRAY + "Pose: " + LegacyText.WHITE + definition.getPose().displayName(),
-                LegacyText.GRAY + "Name color: " + LegacyText.WHITE + definition.getColor().displayName(),
-                onOff("Pushable", definition.isPushable()), onOff("Name shown", definition.isShowName()),
-                onOff("Looks at players", definition.isLookAtPlayer()), onOff("Item pickup", definition.isItemPickup()),
-                onOff("Boards vehicles", definition.isAutoBoardVehicles()), "", GuiItems.hint("Click", "configure"))));
+        inventory.setItem(EDITOR_PROPERTIES_SLOT, item(Material.ARMOR_STAND, "Appearance & Properties",
+                List.of(LegacyText.GRAY + "Pose: " + LegacyText.WHITE + definition.getPose().displayName(),
+                        LegacyText.GRAY + "Name color: " + LegacyText.WHITE + definition.getColor().displayName(),
+                        onOff("Pushable", definition.isPushable()), onOff("Name shown", definition.isShowName()),
+                        onOff("Looks at players", definition.isLookAtPlayer()),
+                        onOff("Item pickup", definition.isItemPickup()),
+                        onOff("Boards vehicles", definition.isAutoBoardVehicles()),
+                        onOff("Keeps chunks loaded", definition.isKeepChunksLoaded()), "",
+                        GuiItems.hint("Click", "configure"))));
         inventory.setItem(EDITOR_EQUIPMENT_SLOT, item(Material.CHEST, "Equipment & Loot", List.of(
                 LegacyText.GRAY + "Armor, hands, loot, and temporary inventory", "", GuiItems.hint("Click", "edit"))));
         inventory.setItem(EDITOR_SPAWN_SLOT,
@@ -657,7 +665,7 @@ public final class GuiService implements Listener {
     }
 
     public void openProperties(Player player, NpcDefinition definition) {
-        Inventory inventory = Bukkit.createInventory(new PropertiesHolder(definition.getKey()), 27,
+        Inventory inventory = Bukkit.createInventory(new PropertiesHolder(definition.getKey()), PROPERTY_SIZE,
                 UiText.title("NPC Properties", definition.getDisplayName()));
         inventory.setItem(PROPERTY_PUSHABLE_SLOT, GuiItems.toggle(Material.PISTON, Material.OBSIDIAN, "Pushable",
                 definition.isPushable(), "players can bump it aside", "stays where it stands", List.of()));
@@ -676,6 +684,11 @@ public final class GuiService implements Listener {
                         "gets into empty minecarts and boats it passes", "ignores minecarts and boats",
                         List.of("Also while walking a route", "Leaves at activator rails, when the vehicle",
                                 "breaks, or on restart")));
+        inventory.setItem(PROPERTY_CHUNKS_SLOT,
+                GuiItems.toggle(Material.LODESTONE, Material.STONE_BRICKS, "Keep Chunks Loaded",
+                        definition.isKeepChunksLoaded(), "keeps walking with no player nearby",
+                        "pauses when its chunks unload", List.of("Loads the chunks around each instance",
+                                "as it walks; each one costs server", "performance, so use it sparingly")));
         List<GuiItems.Option> poses = java.util.Arrays.stream(NpcPose.values())
                 .map(pose -> new GuiItems.Option(pose.material(), pose.displayName(), null)).toList();
         inventory.setItem(PROPERTY_POSE_SLOT, GuiItems.cycle("Pose", poses, definition.getPose().ordinal(),
@@ -1530,6 +1543,7 @@ public final class GuiService implements Listener {
             case PROPERTY_LOOK_SLOT -> definition.setLookAtPlayer(!definition.isLookAtPlayer());
             case PROPERTY_PICKUP_SLOT -> definition.setItemPickup(!definition.isItemPickup());
             case PROPERTY_VEHICLES_SLOT -> definition.setAutoBoardVehicles(!definition.isAutoBoardVehicles());
+            case PROPERTY_CHUNKS_SLOT -> definition.setKeepChunksLoaded(!definition.isKeepChunksLoaded());
             case PROPERTY_POSE_SLOT -> {
                 if (direction == 0)
                     return;

@@ -9,8 +9,8 @@ package dev.blockfolk.ai;
  * @param maxDurationSeconds
  *            hard time limit for one conversation
  * @param cooldownSeconds
- *            how long two NPCs wait before they can start another
- *            conversation, or greet each other again with On Nearby NPC
+ *            how long two NPCs wait before they can start another conversation,
+ *            or greet each other again with On Nearby NPC
  * @param replyDelaySeconds
  *            pause after a line before listeners respond, so players can read
  *            it and lines spoken together are answered together
@@ -39,8 +39,8 @@ public record NpcConversationSettings(int maxReplies, int maxDurationSeconds, in
     }
 
     public static NpcConversationSettings defaults() {
-        return new NpcConversationSettings(DEFAULT_MAX_REPLIES, DEFAULT_MAX_DURATION_SECONDS,
-                DEFAULT_COOLDOWN_SECONDS, DEFAULT_REPLY_DELAY_SECONDS, DEFAULT_HEARING_RANGE, DEFAULT_PLAYER_RANGE);
+        return new NpcConversationSettings(DEFAULT_MAX_REPLIES, DEFAULT_MAX_DURATION_SECONDS, DEFAULT_COOLDOWN_SECONDS,
+                DEFAULT_REPLY_DELAY_SECONDS, DEFAULT_HEARING_RANGE, DEFAULT_PLAYER_RANGE);
     }
 
     /** A cap of zero turns NPC-to-NPC replies off entirely. */

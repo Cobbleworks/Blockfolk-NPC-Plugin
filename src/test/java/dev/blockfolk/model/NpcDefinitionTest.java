@@ -22,6 +22,7 @@ class NpcDefinitionTest {
         assertFalse(definition.isItemPickup());
         assertTrue(definition.isPushable());
         assertFalse(definition.isAutoBoardVehicles());
+        assertFalse(definition.isKeepChunksLoaded());
         assertEquals(NpcColor.ORANGE, definition.getColor());
     }
 
@@ -191,6 +192,7 @@ class NpcDefinitionTest {
         source.setItemPickup(true);
         source.setPushable(false);
         source.setAutoBoardVehicles(true);
+        source.setKeepChunksLoaded(true);
         source.setColor(NpcColor.BLUE);
         source.setBehaviourActions(BehaviourEvent.RIGHT_CLICK,
                 List.of(new BehaviourAction(BehaviourActionType.WAVE, null)));
@@ -202,6 +204,7 @@ class NpcDefinitionTest {
         assertTrue(copy.isItemPickup());
         assertFalse(copy.isPushable());
         assertTrue(copy.isAutoBoardVehicles());
+        assertTrue(copy.isKeepChunksLoaded());
         assertEquals(NpcColor.BLUE, copy.getColor());
         assertEquals(source.getBehaviourActions(BehaviourEvent.RIGHT_CLICK),
                 copy.getBehaviourActions(BehaviourEvent.RIGHT_CLICK));
