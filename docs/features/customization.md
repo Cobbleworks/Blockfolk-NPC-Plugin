@@ -30,7 +30,7 @@ Rides end through the world:
 - an **activator rail** that is powered ejects the NPC as the cart passes over it;
 - breaking the minecart or boat drops the NPC where it was;
 - a server restart or plugin reload puts every NPC back on foot beside its vehicle;
-- an AI NPC told to walk somewhere (Move To, Follow, Flee, Interact, Return Home, or Start Route) gets out first.
+- an AI NPC told to walk somewhere (Move To, Follow, Flee, Return Home, or Start Route) gets out first. Interact keeps it aboard and waits until the target is within reach.
 
 After getting out, a route restarts from the waypoint nearest the drop-off. The NPC waits three seconds before boarding again and never climbs back into the vehicle it just left while it is still within four blocks of it, so a cart stopped at an activator rail does not swallow it again.
 

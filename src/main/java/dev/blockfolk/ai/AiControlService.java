@@ -472,7 +472,8 @@ public final class AiControlService {
             case FOLLOW -> "Started: following" + target + ".";
             case ENTER_VEHICLE -> "Started: " + function + target
                     + ". The NPC gets in once it reaches the vehicle; see Vehicle in the updated state.";
-            case INTERACT -> "Started: " + function + target + ". It may take a moment to walk there.";
+            case INTERACT -> "Started: " + function + target
+                    + ". On foot, the NPC walks there; while riding, it waits until the target is within reach.";
             case START_COMBAT -> "Started: combat" + (target.isEmpty() ? " with the nearest attackable entity" : target)
                     + ". See Combat in the updated state.";
             default -> "Done: " + function + target + ".";
@@ -2013,8 +2014,8 @@ public final class AiControlService {
                 .append(speedSquared > MOVING_VEHICLE_SPEED_SQUARED
                         ? "moving at about " + Math.round(Math.sqrt(speedSquared) * 20.0) + " blocks per second"
                         : "standing still")
-                .append("; walking actions (move_to, follow, flee_from, interact, return_home, start_route) ")
-                .append("get it out first\n");
+                .append("; walking actions (move_to, follow, flee_from, return_home, start_route) ")
+                .append("get it out first; interact stays aboard and waits until the target is within reach\n");
     }
 
     public List<NamedLocation> nearbyLocations(Location center) {

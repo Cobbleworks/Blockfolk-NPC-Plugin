@@ -117,7 +117,8 @@ final class AiActionTools {
             case FOLLOW -> "Keep following a player until unfollow is called.";
             case UNFOLLOW -> "Stop following the current player.";
             case INTERACT -> "Walk to and operate a nearby lever or button, or take items from / store items in "
-                    + "a nearby container. For several switches, call it once per switch in the requested order. "
+                    + "a nearby container. While riding, stay aboard and wait until the target is within reach. "
+                    + "For several switches, call it once per switch in the requested order. "
                     + "It may take time; do not repeat a target that is already in progress.";
             case MOVE_TO -> "Walk to a place, player, NPC, or entity. Call this whenever the NPC should go, "
                     + "come, walk, or head somewhere.";

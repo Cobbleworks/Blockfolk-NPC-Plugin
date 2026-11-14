@@ -1123,8 +1123,8 @@ public final class NpcBehaviourService implements Listener {
         for (NpcInstance instance : instances.findActive()) {
             if (cleanRuntimeState)
                 active.add(instance.getId());
-            // A rider cannot walk; walking goals wait until the ride ends.
-            if (!instances.isRiding(instance) && !tickAiInteraction(instance)) {
+            // Riders can interact within reach, but walking goals wait until the ride ends.
+            if (!tickAiInteraction(instance) && !instances.isRiding(instance)) {
                 tickMoveTo(instance);
                 tickFollow(instance);
             }
@@ -1497,7 +1497,6 @@ public final class NpcBehaviourService implements Listener {
                 : request.blockLocation().getBlock();
         if (target == null || !isUsableInteractionTarget(target, request.kind()))
             return false;
-        leaveVehicleToWalk(instance);
         stopFollowing(instance);
         moveTargets.remove(instance.getId());
         instances.stand(instance);
@@ -1517,7 +1516,7 @@ public final class NpcBehaviourService implements Listener {
         if (!isUsableInteractionTarget(target, interaction.kind())) {
             return finishAiInteraction(instance);
         }
-        Location current = instance.getLocation();
+        Location current = instances.currentLocation(instance);
         if (current.getWorld() != target.getWorld()) {
             return finishAiInteraction(instance);
         }
@@ -1526,6 +1525,9 @@ public final class NpcBehaviourService implements Listener {
             performAiInteraction(instance, target, interaction.kind());
             return finishAiInteraction(instance);
         }
+        // Stay aboard and wait for the vehicle to bring the target within reach.
+        if (instances.isRiding(instance))
+            return true;
         NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
         if (definition == null) {
             return finishAiInteraction(instance);
