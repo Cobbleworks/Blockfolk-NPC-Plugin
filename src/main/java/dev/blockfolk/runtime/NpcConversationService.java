@@ -32,13 +32,13 @@ import dev.blockfolk.repository.NpcDefinitionRepository;
  * Lets AI NPCs with "Respond to NPCs" enabled answer what nearby NPCs say.
  *
  * <p>
- * Every NPC chat line (AI speech and Send Dialog) is offered here, including
- * an NPC's reply to a player's chat, so nearby NPCs can chime in. Holo Dialog
- * is not: it is often repeating flavour text. Listeners in hearing range
- * respond together in one coordinated AI request after a short delay, so lines
- * spoken at the same time get one answer. The {@link NpcConversationTracker}
- * caps how many response rounds one conversation gets, and nothing happens
- * without a player nearby. NPCs in a conversation look at whoever spoke last.
+ * Every NPC chat line (AI speech and Send Dialog) is offered here, including an
+ * NPC's reply to a player's chat, so nearby NPCs can chime in. Holo Dialog is
+ * not: it is often repeating flavour text. Listeners in hearing range respond
+ * together in one coordinated AI request after a short delay, so lines spoken
+ * at the same time get one answer. The {@link NpcConversationTracker} caps how
+ * many response rounds one conversation gets, and nothing happens without a
+ * player nearby. NPCs in a conversation look at whoever spoke last.
  */
 public final class NpcConversationService {
 
@@ -121,7 +121,8 @@ public final class NpcConversationService {
         long now = System.currentTimeMillis();
         cancelEnded(tracker.expire(now));
         String line = NpcResponseIds.plainName(definition.getDisplayName()) + ": " + spoken;
-        List<String> memoryLines = answered == null ? List.of(line)
+        List<String> memoryLines = answered == null
+                ? List.of(line)
                 : List.of(answered.playerName() + " (player): " + answered.text(), line);
         Line spokenLine = Line.npc(speaker.getId(), spoken);
         List<NpcInstance> hearers = hearers(speaker, origin);
@@ -333,8 +334,7 @@ public final class NpcConversationService {
      */
     private void look(NpcInstance speaker, List<NpcInstance> hearers, Set<UUID> participants, String spoken,
             boolean answeringPlayer, long now) {
-        List<NpcInstance> listening = hearers.stream().filter(hearer -> participants.contains(hearer.getId()))
-                .toList();
+        List<NpcInstance> listening = hearers.stream().filter(hearer -> participants.contains(hearer.getId())).toList();
         long until = now + GAZE_MILLIS;
         listening.forEach(hearer -> gazes.put(hearer.getId(), new Gaze(speaker.getId(), until)));
         if (answeringPlayer || listening.isEmpty()) {
@@ -395,7 +395,9 @@ public final class NpcConversationService {
         return text.replaceAll("(?i)§[0-9a-fk-orx]", "").trim();
     }
 
-    /** A line in a round: spoken by an NPC, or the player message an NPC answered. */
+    /**
+     * A line in a round: spoken by an NPC, or the player message an NPC answered.
+     */
     private record Line(UUID speaker, String playerName, String text) {
         static Line npc(UUID speaker, String text) {
             return new Line(speaker, null, text);

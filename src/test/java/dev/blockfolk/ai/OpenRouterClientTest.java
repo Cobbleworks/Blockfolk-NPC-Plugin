@@ -124,11 +124,13 @@ class OpenRouterClientTest {
     void preservesContainerItemAndAmountFromNativeCall() {
         AiControlSettings settings = AiControlSettings.defaults().toggle(AiActionType.INTERACT);
         JsonArray tools = AiActionTools.definitions(settings.allowedActions(), List.of());
-        String normalized = OpenRouterClient.responseActions("""
-                {"choices":[{"message":{"tool_calls":[
-                  {"function":{"name":"interact","arguments":"{\\"target\\":\\"take_from_container_1\\",\\"item\\":\\"bread\\",\\"amount\\":3}"}}
-                ]},"finish_reason":"tool_calls"}]}
-                """, false, tools);
+        String normalized = OpenRouterClient.responseActions(
+                """
+                        {"choices":[{"message":{"tool_calls":[
+                          {"function":{"name":"interact","arguments":"{\\"target\\":\\"take_from_container_1\\",\\"item\\":\\"bread\\",\\"amount\\":3}"}}
+                        ]},"finish_reason":"tool_calls"}]}
+                        """,
+                false, tools);
 
         AiDecision.Action action = AiDecisionParser.parse(normalized, settings).actions().getFirst();
         assertEquals(AiActionType.INTERACT, action.type());

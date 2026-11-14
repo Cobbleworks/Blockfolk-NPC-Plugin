@@ -53,8 +53,8 @@ public final class NpcConversationTracker {
 
     /**
      * Like {@link #claimReply(UUID, Collection, long)}. With
-     * {@code playerPrompted}, the line answered a player, so the pair cooldown
-     * does not apply: the player started this exchange, not the NPCs.
+     * {@code playerPrompted}, the line answered a player, so the pair cooldown does
+     * not apply: the player started this exchange, not the NPCs.
      */
     public Optional<Claim> claimReply(UUID speaker, Collection<UUID> listeners, long now, boolean playerPrompted) {
         expire(now);

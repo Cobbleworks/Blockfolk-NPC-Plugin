@@ -21,6 +21,9 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Pose;
 import org.bukkit.entity.TextDisplay;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
@@ -30,6 +33,7 @@ import org.bukkit.util.Transformation;
 import org.joml.AxisAngle4f;
 import org.joml.Vector3f;
 
+import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
 import com.destroystokyo.paper.profile.ProfileProperty;
 
 import dev.blockfolk.model.NpcDefinition;
@@ -46,7 +50,7 @@ import net.kyori.adventure.text.Component;
  * packet-only fake player, the server owns and tracks this entity, so packet
  * layout changes cannot leave the client with a silently missing NPC.
  */
-public final class PaperMannequinNpcRenderer implements NpcRenderer {
+public final class PaperMannequinNpcRenderer implements NpcRenderer, Listener {
 
     private final Plugin plugin;
     private final NamespacedKey instanceKey;
@@ -82,6 +86,8 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
             animationTask.cancel();
         }
         animationTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
+        HandlerList.unregisterAll(this);
+        Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
     private void tick() {
@@ -95,6 +101,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
             animationTask.cancel();
             animationTask = null;
         }
+        HandlerList.unregisterAll(this);
         jumpTicksByInstance.clear();
         for (UUID displayId : healthBarsByInstance.values()) {
             Entity display = Bukkit.getEntity(displayId);
@@ -437,6 +444,40 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
                     new Vector3f(HEALTH_BAR_SCALE, HEALTH_BAR_SCALE, HEALTH_BAR_SCALE), new AxisAngle4f()));
             spawned.setSilent(true);
             spawned.setInvulnerable(true);
+        });
+    }
+
+    /**
+     * Removes a health bar that re-enters the world without being its NPC's current
+     * bar. Lookups by UUID only see entities in accessible chunks, so when a player
+     * walks away the bar's chunk can drop to the border first: the bar loses its
+     * mapping but cannot be removed, and survives until the chunk fully unloads.
+     * Returning before that brings it back frozen at the NPC's old spot, next to
+     * the replacement bar.
+     */
+    @EventHandler
+    public void onEntityAddToWorld(EntityAddToWorldEvent event) {
+        if (!(event.getEntity() instanceof TextDisplay display))
+            return;
+        String taggedId = display.getPersistentDataContainer().get(healthBarKey, PersistentDataType.STRING);
+        if (taggedId == null)
+            return;
+        UUID instanceId;
+        try {
+            instanceId = UUID.fromString(taggedId);
+        } catch (IllegalArgumentException exception) {
+            instanceId = null;
+        }
+        UUID owner = instanceId;
+        UUID displayId = display.getUniqueId();
+        // Checked a tick later: a freshly spawned bar fires this before it is mapped,
+        // and removing an entity while it is being added is unsafe.
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (owner != null && displayId.equals(healthBarsByInstance.get(owner)))
+                return;
+            Entity stale = Bukkit.getEntity(displayId);
+            if (stale != null)
+                stale.remove();
         });
     }
 

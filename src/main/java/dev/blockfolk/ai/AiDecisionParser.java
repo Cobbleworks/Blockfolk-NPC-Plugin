@@ -20,7 +20,10 @@ public final class AiDecisionParser {
     private static final int MAX_HINT_ALIASES = 12;
     private static final Set<String> TARGETS = Set.of("triggering_player", "triggering_entity", "nearest_player",
             "nearest_attackable", "current_target");
-    /** Largest container transfer worth asking for: a full 27-slot inventory of 64-stacks. */
+    /**
+     * Largest container transfer worth asking for: a full 27-slot inventory of
+     * 64-stacks.
+     */
     static final int MAX_TRANSFER_AMOUNT = 27 * 64;
     private static final Set<String> ANIMATIONS = Set.of("wave", "jump", "sneak", "stand");
 

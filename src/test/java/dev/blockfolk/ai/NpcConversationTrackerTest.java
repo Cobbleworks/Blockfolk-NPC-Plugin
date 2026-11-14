@@ -59,8 +59,7 @@ class NpcConversationTrackerTest {
 
         assertTrue(tracker.onCooldown(COWBOY, BANDIT, now + 2));
         assertTrue(tracker.claimReply(COWBOY, List.of(BANDIT), now + 2).isEmpty());
-        NpcConversationTracker.Claim claim = tracker.claimReply(COWBOY, List.of(BANDIT), now + 2, true)
-                .orElseThrow();
+        NpcConversationTracker.Claim claim = tracker.claimReply(COWBOY, List.of(BANDIT), now + 2, true).orElseThrow();
         assertEquals(1, claim.reply());
         assertEquals(List.of(BANDIT), claim.listeners());
     }

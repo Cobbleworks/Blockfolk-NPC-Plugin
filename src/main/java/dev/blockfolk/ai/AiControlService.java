@@ -66,7 +66,9 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 public final class AiControlService {
 
     private static final double PERCEPTION_RADIUS = 16.0;
-    /** Item kinds listed per nearby container; the rest are summarized as a count. */
+    /**
+     * Item kinds listed per nearby container; the rest are summarized as a count.
+     */
     private static final int MAX_LISTED_CONTAINER_KINDS = 16;
     private static final double LOCATION_PERCEPTION_RADIUS = AiTargetSnapshot.MAX_COORDINATE_DISTANCE;
     private static final int MAX_NEARBY_LOCATIONS = 20;
@@ -514,8 +516,8 @@ public final class AiControlService {
     }
 
     /**
-     * Queues a chat turn for the one NPC the player addresses: the NPC named in
-     * the message, otherwise the closest candidate. Other NPCs nearby join in by
+     * Queues a chat turn for the one NPC the player addresses: the NPC named in the
+     * message, otherwise the closest candidate. Other NPCs nearby join in by
      * answering its reply through an NPC conversation.
      *
      * @param candidates
@@ -706,8 +708,7 @@ public final class AiControlService {
         Map<String, GroupParticipant> aliases = new java.util.LinkedHashMap<>();
         Map<UUID, Long> requestGenerations = new HashMap<>();
         Map<UUID, AiTargetSnapshot> targetsByInstance = new HashMap<>();
-        StringBuilder system = new StringBuilder(
-                source.npcConversation() ? NPC_GROUP_RESULT_RULES : CHAT_RESULT_RULES);
+        StringBuilder system = new StringBuilder(source.npcConversation() ? NPC_GROUP_RESULT_RULES : CHAT_RESULT_RULES);
         List<String> responseIds = NpcResponseIds
                 .forNames(participants.stream().map(participant -> participant.definition().getDisplayName()).toList());
         String primaryResponseId = responseIds.getFirst();
@@ -1978,8 +1979,7 @@ public final class AiControlService {
             } else {
                 container.contents().entrySet().stream()
                         .sorted(Map.Entry.<Material, Integer>comparingByValue().reversed())
-                        .limit(MAX_LISTED_CONTAINER_KINDS)
-                        .forEach(entry -> out.append(entry.getValue()).append(' ')
+                        .limit(MAX_LISTED_CONTAINER_KINDS).forEach(entry -> out.append(entry.getValue()).append(' ')
                                 .append(readable(entry.getKey().name())).append(", "));
                 out.setLength(out.length() - 2);
                 int hidden = container.contents().size() - MAX_LISTED_CONTAINER_KINDS;
@@ -2045,8 +2045,7 @@ public final class AiControlService {
                 .filter(other -> other.getLocation().getWorld() == center.getWorld())
                 .filter(other -> other.getLocation().distanceSquared(center) <= PERCEPTION_RADIUS * PERCEPTION_RADIUS)
                 .sorted(Comparator.comparingDouble(other -> other.getLocation().distanceSquared(center)))
-                .filter(other -> perception == null
-                        || actor != null && other.getEntityId() == actor.getEntityId()
+                .filter(other -> perception == null || actor != null && other.getEntityId() == actor.getEntityId()
                         || perception.perceives(instance, other))
                 .limit(3).toList();
     }

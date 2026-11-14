@@ -124,9 +124,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 questionService, getConfig().getInt("proximity-transition-cooldown-seconds", 3));
         behaviourService.setCombatService(combatService);
         dev.blockfolk.runtime.NpcPerception perception = new dev.blockfolk.runtime.NpcPerception(instanceRegistry,
-                getConfig().getBoolean("perception.line-of-sight", true),
-                getConfig().getDouble("perception.awareness-range",
-                        dev.blockfolk.runtime.NpcPerception.DEFAULT_AWARENESS_RANGE));
+                getConfig().getBoolean("perception.line-of-sight", true), getConfig().getDouble(
+                        "perception.awareness-range", dev.blockfolk.runtime.NpcPerception.DEFAULT_AWARENESS_RANGE));
         behaviourService.setPerception(perception);
         behaviourService.setShopService(shopService);
         routeGuiService.setBehaviourService(behaviourService);

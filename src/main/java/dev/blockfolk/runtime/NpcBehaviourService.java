@@ -1009,8 +1009,8 @@ public final class NpcBehaviourService implements Listener {
                         aiControlService.noteAction(instance, "You stopped following.");
                     stopFollowing(instance);
                 }
-                case INTERACT -> startAiInteraction(instance, action.target(), action.item(), action.amount(),
-                        result.targets());
+                case INTERACT ->
+                    startAiInteraction(instance, action.target(), action.item(), action.amount(), result.targets());
                 case MOVE_TO ->
                     resolveAiMoveTarget(action.target(), result.targets()).ifPresentOrElse(targetLocation -> {
                         leaveVehicleToWalk(instance);
@@ -1576,8 +1576,8 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private void startAiInteraction(NpcInstance instance, String requestedTarget, String requestedItem,
-            Integer amount, AiTargetSnapshot targets) {
+    private void startAiInteraction(NpcInstance instance, String requestedTarget, String requestedItem, Integer amount,
+            AiTargetSnapshot targets) {
         String normalizedTarget = requestedTarget == null ? "nearest_switch" : requestedTarget;
         AiInteractionKind kind = normalizedTarget.startsWith("take_from_container")
                 ? AiInteractionKind.TAKE_FROM_CONTAINER
@@ -1638,9 +1638,8 @@ public final class NpcBehaviourService implements Listener {
         moveTargets.remove(instance.getId());
         instances.stand(instance);
         instances.stopNavigating(instance);
-        aiInteractions.put(instance.getId(),
-                new AiInteraction(request.kind(), target.getLocation(), interactionDestinations(target, current), 0,
-                        request.item(), request.amount()));
+        aiInteractions.put(instance.getId(), new AiInteraction(request.kind(), target.getLocation(),
+                interactionDestinations(target, current), 0, request.item(), request.amount()));
         return true;
     }
 
@@ -1758,8 +1757,7 @@ public final class NpcBehaviourService implements Listener {
         return nearest;
     }
 
-    private Block findNearestContainer(Location center, NpcInstance instance, AiInteractionKind kind,
-            Material item) {
+    private Block findNearestContainer(Location center, NpcInstance instance, AiInteractionKind kind, Material item) {
         if (center.getWorld() == null)
             return null;
         Block nearest = null;
@@ -1976,8 +1974,8 @@ public final class NpcBehaviourService implements Listener {
         animateContainerInteraction(container.getLocation());
         int available = countItem(source.getContents(), item);
         if (available == 0) {
-            noteInteractionOutcome(instance, "Taking " + itemName + " from " + name + " failed: it holds none. It holds "
-                    + describeContents(source.getContents()) + ".");
+            noteInteractionOutcome(instance, "Taking " + itemName + " from " + name
+                    + " failed: it holds none. It holds " + describeContents(source.getContents()) + ".");
             return;
         }
         Inventory carried = Bukkit.createInventory(null, 27);
@@ -2027,8 +2025,8 @@ public final class NpcBehaviourService implements Listener {
             noteInteractionOutcome(instance, "You took only " + taken + " of the " + amount + " " + itemName
                     + " you wanted: " + (reason == null ? name + " held only " + available : reason) + ".");
         else if (amount == null && reason != null)
-            noteInteractionOutcome(instance, "You took " + taken + " " + itemName + " but left "
-                    + (available - taken) + " behind: " + reason + ".");
+            noteInteractionOutcome(instance, "You took " + taken + " " + itemName + " but left " + (available - taken)
+                    + " behind: " + reason + ".");
     }
 
     private void takeFromInventory(NpcInstance instance, Inventory source, Location containerLocation, Entity actor) {
@@ -2074,7 +2072,9 @@ public final class NpcBehaviourService implements Listener {
         Inventory destination = container.getInventory();
         String name = containerName(container.getLocation());
         String what = filter == null ? "your items" : readableMaterial(filter);
-        int carriedAmount = filter == null ? countItems(carried.getContents()) : countItem(carried.getContents(), filter);
+        int carriedAmount = filter == null
+                ? countItems(carried.getContents())
+                : countItem(carried.getContents(), filter);
         if (carriedAmount == 0) {
             noteInteractionOutcome(instance, "Storing " + what + " in " + name + " failed: you carry none.");
             return;
@@ -2115,13 +2115,14 @@ public final class NpcBehaviourService implements Listener {
             updateTemporaryInventory(instance, carried.getContents(), null, InventoryChange.Cause.STORED, name);
         int target = amount == null ? carriedAmount : Math.min(amount, carriedAmount);
         if (!moved)
-            noteInteractionOutcome(instance, "Storing " + what + " in " + name + " failed: it is full or refused them.");
+            noteInteractionOutcome(instance,
+                    "Storing " + what + " in " + name + " failed: it is full or refused them.");
         else if (stored < target)
             noteInteractionOutcome(instance, "You stored only " + stored + " of " + target + " "
                     + (filter == null ? "items" : what) + " in " + name + ": it is full or refused the rest.");
         else if (amount != null && amount > carriedAmount)
-            noteInteractionOutcome(instance, "You stored all " + carriedAmount + " " + what + " you carried, fewer than the "
-                    + amount + " asked for.");
+            noteInteractionOutcome(instance, "You stored all " + carriedAmount + " " + what
+                    + " you carried, fewer than the " + amount + " asked for.");
     }
 
     private void noteInteractionOutcome(NpcInstance instance, String outcome) {
@@ -2729,7 +2730,10 @@ public final class NpcBehaviourService implements Listener {
         SWITCH, TAKE_FROM_CONTAINER, STORE_IN_CONTAINER
     }
 
-    /** {@code item} and {@code amount} narrow a container transfer; null means any item / all of it. */
+    /**
+     * {@code item} and {@code amount} narrow a container transfer; null means any
+     * item / all of it.
+     */
     private record AiInteraction(AiInteractionKind kind, Location blockLocation, List<Location> navigationTargets,
             int destinationIndex, Material item, Integer amount) {
         private Location navigationTarget() {
@@ -2741,8 +2745,7 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private record AiInteractionRequest(AiInteractionKind kind, Location blockLocation, Material item,
-            Integer amount) {
+    private record AiInteractionRequest(AiInteractionKind kind, Location blockLocation, Material item, Integer amount) {
         private AiInteractionRequest {
             blockLocation = blockLocation == null ? null : blockLocation.clone();
         }

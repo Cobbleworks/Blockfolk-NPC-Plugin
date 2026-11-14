@@ -9,9 +9,9 @@ import dev.blockfolk.model.NpcInstance;
 
 /**
  * Decides whether an NPC notices another entity it is already in range of.
- * Anything within the awareness range is noticed, as if heard or sensed;
- * beyond it the NPC needs a clear line of sight, so walls and floors hide what
- * is behind them.
+ * Anything within the awareness range is noticed, as if heard or sensed; beyond
+ * it the NPC needs a clear line of sight, so walls and floors hide what is
+ * behind them.
  *
  * <p>
  * Callers apply their own range first; this only removes what the NPC cannot
