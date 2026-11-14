@@ -15,6 +15,7 @@ Combat is configured per preset under **Fighting & Survival**.
 - A respawning NPC needs a preset spawnpoint.
 - Dropped experience changes in steps of 5.
 - The optional boss bar is visible to players within 16 blocks.
+- A damaged NPC shows a small `[■■■■□□□□□□]` health bar above its head, visible within 16 blocks. It disappears once the NPC is back to full health. Turn it off or change the distance under `health-bars` in `config.yml`.
 
 Health, respawn time, and dropped experience each use one icon. **Left-click** decreases the value, **right-click** increases it, **shift-click** uses five steps, and **middle-click** lets you enter an exact whole number in chat. Setting health or respawn time to `0` keeps the behaviours described above.
 

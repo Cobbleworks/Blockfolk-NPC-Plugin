@@ -10,6 +10,8 @@ Global settings are created at `plugins/Blockfolk/config.yml`. Restart the serve
 | `question-timeout-seconds` | `30` | Time allowed to answer an NPC question before its cancel/timeout branch runs. |
 | `proximity-transition-cooldown-seconds` | `3` | Debounces rapid approach/leave transitions while an NPC starts or stops moving. |
 | `mineskin-api-key` | empty | Optional key for higher MineSkin limits when resolving external skin image URLs. |
+| `health-bars.enabled` | `true` | Shows a small health bar above damaged NPCs until they are back to full health. |
+| `health-bars.view-distance` | `16` | Blocks within which players see the health bar. |
 
 ## OpenRouter settings
 
@@ -46,6 +48,9 @@ chat-input-timeout-seconds: 60
 question-timeout-seconds: 30
 proximity-transition-cooldown-seconds: 3
 mineskin-api-key: ""
+health-bars:
+  enabled: true
+  view-distance: 16
 
 openrouter:
   endpoint: "https://openrouter.ai/api/v1/chat/completions"

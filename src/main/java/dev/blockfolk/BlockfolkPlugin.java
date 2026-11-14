@@ -84,7 +84,10 @@ public final class BlockfolkPlugin extends JavaPlugin {
         customEventRepository = new CustomEventRepository(this);
         fighterAttackRepository = new dev.blockfolk.repository.FighterAttackRepository(this);
         shopRepository = new dev.blockfolk.repository.ShopRepository(this);
-        npcRenderer = new PaperMannequinNpcRenderer(this);
+        npcRenderer = new PaperMannequinNpcRenderer(this,
+                new dev.blockfolk.runtime.HealthBar.Settings(getConfig().getBoolean("health-bars.enabled", true),
+                        getConfig().getDouble("health-bars.view-distance",
+                                dev.blockfolk.runtime.HealthBar.DEFAULT_VIEW_DISTANCE)));
         navigationService = new NativeNpcNavigationService(this);
         transientNpcService = new dev.blockfolk.api.TransientNpcService(this, npcRenderer, navigationService);
         dialogService = new DialogService(this);

@@ -9,6 +9,11 @@ mineskin-api-key: ""
 chunk-loading:
   # Chunks loaded in every direction around such an NPC: 0 = only its own chunk, 1 = 3x3, 2 = 5x5, 3 = 7x7.
   radius: 1
+# Damaged NPCs show a small [■■■■□□□□□□] health bar above their head until they are back to full health.
+health-bars:
+  enabled: true
+  # Blocks within which players see the bar.
+  view-distance: 16
 
 # Optional AI behaviour. Configure this per NPC preset in its dedicated
 # AI Behaviour menu. No requests are made for paused presets.

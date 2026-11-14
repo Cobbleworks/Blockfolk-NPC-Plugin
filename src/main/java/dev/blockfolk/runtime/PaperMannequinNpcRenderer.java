@@ -1,26 +1,33 @@
 package dev.blockfolk.runtime;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Pose;
+import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.Transformation;
+import org.joml.AxisAngle4f;
+import org.joml.Vector3f;
 
 import com.destroystokyo.paper.profile.ProfileProperty;
 
@@ -28,6 +35,7 @@ import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.NpcPose;
 import io.papermc.paper.entity.TeleportFlag;
+import dev.blockfolk.util.EntityHealth;
 import dev.blockfolk.util.SkinTextureUtil;
 import io.papermc.paper.datacomponent.item.ResolvableProfile;
 import net.kyori.adventure.text.Component;
@@ -42,17 +50,29 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     private final Plugin plugin;
     private final NamespacedKey instanceKey;
     private final NamespacedKey seatKey;
+    private final NamespacedKey healthBarKey;
+    private final HealthBar.Settings healthBars;
     private final Map<UUID, UUID> entityIdsByInstance = new HashMap<>();
     private final Map<UUID, Integer> jumpTicksByInstance = new HashMap<>();
+    /** Health bar display entity per instance, for removing bars left behind. */
+    private final Map<UUID, UUID> healthBarsByInstance = new HashMap<>();
     private BukkitTask animationTask;
+    private long ticks;
 
     private static final int JUMP_DURATION_TICKS = 12;
     private static final double JUMP_HEIGHT = 0.85;
+    private static final int HEALTH_BAR_INTERVAL_TICKS = 2;
+    private static final float HEALTH_BAR_SCALE = 0.8f;
+    /** Bar height above the head: clear of the name tag, or in its place. */
+    private static final float HEALTH_BAR_OFFSET_WITH_NAME = 0.62f;
+    private static final float HEALTH_BAR_OFFSET_WITHOUT_NAME = 0.3f;
 
-    public PaperMannequinNpcRenderer(Plugin plugin) {
+    public PaperMannequinNpcRenderer(Plugin plugin, HealthBar.Settings healthBars) {
         this.plugin = plugin;
         this.instanceKey = new NamespacedKey(plugin, "instance-id");
         this.seatKey = new NamespacedKey(plugin, "seat-instance-id");
+        this.healthBarKey = new NamespacedKey(plugin, "health-bar-instance-id");
+        this.healthBars = healthBars;
     }
 
     @Override
@@ -60,7 +80,13 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         if (animationTask != null) {
             animationTask.cancel();
         }
-        animationTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickJumps, 1L, 1L);
+        animationTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
+    }
+
+    private void tick() {
+        tickJumps();
+        if (++ticks % HEALTH_BAR_INTERVAL_TICKS == 0)
+            tickHealthBars();
     }
 
     @Override
@@ -70,6 +96,12 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
             animationTask = null;
         }
         jumpTicksByInstance.clear();
+        for (UUID displayId : healthBarsByInstance.values()) {
+            Entity display = Bukkit.getEntity(displayId);
+            if (display != null)
+                display.remove();
+        }
+        healthBarsByInstance.clear();
         entityIdsByInstance.clear();
     }
 
@@ -129,6 +161,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
     private void destroy(NpcInstance instance, boolean loadChunk) {
         Mannequin mannequin = findEntity(instance, loadChunk);
         removeSeats(instance, mannequin);
+        removeHealthBar(instance.getId(), mannequin);
         if (mannequin != null) {
             mannequin.remove();
         }
@@ -156,7 +189,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         }
         ArmorStand seat = seat(mannequin);
         boolean moved = seat == null
-                ? mannequin.teleport(renderedLocation)
+                ? teleport(instance.getId(), mannequin, renderedLocation)
                 : seat.teleport(renderedLocation, TeleportFlag.EntityState.RETAIN_PASSENGERS);
         if (!moved)
             return false;
@@ -249,7 +282,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         if (mounted != null) {
             mannequin.leaveVehicle();
             mounted.remove();
-            mannequin.teleport(base);
+            teleport(instance.getId(), mannequin, base);
         }
         // Also removes a saved seat whose passenger died or was removed externally.
         if (instance.getLocation().getWorld() != null) {
@@ -328,6 +361,121 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         mannequin.setBodyYaw(currentBodyYaw + bodyStep);
     }
 
+    /**
+     * Teleports the mannequin together with its health bar passenger. Paper refuses
+     * to teleport an entity that carries passengers unless told to keep them, and
+     * cannot keep them across worlds, so a world change drops the bar; the next
+     * health bar tick puts it back.
+     */
+    private boolean teleport(UUID instanceId, Mannequin mannequin, Location location) {
+        if (location.getWorld() != mannequin.getWorld())
+            removeHealthBar(instanceId, mannequin);
+        return mannequin.teleport(location, TeleportFlag.EntityState.RETAIN_PASSENGERS);
+    }
+
+    private void tickHealthBars() {
+        if (healthBars.enabled()) {
+            for (Map.Entry<UUID, UUID> entry : entityIdsByInstance.entrySet()) {
+                if (Bukkit.getEntity(entry.getValue()) instanceof Mannequin mannequin && mannequin.isValid())
+                    updateHealthBar(entry.getKey(), mannequin);
+            }
+        }
+        // Bars whose NPC died, unloaded, or no longer exists.
+        healthBarsByInstance.entrySet().removeIf(entry -> {
+            Entity display = Bukkit.getEntity(entry.getValue());
+            UUID mannequinId = entityIdsByInstance.get(entry.getKey());
+            if (healthBars.enabled() && display != null && display.isValid() && display.getVehicle() != null
+                    && display.getVehicle().isValid() && display.getVehicle().getUniqueId().equals(mannequinId))
+                return false;
+            if (display != null)
+                display.remove();
+            return true;
+        });
+    }
+
+    private void updateHealthBar(UUID instanceId, Mannequin mannequin) {
+        int filled = mannequin.isInvulnerable() || mannequin.isDead()
+                ? HealthBar.HIDDEN
+                : HealthBar.filledSegments(mannequin.getHealth(), EntityHealth.maximum(mannequin));
+        if (filled == HealthBar.HIDDEN) {
+            removeHealthBar(instanceId, mannequin);
+            return;
+        }
+        TextDisplay bar = healthBar(mannequin);
+        if (bar == null) {
+            bar = spawnHealthBar(instanceId, mannequin);
+            if (bar == null)
+                return;
+        }
+        Component text = HealthBar.text(filled);
+        if (!text.equals(bar.text()))
+            bar.text(text);
+        Transformation transformation = healthBarTransformation(mannequin.isCustomNameVisible());
+        if (!transformation.equals(bar.getTransformation()))
+            bar.setTransformation(transformation);
+    }
+
+    private TextDisplay healthBar(Mannequin mannequin) {
+        TextDisplay found = null;
+        for (Entity passenger : mannequin.getPassengers()) {
+            if (!(passenger instanceof TextDisplay display)
+                    || !display.getPersistentDataContainer().has(healthBarKey, PersistentDataType.STRING))
+                continue;
+            if (found == null)
+                found = display;
+            else
+                display.remove();
+        }
+        return found;
+    }
+
+    private TextDisplay spawnHealthBar(UUID instanceId, Mannequin mannequin) {
+        TextDisplay bar = mannequin.getWorld().spawn(mannequin.getLocation(), TextDisplay.class, spawned -> {
+            // Bars are rebuilt from the mannequin's health, so they never need saving.
+            spawned.setPersistent(false);
+            spawned.getPersistentDataContainer().set(healthBarKey, PersistentDataType.STRING, instanceId.toString());
+            // Vertical keeps the offset straight up when a player looks from above or
+            // below.
+            spawned.setBillboard(Display.Billboard.VERTICAL);
+            spawned.setDefaultBackground(false);
+            spawned.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
+            spawned.setShadowed(true);
+            spawned.setBrightness(new Display.Brightness(15, 15));
+            spawned.setViewRange((float) (Math.max(1.0, healthBars.viewDistance()) / 64.0));
+            spawned.setTransformation(healthBarTransformation(mannequin.isCustomNameVisible()));
+            spawned.setSilent(true);
+            spawned.setInvulnerable(true);
+        });
+        if (!mannequin.addPassenger(bar)) {
+            bar.remove();
+            return null;
+        }
+        UUID previous = healthBarsByInstance.put(instanceId, bar.getUniqueId());
+        Entity replaced = previous == null ? null : Bukkit.getEntity(previous);
+        if (replaced != null && replaced != bar)
+            replaced.remove();
+        return bar;
+    }
+
+    private void removeHealthBar(UUID instanceId, Mannequin mannequin) {
+        UUID displayId = healthBarsByInstance.remove(instanceId);
+        Entity tracked = displayId == null ? null : Bukkit.getEntity(displayId);
+        if (tracked != null)
+            tracked.remove();
+        if (mannequin != null) {
+            for (Entity passenger : List.copyOf(mannequin.getPassengers())) {
+                if (passenger.getPersistentDataContainer().has(healthBarKey, PersistentDataType.STRING))
+                    passenger.remove();
+            }
+        }
+    }
+
+    private static Transformation healthBarTransformation(boolean nameVisible) {
+        float offset = nameVisible ? HEALTH_BAR_OFFSET_WITH_NAME : HEALTH_BAR_OFFSET_WITHOUT_NAME;
+        return new Transformation(new Vector3f(0.0f, offset, 0.0f), new AxisAngle4f(),
+                new Vector3f(HEALTH_BAR_SCALE, HEALTH_BAR_SCALE, HEALTH_BAR_SCALE), new AxisAngle4f());
+    }
+
     private void tickJumps() {
         jumpTicksByInstance.replaceAll((instanceId, elapsed) -> elapsed + 1);
         jumpTicksByInstance.entrySet().removeIf(entry -> {
@@ -343,13 +491,13 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
             }
             if (entry.getValue() >= JUMP_DURATION_TICKS) {
                 Location landed = mannequin.getLocation().subtract(0.0, jumpOffset(entry.getValue() - 1), 0.0);
-                mannequin.teleport(landed);
+                teleport(entry.getKey(), mannequin, landed);
                 mannequin.setGravity(true);
                 return true;
             }
             double previousOffset = jumpOffset(entry.getValue() - 1);
             double nextOffset = jumpOffset(entry.getValue());
-            mannequin.teleport(mannequin.getLocation().add(0.0, nextOffset - previousOffset, 0.0));
+            teleport(entry.getKey(), mannequin, mannequin.getLocation().add(0.0, nextOffset - previousOffset, 0.0));
             return false;
         });
     }
@@ -414,7 +562,7 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer {
         // Teleporting a rider would pull it out of its minecart or boat; a
         // preset edit must not end the ride.
         if (transport(mannequin) == null)
-            mannequin.teleport(instance.getLocation());
+            teleport(instance.getId(), mannequin, instance.getLocation());
         mannequin.setPersistent(true);
         mannequin.getPersistentDataContainer().set(instanceKey, PersistentDataType.STRING, instance.getId().toString());
         mannequin.customName(Component.text(definition.getDisplayName()));
