@@ -1549,7 +1549,7 @@ public final class AiControlService {
         }
         List<String> events = memory.recentEvents(instance.getId());
         if (!events.isEmpty()) {
-            out.append("\nRecent event memory:\n");
+            out.append("\nRecent event memory (oldest first):\n");
             events.forEach(item -> out.append("- ").append(item).append('\n'));
         }
         UUID scope = conversationScope;

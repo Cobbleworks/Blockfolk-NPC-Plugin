@@ -265,18 +265,40 @@ public final class NpcBehaviourService implements Listener {
      * it.
      */
     public void updateTemporaryInventory(NpcInstance instance, ItemStack[] contents, Entity actor) {
-        ItemStack[] before = instance.getTemporaryInventoryContents();
-        ItemStack[] after = contents == null ? new ItemStack[0] : contents;
-        boolean dropped = hasUnmatchedItems(before, after);
-        boolean received = hasUnmatchedItems(after, before);
-        instance.setTemporaryInventoryContents(after);
-        if (dropped)
-            trigger(BehaviourEvent.DROP_ITEM, instance, actor);
-        if (received)
-            trigger(BehaviourEvent.RECEIVE_ITEM, instance, actor);
+        if (actor instanceof Player player)
+            updateTemporaryInventory(instance, contents, actor, InventoryChange.Cause.EDITED_BY_PLAYER,
+                    player.getName());
+        else if (actor instanceof Item)
+            updateTemporaryInventory(instance, contents, actor, InventoryChange.Cause.PICKED_UP, null);
+        else
+            updateTemporaryInventory(instance, contents, actor, InventoryChange.Cause.OTHER, null);
     }
 
-    private boolean hasUnmatchedItems(ItemStack[] source, ItemStack[] destination) {
+    /**
+     * Updates an instance inventory and emits events describing what entered or
+     * left it; {@code counterpart} names who or what the items came from or went
+     * to.
+     */
+    private void updateTemporaryInventory(NpcInstance instance, ItemStack[] contents, Entity actor,
+            InventoryChange.Cause cause, String counterpart) {
+        ItemStack[] before = instance.getTemporaryInventoryContents();
+        ItemStack[] after = contents == null ? new ItemStack[0] : contents;
+        List<InventoryChange.Moved> lost = unmatchedItems(before, after);
+        List<InventoryChange.Moved> received = unmatchedItems(after, before);
+        instance.setTemporaryInventoryContents(after);
+        if (!lost.isEmpty())
+            trigger(BehaviourEvent.DROP_ITEM, instance, actor, InventoryChange.describeLost(cause, counterpart, lost));
+        if (!received.isEmpty())
+            trigger(BehaviourEvent.RECEIVE_ITEM, instance, actor,
+                    InventoryChange.describeReceived(cause, counterpart, received));
+    }
+
+    /**
+     * Items in {@code source} that {@code destination} does not hold, with the
+     * missing amounts.
+     */
+    private List<InventoryChange.Moved> unmatchedItems(ItemStack[] source, ItemStack[] destination) {
+        List<InventoryChange.Moved> unmatched = new ArrayList<>();
         java.util.List<ItemStack> remaining = new java.util.ArrayList<>();
         for (ItemStack item : destination) {
             if (item != null && !item.getType().isAir())
@@ -296,9 +318,19 @@ public final class NpcBehaviourService implements Listener {
                 candidate.setAmount(candidate.getAmount() - matched);
             }
             if (amount > 0)
-                return true;
+                unmatched.add(new InventoryChange.Moved(readableItem(item), amount));
         }
-        return false;
+        return unmatched;
+    }
+
+    private static String readableItem(ItemStack item) {
+        return item.getType().name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
+    }
+
+    private static String containerName(Location location) {
+        return location == null || location.getWorld() == null
+                ? null
+                : "a " + readableItem(new ItemStack(location.getBlock().getType()));
     }
 
     public void triggerWaypointActions(List<BehaviourAction> actions, NpcInstance instance) {
@@ -1067,7 +1099,7 @@ public final class NpcBehaviourService implements Listener {
             return;
         contents[slot] = null;
         dropItemForNpc(instance, item);
-        updateTemporaryInventory(instance, contents, null);
+        updateTemporaryInventory(instance, contents, null, InventoryChange.Cause.DROPPED, null);
     }
 
     private void playAiAnimation(NpcInstance instance, String animation) {
@@ -1800,7 +1832,7 @@ public final class NpcBehaviourService implements Listener {
         }
         if (mined) {
             if (collectDrops)
-                updateTemporaryInventory(instance, carried.getContents(), entity);
+                updateTemporaryInventory(instance, carried.getContents(), entity, InventoryChange.Cause.MINED, null);
             if (entity != null)
                 entity.swingMainHand();
         }
@@ -1843,7 +1875,10 @@ public final class NpcBehaviourService implements Listener {
                 source.setItem(slot, null);
             else
                 item.setAmount(item.getAmount() - moved);
-            updateTemporaryInventory(instance, carried.getContents(), actor);
+            String from = source.getHolder() instanceof Player owner
+                    ? "the player " + owner.getName()
+                    : containerName(containerLocation);
+            updateTemporaryInventory(instance, carried.getContents(), actor, InventoryChange.Cause.TAKEN, from);
             return;
         }
     }
@@ -1880,7 +1915,8 @@ public final class NpcBehaviourService implements Listener {
         if (!moved)
             return;
         animateContainerInteraction(container.getLocation());
-        updateTemporaryInventory(instance, carried.getContents(), null);
+        updateTemporaryInventory(instance, carried.getContents(), null, InventoryChange.Cause.STORED,
+                containerName(container.getLocation()));
     }
 
     private InventorySource nearbySourceInventory(NpcInstance instance, Entity actor) {
@@ -1988,7 +2024,7 @@ public final class NpcBehaviourService implements Listener {
             if (item != null && !item.getType().isAir())
                 dropItemForNpc(instance, item);
         }
-        updateTemporaryInventory(instance, new ItemStack[27], null);
+        updateTemporaryInventory(instance, new ItemStack[27], null, InventoryChange.Cause.EMPTIED, null);
     }
 
     private void dropItemForNpc(NpcInstance instance, ItemStack item) {
@@ -2062,7 +2098,7 @@ public final class NpcBehaviourService implements Listener {
                 }
             }
         }
-        updateTemporaryInventory(instance, carried.getContents(), null);
+        updateTemporaryInventory(instance, carried.getContents(), null, InventoryChange.Cause.FARMED, null);
         if (worked && entity != null)
             entity.swingMainHand();
     }

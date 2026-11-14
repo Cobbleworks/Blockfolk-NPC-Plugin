@@ -35,6 +35,9 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Changed
 
+- AI NPCs remember what happened in a fight. **On Combat Exited** now says why combat ended (opponent defeated, killed by someone else, got away, unreachable, escaped, stopped, or the NPC died), and every kill is added to the NPC's recent event memory, including kills by abilities and lingering fire or poison.
+- **On Receive Item** and **On Drop Item** tell the AI which items moved, how many, and how, for example "You picked up 3 iron ingot from the ground." or "Alex took 2 bread out of your inventory."
+- Recent event memory in AI requests shows how long ago each event happened, oldest first.
 - Menu overhaul: every menu shares one layout and visual language. Back sits in the bottom-centre slot, page arrows sit in the bottom corners with page numbers, and Create buttons sit to the right of Back. Item names and tooltips are no longer italic, click hints follow one format, empty lists explain what to do next, and deletions use the same confirmation screen everywhere.
 - On/off settings change their icon and name color with their state and explain both states in the tooltip. Multi-option settings (aggression, pose, name color, conversation mode, ability centre) are cycled in place: their tooltip lists every option with a `▶` marker, left-click selects the next and right-click the previous option. This replaces the separate pose picker.
 - The preset editor is organised into four labelled columns: **Identity** (name, skin, properties), **World** (instances, spawnpoint, routes), **Behaviour** (events, custom events, AI), and **Combat & Items** (fighting, equipment, shops). Click the NPC head to open **NPC Properties**.

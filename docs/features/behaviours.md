@@ -18,6 +18,10 @@ Nearby chat is configured from the AI menu rather than shown as a deterministic 
 
 **On Nearby Aggression** runs when another living entity, including an animal, player, or NPC, takes damage or is hit by an entity within eight blocks. The victim is the action trigger; AI Trigger receives the victim, damage amount, and attacker when known. Cancelled damage events do not trigger it.
 
+**On Combat Exited** tells AI Trigger why the fight ended: the NPC defeated its opponent, the opponent died to someone else, got away, or could not be reached, the NPC escaped while fleeing, combat was stopped by an action or new fight options, or the NPC died. When the opponent dies and another recent attacker is in reach, the NPC turns to it without leaving combat.
+
+**On Receive Item** and **On Drop Item** tell AI Trigger which items moved, how many, and how: picked up from the ground, put in or taken out by a player, mined, harvested or planted, taken from or stored in a container or a player's inventory, dropped, or emptied into nearby containers.
+
 **On Entity Nearby** ignores Blockfolk NPCs. Use **On Nearby NPC** for them: it runs when another Blockfolk NPC comes within eight blocks, with that NPC as the action trigger. It only runs while a player is within `ai-control.npc-conversations.player-range` (32 blocks by default); NPCs that were already standing together fire it once a player arrives. After it fires for two NPCs, neither fires it for the other again until `ai-control.npc-conversations.cooldown-seconds` has passed, so two NPCs meeting at the same moment do not both react. Combined with AI Trigger and **Respond to Nearby NPCs**, it starts [conversations between NPCs](./ai-behaviour.md#conversations-between-npcs).
 
 ## Actions

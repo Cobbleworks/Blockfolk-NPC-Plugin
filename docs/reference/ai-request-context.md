@@ -75,9 +75,11 @@ When the world is available, the request includes broad time of day, weather, bi
 
 Blockfolk keeps:
 
-- up to ten recent event summaries for five minutes;
+- up to ten recent event summaries for five minutes, oldest first, each marked with how long ago it happened (for example `(40s ago) You killed a zombie.`);
 - recent conversation lines up to `ai-control.conversation-history-limit`, which defaults to `20`;
 - when memory is enabled, up to 45 long-term preset facts plus nearby Regional facts from other presets.
+
+Event summaries include the triggers that ran AI Trigger and failed actions. They also include every kill: an NPC remembers killing a mob, player, or other NPC with its weapon, a projectile, or an ability, including deaths from fire or poison within five seconds of its last hit.
 
 Enabled long-term memory reviews the recent conversation after 20 seconds without a new player chat message. Follow-up messages reset the timer; the review waits for pending chat responses to finish. Up to 20 conversation lines are available and the previous exchange overlaps the next review. The review saves only key facts about people and agreements (treatment, deals, promises, meetings, notable news), never reminders of in-progress tasks or small talk. It can save up to three Personal, Regional, or Temporal facts, and usually saves none or one. Personal and Temporal facts appear only in the source NPC preset’s context. Regional facts are anchored where they were learned and appear in AI NPC contexts within 50 blocks only when the receiving NPC has memory enabled. Temporal facts expire after 24 hours. At the 45-fact limit, saving a new fact replaces the oldest Temporal fact if one exists; otherwise, it replaces the oldest fact. Saved Regional facts produce a "spreading rumors" notice; other saved facts produce a "remembered this" notice. This review is separate from gameplay actions.
 

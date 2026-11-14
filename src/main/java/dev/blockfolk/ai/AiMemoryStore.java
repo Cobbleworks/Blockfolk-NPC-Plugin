@@ -1,5 +1,6 @@
 package dev.blockfolk.ai;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -18,6 +19,7 @@ public final class AiMemoryStore {
     public static final int DEFAULT_MAX_MESSAGES = 20;
     private static final Duration EVENT_AGE = Duration.ofMinutes(5);
     private final int maxMessages;
+    private final Clock clock;
     private final Map<UUID, Deque<Entry>> events = new HashMap<>();
     private static final int DREAM_BATCH_SIZE = 10;
     private static final int DREAM_OVERLAP = 2;
@@ -32,14 +34,19 @@ public final class AiMemoryStore {
     }
 
     public AiMemoryStore(int maxMessages) {
-        this.maxMessages = Math.max(0, maxMessages);
+        this(maxMessages, Clock.systemUTC());
     }
 
-    public void rememberEvent(UUID instance, String summary) {
+    AiMemoryStore(int maxMessages, Clock clock) {
+        this.maxMessages = Math.max(0, maxMessages);
+        this.clock = clock;
+    }
+
+    public synchronized void rememberEvent(UUID instance, String summary) {
         if (summary == null || summary.isBlank())
             return;
         Deque<Entry> memory = events.computeIfAbsent(instance, ignored -> new ArrayDeque<>());
-        memory.addLast(new Entry(Instant.now(), summary.trim()));
+        memory.addLast(new Entry(clock.instant(), summary.trim()));
         trim(memory, MAX_EVENTS);
     }
 
@@ -106,14 +113,31 @@ public final class AiMemoryStore {
         dreamInFlight.remove(key(batch.instance(), batch.player(), batch.shared()));
     }
 
-    public List<String> recentEvents(UUID instance) {
+    /**
+     * Recent events, oldest first, each prefixed with how long ago it happened:
+     * {@code "(40s ago) You killed a zombie."}.
+     */
+    public synchronized List<String> recentEvents(UUID instance) {
         Deque<Entry> memory = events.get(instance);
         if (memory == null)
             return List.of();
-        Instant cutoff = Instant.now().minus(EVENT_AGE);
+        Instant now = clock.instant();
+        Instant cutoff = now.minus(EVENT_AGE);
         while (!memory.isEmpty() && memory.getFirst().time().isBefore(cutoff))
             memory.removeFirst();
-        return memory.stream().map(Entry::summary).toList();
+        return memory.stream().map(entry -> "(" + age(Duration.between(entry.time(), now)) + ") " + entry.summary())
+                .toList();
+    }
+
+    static String age(Duration elapsed) {
+        long seconds = Math.max(0L, elapsed.toSeconds());
+        if (seconds < 5)
+            return "just now";
+        if (seconds < 60)
+            return seconds + "s ago";
+        long minutes = seconds / 60;
+        long rest = seconds % 60;
+        return rest == 0 ? minutes + "m ago" : minutes + "m " + rest + "s ago";
     }
 
     public synchronized List<String> recentConversation(UUID instance, UUID player, boolean shared) {

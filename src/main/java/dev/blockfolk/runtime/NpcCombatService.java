@@ -73,6 +73,11 @@ public final class NpcCombatService implements Listener {
     private static final double TARGET_SWITCH_MARGIN = 3.0;
     /** An opponent unseen for this long may be dropped for a fresh attacker. */
     private static final int TARGET_SWITCH_UNSEEN_TICKS = 20;
+    /**
+     * A death without a causing entity (fire, poison, falling) still counts as an
+     * NPC's kill when it hit the victim this recently.
+     */
+    private static final int KILL_CREDIT_TICKS = 5 * 20;
 
     private final Plugin plugin;
     private final NpcDefinitionRepository definitionRepository;
@@ -87,12 +92,18 @@ public final class NpcCombatService implements Listener {
     private final Map<TargetKey, Long> unreachableUntil = new HashMap<>();
     /** Recent attackers per instance, with the tick of their last hit. */
     private final Map<UUID, Map<UUID, Long>> threats = new HashMap<>();
+    /** The last NPC hit on each victim, for crediting kills by lingering damage. */
+    private final Map<UUID, LastNpcHit> lastNpcHits = new HashMap<>();
+    private java.util.function.BiConsumer<NpcInstance, String> outcomeListener = (instance, outcome) -> {
+    };
     private NpcBehaviourService behaviourService;
     private BukkitTask task;
     private long currentTick;
     private final List<PendingWeaponHit> pendingWeaponHits = new java.util.ArrayList<>();
     private record PendingWeaponHit(NpcInstance instance, UUID charge, LivingEntity victim, double before,
             EntityDamageByEntityEvent event) {
+    }
+    private record LastNpcHit(UUID instanceId, long tick) {
     }
 
     public NpcCombatService(Plugin plugin, NpcDefinitionRepository definitionRepository,
@@ -233,6 +244,7 @@ public final class NpcCombatService implements Listener {
         NpcInstance instance = instanceRegistry.findByEntityId(attacker.getEntityId()).orElse(null);
         if (instance == null || !isAttackable(instance, victim))
             return;
+        lastNpcHits.put(victim.getUniqueId(), new LastNpcHit(instance.getId(), currentTick));
         UUID charge = specialAttackService.chargeId(instance.getId());
         if (charge == null)
             return;
@@ -262,12 +274,18 @@ public final class NpcCombatService implements Listener {
     }
 
     public void exitCombat(NpcInstance instance) {
-        clearState(instance);
+        clearState(instance, CombatExitReason.STOPPED);
     }
 
     public void changeFightOptions(NpcInstance instance, FightOptions options) {
         fightOptionsOverrides.put(instance.getId(), options);
-        clearState(instance);
+        clearState(instance, CombatExitReason.STOPPED);
+    }
+
+    /** Receives notable combat outcomes, such as kills, for the NPC's AI memory. */
+    public void setOutcomeListener(java.util.function.BiConsumer<NpcInstance, String> outcomeListener) {
+        this.outcomeListener = outcomeListener == null ? (instance, outcome) -> {
+        } : outcomeListener;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -481,7 +499,7 @@ public final class NpcCombatService implements Listener {
             }
         }
         event.setDroppedExp(definition == null ? 0 : definition.getCombatProfile().droppedExperience());
-        clearState(instance);
+        clearState(instance, CombatExitReason.NPC_DIED);
         threats.remove(instance.getId());
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (definition == null || definition.getCombatProfile().respawnSeconds() == 0) {
@@ -492,6 +510,55 @@ public final class NpcCombatService implements Listener {
             instanceRegistry.markAwaitingRespawn(instance, respawnAt);
             scheduleRespawn(instance);
         });
+    }
+
+    /**
+     * Credits kills to NPCs and marks opponents that died, so combat ends with an
+     * accurate reason.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onEntityKilled(EntityDeathEvent event) {
+        LivingEntity victim = event.getEntity();
+        UUID victimId = victim.getUniqueId();
+        LastNpcHit lastHit = lastNpcHits.remove(victimId);
+        NpcInstance killer = killerOf(event, lastHit);
+        for (Map.Entry<UUID, CombatState> entry : states.entrySet()) {
+            CombatState state = entry.getValue();
+            if (!state.entityId.equals(victimId))
+                continue;
+            if (killer != null && killer.getId().equals(entry.getKey()))
+                state.defeatedByThisNpc = true;
+            else
+                state.targetDied = true;
+        }
+        if (killer != null && !instanceRegistry.isNavigationEntity(victim))
+            outcomeListener.accept(killer, "You killed " + combatantName(victim) + ".");
+    }
+
+    private NpcInstance killerOf(EntityDeathEvent event, LastNpcHit lastHit) {
+        Entity causing = event.getDamageSource().getCausingEntity();
+        if (causing != null)
+            return instanceRegistry.findByEntityId(causing.getEntityId()).orElse(null);
+        if (lastHit == null || currentTick - lastHit.tick() > KILL_CREDIT_TICKS)
+            return null;
+        return instanceRegistry.findById(lastHit.instanceId()).orElse(null);
+    }
+
+    /** Names a combatant for AI memory: NPCs and players by name, mobs by kind. */
+    private String combatantName(Entity entity) {
+        if (entity == null)
+            return null;
+        NpcInstance other = instanceRegistry.findByEntityId(entity.getEntityId()).orElse(null);
+        if (other != null) {
+            return definitionRepository.find(other.getDefinitionKey()).map(
+                    definition -> "the NPC " + dev.blockfolk.ai.NpcResponseIds.plainName(definition.getDisplayName()))
+                    .orElse("an NPC");
+        }
+        if (entity instanceof Player player)
+            return "the player " + player.getName();
+        if (entity.customName() != null)
+            return entity.getName();
+        return "a " + entity.getType().name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
     }
 
     private void scheduleRespawn(NpcInstance instance) {
@@ -521,6 +588,8 @@ public final class NpcCombatService implements Listener {
         currentTick++;
         releaseSuccessfulCharges();
         unreachableUntil.entrySet().removeIf(entry -> entry.getValue() <= currentTick);
+        if (currentTick % 20 == 0)
+            lastNpcHits.values().removeIf(hit -> currentTick - hit.tick() > KILL_CREDIT_TICKS);
         Set<UUID> activeBossBars = new HashSet<>();
         Set<UUID> activeInstances = new HashSet<>();
         for (NpcInstance instance : instanceRegistry.findActive()) {
@@ -538,7 +607,7 @@ public final class NpcCombatService implements Listener {
             updateBossBar(instance, definition, npc, profile, activeBossBars);
             if (profile.invulnerable()) {
                 if (states.containsKey(instance.getId()))
-                    clearState(instance);
+                    clearState(instance, CombatExitReason.STOPPED);
                 specialAttackService.tick(instance.getId(), npc, null, fightOptions.specialAttacks(),
                         hitPredicate(instance, fightOptions, null), currentTick);
                 continue;
@@ -615,7 +684,7 @@ public final class NpcCombatService implements Listener {
         Entity threat = Bukkit.getEntity(state.entityId);
         Location threatLocation = threat != null && threat.isValid() ? threat.getLocation() : state.lastKnownLocation;
         if (currentTick >= state.expiresAt || threatLocation == null || threatLocation.getWorld() != npc.getWorld()) {
-            clearState(instance);
+            clearState(instance, CombatExitReason.ESCAPED);
             return;
         }
         state.lastKnownLocation = threatLocation.clone();
@@ -637,7 +706,10 @@ public final class NpcCombatService implements Listener {
                 || target.getWorld() != npc.getWorld()
                 || target.getLocation().distanceSquared(npc.getLocation()) > MAX_CHASE_RANGE_SQUARED) {
             if (!engageNextThreat(instance, definition, npc))
-                clearState(instance);
+                clearState(instance,
+                        state.defeatedByThisNpc
+                                ? CombatExitReason.DEFEATED_TARGET
+                                : state.targetDied ? CombatExitReason.TARGET_DIED : CombatExitReason.TARGET_LOST);
             return;
         }
         makeMobFightBack(target, npc);
@@ -745,8 +817,9 @@ public final class NpcCombatService implements Listener {
             specialAttackService.cancelCast(instance.getId());
         else
             specialAttackService.cancelAutomaticCast(instance.getId());
-        states.put(instance.getId(), new CombatState(mode, entity.getUniqueId(), entity.getLocation(),
-                currentTick + (mode == CombatMode.FLEE ? FLEE_TICKS : Long.MAX_VALUE), currentTick));
+        states.put(instance.getId(),
+                new CombatState(mode, entity.getUniqueId(), combatantName(entity), entity.getLocation(),
+                        currentTick + (mode == CombatMode.FLEE ? FLEE_TICKS : Long.MAX_VALUE), currentTick));
         if (mode == CombatMode.FIGHT) {
             instanceRegistry.findEntity(instance).ifPresent(npc -> makeMobFightBack(entity, npc));
         }
@@ -860,7 +933,7 @@ public final class NpcCombatService implements Listener {
         npc.setBodyYaw(location.getYaw());
     }
 
-    private void clearState(NpcInstance instance) {
+    private void clearState(NpcInstance instance, CombatExitReason reason) {
         specialAttackService.cancelCast(instance.getId());
         CombatState removed = states.remove(instance.getId());
         if (removed != null) {
@@ -869,7 +942,7 @@ public final class NpcCombatService implements Listener {
             instanceRegistry.stopNavigating(instance);
             if (behaviourService != null) {
                 behaviourService.trigger(dev.blockfolk.model.BehaviourEvent.COMBAT_EXITED, instance,
-                        Bukkit.getEntity(removed.entityId));
+                        Bukkit.getEntity(removed.entityId), reason.describe(removed.opponentName));
             }
         }
     }
@@ -890,7 +963,7 @@ public final class NpcCombatService implements Listener {
     private void abandonUnreachable(NpcInstance instance, CombatState state) {
         unreachableUntil.put(new TargetKey(instance.getId(), state.entityId),
                 currentTick + UNREACHABLE_TARGET_COOLDOWN_TICKS);
-        clearState(instance);
+        clearState(instance, CombatExitReason.TARGET_UNREACHABLE);
     }
 
     private boolean isTemporarilyUnreachable(NpcInstance instance, LivingEntity target) {
@@ -924,6 +997,7 @@ public final class NpcCombatService implements Listener {
 
         private final CombatMode mode;
         private final UUID entityId;
+        private final String opponentName;
         private Location lastKnownLocation;
         private final long expiresAt;
         private long nextAttackAt;
@@ -933,11 +1007,16 @@ public final class NpcCombatService implements Listener {
         private long lastSeenAt;
         private long lastProgressAt;
         private Location lastProgressLocation;
+        /** The opponent died to this NPC. */
+        private boolean defeatedByThisNpc;
+        /** The opponent died to someone or something else. */
+        private boolean targetDied;
 
-        private CombatState(CombatMode mode, UUID entityId, Location lastKnownLocation, long expiresAt,
-                long nextAttackAt) {
+        private CombatState(CombatMode mode, UUID entityId, String opponentName, Location lastKnownLocation,
+                long expiresAt, long nextAttackAt) {
             this.mode = mode;
             this.entityId = entityId;
+            this.opponentName = opponentName;
             this.lastKnownLocation = lastKnownLocation.clone();
             this.expiresAt = expiresAt;
             this.nextAttackAt = nextAttackAt;

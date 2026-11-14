@@ -83,4 +83,53 @@ class AiMemoryStoreTest {
         assertEquals(List.of("line 8", "line 9", "line 10"), second.lines());
         assertEquals(java.util.Set.of(alex), second.participants());
     }
+
+    @Test
+    void eventsCarryTheirAgeAndExpireAfterFiveMinutes() {
+        MutableClock clock = new MutableClock();
+        AiMemoryStore memory = new AiMemoryStore(AiMemoryStore.DEFAULT_MAX_MESSAGES, clock);
+        UUID npc = UUID.randomUUID();
+
+        memory.rememberEvent(npc, "You killed a zombie.");
+        clock.advance(java.time.Duration.ofSeconds(40));
+        memory.rememberEvent(npc, "You picked up 2 rotten flesh from the ground.");
+
+        assertEquals(
+                List.of("(40s ago) You killed a zombie.", "(just now) You picked up 2 rotten flesh from the ground."),
+                memory.recentEvents(npc));
+
+        clock.advance(java.time.Duration.ofMinutes(4).plusSeconds(30));
+        assertEquals(List.of("(4m 30s ago) You picked up 2 rotten flesh from the ground."), memory.recentEvents(npc));
+    }
+
+    @Test
+    void eventAgeIsReadable() {
+        assertEquals("just now", AiMemoryStore.age(java.time.Duration.ofSeconds(4)));
+        assertEquals("12s ago", AiMemoryStore.age(java.time.Duration.ofSeconds(12)));
+        assertEquals("2m ago", AiMemoryStore.age(java.time.Duration.ofMinutes(2)));
+        assertEquals("1m 5s ago", AiMemoryStore.age(java.time.Duration.ofSeconds(65)));
+    }
+
+    private static final class MutableClock extends java.time.Clock {
+        private java.time.Instant now = java.time.Instant.parse("2026-01-01T12:00:00Z");
+
+        void advance(java.time.Duration duration) {
+            now = now.plus(duration);
+        }
+
+        @Override
+        public java.time.ZoneId getZone() {
+            return java.time.ZoneOffset.UTC;
+        }
+
+        @Override
+        public java.time.Clock withZone(java.time.ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public java.time.Instant instant() {
+            return now;
+        }
+    }
 }
