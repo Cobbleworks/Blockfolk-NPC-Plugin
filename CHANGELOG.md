@@ -6,7 +6,7 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Added
 
-- Damaged NPCs show a small health bar above their head, like `[■■■■□□□□□□]`, until they are back to full health. Players see it within 16 blocks. Configure it under `health-bars` in `config.yml`.
+- Damaged NPCs show a small health bar above their name and dialog line, like `[■■■■□□□□□□]`, until they are back to full health. Players see it within 16 blocks. Configure it under `health-bars` in `config.yml`.
 - **Keep Chunks Loaded** property in NPC Properties. NPCs with it on keep the chunks around them loaded as they walk, so routes and long walks continue with no player nearby. The radius is set by `chunk-loading.radius` in `config.yml` (3×3 chunks by default). Off by default. NPC Properties now has two rows: behaviour switches on top, appearance below.
 - NPCs can ride minecarts and boats. The new **Board Vehicles** property in NPC Properties makes an NPC get into an empty minecart, boat, or raft it touches, also while walking a route. Activator rails, breaking the vehicle, or a restart get it out again, and its route resumes from the nearest waypoint. With the property off, passing carts and boats no longer pick the NPC up.
 - AI NPCs know whether they are riding and which minecarts and boats are nearby. The **Enter/Exit Vehicle** AI capability lets them walk to a listed vehicle and get in, or get out. Any AI walking action (Move To, Follow, Flee, Return Home, Start Route) also gets a riding NPC out first.
