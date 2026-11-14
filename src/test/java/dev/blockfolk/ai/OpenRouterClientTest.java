@@ -93,6 +93,19 @@ class OpenRouterClientTest {
     }
 
     @Test
+    void harvestIsAdvertisedAndAcceptedAsAnArgumentFreeNativeCall() {
+        AiControlSettings settings = AiControlSettings.defaults().toggle(AiActionType.HARVEST);
+        JsonArray tools = AiActionTools.definitions(settings.allowedActions(), List.of());
+        String normalized = OpenRouterClient.responseActions("""
+                {"choices":[{"message":{"tool_calls":[
+                  {"function":{"name":"harvest","arguments":"{}"}}
+                ]},"finish_reason":"tool_calls"}]}
+                """, false, tools);
+
+        assertEquals(AiActionType.HARVEST, AiDecisionParser.parse(normalized, settings).actions().getFirst().type());
+    }
+
+    @Test
     void preservesRememberLocationNameFromNativeCall() {
         AiControlSettings settings = AiControlSettings.defaults().toggle(AiActionType.REMEMBER_LOCATION);
         JsonArray tools = AiActionTools.definitions(settings.allowedActions(), List.of());

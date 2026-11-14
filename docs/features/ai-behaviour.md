@@ -99,6 +99,8 @@ The model cannot issue commands, executable code, arbitrary coordinates, or unli
 
 ## Inventory and world interaction
 
+Enable **Harvest / Plant** in AI Behaviour to let the AI use the same farming action as manual **Harvest**. It harvests mature crops and plants empty suitable soil within three blocks horizontally of the NPC. Every planting or replanting consumes one matching seed or planting item from that instance's **Temporary Inventory**. Harvest drops enter that inventory; overflow drops nearby. The action does not till soil or walk to a field, so enable **Move To** if the NPC should travel there first. This capability is off by default.
+
 Enable **Temporary Inventory** when the AI should see and manipulate the items carried by each instance. This also enables container transfers and direct collection of mined drops. If mined drops do not fit, the block remains untouched. Without temporary inventory, mined blocks drop items naturally.
 
 Nearby containers include their custom names in the NPC's context when set. With container interaction enabled, players can refer to a named container such as “Food Supplies”; the NPC matches that name to the listed container target for taking or storing items.

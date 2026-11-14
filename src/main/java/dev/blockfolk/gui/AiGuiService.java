@@ -60,7 +60,7 @@ final class AiGuiService {
     private static final int ADD_MEMORY_SLOT = 51;
     /** Sits next to Respond to Nearby Chat; the action toggles follow it. */
     private static final int NPC_RESPONSE_SLOT = 22;
-    private static final int[] ACTION_SLOTS = {21, 23, 24, 25, 30, 31, 32, 33, 34, 39, 40, 41, 42};
+    private static final int[] ACTION_SLOTS = {21, 23, 24, 25, 30, 31, 32, 33, 34, 39, 40, 41, 42, 43};
     private static final List<AiActionType> ACTION_TYPES = Arrays.stream(AiActionType.values())
             .filter(type -> type != AiActionType.REMEMBER_FACT && type != AiActionType.DROP_ITEM
                     && type != AiActionType.STOP_COMBAT && type != AiActionType.UNFOLLOW
@@ -196,6 +196,7 @@ final class AiGuiService {
             case INTERACT -> Material.LEVER;
             case MOVE_TO -> Material.LEATHER_BOOTS;
             case MINE_BLOCKS -> Material.IRON_PICKAXE;
+            case HARVEST -> Material.WHEAT;
             case RETURN_HOME -> Material.RED_BED;
             case START_ROUTE, PAUSE_ROUTE -> Material.POWERED_RAIL;
             case REMEMBER_FACT -> Material.WRITABLE_BOOK;
@@ -501,6 +502,7 @@ final class AiGuiService {
             case INTERACT -> "Uses nearby buttons, levers, or containers";
             case MOVE_TO -> "Walks to a known location, player, NPC, or entity";
             case MINE_BLOCKS -> "Mines nearby resources; collects drops when item pickup is enabled";
+            case HARVEST -> "Harvests and plants nearby crops using seeds from Temporary Inventory";
             case RETURN_HOME -> "Walks back to this instance's respawn location";
             case START_ROUTE -> "Resumes or pauses this instance's configured route";
             case PAUSE_ROUTE -> "Pauses this instance's configured route";

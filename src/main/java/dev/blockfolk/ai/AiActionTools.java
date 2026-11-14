@@ -124,6 +124,12 @@ final class AiActionTools {
                     + "come, walk, or head somewhere.";
             case MINE_BLOCKS -> "Mine every matching block within reach. Drops go into the temporary inventory "
                     + "when item pickup is enabled; otherwise they drop into the world.";
+            case HARVEST -> "Harvest mature crops and plant empty suitable soil within 3 blocks horizontally "
+                    + "at the NPC's current position, using the same farming action as scripted Harvest. "
+                    + "Each planting or replanting consumes one matching seed or planting item from the NPC's "
+                    + "temporary inventory; never creates seeds. Harvested drops go into that inventory, "
+                    + "with overflow dropped nearby. Does not walk to fields or till soil; use move_to first "
+                    + "if needed. Takes no arguments.";
             case RETURN_HOME -> "Walk back to this NPC's home (respawn) location.";
             case START_ROUTE -> "Resume the configured patrol route.";
             case PAUSE_ROUTE -> "Pause the configured patrol route.";

@@ -233,6 +233,18 @@ class AiDecisionParserTest {
     }
 
     @Test
+    void harvestNeedsExplicitCapabilityButNoTarget() {
+        String response = "{\"actions\":[{\"type\":\"HARVEST\"}]}";
+        AiControlSettings enabled = AiControlSettings.defaults().toggle(AiActionType.HARVEST);
+
+        assertEquals(AiActionType.HARVEST, AiDecisionParser.parse(response, enabled).actions().getFirst().type());
+        assertEquals(AiActionType.DO_NOTHING,
+                AiDecisionParser.parse(response, AiControlSettings.defaults()).actions().getFirst().type());
+        assertEquals(AiActionType.DO_NOTHING,
+                AiDecisionParser.parse(response, enabled.toggle(AiActionType.HARVEST)).actions().getFirst().type());
+    }
+
+    @Test
     void miningRequiresCapabilityAndAResourceTarget() {
         AiControlSettings enabled = AiControlSettings.defaults().toggle(AiActionType.MINE_BLOCKS);
 

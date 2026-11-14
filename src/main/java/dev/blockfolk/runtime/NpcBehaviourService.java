@@ -1032,6 +1032,14 @@ public final class NpcBehaviourService implements Listener {
                         // With item pickup, the collected drops are recorded as received items.
                         aiControlService.noteAction(instance, "You mined " + mined + " " + mining + ".");
                 }
+                case HARVEST -> {
+                    if (harvestNearbyCrops(instance))
+                        aiControlService.noteAction(instance, "You harvested or planted nearby crops, using planting "
+                                + "items from your temporary inventory.");
+                    else
+                        aiControlService.noteOutcome(instance, "harvest failed: no mature crops could be harvested "
+                                + "and no empty suitable soil could be planted with your carried seeds or planting items.");
+                }
                 case RETURN_HOME -> {
                     leaveVehicleToWalk(instance);
                     stopFollowing(instance);
@@ -2122,10 +2130,10 @@ public final class NpcBehaviourService implements Listener {
         itemPickupLockedUntilTick.put(instance.getId(), currentTick + OWN_DROP_PICKUP_LOCK_TICKS);
     }
 
-    private void harvestNearbyCrops(NpcInstance instance) {
+    private boolean harvestNearbyCrops(NpcInstance instance) {
         Location center = instance.getLocation();
         if (center.getWorld() == null)
-            return;
+            return false;
         Inventory carried = Bukkit.createInventory(null, 27);
         carried.setContents(instance.getTemporaryInventoryContents());
         LivingEntity entity = instances.findEntity(instance).orElse(null);
@@ -2188,6 +2196,7 @@ public final class NpcBehaviourService implements Listener {
         updateTemporaryInventory(instance, carried.getContents(), null, InventoryChange.Cause.FARMED, null);
         if (worked && entity != null)
             entity.swingMainHand();
+        return worked;
     }
 
     private void addHarvestDrop(Inventory carried, Location fallback, ItemStack drop) {
@@ -2385,7 +2394,8 @@ public final class NpcBehaviourService implements Listener {
             if (definition == null || !definition.isLookAtPlayer())
                 continue;
             // An NPC talking with other NPCs looks at them instead of the player.
-            LivingEntity partner = conversationService == null ? null
+            LivingEntity partner = conversationService == null
+                    ? null
                     : conversationService.gazeTarget(instance).flatMap(instances::findEntity).orElse(null);
             if (partner != null)
                 instances.lookAt(instance, partner.getEyeLocation());
