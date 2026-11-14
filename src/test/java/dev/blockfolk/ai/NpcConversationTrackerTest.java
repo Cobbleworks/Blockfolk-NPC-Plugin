@@ -51,6 +51,21 @@ class NpcConversationTrackerTest {
     }
 
     @Test
+    void playerInterruptLetsTheReplyToThePlayerStartAFreshConversation() {
+        NpcConversationTracker tracker = tracker(6);
+        long now = 1_000L;
+        tracker.claimReply(COWBOY, List.of(BANDIT), now);
+        tracker.interrupt(COWBOY, now + 1);
+
+        assertTrue(tracker.onCooldown(COWBOY, BANDIT, now + 2));
+        assertTrue(tracker.claimReply(COWBOY, List.of(BANDIT), now + 2).isEmpty());
+        NpcConversationTracker.Claim claim = tracker.claimReply(COWBOY, List.of(BANDIT), now + 2, true)
+                .orElseThrow();
+        assertEquals(1, claim.reply());
+        assertEquals(List.of(BANDIT), claim.listeners());
+    }
+
+    @Test
     void speakerNeverRespondsToItself() {
         NpcConversationTracker tracker = tracker(6);
 

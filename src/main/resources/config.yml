@@ -35,7 +35,7 @@ ai-control:
   invocation-cooldown-seconds: 2
   # Recent conversation lines supplied to the model per NPC conversation. Set to 0 to disable history.
   conversation-history-limit: 20
-  # NPC-to-NPC conversations. NPCs with "Respond to NPCs" enabled answer what nearby NPCs say,
+  # NPC-to-NPC conversations. NPCs with "Respond to NPCs" enabled answer what nearby NPCs say (also an NPC's reply to a player),
   # including scripted Send Dialog lines. Holo Dialog (flavour text) is ignored.
   npc-conversations:
     # Response rounds one conversation may trigger before it ends. Set to 0 to turn NPC replies off.

@@ -48,6 +48,15 @@ public final class NpcConversationTracker {
      *         trigger replies (cap reached, everyone busy or on cooldown)
      */
     public Optional<Claim> claimReply(UUID speaker, Collection<UUID> listeners, long now) {
+        return claimReply(speaker, listeners, now, false);
+    }
+
+    /**
+     * Like {@link #claimReply(UUID, Collection, long)}. With
+     * {@code playerPrompted}, the line answered a player, so the pair cooldown
+     * does not apply: the player started this exchange, not the NPCs.
+     */
+    public Optional<Claim> claimReply(UUID speaker, Collection<UUID> listeners, long now, boolean playerPrompted) {
         expire(now);
         if (!settings.enabled()) {
             return Optional.empty();
@@ -64,7 +73,8 @@ public final class NpcConversationTracker {
         Exchange current = exchange;
         List<UUID> eligible = listeners.stream().filter(listener -> !listener.equals(speaker))
                 .filter(listener -> current != null && current.participants.contains(listener)
-                        || !exchangesByNpc.containsKey(listener) && !onCooldown(speaker, listener, now))
+                        || !exchangesByNpc.containsKey(listener)
+                                && (playerPrompted || !onCooldown(speaker, listener, now)))
                 .distinct().toList();
         if (eligible.isEmpty()) {
             return Optional.empty();

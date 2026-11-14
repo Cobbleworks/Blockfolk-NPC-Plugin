@@ -207,7 +207,7 @@ public final class NpcBehaviourService implements Listener {
         this.conversationService = conversationService;
         if (conversationService != null) {
             conversationService.setDecisionHandler((instance, result) -> definitions.find(instance.getDefinitionKey())
-                    .ifPresent(definition -> applyAiDecision(null, result, instance, definition, null, false)));
+                    .ifPresent(definition -> applyAiDecision(null, result, instance, definition, null, false, null)));
         }
     }
 
@@ -699,10 +699,10 @@ public final class NpcBehaviourService implements Listener {
         if (aiControlService != null && !aiGroup.isEmpty()) {
             if (conversationService != null)
                 conversationService.interrupt(aiGroup);
-            aiControlService.invokeChatGroup(message, aiGroup, player,
+            aiControlService.invokeChat(message, aiGroup, player,
                     (instance, result) -> definitions.find(instance.getDefinitionKey())
                             .ifPresent(definition -> applyAiDecision(BehaviourEvent.PLAYER_CHAT, result, instance,
-                                    definition, player, false)));
+                                    definition, player, false, message)));
         }
     }
 
@@ -928,8 +928,12 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
+    /**
+     * @param chatMessage
+     *            the player's message for a chat reply, otherwise null
+     */
     private void applyAiDecision(BehaviourEvent event, AiDecisionResult result, NpcInstance instance,
-            NpcDefinition definition, Entity actor, boolean rememberOwnSpeech) {
+            NpcDefinition definition, Entity actor, boolean rememberOwnSpeech, String chatMessage) {
         for (AiDecision.Action action : result.decision().actions()) {
             Entity target = resolveAiTarget(action.target(), result.targets());
             switch (action.type()) {
@@ -942,8 +946,11 @@ public final class NpcBehaviourService implements Listener {
                             // No player conversation holds this line, so keep it as an event.
                             aiControlService.noteAction(instance, "You said: \"" + action.text() + "\"");
                     }
-                    // Replies in a player's chat are coordinated by the chat group itself.
-                    if (event != BehaviourEvent.PLAYER_CHAT)
+                    // Nearby NPCs hear it too and may chime in, also on a reply to a player.
+                    if (event == BehaviourEvent.PLAYER_CHAT && conversationService != null)
+                        conversationService.npcAnsweredPlayer(instance, definition, action.text(),
+                                actor instanceof Player player ? player : null, chatMessage);
+                    else
                         npcSpoke(instance, definition, action.text());
                 }
                 case PLAY_ANIMATION -> playAiAnimation(instance, action.animation());
@@ -1058,7 +1065,7 @@ public final class NpcBehaviourService implements Listener {
             NpcDefinition definition, Entity actor) {
         if (aiControlService != null)
             aiControlService.invoke(event, eventDetail, guidance, instance, definition, actor,
-                    result -> applyAiDecision(event, result, instance, definition, actor, true));
+                    result -> applyAiDecision(event, result, instance, definition, actor, true, null));
     }
 
     /**
@@ -2362,7 +2369,13 @@ public final class NpcBehaviourService implements Listener {
             NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
             if (definition == null || !definition.isLookAtPlayer())
                 continue;
-            nearestPlayer(instance).ifPresent(player -> instances.lookAt(instance, player.getEyeLocation()));
+            // An NPC talking with other NPCs looks at them instead of the player.
+            LivingEntity partner = conversationService == null ? null
+                    : conversationService.gazeTarget(instance).flatMap(instances::findEntity).orElse(null);
+            if (partner != null)
+                instances.lookAt(instance, partner.getEyeLocation());
+            else
+                nearestPlayer(instance).ifPresent(player -> instances.lookAt(instance, player.getEyeLocation()));
         }
     }
 

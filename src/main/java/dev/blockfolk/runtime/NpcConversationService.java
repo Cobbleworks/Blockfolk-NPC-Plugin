@@ -32,22 +32,26 @@ import dev.blockfolk.repository.NpcDefinitionRepository;
  * Lets AI NPCs with "Respond to NPCs" enabled answer what nearby NPCs say.
  *
  * <p>
- * Every NPC chat line (AI speech and Send Dialog) is offered here. Holo Dialog
+ * Every NPC chat line (AI speech and Send Dialog) is offered here, including
+ * an NPC's reply to a player's chat, so nearby NPCs can chime in. Holo Dialog
  * is not: it is often repeating flavour text. Listeners in hearing range
  * respond together in one coordinated AI request after a short delay, so lines
  * spoken at the same time get one answer. The {@link NpcConversationTracker}
  * caps how many response rounds one conversation gets, and nothing happens
- * without a player nearby.
+ * without a player nearby. NPCs in a conversation look at whoever spoke last.
  */
 public final class NpcConversationService {
 
     private static final double ENCOUNTER_RANGE = 8.0;
+    /** How long an NPC keeps looking at the last NPC that spoke to it. */
+    private static final long GAZE_MILLIS = 10_000L;
 
     private final Plugin plugin;
     private final NpcDefinitionRepository definitions;
     private final NpcInstanceRegistry instances;
     private final NpcConversationTracker tracker;
     private final Map<UUID, PendingRound> pendingRounds = new HashMap<>();
+    private final Map<UUID, Gaze> gazes = new HashMap<>();
     private AiControlService aiControlService;
     private BiConsumer<NpcInstance, AiDecisionResult> decisionHandler = (instance, result) -> {
     };
@@ -82,6 +86,21 @@ public final class NpcConversationService {
      * Offers a visible NPC line to nearby NPCs. Main thread only.
      */
     public void npcSpoke(NpcInstance speaker, NpcDefinition definition, String text) {
+        spoke(speaker, definition, text, null);
+    }
+
+    /**
+     * Offers an NPC's reply to a player's chat to nearby NPCs, so they can chime
+     * in. The player's message is shared with them as part of the conversation.
+     * Main thread only.
+     */
+    public void npcAnsweredPlayer(NpcInstance speaker, NpcDefinition definition, String text, Player player,
+            String message) {
+        String playerName = player == null ? "A player" : player.getName();
+        spoke(speaker, definition, text, message == null ? null : Line.player(playerName, stripFormatting(message)));
+    }
+
+    private void spoke(NpcInstance speaker, NpcDefinition definition, String text, Line answered) {
         if (aiControlService == null || !aiControlService.configured() || !settings().enabled() || text == null) {
             return;
         }
@@ -96,6 +115,9 @@ public final class NpcConversationService {
         long now = System.currentTimeMillis();
         cancelEnded(tracker.expire(now));
         String line = NpcResponseIds.plainName(definition.getDisplayName()) + ": " + spoken;
+        List<String> memoryLines = answered == null ? List.of(line)
+                : List.of(answered.playerName() + " (player): " + answered.text(), line);
+        Line spokenLine = Line.npc(speaker.getId(), spoken);
         List<NpcInstance> hearers = hearers(speaker, origin);
         Optional<UUID> existing = tracker.conversationOf(speaker.getId(), now);
         Set<UUID> existingParticipants = existing.map(tracker::participants).orElse(Set.of());
@@ -103,23 +125,33 @@ public final class NpcConversationService {
         PendingRound pending = existing.map(pendingRounds::get).orElse(null);
         if (pending != null) {
             // Lines spoken before the pending round starts are answered together.
-            pending.lines.add(new Line(speaker.getId(), spoken));
+            if (answered != null) {
+                pending.lines.add(answered);
+            }
+            pending.lines.add(spokenLine);
             hearers.stream().filter(this::respondsToNpc).map(NpcInstance::getId).filter(existingParticipants::contains)
                     .forEach(pending.listeners::add);
-            remember(pending.key, speaker, hearers, existingParticipants, line);
+            remember(pending.key, speaker, hearers, existingParticipants, memoryLines);
+            look(speaker, hearers, existingParticipants, spoken, answered != null, now);
             return;
         }
 
         List<UUID> listeners = hearers.stream().filter(this::respondsToNpc).map(NpcInstance::getId).toList();
-        Optional<NpcConversationTracker.Claim> claim = tracker.claimReply(speaker.getId(), listeners, now);
+        Optional<NpcConversationTracker.Claim> claim = tracker.claimReply(speaker.getId(), listeners, now,
+                answered != null);
         if (claim.isEmpty()) {
             // The reply budget is used up, but the closing line still belongs to
             // the conversation.
-            existing.ifPresent(key -> remember(key, speaker, hearers, existingParticipants, line));
+            existing.ifPresent(key -> {
+                remember(key, speaker, hearers, existingParticipants, memoryLines);
+                look(speaker, hearers, existingParticipants, spoken, answered != null, now);
+            });
             return;
         }
         NpcConversationTracker.Claim round = claim.get();
-        remember(round.conversationKey(), speaker, hearers, tracker.participants(round.conversationKey()), line);
+        Set<UUID> participants = tracker.participants(round.conversationKey());
+        remember(round.conversationKey(), speaker, hearers, participants, memoryLines);
+        look(speaker, hearers, participants, spoken, answered != null, now);
         // A newcomer joining a conversation whose round is still pending merges
         // into that round instead of replacing it.
         PendingRound next = pendingRounds.get(round.conversationKey());
@@ -131,8 +163,33 @@ public final class NpcConversationService {
             next = created;
         }
         next.reply = round.reply();
-        next.lines.add(new Line(speaker.getId(), spoken));
+        if (answered != null) {
+            next.lines.add(answered);
+        }
+        next.lines.add(spokenLine);
         next.listeners.addAll(round.listeners());
+    }
+
+    /**
+     * The NPC this one should look at because it is talking with it, if any.
+     * Expires a few seconds after the last line.
+     */
+    public Optional<NpcInstance> gazeTarget(NpcInstance instance) {
+        Gaze gaze = gazes.get(instance.getId());
+        if (gaze == null) {
+            return Optional.empty();
+        }
+        if (gaze.until() <= System.currentTimeMillis()) {
+            gazes.remove(instance.getId());
+            return Optional.empty();
+        }
+        Location location = instances.currentLocation(instance);
+        double range = settings().hearingRange();
+        return instances.findById(gaze.target()).filter(target -> {
+            Location targetLocation = instances.currentLocation(target);
+            return targetLocation.getWorld() == location.getWorld()
+                    && targetLocation.distanceSquared(location) <= range * range;
+        });
     }
 
     /**
@@ -167,12 +224,15 @@ public final class NpcConversationService {
         long now = System.currentTimeMillis();
         for (NpcInstance npc : npcs) {
             tracker.interrupt(npc.getId(), now).ifPresent(this::cancelRound);
+            gazes.remove(npc.getId());
         }
     }
 
     public void forget(NpcInstance instance) {
         tracker.forget(instance.getId(), System.currentTimeMillis()).ifPresent(this::cancelRound);
         pendingRounds.values().forEach(round -> round.listeners.remove(instance.getId()));
+        gazes.remove(instance.getId());
+        gazes.values().removeIf(gaze -> gaze.target().equals(instance.getId()));
     }
 
     public void stop() {
@@ -182,6 +242,7 @@ public final class NpcConversationService {
             }
         });
         pendingRounds.clear();
+        gazes.clear();
     }
 
     private void startRound(PendingRound round) {
@@ -193,6 +254,8 @@ public final class NpcConversationService {
         if (tracker.participants(round.key).isEmpty()) {
             return;
         }
+        // The last line is always an NPC's: a player's line is only added right
+        // before the NPC reply that answered it.
         Line last = round.lines.getLast();
         NpcInstance lastSpeaker = instances.findById(last.speaker()).orElse(null);
         if (lastSpeaker == null) {
@@ -202,10 +265,10 @@ public final class NpcConversationService {
         if (origin.getWorld() == null || !playerNearby(origin)) {
             return;
         }
-        List<Location> speakerLocations = round.lines.stream().map(Line::speaker).distinct().map(instances::findById)
+        List<UUID> lineSpeakers = round.lines.stream().filter(Line::byNpc).map(Line::speaker).toList();
+        List<Location> speakerLocations = lineSpeakers.stream().distinct().map(instances::findById)
                 .flatMap(Optional::stream).map(instances::currentLocation).toList();
         double range = settings().hearingRange();
-        List<UUID> lineSpeakers = round.lines.stream().map(Line::speaker).toList();
         List<NpcInstance> candidates = round.listeners.stream().map(instances::findById).flatMap(Optional::stream)
                 .filter(candidate -> heardOthers(candidate.getId(), lineSpeakers)).filter(this::respondsToNpc)
                 .filter(candidate -> {
@@ -231,9 +294,14 @@ public final class NpcConversationService {
     }
 
     private String describe(PendingRound round) {
-        StringBuilder detail = new StringBuilder("Nearby NPCs are talking. New lines:\n");
+        boolean playerInvolved = round.lines.stream().anyMatch(line -> !line.byNpc());
+        StringBuilder detail = new StringBuilder(playerInvolved
+                ? "A player is talking with a nearby NPC. New lines:\n"
+                : "Nearby NPCs are talking. New lines:\n");
         for (Line line : round.lines) {
-            String name = instances.findById(line.speaker()).map(this::displayName).orElse("An NPC");
+            String name = line.byNpc()
+                    ? instances.findById(line.speaker()).map(this::displayName).orElse("An NPC")
+                    : "Player " + line.playerName();
             detail.append("- ").append(name).append(": \"").append(line.text()).append("\"\n");
         }
         detail.append("This is reply ").append(round.reply).append(" of ").append(round.maxReplies)
@@ -245,11 +313,30 @@ public final class NpcConversationService {
     }
 
     private void remember(UUID key, NpcInstance speaker, List<NpcInstance> hearers, Set<UUID> participants,
-            String line) {
+            List<String> lines) {
         List<NpcInstance> audience = new ArrayList<>();
         audience.add(speaker);
         hearers.stream().filter(hearer -> participants.contains(hearer.getId())).forEach(audience::add);
-        aiControlService.rememberNpcConversationLine(key, audience, line);
+        lines.forEach(line -> aiControlService.rememberNpcConversationLine(key, audience, line));
+    }
+
+    /**
+     * Turns the conversation's listeners towards the speaker. The speaker looks at
+     * the NPC its line names, otherwise the closest listener, unless it was
+     * answering a player: then it keeps facing the player.
+     */
+    private void look(NpcInstance speaker, List<NpcInstance> hearers, Set<UUID> participants, String spoken,
+            boolean answeringPlayer, long now) {
+        List<NpcInstance> listening = hearers.stream().filter(hearer -> participants.contains(hearer.getId()))
+                .toList();
+        long until = now + GAZE_MILLIS;
+        listening.forEach(hearer -> gazes.put(hearer.getId(), new Gaze(speaker.getId(), until)));
+        if (answeringPlayer || listening.isEmpty()) {
+            gazes.remove(speaker.getId());
+            return;
+        }
+        int addressee = ChatAddressee.select(spoken, listening.stream().map(this::displayName).toList());
+        gazes.put(speaker.getId(), new Gaze(listening.get(Math.max(0, addressee)).getId(), until));
     }
 
     private List<NpcInstance> hearers(NpcInstance speaker, Location origin) {
@@ -301,7 +388,22 @@ public final class NpcConversationService {
         return text.replaceAll("(?i)§[0-9a-fk-orx]", "").trim();
     }
 
-    private record Line(UUID speaker, String text) {
+    /** A line in a round: spoken by an NPC, or the player message an NPC answered. */
+    private record Line(UUID speaker, String playerName, String text) {
+        static Line npc(UUID speaker, String text) {
+            return new Line(speaker, null, text);
+        }
+
+        static Line player(String playerName, String text) {
+            return new Line(null, playerName, text);
+        }
+
+        boolean byNpc() {
+            return speaker != null;
+        }
+    }
+
+    private record Gaze(UUID target, long until) {
     }
 
     private static final class PendingRound {

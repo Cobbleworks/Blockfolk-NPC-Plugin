@@ -72,7 +72,7 @@ public final class AiControlService {
      * Velocity (blocks per tick, squared) above which a vehicle counts as moving.
      */
     private static final double MOVING_VEHICLE_SPEED_SQUARED = 0.01 * 0.01;
-    private static final int MAX_CHAT_GROUP_SIZE = 5;
+    private static final int MAX_CONVERSATION_GROUP_SIZE = 5;
     private static final int MAX_PENDING_INTERACTIONS = 8;
     private static final int MAX_ACTION_ROUNDS = 3;
     private static final int MAX_ACTIONS_PER_TURN = 8;
@@ -103,17 +103,17 @@ public final class AiControlService {
             You are the mind of one Minecraft NPC. React naturally to the event that invoked you; when a nearby
             player speaks, answer with say.
             """ + CORE_RULES;
-    private static final String GROUP_RESULT_RULES = """
-            You handle one player's chat message for the listed Minecraft NPCs.
-            Every function call needs the npc argument: the Response ID of the NPC performing it. Response IDs
-            identify NPCs in this conversation; display names are what players see.
-            The first participant is the intended speaker (named by the player, or the closest one). It should
-            answer unless silence clearly suits its character; then call do_nothing for it. Other NPCs join only
-            when it feels natural and may have no calls at all. Each NPC's targets come from its own context.
+    private static final String CHAT_RESULT_RULES = """
+            You handle one player's chat message for the listed Minecraft NPC.
+            Every function call needs the npc argument: the NPC's Response ID. Response IDs identify NPCs in this
+            conversation; display names are what players see.
+            The NPC should answer unless silence clearly suits its character; then call do_nothing. Its targets
+            come from its own context.
             """ + CORE_RULES;
     private static final String NPC_GROUP_RESULT_RULES = """
             You handle a conversation between Minecraft NPCs: another NPC just spoke near the listed NPCs, and
-            players may be watching.
+            players may be watching. When that NPC was answering a player, the listed NPCs may chime in on what
+            the player said too, and may address the player.
             Every function call needs the npc argument: the Response ID of the NPC performing it. Response IDs
             identify NPCs in this conversation; display names are what players see.
             The first participant is the intended responder (named in the latest line, or the closest one). It
@@ -504,9 +504,14 @@ public final class AiControlService {
     }
 
     /**
-     * Queues a chat turn with its intended speaker fixed when the message arrives.
+     * Queues a chat turn for the one NPC the player addresses: the NPC named in
+     * the message, otherwise the closest candidate. Other NPCs nearby join in by
+     * answering its reply through an NPC conversation.
+     *
+     * @param candidates
+     *            NPCs that respond to this player's chat, closest first
      */
-    public void invokeChatGroup(String message, List<NpcInstance> candidates, Player player,
+    public void invokeChat(String message, List<NpcInstance> candidates, Player player,
             BiConsumer<NpcInstance, AiDecisionResult> resultHandler) {
         List<GroupParticipant> eligibleParticipants = candidates.stream()
                 .map(instance -> definitions.find(instance.getDefinitionKey()).map(
@@ -525,16 +530,16 @@ public final class AiControlService {
             return;
         }
 
-        eligibleParticipants.stream().filter(participant -> participant.settings().memoryEnabled())
-                .forEach(participant -> scheduleIdleDream(participant.instance(), player.getUniqueId(),
-                        participant.settings().sharedConversation(), DREAM_IDLE_TICKS));
-
         int addressee = ChatAddressee.select(message,
                 eligibleParticipants.stream().map(participant -> participant.definition().getDisplayName()).toList());
+        GroupParticipant speaker = eligibleParticipants.get(addressee);
+        if (speaker.settings().memoryEnabled()) {
+            scheduleIdleDream(speaker.instance(), player.getUniqueId(), speaker.settings().sharedConversation(),
+                    DREAM_IDLE_TICKS);
+        }
         GroupSource source = GroupSource.player(player, message);
-        enqueueGroup(new PendingGroupInvocation(source, List.copyOf(candidates), resultHandler,
-                eligibleParticipants.get(addressee).instance().getId(), System.currentTimeMillis(),
-                ++nextChatTurnSequence));
+        enqueueGroup(new PendingGroupInvocation(source, List.of(speaker.instance()), resultHandler,
+                speaker.instance().getId(), System.currentTimeMillis(), ++nextChatTurnSequence));
     }
 
     /**
@@ -663,7 +668,7 @@ public final class AiControlService {
         List<GroupParticipant> participants = new ArrayList<>();
         participants.add(primary);
         for (GroupParticipant participant : eligibleParticipants) {
-            if (participants.size() >= MAX_CHAT_GROUP_SIZE) {
+            if (participants.size() >= MAX_CONVERSATION_GROUP_SIZE) {
                 break;
             }
             if (participant == primary) {
@@ -692,7 +697,7 @@ public final class AiControlService {
         Map<UUID, Long> requestGenerations = new HashMap<>();
         Map<UUID, AiTargetSnapshot> targetsByInstance = new HashMap<>();
         StringBuilder system = new StringBuilder(
-                source.npcConversation() ? NPC_GROUP_RESULT_RULES : GROUP_RESULT_RULES);
+                source.npcConversation() ? NPC_GROUP_RESULT_RULES : CHAT_RESULT_RULES);
         List<String> responseIds = NpcResponseIds
                 .forNames(participants.stream().map(participant -> participant.definition().getDisplayName()).toList());
         String primaryResponseId = responseIds.getFirst();
@@ -811,9 +816,7 @@ public final class AiControlService {
         if (source.npcConversation()) {
             return participants == 1 ? "\n\nNPC responding:\n" : "\n\nNearby NPC group (intended responder first):\n";
         }
-        return participants == 1
-                ? "\n\nNPC responding to the player:\n"
-                : "\n\nNearby NPC group (intended speaker first):\n";
+        return "\n\nNPC responding to the player:\n";
     }
 
     private void logRequestFailure(String requestDescription, Throwable error) {

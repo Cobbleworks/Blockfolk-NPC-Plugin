@@ -50,21 +50,21 @@ Add **AI Trigger** to any standard event, custom event, waypoint, or question br
 to guide the AI for that specific trigger. Leave it empty to use the surrounding event as the request reason without
 extra guidance.
 
-Enable **Respond to Nearby Chat** for direct player conversation within eight blocks. One chat message creates a coordinated request for up to five eligible NPCs. A named NPC is the intended speaker; otherwise the closest NPC is. If that NPC is busy, the turn waits for it rather than moving to another speaker.
+Enable **Respond to Nearby Chat** for direct player conversation within eight blocks. One NPC answers each chat message: the NPC named in it, otherwise the closest one. If that NPC is busy, the turn waits for it rather than moving to another speaker. Other NPCs nearby with **Respond to Nearby NPCs** hear the reply and can chime in, which starts a conversation between NPCs (see below).
 
 ### Conversations between NPCs
 
-Enable **Respond to Nearby NPCs** to let an NPC answer what other NPCs say within 12 blocks. AI speech and **Send Dialog** lines count, so a scripted line can start an AI conversation. **Show Holo Dialog** lines are ignored, so repeating flavour text above an NPC never starts or interrupts a conversation. Lines spoken as part of a player's chat turn do not, because that chat turn already lets nearby NPCs join in.
+Enable **Respond to Nearby NPCs** to let an NPC answer what other NPCs say within 12 blocks. AI speech and **Send Dialog** lines count, so a scripted line can start an AI conversation. **Show Holo Dialog** lines are ignored, so repeating flavour text above an NPC never starts or interrupts a conversation. An NPC's reply to a player counts too: listeners also see what the player said, so they can chime in on it or answer the player.
 
-For example, give a cowboy an **On Nearby NPC** row with an AI Trigger ("Confront bandits; greet everyone else") and enable **Respond to Nearby NPCs** on the bandit. When the bandit walks up, the cowboy speaks first and the bandit answers. Enable the switch on both NPCs for a back-and-forth. Several NPCs in range respond together as a group, in one coordinated request like nearby chat. The NPC named in the latest line is the intended responder, otherwise the closest one. Responding NPCs can use any of their enabled capabilities, so two NPCs can talk about a lever and then pull it with **Interact**.
+For example, give a cowboy an **On Nearby NPC** row with an AI Trigger ("Confront bandits; greet everyone else") and enable **Respond to Nearby NPCs** on the bandit. When the bandit walks up, the cowboy speaks first and the bandit answers. Enable the switch on both NPCs for a back-and-forth. Several NPCs in range respond together as a group, in one coordinated request. The NPC named in the latest line is the intended responder, otherwise the closest one. NPCs in a conversation turn their heads to whoever is speaking, and back to the nearest player about 10 seconds after the last line. NPCs with **Look at Player** off keep their facing. Responding NPCs can use any of their enabled capabilities, so two NPCs can talk about a lever and then pull it with **Interact**.
 
 Conversations between NPCs are limited so they cannot loop:
 
 - **Reply cap:** each conversation allows `max-replies` response rounds, 6 by default. The model is told how many remain and closes the conversation on the last one.
 - **Time limit:** a conversation ends after `max-duration-seconds`, or after 30 seconds without a new line.
-- **Cooldown:** when a conversation ends, its NPCs wait `cooldown-seconds` before talking to each other again.
+- **Cooldown:** when a conversation ends, its NPCs wait `cooldown-seconds` before talking to each other again. A reply to a player is exempt, so NPCs can chime in on every chat message.
 - **Player nearby:** NPCs only talk to each other while a player is within `player-range` blocks.
-- **Player interrupts:** when a player chats with an NPC, its NPC conversation ends and the NPC answers the player.
+- **Player interrupts:** when a player chats with an NPC, its NPC conversation ends and the NPC answers the player. Its reply can start a new conversation with a fresh reply cap.
 
 ```yaml
 ai-control:
@@ -81,7 +81,7 @@ Set `max-replies` to `0` to turn NPC replies off server-wide. Each NPC in the co
 
 ### NPC names and aliases
 
-Group requests use readable Response IDs such as `npc_mr_mario` to route function calls to the right NPC. If multiple participating NPCs have the same normalized name, their IDs become `npc_mr_mario_01`, `npc_mr_mario_02`, and so on for that request. The display name appears beside the ID in both the system context and participant heading. The player's exact chat message is included, so a message such as “Mr. Mario, how is your day?” selects **Mr. Mario** as the intended speaker.
+Requests use readable Response IDs such as `npc_mr_mario` to route function calls to the right NPC. If multiple participating NPCs have the same normalized name, their IDs become `npc_mr_mario_01`, `npc_mr_mario_02`, and so on for that request. The display name appears beside the ID in both the system context and participant heading. The player's exact chat message is included, so a message such as “Mr. Mario, how is your day?” selects **Mr. Mario** as the intended speaker.
 
 If a group response omits the intended speaker, Blockfolk asks that NPC separately and keeps valid actions from the other NPCs. A silent intended speaker can use **Do Nothing**.
 
