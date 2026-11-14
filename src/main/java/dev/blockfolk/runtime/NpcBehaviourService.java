@@ -258,6 +258,10 @@ public final class NpcBehaviourService implements Listener {
         };
         executeSequence(event, definition.getBehaviourActions(event), 0, instance, definition, actor, eventDetail,
                 completion);
+        // Recorded after the routine starts, so an AI Trigger it runs right away
+        // sees this event as its trigger rather than also as a memory.
+        if (aiControlService != null)
+            aiControlService.recordEvent(event, instance, definition, actor, eventDetail);
     }
 
     /**
@@ -330,7 +334,7 @@ public final class NpcBehaviourService implements Listener {
     private static String containerName(Location location) {
         return location == null || location.getWorld() == null
                 ? null
-                : "a " + readableItem(new ItemStack(location.getBlock().getType()));
+                : EntityNames.withArticle(location.getBlock().getType().name());
     }
 
     public void triggerWaypointActions(List<BehaviourAction> actions, NpcInstance instance) {
@@ -932,8 +936,11 @@ public final class NpcBehaviourService implements Listener {
                 case SAY -> {
                     sendDialog(event, instance, definition, action.text(), actor);
                     if (rememberOwnSpeech) {
-                        aiControlService.rememberNpcSpeech(instance, definition,
-                                actor instanceof Player player ? player : null, action.text());
+                        if (actor instanceof Player player)
+                            aiControlService.rememberNpcSpeech(instance, definition, player, action.text());
+                        else
+                            // No player conversation holds this line, so keep it as an event.
+                            aiControlService.noteAction(instance, "You said: \"" + action.text() + "\"");
                     }
                     // Replies in a player's chat are coordinated by the chat group itself.
                     if (event != BehaviourEvent.PLAYER_CHAT)
@@ -945,12 +952,16 @@ public final class NpcBehaviourService implements Listener {
                         Entity selected = action.target() == null
                                 ? resolveAiTarget("nearest_attackable", result.targets())
                                 : target;
-                        if (!combatService.startDirectedCombat(instance, selected)) {
+                        if (combatService.startDirectedCombat(instance, selected)) {
+                            aiControlService.noteAction(instance, "You attacked " + nameOf(selected) + ".");
+                        } else {
+                            String requested = action.target() == null ? "nearest_attackable" : action.target();
                             plugin.getLogger().warning("AI START_COMBAT for " + definition.getKey()
-                                    + " could not engage "
-                                    + (action.target() == null ? "nearest_attackable" : action.target())
+                                    + " could not engage " + requested
                                     + ". The target must still be a living, attackable entity, and the NPC must have "
                                     + "maximum health above zero.");
+                            aiControlService.noteOutcome(instance, "start_combat " + requested
+                                    + " failed: that target is gone or cannot be attacked.");
                         }
                     }
                 }
@@ -962,17 +973,23 @@ public final class NpcBehaviourService implements Listener {
                     if (target == null)
                         aiControlService.noteOutcome(instance,
                                 "flee_from " + action.target() + " failed: that entity is no longer present.");
-                    fleeFrom(instance, target);
+                    else if (fleeFrom(instance, target))
+                        aiControlService.noteAction(instance, "You ran away from " + nameOf(target) + ".");
                 }
                 case FOLLOW -> {
                     if (target instanceof Player player) {
                         leaveVehicleToWalk(instance);
                         startFollowing(instance, player);
+                        aiControlService.noteAction(instance, "You started following " + nameOf(player) + ".");
                     } else
                         aiControlService.noteOutcome(instance,
                                 "follow " + action.target() + " failed: only players can be followed.");
                 }
-                case UNFOLLOW -> stopFollowing(instance);
+                case UNFOLLOW -> {
+                    if (following.containsKey(instance.getId()))
+                        aiControlService.noteAction(instance, "You stopped following.");
+                    stopFollowing(instance);
+                }
                 case INTERACT -> startAiInteraction(instance, action.target(), result.targets());
                 case MOVE_TO ->
                     resolveAiMoveTarget(action.target(), result.targets()).ifPresentOrElse(targetLocation -> {
@@ -982,33 +999,54 @@ public final class NpcBehaviourService implements Listener {
                         aiMoveTargets.put(instance.getId(), targetLocation);
                         instances.stand(instance);
                         instances.stopNavigating(instance);
+                        aiControlService.noteAction(instance,
+                                "You set off towards " + moveTargetName(action.target(), result.targets()) + ".");
                     }, () -> aiControlService.noteOutcome(instance,
                             "move_to " + action.target() + " failed: that target is no longer present."));
-                case MINE_BLOCKS -> mineNearbyBlocks(instance, action.target(), true, definition.isItemPickup());
+                case MINE_BLOCKS -> {
+                    String mining = action.target() == null ? "blocks" : action.target().replace('_', ' ');
+                    int mined = mineNearbyBlocks(instance, action.target(), true, definition.isItemPickup());
+                    if (mined == 0)
+                        aiControlService.noteOutcome(instance, "mine_blocks " + mining
+                                + " failed: nothing matching was in reach"
+                                + (definition.isItemPickup() ? " or the drops did not fit your inventory." : "."));
+                    else if (!definition.isItemPickup())
+                        // With item pickup, the collected drops are recorded as received items.
+                        aiControlService.noteAction(instance, "You mined " + mined + " " + mining + ".");
+                }
                 case RETURN_HOME -> {
                     leaveVehicleToWalk(instance);
                     stopFollowing(instance);
                     moveTargets.put(instance.getId(), instance.getSpawnLocation());
                     instances.stopNavigating(instance);
+                    aiControlService.noteAction(instance, "You headed back home.");
                 }
                 case START_ROUTE -> {
                     leaveVehicleToWalk(instance);
                     routePaused.remove(instance.getId());
                     instances.stopNavigating(instance);
+                    aiControlService.noteAction(instance, "You started walking your route.");
                 }
                 case PAUSE_ROUTE -> {
                     routePaused.add(instance.getId());
                     instances.stopNavigating(instance);
+                    aiControlService.noteAction(instance, "You paused your route.");
                 }
                 case REMEMBER_FACT -> aiControlService.rememberFact(definition, action.text());
-                case REMEMBER_LOCATION ->
+                case REMEMBER_LOCATION -> {
                     aiControlService.rememberLocation(instance, definition, action.locationName());
+                    if (action.locationName() != null && !action.locationName().isBlank())
+                        aiControlService.noteAction(instance,
+                                "You memorised this spot as \"" + action.locationName().trim() + "\".");
+                }
                 case DROP_ITEM -> dropAiInventoryItem(instance, action.target());
                 case ENTER_VEHICLE -> enterAiVehicle(instance, action.target(), target);
                 case EXIT_VEHICLE -> {
                     if (vehicleService == null || !vehicleService.exit(instance))
                         aiControlService.noteOutcome(instance,
                                 "exit_vehicle failed: the NPC is not riding a minecart or boat.");
+                    else
+                        aiControlService.noteAction(instance, "You got out of your vehicle.");
                 }
                 case DO_NOTHING -> {
                 }
@@ -1037,8 +1075,12 @@ public final class NpcBehaviourService implements Listener {
             return;
         NpcVehicleService.RequestResult result = vehicleService.requestBoard(instance, vehicle);
         switch (result) {
-            case BOARDED -> stopFollowing(instance);
+            case BOARDED -> {
+                stopFollowing(instance);
+                aiControlService.noteAction(instance, "You got into " + nameOf(vehicle) + ".");
+            }
             case WALKING -> {
+                aiControlService.noteAction(instance, "You walked over to board " + nameOf(vehicle) + ".");
                 stopFollowing(instance);
                 aiInteractions.remove(instance.getId());
                 moveTargets.put(instance.getId(), vehicle.getLocation());
@@ -1115,9 +1157,9 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private void fleeFrom(NpcInstance instance, Entity target) {
+    private boolean fleeFrom(NpcInstance instance, Entity target) {
         if (target == null || target.getWorld() != instance.getLocation().getWorld())
-            return;
+            return false;
         leaveVehicleToWalk(instance);
         Location origin = instance.getLocation();
         Vector away = origin.toVector().subtract(target.getLocation().toVector()).setY(0);
@@ -1127,6 +1169,23 @@ public final class NpcBehaviourService implements Listener {
         stopFollowing(instance);
         moveTargets.put(instance.getId(), destination);
         instances.stopNavigating(instance);
+        return true;
+    }
+
+    private String nameOf(Entity entity) {
+        String name = EntityNames.describe(entity, instances, definitions);
+        return name == null ? "your target" : name;
+    }
+
+    /**
+     * Names a move target: an entity by name, anything else by the alias the model
+     * used.
+     */
+    private String moveTargetName(String alias, AiTargetSnapshot targets) {
+        Entity entity = resolveAiTarget(alias, targets);
+        if (entity != null)
+            return nameOf(entity);
+        return alias == null ? "a destination" : alias.replace('_', ' ');
     }
 
     private void tickBehaviour() {
@@ -1512,6 +1571,8 @@ public final class NpcBehaviourService implements Listener {
         if (!beginAiInteraction(instance, request)) {
             plugin.getLogger().warning("AI INTERACT for " + instance.getDefinitionKey() + " could not start for "
                     + normalizedTarget + "; no usable target was found.");
+            aiControlService.noteOutcome(instance,
+                    "interact " + normalizedTarget + " failed: no usable target was found.");
         }
     }
 
@@ -1613,6 +1674,8 @@ public final class NpcBehaviourService implements Listener {
     private void performAiInteraction(NpcInstance instance, Block block, AiInteractionKind kind) {
         if (kind == AiInteractionKind.SWITCH) {
             toggleSwitch(block);
+            if (aiControlService != null)
+                aiControlService.noteAction(instance, "You used " + containerName(block.getLocation()) + ".");
             return;
         }
         if (!(block.getState() instanceof Container container))
@@ -1771,11 +1834,12 @@ public final class NpcBehaviourService implements Listener {
         mineNearbyBlocks(instance, "mineable_blocks", false, definition.isItemPickup());
     }
 
-    private void mineNearbyBlocks(NpcInstance instance, String requestedTarget, boolean autonomousRange,
+    /** Mines matching blocks around the NPC and returns how many it mined. */
+    private int mineNearbyBlocks(NpcInstance instance, String requestedTarget, boolean autonomousRange,
             boolean collectDrops) {
         Location feet = instances.currentLocation(instance);
         if (feet.getWorld() == null)
-            return;
+            return 0;
         LivingEntity entity = instances.findEntity(instance).orElse(null);
         ItemStack tool = entity == null || entity.getEquipment() == null
                 ? null
@@ -1836,6 +1900,7 @@ public final class NpcBehaviourService implements Listener {
             if (entity != null)
                 entity.swingMainHand();
         }
+        return minedBlocks;
     }
 
     private void takeNearbyItem(NpcInstance instance, Entity actor) {

@@ -18,6 +18,8 @@ public final class AiMemoryStore {
     private static final int DREAM_HISTORY_LINES = 20;
     public static final int DEFAULT_MAX_MESSAGES = 20;
     private static final Duration EVENT_AGE = Duration.ofMinutes(5);
+    /** Events with the same merge key this close together become one entry. */
+    private static final Duration EVENT_MERGE_WINDOW = Duration.ofSeconds(30);
     private final int maxMessages;
     private final Clock clock;
     private final Map<UUID, Deque<Entry>> events = new HashMap<>();
@@ -43,10 +45,35 @@ public final class AiMemoryStore {
     }
 
     public synchronized void rememberEvent(UUID instance, String summary) {
+        rememberEvent(instance, null, summary);
+    }
+
+    /**
+     * Remembers an event. When an entry with the same non-null {@code mergeKey} is
+     * less than 30 seconds old, it is replaced by this one with a repeat count, so
+     * a burst of hits from one attacker takes a single slot.
+     */
+    public synchronized void rememberEvent(UUID instance, String mergeKey, String summary) {
         if (summary == null || summary.isBlank())
             return;
         Deque<Entry> memory = events.computeIfAbsent(instance, ignored -> new ArrayDeque<>());
-        memory.addLast(new Entry(clock.instant(), summary.trim()));
+        Instant now = clock.instant();
+        int count = 1;
+        if (mergeKey != null) {
+            Instant mergeCutoff = now.minus(EVENT_MERGE_WINDOW);
+            java.util.Iterator<Entry> entries = memory.descendingIterator();
+            while (entries.hasNext()) {
+                Entry entry = entries.next();
+                if (entry.time().isBefore(mergeCutoff))
+                    break;
+                if (mergeKey.equals(entry.mergeKey())) {
+                    count += entry.count();
+                    entries.remove();
+                    break;
+                }
+            }
+        }
+        memory.addLast(new Entry(now, mergeKey, summary.trim(), count));
         trim(memory, MAX_EVENTS);
     }
 
@@ -125,8 +152,8 @@ public final class AiMemoryStore {
         Instant cutoff = now.minus(EVENT_AGE);
         while (!memory.isEmpty() && memory.getFirst().time().isBefore(cutoff))
             memory.removeFirst();
-        return memory.stream().map(entry -> "(" + age(Duration.between(entry.time(), now)) + ") " + entry.summary())
-                .toList();
+        return memory.stream().map(entry -> "(" + age(Duration.between(entry.time(), now)) + ") " + entry.summary()
+                + (entry.count() > 1 ? " [" + entry.count() + " times; latest shown]" : "")).toList();
     }
 
     static String age(Duration elapsed) {
@@ -164,7 +191,7 @@ public final class AiMemoryStore {
             deque.removeFirst();
     }
 
-    private record Entry(Instant time, String summary) {
+    private record Entry(Instant time, String mergeKey, String summary, int count) {
     }
 
     private static ConversationKey key(UUID instance, UUID player, boolean shared) {

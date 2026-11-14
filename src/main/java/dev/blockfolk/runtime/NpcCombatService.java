@@ -544,21 +544,8 @@ public final class NpcCombatService implements Listener {
         return instanceRegistry.findById(lastHit.instanceId()).orElse(null);
     }
 
-    /** Names a combatant for AI memory: NPCs and players by name, mobs by kind. */
     private String combatantName(Entity entity) {
-        if (entity == null)
-            return null;
-        NpcInstance other = instanceRegistry.findByEntityId(entity.getEntityId()).orElse(null);
-        if (other != null) {
-            return definitionRepository.find(other.getDefinitionKey()).map(
-                    definition -> "the NPC " + dev.blockfolk.ai.NpcResponseIds.plainName(definition.getDisplayName()))
-                    .orElse("an NPC");
-        }
-        if (entity instanceof Player player)
-            return "the player " + player.getName();
-        if (entity.customName() != null)
-            return entity.getName();
-        return "a " + entity.getType().name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
+        return EntityNames.describe(entity, instanceRegistry, definitionRepository);
     }
 
     private void scheduleRespawn(NpcInstance instance) {

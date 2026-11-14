@@ -79,7 +79,14 @@ Blockfolk keeps:
 - recent conversation lines up to `ai-control.conversation-history-limit`, which defaults to `20`;
 - when memory is enabled, up to 45 long-term preset facts plus nearby Regional facts from other presets.
 
-Event summaries include the triggers that ran AI Trigger and failed actions. They also include every kill: an NPC remembers killing a mob, player, or other NPC with its weapon, a projectile, or an ability, including deaths from fire or poison within five seconds of its last hit.
+For NPCs with AI Behaviour active, event summaries include:
+
+- every standard behaviour event the NPC experiences, whether or not that event has an AI Trigger, except **On Idle**. Idle cycles, waypoint actions, and custom events are recorded when they run AI Trigger;
+- every kill: an NPC remembers killing a mob, player, or other NPC with its weapon, a projectile, or an ability, including deaths from fire or poison within five seconds of its last hit;
+- the NPC's own AI actions, such as attacking, fleeing, following, moving, returning home, starting or pausing its route, mining, using a switch, remembering a location, and getting into or out of a vehicle. Speech is kept in conversation memory instead, unless no player was involved;
+- actions that failed, with the reason.
+
+When one event repeats from the same source within 30 seconds, for example several hits from one attacker, it is kept as one entry showing the latest details and how often it happened.
 
 Enabled long-term memory reviews the recent conversation after 20 seconds without a new player chat message. Follow-up messages reset the timer; the review waits for pending chat responses to finish. Up to 20 conversation lines are available and the previous exchange overlaps the next review. The review saves only key facts about people and agreements (treatment, deals, promises, meetings, notable news), never reminders of in-progress tasks or small talk. It can save up to three Personal, Regional, or Temporal facts, and usually saves none or one. Personal and Temporal facts appear only in the source NPC preset’s context. Regional facts are anchored where they were learned and appear in AI NPC contexts within 50 blocks only when the receiving NPC has memory enabled. Temporal facts expire after 24 hours. At the 45-fact limit, saving a new fact replaces the oldest Temporal fact if one exists; otherwise, it replaces the oldest fact. Saved Regional facts produce a "spreading rumors" notice; other saved facts produce a "remembered this" notice. This review is separate from gameplay actions.
 

@@ -110,6 +110,46 @@ class AiMemoryStoreTest {
         assertEquals("1m 5s ago", AiMemoryStore.age(java.time.Duration.ofSeconds(65)));
     }
 
+    @Test
+    void repeatedEventsFromOneSourceMergeIntoTheLatest() {
+        MutableClock clock = new MutableClock();
+        AiMemoryStore memory = new AiMemoryStore(AiMemoryStore.DEFAULT_MAX_MESSAGES, clock);
+        UUID npc = UUID.randomUUID();
+
+        memory.rememberEvent(npc, "DAMAGE_TAKEN:zombie", "Took 2 damage. Health: 18.");
+        clock.advance(java.time.Duration.ofSeconds(2));
+        memory.rememberEvent(npc, null, "You attacked a zombie.");
+        clock.advance(java.time.Duration.ofSeconds(2));
+        memory.rememberEvent(npc, "DAMAGE_TAKEN:zombie", "Took 3 damage. Health: 15.");
+
+        assertEquals(List.of("(just now) You attacked a zombie.",
+                "(just now) Took 3 damage. Health: 15. [2 times; latest shown]"), memory.recentEvents(npc));
+    }
+
+    @Test
+    void eventsOutsideTheMergeWindowStaySeparate() {
+        MutableClock clock = new MutableClock();
+        AiMemoryStore memory = new AiMemoryStore(AiMemoryStore.DEFAULT_MAX_MESSAGES, clock);
+        UUID npc = UUID.randomUUID();
+
+        memory.rememberEvent(npc, "PLAYER_APPROACH:alex", "Alex approached.");
+        clock.advance(java.time.Duration.ofSeconds(31));
+        memory.rememberEvent(npc, "PLAYER_APPROACH:alex", "Alex approached.");
+
+        assertEquals(List.of("(31s ago) Alex approached.", "(just now) Alex approached."), memory.recentEvents(npc));
+    }
+
+    @Test
+    void unkeyedEventsNeverMerge() {
+        AiMemoryStore memory = new AiMemoryStore();
+        UUID npc = UUID.randomUUID();
+
+        memory.rememberEvent(npc, "You killed a zombie.");
+        memory.rememberEvent(npc, "You killed a zombie.");
+
+        assertEquals(2, memory.recentEvents(npc).size());
+    }
+
     private static final class MutableClock extends java.time.Clock {
         private java.time.Instant now = java.time.Instant.parse("2026-01-01T12:00:00Z");
 

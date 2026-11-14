@@ -273,7 +273,10 @@ public final class AiControlService {
                     error);
             return true;
         }
-        memory.rememberEvent(instance.getId(), detail);
+        // Standard events are recorded by recordEvent when they fire; only
+        // idle cycles, waypoints, and custom events reach here unrecorded.
+        if (event == null || event == BehaviourEvent.IDLE)
+            memory.rememberEvent(instance.getId(), detail);
         try {
             processingStarted.accept(instance);
         } catch (RuntimeException error) {
@@ -1036,6 +1039,33 @@ public final class AiControlService {
         memory.rememberMessage(instance.getId(), player.getUniqueId(), sharedConversation(instance),
                 player.getName() + ": " + text, definitions.find(instance.getDefinitionKey())
                         .map(definition -> definition.getAiControlSettings().memoryEnabled()).orElse(false));
+    }
+
+    /**
+     * Records a behaviour event that happened to an AI NPC, whether or not it runs
+     * an AI Trigger. Repeats of one event from the same source within a short
+     * window merge into one entry, so bursts such as combat hits do not push out
+     * everything else. Idle cycles are not recorded.
+     */
+    public void recordEvent(BehaviourEvent event, NpcInstance instance, NpcDefinition definition, Entity actor,
+            String eventDetail) {
+        if (event == null || event == BehaviourEvent.IDLE || instance == null || definition == null
+                || !definition.getAiControlSettings().enabled() || !definition.getAiControlSettings().hasContext())
+            return;
+        String source = actor == null
+                ? ""
+                : actor instanceof org.bukkit.entity.Item ? "item" : actor.getUniqueId().toString();
+        memory.rememberEvent(instance.getId(), event.name() + ":" + source, describeEvent(event, actor, eventDetail));
+    }
+
+    /**
+     * Records something the NPC did, for example "You attacked a zombie.", so its
+     * next request knows its own recent actions.
+     */
+    public void noteAction(NpcInstance instance, String action) {
+        if (instance != null && action != null && !action.isBlank()) {
+            memory.rememberEvent(instance.getId(), action);
+        }
     }
 
     /**
