@@ -1059,6 +1059,22 @@ public final class AiControlService {
     }
 
     /**
+     * Records something an AI NPC noticed around it, such as a death nearby, for
+     * its next request. Entries with the same merge key within a short window
+     * combine.
+     */
+    public void noteObservation(NpcInstance instance, String mergeKey, String summary) {
+        if (instance == null || summary == null || summary.isBlank())
+            return;
+        boolean active = definitions.find(instance.getDefinitionKey())
+                .map(definition -> definition.getAiControlSettings().enabled()
+                        && definition.getAiControlSettings().hasContext())
+                .orElse(false);
+        if (active)
+            memory.rememberEvent(instance.getId(), mergeKey, summary);
+    }
+
+    /**
      * Records something the NPC did, for example "You attacked a zombie.", so its
      * next request knows its own recent actions.
      */

@@ -78,6 +78,10 @@ public final class NpcCombatService implements Listener {
      * NPC's kill when it hit the victim this recently.
      */
     private static final int KILL_CREDIT_TICKS = 5 * 20;
+    /** NPCs notice deaths they can see within this range. */
+    private static final double WITNESS_SIGHT_RANGE_SQUARED = 16.0 * 16.0;
+    /** NPCs notice deaths this close even without line of sight. */
+    private static final double WITNESS_HEARING_RANGE_SQUARED = 8.0 * 8.0;
 
     private final Plugin plugin;
     private final NpcDefinitionRepository definitionRepository;
@@ -96,6 +100,14 @@ public final class NpcCombatService implements Listener {
     private final Map<UUID, LastNpcHit> lastNpcHits = new HashMap<>();
     private java.util.function.BiConsumer<NpcInstance, String> outcomeListener = (instance, outcome) -> {
     };
+    private ObservationListener observationListener = (instance, mergeKey, summary) -> {
+    };
+
+    /** Receives what an NPC noticed nearby; equal merge keys may be combined. */
+    @FunctionalInterface
+    public interface ObservationListener {
+        void observed(NpcInstance instance, String mergeKey, String summary);
+    }
     private NpcBehaviourService behaviourService;
     private BukkitTask task;
     private long currentTick;
@@ -280,6 +292,12 @@ public final class NpcCombatService implements Listener {
     public void changeFightOptions(NpcInstance instance, FightOptions options) {
         fightOptionsOverrides.put(instance.getId(), options);
         clearState(instance, CombatExitReason.STOPPED);
+    }
+
+    /** Receives deaths NPCs witness nearby, for their AI memory. */
+    public void setObservationListener(ObservationListener observationListener) {
+        this.observationListener = observationListener == null ? (instance, mergeKey, summary) -> {
+        } : observationListener;
     }
 
     /** Receives notable combat outcomes, such as kills, for the NPC's AI memory. */
@@ -531,8 +549,49 @@ public final class NpcCombatService implements Listener {
             else
                 state.targetDied = true;
         }
-        if (killer != null && !instanceRegistry.isNavigationEntity(victim))
+        if (instanceRegistry.isNavigationEntity(victim))
+            return;
+        if (killer != null)
             outcomeListener.accept(killer, "You killed " + combatantName(victim) + ".");
+        recordWitnesses(event, victim, killer);
+    }
+
+    /**
+     * Lets NPCs near a death remember it. Only deaths involving a player or NPC, as
+     * killer or victim, are recorded; mobs killing mobs and mobs dying to the
+     * environment are not.
+     */
+    private void recordWitnesses(EntityDeathEvent event, LivingEntity victim, NpcInstance npcKiller) {
+        Entity killerEntity = npcKiller != null
+                ? instanceRegistry.findEntity(npcKiller).orElse(null)
+                : event.getDamageSource().getCausingEntity();
+        if (killerEntity == null)
+            killerEntity = victim.getKiller();
+        boolean notableKiller = killerEntity instanceof Player
+                || (killerEntity != null && instanceRegistry.findByEntityId(killerEntity.getEntityId()).isPresent());
+        boolean notableVictim = victim instanceof Player
+                || instanceRegistry.findByEntityId(victim.getEntityId()).isPresent();
+        if (!notableKiller && !notableVictim)
+            return;
+        String summary = WitnessedDeath.describe(killerEntity == null ? null : combatantName(killerEntity),
+                combatantName(victim), event.getDamageSource().getDamageType().getKey().getKey());
+        // Repeated kills by one killer (or repeated deaths of one victim) share an
+        // entry.
+        String mergeKey = "WITNESSED_DEATH:" + (killerEntity == null ? victim : killerEntity).getUniqueId();
+        Location place = victim.getLocation();
+        for (NpcInstance observer : instanceRegistry.findActive()) {
+            if (npcKiller != null && observer.getId().equals(npcKiller.getId()))
+                continue; // Its own kill is already remembered as "You killed ...".
+            LivingEntity witness = instanceRegistry.findEntity(observer).orElse(null);
+            if (witness == null || witness.equals(victim) || witness.equals(killerEntity) || witness.isDead()
+                    || witness.getWorld() != place.getWorld())
+                continue;
+            double distanceSquared = witness.getLocation().distanceSquared(place);
+            if (distanceSquared > WITNESS_SIGHT_RANGE_SQUARED
+                    || (distanceSquared > WITNESS_HEARING_RANGE_SQUARED && !witness.hasLineOfSight(victim)))
+                continue;
+            observationListener.observed(observer, mergeKey, summary);
+        }
     }
 
     private NpcInstance killerOf(EntityDeathEvent event, LastNpcHit lastHit) {

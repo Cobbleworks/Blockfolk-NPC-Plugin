@@ -83,6 +83,7 @@ For NPCs with AI Behaviour active, event summaries include:
 
 - every standard behaviour event the NPC experiences, whether or not that event has an AI Trigger, except **On Idle**. Idle cycles, waypoint actions, and custom events are recorded when they run AI Trigger;
 - every kill: an NPC remembers killing a mob, player, or other NPC with its weapon, a projectile, or an ability, including deaths from fire or poison within five seconds of its last hit;
+- deaths it witnessed: when a player or NPC kills something, or a player or NPC dies, within 16 blocks in sight or 8 blocks out of sight, for example `The player Alex killed the NPC Bob nearby.` Mobs killing mobs and mobs dying to the environment are left out. The NPC does not react right away; it knows on its next AI request;
 - the NPC's own AI actions, such as attacking, fleeing, following, moving, returning home, starting or pausing its route, mining, using a switch, remembering a location, and getting into or out of a vehicle. Speech is kept in conversation memory instead, unless no player was involved;
 - actions that failed, with the reason.
 

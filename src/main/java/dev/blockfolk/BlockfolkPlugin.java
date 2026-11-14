@@ -167,6 +167,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         guiService.setAiControlService(aiControlService);
         combatService.setBehaviourService(behaviourService);
         combatService.setOutcomeListener(aiControlService::noteOutcome);
+        combatService.setObservationListener(aiControlService::noteObservation);
         guiService.setBehaviourService(behaviourService);
         instanceRegistry.setSpawnListener((instance, definition) -> {
             behaviourService.forget(instance);
