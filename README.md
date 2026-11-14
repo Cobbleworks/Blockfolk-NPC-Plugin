@@ -158,6 +158,7 @@ Conversation memory can be private per player or shared by everyone speaking to 
 | `/bf shops`               | Open the shared shop library                                                  |
 | `/bf routes`               | Open the route manager                                                        |
 | `/bf locations`            | Open the global-location manager                                              |
+| `/bf config chunkloaders` | List all NPC presets with Keep Chunks Loaded enabled; click an entry to open its editor |
 
 ## **Permissions**
 

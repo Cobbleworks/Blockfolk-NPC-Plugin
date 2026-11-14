@@ -38,6 +38,9 @@ import dev.blockfolk.runtime.NpcShopService;
 import dev.blockfolk.util.UiText;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 public final class BlockfolkCommand implements CommandExecutor, TabCompleter, BasicCommand {
 
@@ -109,6 +112,23 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         }
         if (!sender.hasPermission("blockfolk.admin")) {
             sender.sendMessage(UiText.error("You do not have permission to use Blockfolk."));
+            return true;
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("chunkloaders")) {
+            List<NpcDefinition> chunkloaders = definitionRepository.findAll().stream()
+                    .filter(NpcDefinition::isKeepChunksLoaded).toList();
+            if (chunkloaders.isEmpty()) {
+                sender.sendMessage(UiText.info("No NPCs have Keep Chunks Loaded enabled."));
+                return true;
+            }
+            sender.sendMessage(UiText.info("NPCs with Keep Chunks Loaded enabled: " + chunkloaders.size()));
+            for (NpcDefinition definition : chunkloaders) {
+                sender.sendMessage(Component
+                        .text("- " + definition.getDisplayName() + " (" + definition.getKey() + ")",
+                                NamedTextColor.AQUA)
+                        .hoverEvent(Component.text("Click to open the NPC menu."))
+                        .clickEvent(ClickEvent.runCommand("/bf npc " + definition.getKey() + " edit")));
+            }
             return true;
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("events") && args[1].equalsIgnoreCase("trigger")) {
@@ -252,7 +272,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return true;
         }
         player.sendMessage(UiText.info(
-                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|shop [create <name>|<shop> [rename <name>|preview]]|shops|abilities|routes|locations|config ai <model|mute-me|memory forgetnearby <radius>>]"));
+                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|shop [create <name>|<shop> [rename <name>|preview]]|shops|abilities|routes|locations|config <chunkloaders|ai <model|mute-me|memory forgetnearby <radius>>>]"));
         return true;
     }
 
@@ -557,7 +577,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
                 };
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("config"))
-            return filter(List.of("ai"), args[1]);
+            return filter(List.of("ai", "chunkloaders"), args[1]);
         if (args.length == 3 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("ai"))
             return filter(List.of("model", "mute-me", "memory"), args[2]);
         if (args.length == 4 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("ai")
