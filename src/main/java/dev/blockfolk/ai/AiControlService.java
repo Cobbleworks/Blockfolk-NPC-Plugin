@@ -305,7 +305,7 @@ public final class AiControlService {
         long generation = generations.getOrDefault(instance.getId(), 0L);
         RequestContext context;
         try {
-            context = buildContext(event, detail, guidance, instance, definition, actor, settings, true);
+            context = buildContext(event, detail, instance, definition, actor, settings, true);
         } catch (RuntimeException error) {
             inFlight.remove(instance.getId());
             plugin.getLogger().log(Level.WARNING, "Could not build AI Behaviour context for " + definition.getKey(),
@@ -329,9 +329,10 @@ public final class AiControlService {
             StringBuilder system = new StringBuilder(settings.systemContext());
             appendWorldContext(system, instances.currentLocation(instance).getWorld());
             system.append("\n\n").append(RESULT_RULES);
+            appendTriggerDirective(system, guidance);
             OpenRouterClient.ActionSession session = client.actionSession(system.toString(), context.prompt(),
                     AiActionTools.definitions(available, List.of(), routeKeys(definition)), false);
-            completeSingleActionChain(session, event, detail, guidance, instance, definition, actor, settings,
+            completeSingleActionChain(session, event, detail, instance, definition, actor, settings,
                     available, resultHandler, context, generation, 0, 0, false, false)
                     .whenComplete((ignored, error) -> {
                         if (error != null) {
@@ -360,7 +361,7 @@ public final class AiControlService {
     }
 
     private CompletableFuture<Void> completeSingleActionChain(OpenRouterClient.ActionSession session,
-            BehaviourEvent event, String detail, String guidance, NpcInstance instance, NpcDefinition definition,
+            BehaviourEvent event, String detail, NpcInstance instance, NpcDefinition definition,
             Entity actor, AiControlSettings settings, Set<AiActionType> available,
             Consumer<AiDecisionResult> resultHandler, RequestContext context, long generation, int round,
             int actionsUsed, boolean alreadySpoke, boolean retried) {
@@ -374,7 +375,7 @@ public final class AiControlService {
                 plugin.getLogger().warning("AI Behaviour request for " + definition.getKey() + " needs correction ("
                         + correctionSummary(turn, parsed) + "); asking the model to fix it.");
                 requestCorrection(session, turn, parsed);
-                return completeSingleActionChain(session, event, detail, guidance, instance, definition, actor,
+                return completeSingleActionChain(session, event, detail, instance, definition, actor,
                         settings, available, resultHandler, context, generation, round, actionsUsed, alreadySpoke,
                         true);
             }
@@ -408,7 +409,7 @@ public final class AiControlService {
                     warnDamageNoAction(event, instance, definition, settings, decision);
                     resultHandler.accept(new AiDecisionResult(decision, context.targets()));
                     applied.complete(
-                            buildContext(event, detail, guidance, instance, definition, actor, settings, true));
+                            buildContext(event, detail, instance, definition, actor, settings, true));
                 } catch (RuntimeException error) {
                     applied.completeExceptionally(error);
                 }
@@ -424,7 +425,7 @@ public final class AiControlService {
                         followUpNote(updated.prompt(),
                                 spoke ? "You have already spoken this turn; do not call say " + "again." : ""),
                         true);
-                return completeSingleActionChain(session, event, detail, guidance, instance, definition, actor,
+                return completeSingleActionChain(session, event, detail, instance, definition, actor,
                         settings, available, resultHandler, updated, generation, round + 1, total, spoke, false);
             });
         });
@@ -775,7 +776,7 @@ public final class AiControlService {
                 if (source.player() != null) {
                     rememberPlayerMessage(participant.instance(), source.player(), source.chatMessage());
                 }
-                RequestContext participantContext = buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail, null,
+                RequestContext participantContext = buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail,
                         participant.instance(), participant.definition(), source.actor(), participant.settings(), false,
                         source.scopeId());
                 memory.rememberEvent(participant.instance().getId(), eventDetail);
@@ -953,7 +954,7 @@ public final class AiControlService {
                                 || !generations.getOrDefault(id, 0L).equals(requestGenerations.get(id))) {
                             continue;
                         }
-                        RequestContext fresh = buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail, null,
+                        RequestContext fresh = buildContext(BehaviourEvent.PLAYER_CHAT, eventDetail,
                                 participant.instance(), participant.definition(), source.actor(),
                                 participant.settings(), false, source.scopeId());
                         targetsByInstance.put(id, fresh.targets());
@@ -1567,9 +1568,26 @@ public final class AiControlService {
         }
     }
 
-    private RequestContext buildContext(BehaviourEvent event, String detail, String guidance, NpcInstance instance,
+    /**
+     * The trigger prompt is written by the server's NPC author, not by a player,
+     * so it belongs in the system prompt as a directive. In the user message it
+     * sat next to chat and signs, which the rules mark as untrusted information,
+     * and the NPC answered it as if a player had said it.
+     */
+    static void appendTriggerDirective(StringBuilder system, String guidance) {
+        if (guidance == null || guidance.isBlank())
+            return;
+        system.append("""
+
+                Directive for this event (from the NPC's author, not from any player):
+                Pursue this as the NPC's goal right now. Nobody said it aloud, so never answer, quote, or
+                mention it; act on it in character through your function calls.
+                """).append(guidance.trim()).append('\n');
+    }
+
+    private RequestContext buildContext(BehaviourEvent event, String detail, NpcInstance instance,
             NpcDefinition definition, Entity actor, AiControlSettings settings, boolean includeEvent) {
-        return buildContext(event, detail, guidance, instance, definition, actor, settings, includeEvent, null);
+        return buildContext(event, detail, instance, definition, actor, settings, includeEvent, null);
     }
 
     /**
@@ -1577,7 +1595,7 @@ public final class AiControlService {
      *            conversation whose recent lines to include; null derives it from
      *            the actor (a player, or another Blockfolk NPC)
      */
-    private RequestContext buildContext(BehaviourEvent event, String detail, String guidance, NpcInstance instance,
+    private RequestContext buildContext(BehaviourEvent event, String detail, NpcInstance instance,
             NpcDefinition definition, Entity actor, AiControlSettings settings, boolean includeEvent,
             UUID conversationScope) {
         AiTargetSnapshot.Builder targets = AiTargetSnapshot.builder();
@@ -1598,9 +1616,6 @@ public final class AiControlService {
         StringBuilder out = new StringBuilder(1200);
         if (includeEvent) {
             out.append("Event:\n").append(detail).append("\n\n");
-            if (guidance != null && !guidance.isBlank()) {
-                out.append("Trigger guidance:\n").append(guidance.trim()).append("\n\n");
-            }
         }
         out.append("NPC state:\n").append("Name: ").append(NpcResponseIds.plainName(definition.getDisplayName()))
                 .append('\n').append("World: ").append(world == null ? "unknown" : world.getName()).append('\n')
