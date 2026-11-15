@@ -6,6 +6,7 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Added
 
+- AI NPCs see every route they own and can choose one to start. The AI context lists each assigned route's key, name, and waypoint count, plus which route the NPC is following or has paused. The Start Route function takes an optional `route`; omitting it resumes the current route as before. Start/Pause Route is now offered whenever the NPC owns a route, even without a default route or an earlier Set Route.
 - AI NPCs choose exactly which items to take from or store in a container. The Interact function takes an optional `item` (such as `oak_log`) and `amount`, so an NPC can fetch 12 logs or put away only its iron ingots instead of always taking the first stack or storing everything. The NPC learns on its next turn when a transfer falls short and why. Container contents in the AI context now list up to 16 item kinds instead of 8.
 - Damaged NPCs show a small health bar above their name and dialog line, like `[■■■■□□□□□□]`, until they are back to full health. Players see it within 16 blocks. Configure it under `health-bars` in `config.yml`.
 - **Keep Chunks Loaded** property in NPC Properties. NPCs with it on keep the chunks around them loaded as they walk, so routes and long walks continue with no player nearby. The radius is set by `chunk-loading.radius` in `config.yml` (3×3 chunks by default). Off by default. NPC Properties now has two rows: behaviour switches on top, appearance below.

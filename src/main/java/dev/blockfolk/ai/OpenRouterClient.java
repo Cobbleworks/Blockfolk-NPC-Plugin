@@ -362,7 +362,7 @@ public final class OpenRouterClient {
                 else if (argumentsObject == null)
                     action.addProperty("rejection", "arguments were not a valid JSON object");
                 if (argumentsObject != null) {
-                    for (String field : new String[]{"text", "target", "animation", "name", "item", "amount"}) {
+                    for (String field : new String[]{"text", "target", "animation", "name", "item", "amount", "route"}) {
                         if (argumentsObject.has(field))
                             action.add(field, argumentsObject.get(field));
                     }

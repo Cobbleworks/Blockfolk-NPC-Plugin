@@ -504,8 +504,8 @@ final class AiGuiService {
             case MINE_BLOCKS -> "Mines nearby resources; collects drops when item pickup is enabled";
             case HARVEST -> "Harvests and plants nearby crops using seeds from Temporary Inventory";
             case RETURN_HOME -> "Walks back to this instance's respawn location";
-            case START_ROUTE -> "Resumes or pauses this instance's configured route";
-            case PAUSE_ROUTE -> "Pauses this instance's configured route";
+            case START_ROUTE -> "Starts one of this NPC's routes, resumes or pauses the current one";
+            case PAUSE_ROUTE -> "Pauses the route this instance is walking";
             case REMEMBER_FACT -> "Saves a durable fact for future conversations";
             case REMEMBER_LOCATION -> "Saves this NPC's position with a label for all NPCs to use";
             case DROP_ITEM -> "Drops a carried item from Temporary Inventory";

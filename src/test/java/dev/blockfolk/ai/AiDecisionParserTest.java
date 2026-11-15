@@ -383,4 +383,36 @@ class AiDecisionParserTest {
         assertEquals(AiActionType.DO_NOTHING, result.value().actions().getFirst().type());
         assertEquals(4, result.outcomes().stream().filter(outcome -> !outcome.isAccepted()).count());
     }
+
+    @Test
+    void startRouteResolvesAssignedRoutesByKeyOrNameAndRejectsOthers() {
+        AiControlSettings settings = settings("Guard", "", "", EnumSet.of(AiActionType.START_ROUTE));
+        AiTargetSnapshot.Builder builder = AiTargetSnapshot.builder();
+        builder.bindRoute("village/night_patrol", "Night Patrol");
+        builder.bindRoute("market_loop", "Market Loop");
+        AiTargetSnapshot snapshot = builder.build();
+
+        AiDecision byKey = AiDecisionParser.parseDetailed("""
+                {"actions":[{"type":"START_ROUTE","route":"village/night_patrol"}]}
+                """, settings, snapshot).value();
+        assertEquals("village/night_patrol", byKey.actions().getFirst().target());
+
+        AiDecision byName = AiDecisionParser.parseDetailed("""
+                {"actions":[{"type":"START_ROUTE","route":"Market Loop"}]}
+                """, settings, snapshot).value();
+        assertEquals("market_loop", byName.actions().getFirst().target());
+
+        AiDecision resume = AiDecisionParser.parseDetailed("""
+                {"actions":[{"type":"START_ROUTE"}]}
+                """, settings, snapshot).value();
+        assertEquals(AiActionType.START_ROUTE, resume.actions().getFirst().type());
+        assertNull(resume.actions().getFirst().target());
+
+        AiParseResult<AiDecision> unknown = AiDecisionParser.parseDetailed("""
+                {"actions":[{"type":"START_ROUTE","route":"someone_elses_route"}]}
+                """, settings, snapshot);
+        String rejection = unknown.outcomes().getFirst().rejection();
+        assertEquals(true, rejection.contains("market_loop") && rejection.contains("village/night_patrol"),
+                rejection);
+    }
 }

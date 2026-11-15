@@ -14,12 +14,21 @@ final class AiActionTools {
     }
 
     static JsonArray definitions(Set<AiActionType> actions, List<String> responseIds) {
+        return definitions(actions, responseIds, List.of());
+    }
+
+    /**
+     * @param routeKeys
+     *            assigned route keys offered to start_route; empty leaves the
+     *            parameter free-form
+     */
+    static JsonArray definitions(Set<AiActionType> actions, List<String> responseIds, List<String> routeKeys) {
         JsonArray tools = new JsonArray();
-        actions.stream().sorted().forEach(action -> tools.add(definition(action, responseIds)));
+        actions.stream().sorted().forEach(action -> tools.add(definition(action, responseIds, routeKeys)));
         return tools;
     }
 
-    private static JsonObject definition(AiActionType action, List<String> responseIds) {
+    private static JsonObject definition(AiActionType action, List<String> responseIds, List<String> routeKeys) {
         JsonObject parameters = new JsonObject();
         parameters.addProperty("type", "object");
         parameters.addProperty("additionalProperties", false);
@@ -55,6 +64,16 @@ final class AiActionTools {
                 animation.add("enum", values);
                 properties.add("animation", animation);
                 required.add("animation");
+            }
+            case START_ROUTE -> {
+                JsonObject route = stringProperty("Key of one of this NPC's assigned routes, as listed under "
+                        + "Assigned routes. Omit to resume the current route.");
+                if (!routeKeys.isEmpty()) {
+                    JsonArray values = new JsonArray();
+                    routeKeys.stream().distinct().sorted().forEach(values::add);
+                    route.add("enum", values);
+                }
+                properties.add("route", route);
             }
             case START_COMBAT -> properties.add("target", stringProperty(targetDescription(action)));
             case INTERACT -> {
@@ -145,8 +164,10 @@ final class AiActionTools {
                     + "with overflow dropped nearby. Does not walk to fields or till soil; use move_to first "
                     + "if needed. Takes no arguments.";
             case RETURN_HOME -> "Walk back to this NPC's home (respawn) location.";
-            case START_ROUTE -> "Resume the configured patrol route.";
-            case PAUSE_ROUTE -> "Pause the configured patrol route.";
+            case START_ROUTE -> "Start walking one of this NPC's assigned routes by naming it, or resume the "
+                    + "current route when route is omitted. Choosing a route switches to it from its nearest "
+                    + "waypoint.";
+            case PAUSE_ROUTE -> "Pause the route the NPC is currently walking.";
             case REMEMBER_FACT -> "Store a durable fact for later interactions.";
             case REMEMBER_LOCATION -> "Save the NPC's current position under a new unique name that every NPC "
                     + "can then walk to. Use it when a player names the place the NPC is standing, such as "

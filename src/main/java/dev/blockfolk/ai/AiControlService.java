@@ -15,7 +15,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
-import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Level;
@@ -194,8 +193,10 @@ public final class AiControlService {
     private Consumer<NpcInstance> processingFinished = ignored -> {
     };
     private volatile boolean warnedNotConfigured;
-    private BiPredicate<NpcInstance, NpcDefinition> routeState = (instance, definition) -> definition
-            .getMovementProfile().enabled();
+    private Function<NpcDefinition, List<AiRouteOption>> assignedRoutes = definition -> List.of();
+    private BiFunction<NpcInstance, NpcDefinition, String> currentRoute = (instance, definition) -> definition
+            .getMovementProfile().enabled() ? definition.getMovementProfile().routeKey() : null;
+    private java.util.function.Predicate<NpcInstance> routePaused = instance -> false;
     private BiFunction<NpcInstance, NpcDefinition, String> navigationPurpose = (instance,
             definition) -> "a destination";
 
@@ -220,10 +221,42 @@ public final class AiControlService {
         } : finished;
     }
 
-    public void setRouteState(BiPredicate<NpcInstance, NpcDefinition> routeState) {
-        this.routeState = routeState == null
-                ? (instance, definition) -> definition.getMovementProfile().enabled()
-                : routeState;
+    /**
+     * @param assignedRoutes
+     *            the routes an NPC owns and may start; empty routes are ignored
+     * @param currentRoute
+     *            the route an instance walks or would resume, or null
+     * @param routePaused
+     *            whether an instance's route is paused
+     */
+    public void setRouteState(Function<NpcDefinition, List<AiRouteOption>> assignedRoutes,
+            BiFunction<NpcInstance, NpcDefinition, String> currentRoute,
+            java.util.function.Predicate<NpcInstance> routePaused) {
+        if (assignedRoutes != null)
+            this.assignedRoutes = assignedRoutes;
+        if (currentRoute != null)
+            this.currentRoute = currentRoute;
+        if (routePaused != null)
+            this.routePaused = routePaused;
+    }
+
+    private List<AiRouteOption> routesOf(NpcDefinition definition) {
+        try {
+            return assignedRoutes.apply(definition).stream().filter(route -> route.waypoints() > 0)
+                    .sorted(Comparator.comparing(AiRouteOption::key)).toList();
+        } catch (RuntimeException error) {
+            plugin.getLogger().log(Level.WARNING, "Could not list routes for " + definition.getKey(), error);
+            return List.of();
+        }
+    }
+
+    private List<String> routeKeys(NpcDefinition definition) {
+        return routesOf(definition).stream().map(AiRouteOption::key).toList();
+    }
+
+    /** Whether {@code routeKey} is one of the routes the NPC's AI may start. */
+    public boolean isAssignedRoute(NpcDefinition definition, String routeKey) {
+        return routeKey != null && routesOf(definition).stream().anyMatch(route -> route.key().equals(routeKey));
     }
 
     public void setNavigationPurpose(BiFunction<NpcInstance, NpcDefinition, String> navigationPurpose) {
@@ -297,7 +330,7 @@ public final class AiControlService {
             appendWorldContext(system, instances.currentLocation(instance).getWorld());
             system.append("\n\n").append(RESULT_RULES);
             OpenRouterClient.ActionSession session = client.actionSession(system.toString(), context.prompt(),
-                    AiActionTools.definitions(available, List.of()), false);
+                    AiActionTools.definitions(available, List.of(), routeKeys(definition)), false);
             completeSingleActionChain(session, event, detail, guidance, instance, definition, actor, settings,
                     available, resultHandler, context, generation, 0, 0, false, false)
                     .whenComplete((ignored, error) -> {
@@ -783,7 +816,9 @@ public final class AiControlService {
         try {
             EnumSet<AiActionType> groupActions = EnumSet.noneOf(AiActionType.class);
             availableByAlias.values().forEach(groupActions::addAll);
-            var groupTools = AiActionTools.definitions(groupActions, responseIds);
+            List<String> groupRoutes = aliases.values().stream()
+                    .flatMap(participant -> routeKeys(participant.definition()).stream()).distinct().sorted().toList();
+            var groupTools = AiActionTools.definitions(groupActions, responseIds, groupRoutes);
             OpenRouterClient.ActionSession session = client.actionSession(system.toString(), context.toString(),
                     groupTools, true);
             completeGroupActionChain(session, aliases, requestGenerations, targetsByInstance, targetsByAlias,
@@ -1595,9 +1630,9 @@ public final class AiControlService {
         }
         out.append('\n');
         out.append("Combat: ").append(combat != null && combat.isEngaged(instance) ? "active" : "not active")
-                .append('\n').append("Route: ")
-                .append(routeState.test(instance, definition) ? "configured" : "not configured").append('\n')
-                .append("Item pickup: ").append(definition.isItemPickup() ? "enabled" : "disabled").append('\n');
+                .append('\n');
+        appendRoutes(out, instance, definition, targets);
+        out.append("Item pickup: ").append(definition.isItemPickup() ? "enabled" : "disabled").append('\n');
         if (npc != null) {
             out.append("Equipment: main hand ")
                     .append(npc.getEquipment() == null
@@ -1662,15 +1697,42 @@ public final class AiControlService {
         return new RequestContext(out.toString(), targets.build());
     }
 
+    private void appendRoutes(StringBuilder out, NpcInstance instance, NpcDefinition definition,
+            AiTargetSnapshot.Builder targets) {
+        String current = currentRoute.apply(instance, definition);
+        out.append("Route: ");
+        if (current == null)
+            out.append("none selected");
+        else
+            out.append(routePaused.test(instance) ? "paused on " : "following ").append(current);
+        out.append('\n').append("Assigned routes: ");
+        List<AiRouteOption> routes = routesOf(definition);
+        if (routes.isEmpty()) {
+            out.append("none\n");
+            return;
+        }
+        List<String> entries = new ArrayList<>();
+        for (AiRouteOption route : routes) {
+            targets.bindRoute(route.key(), route.displayName());
+            String name = route.displayName() == null ? "" : route.displayName().trim();
+            entries.add(route.key() + " (" + (name.isEmpty() || name.equalsIgnoreCase(route.key()) ? "" : name + ", ")
+                    + route.waypoints() + (route.waypoints() == 1 ? " waypoint" : " waypoints")
+                    + (route.key().equals(current) ? ", current" : "") + ")");
+        }
+        out.append(String.join("; ", entries))
+                .append(" - start_route with route set to one of these keys switches to it\n");
+    }
+
     private EnumSet<AiActionType> availableActions(NpcInstance instance, NpcDefinition definition,
             AiControlSettings settings) {
         EnumSet<AiActionType> actions = EnumSet.copyOf(settings.allowedActions());
         actions.remove(AiActionType.REMEMBER_FACT);
         actions.remove(AiActionType.DROP_ITEM);
-        if (!routeState.test(instance, definition)) {
+        boolean hasCurrentRoute = currentRoute.apply(instance, definition) != null;
+        if (!hasCurrentRoute && routesOf(definition).isEmpty())
             actions.remove(AiActionType.START_ROUTE);
+        if (!hasCurrentRoute)
             actions.remove(AiActionType.PAUSE_ROUTE);
-        }
         if (hasInventoryItems(instance)) {
             actions.add(AiActionType.DROP_ITEM);
         }

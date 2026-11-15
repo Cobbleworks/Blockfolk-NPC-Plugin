@@ -157,7 +157,11 @@ public final class BlockfolkPlugin extends JavaPlugin {
         conversationService.setAiControlService(aiControlService);
         conversationService.setPerception(perception);
         behaviourService.setConversationService(conversationService);
-        aiControlService.setRouteState(behaviourService::hasRoute);
+        aiControlService.setRouteState(definition -> routeRepository.findAll().stream()
+                .filter(route -> route.isOwnedBy(definition.getKey()))
+                .map(route -> new dev.blockfolk.ai.AiRouteOption(route.getKey(), route.getDisplayName(),
+                        route.getPoints().size()))
+                .toList(), behaviourService::currentRouteKey, behaviourService::isRoutePaused);
         aiControlService.setNavigationPurpose((instance, definition) -> {
             if (combatService.isEngaged(instance)) {
                 return "a combat destination";

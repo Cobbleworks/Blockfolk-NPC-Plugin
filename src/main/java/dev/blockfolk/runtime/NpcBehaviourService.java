@@ -424,6 +424,22 @@ public final class NpcBehaviourService implements Listener {
         return routeOverrides.containsKey(instance.getId()) || definition.getMovementProfile().enabled();
     }
 
+    /**
+     * The route this instance currently walks (or would resume): the last Set
+     * Route / AI-selected route, else the enabled default route; null if none.
+     */
+    public String currentRouteKey(NpcInstance instance, NpcDefinition definition) {
+        String override = routeOverrides.get(instance.getId());
+        if (override != null)
+            return override;
+        MovementProfile profile = definition.getMovementProfile();
+        return profile.enabled() ? profile.routeKey() : null;
+    }
+
+    public boolean isRoutePaused(NpcInstance instance) {
+        return routePaused.contains(instance.getId());
+    }
+
     public void removeRoute(String routeKey) {
         String normalized = dev.blockfolk.model.NpcRoute.normalizeKey(routeKey);
         routeOverrides.entrySet().removeIf(entry -> {
@@ -1050,6 +1066,31 @@ public final class NpcBehaviourService implements Listener {
                     aiControlService.noteAction(instance, "You headed back home.");
                 }
                 case START_ROUTE -> {
+                    String chosen = action.target();
+                    if (chosen != null) {
+                        String key;
+                        try {
+                            key = dev.blockfolk.model.NpcRoute.normalizeKey(chosen);
+                        } catch (IllegalArgumentException exception) {
+                            key = null;
+                        }
+                        if (key == null || !aiControlService.isAssignedRoute(definition, key)) {
+                            aiControlService.noteOutcome(instance, "start_route " + chosen
+                                    + " failed: that is not one of your assigned routes.");
+                            break;
+                        }
+                        leaveVehicleToWalk(instance);
+                        routeOverrides.put(instance.getId(), key);
+                        routePaused.remove(instance.getId());
+                        instances.stopNavigating(instance);
+                        aiControlService.noteAction(instance, "You started walking your route " + key + ".");
+                        break;
+                    }
+                    if (currentRouteKey(instance, definition) == null) {
+                        aiControlService.noteOutcome(instance,
+                                "start_route failed: you have no current route; name one of your assigned routes.");
+                        break;
+                    }
                     leaveVehicleToWalk(instance);
                     routePaused.remove(instance.getId());
                     instances.stopNavigating(instance);

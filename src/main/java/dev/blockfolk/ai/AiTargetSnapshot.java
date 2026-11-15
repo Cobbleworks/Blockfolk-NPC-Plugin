@@ -23,7 +23,7 @@ import dev.blockfolk.model.NpcInstance;
  * display name, a mob type) to the canonical alias shown in context.
  */
 public record AiTargetSnapshot(Map<String, UUID> entityIds, Map<String, UUID> npcInstanceIds,
-        Map<String, Location> locations, Map<String, String> synonyms, Location origin) {
+        Map<String, Location> locations, Map<String, String> synonyms, Location origin, Map<String, String> routes) {
 
     /**
      * Block coordinates are accepted for MOVE_TO within this distance of the NPC.
@@ -42,11 +42,34 @@ public record AiTargetSnapshot(Map<String, UUID> entityIds, Map<String, UUID> np
         locations = Map.copyOf(copiedLocations);
         synonyms = synonyms == null ? Map.of() : Map.copyOf(synonyms);
         origin = origin == null ? null : origin.clone();
+        routes = routes == null ? Map.of() : Map.copyOf(routes);
+    }
+
+    public AiTargetSnapshot(Map<String, UUID> entityIds, Map<String, UUID> npcInstanceIds,
+            Map<String, Location> locations, Map<String, String> synonyms, Location origin) {
+        this(entityIds, npcInstanceIds, locations, synonyms, origin, Map.of());
     }
 
     public AiTargetSnapshot(Map<String, UUID> entityIds, Map<String, UUID> npcInstanceIds,
             Map<String, Location> locations) {
         this(entityIds, npcInstanceIds, locations, Map.of(), null);
+    }
+
+    /**
+     * Resolves a model-supplied route (its key or display name) to the key of
+     * one of this NPC's assigned routes.
+     */
+    public Optional<String> route(String raw) {
+        if (raw == null || raw.isBlank())
+            return Optional.empty();
+        String value = raw.trim().toLowerCase(Locale.ROOT).replaceAll("^[\"'`]+|[\"'`]+$", "").trim();
+        String key = routes.get(value);
+        return Optional.ofNullable(key != null ? key : routes.get(slug(value)));
+    }
+
+    /** Keys of this NPC's assigned routes, for correction hints. */
+    public List<String> routeKeys() {
+        return routes.values().stream().distinct().sorted().toList();
     }
 
     public Optional<UUID> entityId(String alias) {
@@ -158,6 +181,7 @@ public record AiTargetSnapshot(Map<String, UUID> entityIds, Map<String, UUID> np
         private final Map<String, Location> locations = new LinkedHashMap<>();
         private final Map<String, String> synonyms = new LinkedHashMap<>();
         private final Set<String> ambiguous = new HashSet<>();
+        private final Map<String, String> routes = new LinkedHashMap<>();
         private Location origin;
 
         void bindEntity(String alias, Entity entity) {
@@ -173,6 +197,16 @@ public record AiTargetSnapshot(Map<String, UUID> entityIds, Map<String, UUID> np
         void bindLocation(String alias, Location location) {
             if (location != null)
                 locations.put(alias, location.clone());
+        }
+
+        /** Binds an assigned route by its key, plus its display name as a synonym. */
+        void bindRoute(String key, String displayName) {
+            if (key == null || key.isBlank())
+                return;
+            routes.put(key, key);
+            String name = displayName == null ? "" : slug(displayName);
+            if (!name.isEmpty())
+                routes.putIfAbsent(name, key);
         }
 
         void origin(Location origin) {
@@ -199,7 +233,7 @@ public record AiTargetSnapshot(Map<String, UUID> entityIds, Map<String, UUID> np
         }
 
         AiTargetSnapshot build() {
-            return new AiTargetSnapshot(entityIds, npcInstanceIds, locations, synonyms, origin);
+            return new AiTargetSnapshot(entityIds, npcInstanceIds, locations, synonyms, origin, routes);
         }
     }
 }

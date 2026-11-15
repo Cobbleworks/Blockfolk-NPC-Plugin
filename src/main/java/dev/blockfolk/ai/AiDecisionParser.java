@@ -111,6 +111,8 @@ public final class AiDecisionParser {
                 && type != AiActionType.DROP_ITEM && !settings.allowedActions().contains(type)))
             return AiCallOutcome.rejected(call, function, "this NPC cannot use " + function + " right now");
         String text = string(object, "text", false);
+        if (type == AiActionType.START_ROUTE)
+            return startRoute(call, function, object, targets);
         String target = string(object, "target", true);
         String animation = string(object, "animation", true);
         String locationName = string(object, "name", false);
@@ -155,6 +157,30 @@ public final class AiDecisionParser {
         }
         return AiCallOutcome.accepted(call, function,
                 new AiDecision.Action(type, text, target, animation, locationName, item, amount));
+    }
+
+    /**
+     * start_route takes an optional route; omitting it resumes the current one.
+     * A named route must be one of the NPC's assigned routes.
+     */
+    private static AiCallOutcome startRoute(int call, String function, JsonObject object, AiTargetSnapshot targets) {
+        String raw = string(object, "route", false);
+        if (raw == null || raw.isBlank())
+            raw = string(object, "target", false);
+        if (raw == null || raw.isBlank())
+            return AiCallOutcome.accepted(call, function,
+                    new AiDecision.Action(AiActionType.START_ROUTE, null, null, null));
+        if (targets == null)
+            return AiCallOutcome.accepted(call, function,
+                    new AiDecision.Action(AiActionType.START_ROUTE, null, raw.trim(), null));
+        String requested = raw.trim();
+        return targets.route(requested)
+                .map(key -> AiCallOutcome.accepted(call, function,
+                        new AiDecision.Action(AiActionType.START_ROUTE, null, key, null)))
+                .orElseGet(() -> AiCallOutcome.rejected(call, function, "'" + requested
+                        + "' is not one of this NPC's assigned routes" + (targets.routeKeys().isEmpty()
+                                ? "; it has none, so omit route to resume the current one"
+                                : "; valid routes: " + String.join(", ", targets.routeKeys()))));
     }
 
     private static boolean requiresTarget(AiActionType type) {
