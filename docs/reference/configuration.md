@@ -22,7 +22,7 @@ Global settings are created at `plugins/Blockfolk/config.yml`. Restart the serve
 | `openrouter.model` | `deepseek/deepseek-v4-flash-0731` | OpenRouter model identifier. |
 | `openrouter.timeout-seconds` | `17` | Network request timeout. Increase it for slower providers. |
 | `openrouter.max-tokens` | `1600` | Maximum output allowance per request, including any reasoning tokens. |
-| `openrouter.reasoning-effort` | `low` | How much the model may think before acting: `none`, `minimal`, `low`, `medium`, or `high`. Some reasoning makes NPCs follow through on requested actions more reliably; `none` gives the lowest latency. Models without reasoning support ignore it. |
+| `openrouter.reasoning-effort` | `low` | How much the model may think before acting: `none`, `minimal`, `low`, `medium`, or `high`. Change it in-game with `/bf config ai reasoning`. Some reasoning makes NPCs follow through on requested actions more reliably; `none` gives the lowest latency. Models without reasoning support ignore it. |
 
 Gameplay requests use native function calls with temperature `0.3`; memory review requests JSON output.
 

@@ -17,6 +17,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import dev.blockfolk.ai.AiControlService;
+import dev.blockfolk.ai.OpenRouterClient;
 import dev.blockfolk.gui.CustomEventGuiService;
 import dev.blockfolk.gui.GuiService;
 import dev.blockfolk.gui.RouteGuiService;
@@ -155,6 +156,25 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             plugin.saveConfig();
             aiControlService.setModel(model);
             sender.sendMessage(UiText.success("AI model set to '" + model + "'."));
+            return true;
+        }
+        if (args.length >= 3 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("ai")
+                && args[2].equalsIgnoreCase("reasoning")) {
+            String efforts = String.join("|", OpenRouterClient.REASONING_EFFORTS);
+            if (args.length == 3) {
+                sender.sendMessage(UiText.info("Current AI reasoning effort: '" + aiControlService.reasoningEffort()
+                        + "'. Use /bf config ai reasoning <" + efforts + ">."));
+                return true;
+            }
+            String effort = args[3].toLowerCase(Locale.ROOT);
+            if (args.length != 4 || !OpenRouterClient.REASONING_EFFORTS.contains(effort)) {
+                sender.sendMessage(UiText.error("Use /bf config ai reasoning <" + efforts + ">."));
+                return true;
+            }
+            plugin.getConfig().set("openrouter.reasoning-effort", effort);
+            plugin.saveConfig();
+            aiControlService.setReasoningEffort(effort);
+            sender.sendMessage(UiText.success("AI reasoning effort set to '" + effort + "'."));
             return true;
         }
         if (!(sender instanceof Player player)) {
@@ -579,7 +599,10 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         if (args.length == 2 && args[0].equalsIgnoreCase("config"))
             return filter(List.of("ai", "chunkloaders"), args[1]);
         if (args.length == 3 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("ai"))
-            return filter(List.of("model", "mute-me", "memory"), args[2]);
+            return filter(List.of("model", "reasoning", "mute-me", "memory"), args[2]);
+        if (args.length == 4 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("ai")
+                && args[2].equalsIgnoreCase("reasoning"))
+            return filter(OpenRouterClient.REASONING_EFFORTS, args[3]);
         if (args.length == 4 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("ai")
                 && args[2].equalsIgnoreCase("mute-me"))
             return filter(List.of("on", "off"), args[3]);

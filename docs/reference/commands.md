@@ -31,6 +31,7 @@
 | `/bf npc <name> delete` | Delete the preset, its instances, and its owned routes. |
 | `/bf npc <name> spawn [here\|location]` | Spawn a persistent instance at your position or a saved location. |
 | `/bf config ai model [model]` | Without a model, show the one in use. With a model, save and immediately use it. Also works from the console. |
+| `/bf config ai reasoning [none\|minimal\|low\|medium\|high]` | Without a value, show the reasoning effort in use. With a value, save and immediately use it. Also works from the console. |
 | `/bf config chunkloaders` | List all NPC presets with Keep Chunks Loaded enabled, including presets without spawned instances. Click an entry to open its NPC editor. Also works from the console as a text list. |
 | `/bf config ai mute-me <on\|off>` | Stop or allow nearby AIs hearing your chat. Off by default; saved per player. |
 

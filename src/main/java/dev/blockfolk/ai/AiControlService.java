@@ -515,6 +515,14 @@ public final class AiControlService {
         client.setModel(model);
     }
 
+    public String reasoningEffort() {
+        return client.reasoningEffort();
+    }
+
+    public void setReasoningEffort(String effort) {
+        client.setReasoningEffort(effort);
+    }
+
     /**
      * Queues a chat turn for the one NPC the player addresses: the NPC named in the
      * message, otherwise the closest candidate. Other NPCs nearby join in by

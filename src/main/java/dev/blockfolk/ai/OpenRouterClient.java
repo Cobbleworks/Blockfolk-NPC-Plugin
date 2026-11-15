@@ -26,7 +26,7 @@ public final class OpenRouterClient {
     private volatile String model;
     private final Duration timeout;
     private final int maxTokens;
-    private final String reasoningEffort;
+    private volatile String reasoningEffort;
     private final String endpointIssue;
     /**
      * Set once a provider rejects tool_choice "required"; later requests then use
@@ -75,6 +75,14 @@ public final class OpenRouterClient {
 
     public void setModel(String model) {
         this.model = model == null ? "" : model.trim();
+    }
+
+    public String reasoningEffort() {
+        return reasoningEffort;
+    }
+
+    public void setReasoningEffort(String effort) {
+        this.reasoningEffort = normalizeEffort(effort);
     }
 
     public String configurationIssue() {
@@ -385,6 +393,8 @@ public final class OpenRouterClient {
             throw new IllegalStateException("OpenRouter returned malformed tool calls", exception);
         }
     }
+
+    public static final List<String> REASONING_EFFORTS = List.of("none", "minimal", "low", "medium", "high");
 
     static String normalizeEffort(String effort) {
         String normalized = effort == null ? "" : effort.trim().toLowerCase(java.util.Locale.ROOT);
