@@ -133,7 +133,9 @@ public final class NpcCombatService implements Listener {
         this.specialAttackService = new NpcSpecialAttackService(
                 fighters == null ? FighterTemplates::defaults : fighters::findAll,
                 (id, location) -> instanceRegistry.findById(id)
-                        .map(instance -> instanceRegistry.move(instance, location)).orElse(false),
+                        .map(instance -> !isExternalNavigationPaused(instance)
+                                && instanceRegistry.move(instance, location))
+                        .orElse(false),
                 victim -> instanceRegistry.findByEntityId(victim.getEntityId())
                         .ifPresent(instanceRegistry::stopNavigating));
     }
@@ -743,7 +745,7 @@ public final class NpcCombatService implements Listener {
             state.navigationTarget = current.clone().add(away.normalize().multiply(10.0));
             state.nextRepathAt = currentTick + 10;
         }
-        instanceRegistry.navigate(instance, state.navigationTarget, WalkingSpeed.VERY_FAST);
+        navigateCombat(instance, state.navigationTarget, WalkingSpeed.VERY_FAST);
     }
 
     private void fight(NpcInstance instance, NpcDefinition definition, LivingEntity npc, CombatState state) {
@@ -792,7 +794,8 @@ public final class NpcCombatService implements Listener {
         NpcAttack attack = attackSelector.select(selected);
         if (distanceSquared > attack.rangeSquared()) {
             Location currentLocation = npc.getLocation();
-            if (state.lastProgressLocation == null
+            // Waiting for a quest dialog is intentional, not a stalled path.
+            if (isExternalNavigationPaused(instance) || state.lastProgressLocation == null
                     || currentLocation.distanceSquared(state.lastProgressLocation) >= CHASE_PROGRESS_DISTANCE_SQUARED) {
                 state.lastProgressLocation = currentLocation;
                 state.lastProgressAt = currentTick;
@@ -805,7 +808,7 @@ public final class NpcCombatService implements Listener {
                 state.nextRepathAt = currentTick + 10;
             }
             state.retreating = false;
-            instanceRegistry.navigate(instance, state.navigationTarget, WalkingSpeed.FAST);
+            navigateCombat(instance, state.navigationTarget, WalkingSpeed.FAST);
             return;
         }
         if (distanceSquared < attack.minimumRangeSquared()) {
@@ -814,7 +817,7 @@ public final class NpcCombatService implements Listener {
                 state.nextRepathAt = currentTick + 10;
             }
             state.retreating = true;
-            instanceRegistry.navigate(instance, state.navigationTarget, WalkingSpeed.FAST);
+            navigateCombat(instance, state.navigationTarget, WalkingSpeed.FAST);
             return;
         }
 
@@ -828,6 +831,18 @@ public final class NpcCombatService implements Listener {
             attack.execute(npc, target);
             state.nextAttackAt = currentTick + attack.cooldownTicks();
         }
+    }
+
+    private boolean isExternalNavigationPaused(NpcInstance instance) {
+        return behaviourService != null && behaviourService.isExternalNavigationPaused(instance);
+    }
+
+    private void navigateCombat(NpcInstance instance, Location target, WalkingSpeed speed) {
+        if (isExternalNavigationPaused(instance)) {
+            instanceRegistry.stopNavigating(instance);
+            return;
+        }
+        instanceRegistry.navigate(instance, target, speed);
     }
 
     private Location retreatLocation(LivingEntity npc, LivingEntity target, double minimumRange) {

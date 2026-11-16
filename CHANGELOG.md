@@ -4,6 +4,11 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- BeautyQuests receives NPC clicks before Blockfolk cancels mannequin interaction or runs normal click actions. Quest selection no longer also fires the NPC's click routine, and left-click selection detects invulnerable NPCs before damage processing. Shift-right-click still opens the Blockfolk admin editor.
+- BeautyQuests dialog navigation pauses also stop combat chasing, fleeing, ranged retreats, dashes, and blinks. Combat walking resumes after the external pause is released; pausing only a route does not stop combat movement.
+
 ### Added
 
 - AI NPCs see every route they own and can choose one to start. The AI context lists each assigned route's key, name, and waypoint count, plus which route the NPC is following or has paused. The Start Route function takes an optional `route`; omitting it resumes the current route as before. Start/Pause Route is now offered whenever the NPC owns a route, even without a default route or an earlier Set Route.

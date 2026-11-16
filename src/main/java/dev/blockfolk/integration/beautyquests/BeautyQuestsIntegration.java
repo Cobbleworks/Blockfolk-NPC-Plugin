@@ -13,7 +13,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -33,6 +32,7 @@ import fr.skytasul.quests.api.QuestsAPI;
 import fr.skytasul.quests.api.npcs.BqInternalNpc;
 import fr.skytasul.quests.api.npcs.BqInternalNpcFactory;
 import fr.skytasul.quests.api.npcs.NpcClickType;
+import io.papermc.paper.event.player.PrePlayerAttackEntityEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
@@ -93,7 +93,7 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
 
     private final class ClickListener implements Listener {
 
-        @EventHandler(priority = EventPriority.HIGHEST)
+        @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
         public void onRightClick(PlayerInteractEntityEvent event) {
             if (event.getHand() != EquipmentSlot.HAND) {
                 return;
@@ -110,12 +110,12 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
                     event.getPlayer().isSneaking() ? NpcClickType.SHIFT_RIGHT : NpcClickType.RIGHT);
         }
 
-        @EventHandler(priority = EventPriority.HIGHEST)
-        public void onLeftClick(EntityDamageByEntityEvent event) {
-            if (!(event.getDamager() instanceof Player player)) {
-                return;
-            }
-            instances.findByEntityId(event.getEntity().getEntityId())
+        // Selection must happen before damage and Blockfolk's left-click actions,
+        // including when native invulnerability prevents a damage event entirely.
+        @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+        public void onLeftClick(PrePlayerAttackEntityEvent event) {
+            Player player = event.getPlayer();
+            instances.findByEntityId(event.getAttacked().getEntityId())
                     .ifPresent(instance -> npcClicked(event, instance.getId().toString(), player,
                             player.isSneaking() ? NpcClickType.SHIFT_LEFT : NpcClickType.LEFT));
         }

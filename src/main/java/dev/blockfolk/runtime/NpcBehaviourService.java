@@ -425,8 +425,8 @@ public final class NpcBehaviourService implements Listener {
     }
 
     /**
-     * The route this instance currently walks (or would resume): the last Set
-     * Route / AI-selected route, else the enabled default route; null if none.
+     * The route this instance currently walks (or would resume): the last Set Route
+     * / AI-selected route, else the enabled default route; null if none.
      */
     public String currentRouteKey(NpcInstance instance, NpcDefinition definition) {
         String override = routeOverrides.get(instance.getId());
@@ -467,7 +467,12 @@ public final class NpcBehaviourService implements Listener {
      * action. A pause must not discard the route worker's next waypoint.
      */
     public boolean isNavigationPaused(NpcInstance instance) {
-        return routePaused.contains(instance.getId()) || externallyPaused.contains(instance.getId());
+        return routePaused.contains(instance.getId()) || isExternalNavigationPaused(instance);
+    }
+
+    /** Quest dialogs suspend combat movement too; route-only pauses do not. */
+    public boolean isExternalNavigationPaused(NpcInstance instance) {
+        return externallyPaused.contains(instance.getId());
     }
 
     /** Temporarily pauses movement owned by an external dialog or quest system. */
@@ -1075,8 +1080,8 @@ public final class NpcBehaviourService implements Listener {
                             key = null;
                         }
                         if (key == null || !aiControlService.isAssignedRoute(definition, key)) {
-                            aiControlService.noteOutcome(instance, "start_route " + chosen
-                                    + " failed: that is not one of your assigned routes.");
+                            aiControlService.noteOutcome(instance,
+                                    "start_route " + chosen + " failed: that is not one of your assigned routes.");
                             break;
                         }
                         leaveVehicleToWalk(instance);
