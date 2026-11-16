@@ -56,8 +56,8 @@ public record AiTargetSnapshot(Map<String, UUID> entityIds, Map<String, UUID> np
     }
 
     /**
-     * Resolves a model-supplied route (its key or display name) to the key of
-     * one of this NPC's assigned routes.
+     * Resolves a model-supplied route (its key or display name) to the key of one
+     * of this NPC's assigned routes.
      */
     public Optional<String> route(String raw) {
         if (raw == null || raw.isBlank())

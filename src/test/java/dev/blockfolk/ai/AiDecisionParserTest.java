@@ -412,7 +412,6 @@ class AiDecisionParserTest {
                 {"actions":[{"type":"START_ROUTE","route":"someone_elses_route"}]}
                 """, settings, snapshot);
         String rejection = unknown.outcomes().getFirst().rejection();
-        assertEquals(true, rejection.contains("market_loop") && rejection.contains("village/night_patrol"),
-                rejection);
+        assertEquals(true, rejection.contains("market_loop") && rejection.contains("village/night_patrol"), rejection);
     }
 }

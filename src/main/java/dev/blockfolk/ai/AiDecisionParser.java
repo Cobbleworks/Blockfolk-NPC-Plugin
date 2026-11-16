@@ -160,8 +160,8 @@ public final class AiDecisionParser {
     }
 
     /**
-     * start_route takes an optional route; omitting it resumes the current one.
-     * A named route must be one of the NPC's assigned routes.
+     * start_route takes an optional route; omitting it resumes the current one. A
+     * named route must be one of the NPC's assigned routes.
      */
     private static AiCallOutcome startRoute(int call, String function, JsonObject object, AiTargetSnapshot targets) {
         String raw = string(object, "route", false);
@@ -177,10 +177,11 @@ public final class AiDecisionParser {
         return targets.route(requested)
                 .map(key -> AiCallOutcome.accepted(call, function,
                         new AiDecision.Action(AiActionType.START_ROUTE, null, key, null)))
-                .orElseGet(() -> AiCallOutcome.rejected(call, function, "'" + requested
-                        + "' is not one of this NPC's assigned routes" + (targets.routeKeys().isEmpty()
-                                ? "; it has none, so omit route to resume the current one"
-                                : "; valid routes: " + String.join(", ", targets.routeKeys()))));
+                .orElseGet(() -> AiCallOutcome.rejected(call, function,
+                        "'" + requested + "' is not one of this NPC's assigned routes"
+                                + (targets.routeKeys().isEmpty()
+                                        ? "; it has none, so omit route to resume the current one"
+                                        : "; valid routes: " + String.join(", ", targets.routeKeys()))));
     }
 
     private static boolean requiresTarget(AiActionType type) {

@@ -332,9 +332,8 @@ public final class AiControlService {
             appendTriggerDirective(system, guidance);
             OpenRouterClient.ActionSession session = client.actionSession(system.toString(), context.prompt(),
                     AiActionTools.definitions(available, List.of(), routeKeys(definition)), false);
-            completeSingleActionChain(session, event, detail, instance, definition, actor, settings,
-                    available, resultHandler, context, generation, 0, 0, false, false)
-                    .whenComplete((ignored, error) -> {
+            completeSingleActionChain(session, event, detail, instance, definition, actor, settings, available,
+                    resultHandler, context, generation, 0, 0, false, false).whenComplete((ignored, error) -> {
                         if (error != null) {
                             logRequestFailure("AI Behaviour request for " + definition.getKey(), error);
                         }
@@ -361,10 +360,10 @@ public final class AiControlService {
     }
 
     private CompletableFuture<Void> completeSingleActionChain(OpenRouterClient.ActionSession session,
-            BehaviourEvent event, String detail, NpcInstance instance, NpcDefinition definition,
-            Entity actor, AiControlSettings settings, Set<AiActionType> available,
-            Consumer<AiDecisionResult> resultHandler, RequestContext context, long generation, int round,
-            int actionsUsed, boolean alreadySpoke, boolean retried) {
+            BehaviourEvent event, String detail, NpcInstance instance, NpcDefinition definition, Entity actor,
+            AiControlSettings settings, Set<AiActionType> available, Consumer<AiDecisionResult> resultHandler,
+            RequestContext context, long generation, int round, int actionsUsed, boolean alreadySpoke,
+            boolean retried) {
         return session.complete().thenCompose(turn -> {
             if (turn.calls().isEmpty() && round > 0) {
                 return CompletableFuture.completedFuture(null);
@@ -375,9 +374,8 @@ public final class AiControlService {
                 plugin.getLogger().warning("AI Behaviour request for " + definition.getKey() + " needs correction ("
                         + correctionSummary(turn, parsed) + "); asking the model to fix it.");
                 requestCorrection(session, turn, parsed);
-                return completeSingleActionChain(session, event, detail, instance, definition, actor,
-                        settings, available, resultHandler, context, generation, round, actionsUsed, alreadySpoke,
-                        true);
+                return completeSingleActionChain(session, event, detail, instance, definition, actor, settings,
+                        available, resultHandler, context, generation, round, actionsUsed, alreadySpoke, true);
             }
             if (turn.truncated() || !parsed.usable()) {
                 plugin.getLogger()
@@ -408,8 +406,7 @@ public final class AiControlService {
                     AiDecision decision = new AiDecision(accepted);
                     warnDamageNoAction(event, instance, definition, settings, decision);
                     resultHandler.accept(new AiDecisionResult(decision, context.targets()));
-                    applied.complete(
-                            buildContext(event, detail, instance, definition, actor, settings, true));
+                    applied.complete(buildContext(event, detail, instance, definition, actor, settings, true));
                 } catch (RuntimeException error) {
                     applied.completeExceptionally(error);
                 }
@@ -425,8 +422,8 @@ public final class AiControlService {
                         followUpNote(updated.prompt(),
                                 spoke ? "You have already spoken this turn; do not call say " + "again." : ""),
                         true);
-                return completeSingleActionChain(session, event, detail, instance, definition, actor,
-                        settings, available, resultHandler, updated, generation, round + 1, total, spoke, false);
+                return completeSingleActionChain(session, event, detail, instance, definition, actor, settings,
+                        available, resultHandler, updated, generation, round + 1, total, spoke, false);
             });
         });
     }
@@ -1569,10 +1566,10 @@ public final class AiControlService {
     }
 
     /**
-     * The trigger prompt is written by the server's NPC author, not by a player,
-     * so it belongs in the system prompt as a directive. In the user message it
-     * sat next to chat and signs, which the rules mark as untrusted information,
-     * and the NPC answered it as if a player had said it.
+     * The trigger prompt is written by the server's NPC author, not by a player, so
+     * it belongs in the system prompt as a directive. In the user message it sat
+     * next to chat and signs, which the rules mark as untrusted information, and
+     * the NPC answered it as if a player had said it.
      */
     static void appendTriggerDirective(StringBuilder system, String guidance) {
         if (guidance == null || guidance.isBlank())
