@@ -49,6 +49,7 @@ class BeautyQuestsClickTest {
     private final Entity entity = mock(Entity.class);
     private final NpcInstance instance = new NpcInstance(UUID.randomUUID(), "guard", new Location(null, 0, 64, 0));
     private final List<Listener> listeners = new ArrayList<>();
+    private final List<Listener> questListeners = new ArrayList<>();
     private final List<NpcClickType> questClicks = new ArrayList<>();
     private NpcBehaviourService behaviours;
     private GuiService gui;
@@ -92,8 +93,10 @@ class BeautyQuestsClickTest {
             integration.register();
         }
         ArgumentCaptor<Listener> registered = ArgumentCaptor.forClass(Listener.class);
-        verify(manager).registerEvents(registered.capture(), eq(plugin));
-        listeners.add(registered.getValue());
+        // The kill-target factory and the click listener, in registration order.
+        verify(manager, times(2)).registerEvents(registered.capture(), eq(plugin));
+        questListeners.addAll(registered.getAllValues());
+        listeners.addAll(questListeners);
         listeners.add(gui);
         listeners.add(behaviours);
     }
@@ -123,7 +126,7 @@ class BeautyQuestsClickTest {
 
     @Test
     void normalRightClickStillWorksWithoutBeautyQuests() throws Exception {
-        listeners.removeFirst();
+        listeners.removeAll(questListeners);
 
         dispatch(rightClick(EquipmentSlot.HAND));
 

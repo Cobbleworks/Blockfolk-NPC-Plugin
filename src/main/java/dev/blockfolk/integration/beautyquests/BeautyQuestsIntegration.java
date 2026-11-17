@@ -59,6 +59,11 @@ public final class BeautyQuestsIntegration implements BqInternalNpcFactory {
 
     public void register() {
         QuestsAPI.getAPI().addNpcFactory(FACTORY_KEY, this);
+        BlockfolkMobFactory mobFactory = new BlockfolkMobFactory(plugin, definitions, instances);
+        QuestsAPI.getAPI().registerMobFactory(mobFactory);
+        // Before the click listener, so a kill-target selection click is consumed
+        // first.
+        plugin.getServer().getPluginManager().registerEvents(mobFactory, plugin);
         plugin.getServer().getPluginManager().registerEvents(new ClickListener(), plugin);
         plugin.getLogger().info("BeautyQuests integration enabled.");
     }
