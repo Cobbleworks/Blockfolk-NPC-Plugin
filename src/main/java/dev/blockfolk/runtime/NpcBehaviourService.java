@@ -158,6 +158,8 @@ public final class NpcBehaviourService implements Listener {
     private NpcPerception perception;
     private NpcVehicleService vehicleService;
     private BukkitTask behaviourTask;
+    private java.util.function.Function<String, java.util.Optional<ActionLocation>> locationResolver =
+            ignored -> java.util.Optional.empty();
     private long currentTick;
     private int proximityTick;
     private int playerLookTick;
@@ -179,6 +181,17 @@ public final class NpcBehaviourService implements Listener {
 
     public void setShopService(NpcShopService shopService) {
         this.shopService = shopService;
+    }
+
+    /** Resolves {@link dev.blockfolk.model.LocationLink} keys to the global location's current position. */
+    public void setLocationResolver(
+            java.util.function.Function<String, java.util.Optional<ActionLocation>> locationResolver) {
+        this.locationResolver = locationResolver == null ? ignored -> java.util.Optional.empty() : locationResolver;
+    }
+
+    private java.util.Optional<ActionLocation> resolveActionLocation(String value) {
+        java.util.Optional<String> linkedKey = dev.blockfolk.model.LocationLink.key(value);
+        return linkedKey.isPresent() ? locationResolver.apply(linkedKey.get()) : ActionLocation.parse(value);
     }
 
     public void setCombatService(NpcCombatService combatService) {
@@ -916,14 +929,14 @@ public final class NpcBehaviourService implements Listener {
                 instances.stopNavigating(instance);
             }
             case SET_WALK_SPEED -> speedOverrides.put(instance.getId(), WalkingSpeed.fromStored(action.value()));
-            case MOVE_TO -> ActionLocation.parse(action.value()).map(ActionLocation::toLocation)
+            case MOVE_TO -> resolveActionLocation(action.value()).map(ActionLocation::toLocation)
                     .filter(java.util.Objects::nonNull).ifPresent(target -> {
                         stopFollowing(instance);
                         moveTargets.put(instance.getId(), target);
                         instances.stand(instance);
                         instances.stopNavigating(instance);
                     });
-            case TELEPORT_TO -> ActionLocation.parse(action.value()).map(ActionLocation::toLocation)
+            case TELEPORT_TO -> resolveActionLocation(action.value()).map(ActionLocation::toLocation)
                     .filter(java.util.Objects::nonNull).ifPresent(target -> {
                         stopFollowing(instance);
                         moveTargets.remove(instance.getId());

@@ -14,6 +14,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -40,6 +41,7 @@ import org.bukkit.potion.PotionType;
 
 import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.model.ActionLocation;
+import dev.blockfolk.model.LocationLink;
 import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
@@ -2539,7 +2541,10 @@ public final class GuiService implements Listener {
 
     private void sendWaypointPrompt(Player player, BehaviourActionType type, UUID token) {
         Component message = UiText.prompt("Right-click the block the NPC should "
-                + (type == BehaviourActionType.MOVE_TO ? "walk to" : "teleport onto") + ". ");
+                + (type == BehaviourActionType.MOVE_TO
+                        ? "walk to, or right-click a green location marker to link that global location"
+                        : "teleport onto")
+                + ". ");
         if (type == BehaviourActionType.MOVE_TO) {
             Component selector = Component.text("[Select saved location]", NamedTextColor.GREEN)
                     .decorate(TextDecoration.UNDERLINED)
@@ -2584,40 +2589,87 @@ public final class GuiService implements Listener {
                 QuestionWaypointSession questionSession = validQuestionWaypointSession(player, event.getItem());
                 if (questionSession != null) {
                     event.setCancelled(true);
-                    ActionLocation location = ActionLocation.above(event.getClickedBlock());
+                    WaypointTarget target = waypointTarget(questionSession.type(), event.getClickedBlock());
                     finishQuestionWaypointSelection(player);
                     setQuestionBranchAction(questionSession.action(),
-                            new BehaviourAction(questionSession.type(), location.serialize()));
+                            new BehaviourAction(questionSession.type(), target.value()));
                     player.sendMessage(UiText
-                            .success(questionSession.type().displayName() + " set to " + location.display() + "."));
+                            .success(questionSession.type().displayName() + " set to " + target.display() + "."));
                     openAfterQuestionBranchPicker(player, questionSession.action());
                 }
                 return;
             }
             event.setCancelled(true);
-            ActionLocation location = ActionLocation.above(event.getClickedBlock());
+            WaypointTarget target = waypointTarget(routeSession.type(), event.getClickedBlock());
             finishRouteWaypointSelection(player);
-            RoutePoint updated = setRoutePointAction(routeSession.action(), routeSession.type(), location.serialize());
+            RoutePoint updated = setRoutePointAction(routeSession.action(), routeSession.type(), target.value());
             if (updated == null) {
                 player.sendMessage(UiText.error("That route point no longer exists."));
                 return;
             }
             player.sendMessage(
-                    UiText.success(routeSession.type().displayName() + " set to " + location.display() + "."));
+                    UiText.success(routeSession.type().displayName() + " set to " + target.display() + "."));
             openWaypointActions(player, routeSession.action().routeKey(), updated);
             return;
         }
         event.setCancelled(true);
         NpcDefinition definition = definitionRepository.find(session.action().key()).orElse(null);
-        ActionLocation location = ActionLocation.above(event.getClickedBlock());
+        WaypointTarget target = waypointTarget(session.type(), event.getClickedBlock());
         finishWaypointSelection(player);
         if (definition == null) {
             player.sendMessage(UiText.error("That NPC preset no longer exists."));
             return;
         }
-        setAction(definition, session.action(), session.type(), location.serialize());
-        player.sendMessage(UiText.success(session.type().displayName() + " set to " + location.display() + "."));
+        setAction(definition, session.action(), session.type(), target.value());
+        player.sendMessage(UiText.success(session.type().displayName() + " set to " + target.display() + "."));
         openBehaviourHome(player, definition, session.action());
+    }
+
+    /**
+     * Resolves a right-clicked block into a waypoint value. For Move To, clicking a
+     * global location marker links the action to that location; any other block
+     * stores its coordinates.
+     */
+    private WaypointTarget waypointTarget(BehaviourActionType type, Block block) {
+        if (type == BehaviourActionType.MOVE_TO) {
+            NamedLocation named = namedLocationAt(block);
+            if (named != null)
+                return new WaypointTarget(LocationLink.serialize(named.key()),
+                        "global location '" + named.displayName() + "'");
+        }
+        ActionLocation location = ActionLocation.above(block);
+        return new WaypointTarget(location.serialize(), location.display());
+    }
+
+    /** The global location standing on this block, or occupying its space. */
+    private NamedLocation namedLocationAt(Block block) {
+        ActionLocation above = ActionLocation.above(block);
+        String world = block.getWorld().getName();
+        for (NamedLocation named : locationRepository.findAll()) {
+            ActionLocation location = named.location();
+            if (location.equals(above))
+                return named;
+            if (location.worldName().equals(world) && (int) Math.floor(location.x()) == block.getX()
+                    && (int) Math.floor(location.y()) == block.getY() && (int) Math.floor(location.z()) == block.getZ())
+                return named;
+        }
+        return null;
+    }
+
+    /** True while the player holds an active Move To waypoint compass session. */
+    public boolean isSelectingMoveToWaypoint(Player player) {
+        UUID playerId = player.getUniqueId();
+        WaypointSession direct = waypointSessions.get(playerId);
+        if (direct != null && direct.type() == BehaviourActionType.MOVE_TO)
+            return true;
+        RouteActionWaypointSession route = routeWaypointSessions.get(playerId);
+        if (route != null && route.type() == BehaviourActionType.MOVE_TO)
+            return true;
+        QuestionWaypointSession question = questionWaypointSessions.get(playerId);
+        return question != null && question.type() == BehaviourActionType.MOVE_TO;
+    }
+
+    private record WaypointTarget(String value, String display) {
     }
 
     @EventHandler
@@ -3939,6 +3991,12 @@ public final class GuiService implements Listener {
             return "No setting required";
         }
         if (action.type() == BehaviourActionType.MOVE_TO || action.type() == BehaviourActionType.TELEPORT_TO) {
+            String linkedKey = LocationLink.key(action.value()).orElse(null);
+            if (linkedKey != null) {
+                return locationRepository.find(linkedKey)
+                        .map(named -> "Location '" + named.displayName() + "'")
+                        .orElse("Missing location '" + linkedKey + "'");
+            }
             return ActionLocation.parse(action.value()).map(ActionLocation::display).orElse("Invalid waypoint");
         }
         if (action.type() == BehaviourActionType.USE_ABILITY) {

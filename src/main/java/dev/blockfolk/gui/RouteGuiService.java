@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.BiConsumer;
+import java.util.function.Predicate;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
@@ -79,6 +80,7 @@ public final class RouteGuiService implements Listener {
     private final Map<UUID, EditSession> editSessions = new HashMap<>();
     private final Map<UUID, LocationEditSession> locationEditSessions = new HashMap<>();
     private final Map<UUID, Map<String, TextDisplay>> locationLabels = new HashMap<>();
+    private Predicate<Player> locationPreviewActive = ignored -> false;
     private WaypointActionOpener waypointActionOpener;
     private BiConsumer<Player, NpcDefinition> npcMenuOpener;
     private BukkitTask markerTask;
@@ -110,6 +112,14 @@ public final class RouteGuiService implements Listener {
 
     public void setNpcMenuOpener(BiConsumer<Player, NpcDefinition> npcMenuOpener) {
         this.npcMenuOpener = npcMenuOpener;
+    }
+
+    /**
+     * Players matching this predicate temporarily see all global location markers,
+     * e.g. while choosing a Move To target with the waypoint compass.
+     */
+    public void setLocationPreviewActive(Predicate<Player> locationPreviewActive) {
+        this.locationPreviewActive = locationPreviewActive == null ? ignored -> false : locationPreviewActive;
     }
 
     public void openRoutes(Player player) {
@@ -1022,6 +1032,20 @@ public final class RouteGuiService implements Listener {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null && player.isOnline())
                 showLocations(player);
+        }
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            UUID playerId = player.getUniqueId();
+            if (locationEditSessions.containsKey(playerId))
+                continue;
+            if (locationPreviewActive.test(player))
+                showLocations(player);
+            else if (locationLabels.containsKey(playerId))
+                removeLocationLabels(playerId);
+        }
+        // Drop labels of players who left while previewing.
+        for (UUID playerId : List.copyOf(locationLabels.keySet())) {
+            if (Bukkit.getPlayer(playerId) == null)
+                removeLocationLabels(playerId);
         }
     }
 

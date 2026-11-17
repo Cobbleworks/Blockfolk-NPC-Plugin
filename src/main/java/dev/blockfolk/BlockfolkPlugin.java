@@ -11,6 +11,7 @@ import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.gui.CustomEventGuiService;
 import dev.blockfolk.gui.GuiService;
 import dev.blockfolk.gui.RouteGuiService;
+import dev.blockfolk.model.NamedLocation;
 import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.integration.beautyquests.BeautyQuestsIntegration;
 import dev.blockfolk.model.BehaviourEvent;
@@ -115,6 +116,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         routeGuiService.setNpcMenuOpener(guiService::openEditor);
         guiService.setLocationsOpener(routeGuiService::openLocationsFromMain);
+        routeGuiService.setLocationPreviewActive(guiService::isSelectingMoveToWaypoint);
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService,
                 fighterAttackRepository);
         questionService = new NpcQuestionService(this, instanceRegistry, chatInputService,
@@ -128,6 +130,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                         "perception.awareness-range", dev.blockfolk.runtime.NpcPerception.DEFAULT_AWARENESS_RANGE));
         behaviourService.setPerception(perception);
         behaviourService.setShopService(shopService);
+        behaviourService.setLocationResolver(key -> locationRepository.find(key).map(NamedLocation::location));
         routeGuiService.setBehaviourService(behaviourService);
         OpenRouterClient openRouterClient = new OpenRouterClient(
                 getConfig().getString("openrouter.endpoint", "https://openrouter.ai/api/v1/chat/completions"),
