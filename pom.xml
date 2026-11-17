@@ -42,8 +42,11 @@
         </dependency>
         <dependency>
             <groupId>fr.skytasul</groupId>
-            <artifactId>beautyquests-api</artifactId>
-            <version>1.0.4</version>
+            <!-- Full plugin jar installed locally (mvn install:install-file); the
+                 published beautyquests-api stops at 1.0.4, whose MobFactory.callEvent
+                 signature is binary-incompatible with BeautyQuests 2.x. -->
+            <artifactId>beautyquests</artifactId>
+            <version>2.1.0</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
