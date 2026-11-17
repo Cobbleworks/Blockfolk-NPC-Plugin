@@ -303,12 +303,11 @@ public final class AbilitiesGuiService implements Listener {
             case RING -> "Outer Radius";
             case BEAM -> "Beam Radius";
             case DASH -> "Path Radius";
-            case CHAIN -> "Jump Radius";
             case TELEPORT -> "Blink Distance";
             case CONE, SELF -> null;
         };
         if (sizeLabel != null) {
-            boolean wholeBlocks = shape == Shape.RING || shape == Shape.CHAIN || shape == Shape.TELEPORT;
+            boolean wholeBlocks = shape == Shape.RING || shape == Shape.TELEPORT;
             controls.add(slot -> number(screen, holder, slot, Material.SLIME_BALL, sizeLabel, attack.size(), "blocks",
                     wholeBlocks ? 1 : 0.25, FighterAttack.MAX_SIZE, 0.25, sizeHelp(shape),
                     v -> a -> a.toBuilder().size(v).build()));
@@ -326,11 +325,6 @@ public final class AbilitiesGuiService implements Listener {
                     "blocks", 1, FighterAttack.MAX_RANGE, 1, "How far the cone reaches; separate from activation range",
                     v -> a -> a.toBuilder().coneLength(v).build()));
         }
-        if (shape == Shape.CHAIN)
-            controls.add(slot -> number(screen, holder, slot, Material.IRON_CHAIN, "Chain Targets",
-                    attack.chainTargets(), "targets", FighterAttack.MIN_CHAIN_TARGETS, FighterAttack.MAX_CHAIN_TARGETS,
-                    1, "Maximum entities struck, including the first",
-                    v -> a -> a.toBuilder().chainTargets((int) Math.round(v)).build()));
         place(controls, 3);
         screen.set(40, item(Material.BOOK, "How " + label(shape) + " Works", shapeTips(shape)));
     }
@@ -676,7 +670,6 @@ public final class AbilitiesGuiService implements Listener {
             case RING -> "Ring: " + format(attack.innerRadius()) + "–" + format(attack.size()) + " blocks";
             case CONE -> "Cone: " + format(attack.coneLength()) + " blocks · " + format(attack.angle()) + "°";
             case BEAM -> "Beam radius: " + format(attack.size()) + " blocks";
-            case CHAIN -> "Chain: " + attack.chainTargets() + " targets · " + format(attack.size()) + "-block jumps";
             case DASH -> "Path radius: " + format(attack.size()) + " blocks";
             case TELEPORT -> "Blink distance: " + format(attack.size()) + " blocks";
             case SELF -> null;
@@ -754,7 +747,7 @@ public final class AbilitiesGuiService implements Listener {
 
     private static Material icon(FighterAttack attack) {
         return switch (attack.shape()) {
-            case TELEPORT, CHAIN, DASH, SELF -> shapeIcon(attack.shape());
+            case TELEPORT, DASH, SELF -> shapeIcon(attack.shape());
             default -> AbilityVisuals.icon(attack.visual());
         };
     }
@@ -764,7 +757,6 @@ public final class AbilitiesGuiService implements Listener {
             case RING -> Material.TARGET;
             case CONE -> Material.HOPPER;
             case BEAM -> Material.END_ROD;
-            case CHAIN -> Material.IRON_CHAIN;
             case DASH -> Material.TRIDENT;
             case TELEPORT -> Material.ENDER_PEARL;
             case SELF -> Material.NETHER_STAR;
@@ -776,7 +768,6 @@ public final class AbilitiesGuiService implements Listener {
             case RING -> "A hollow ring; standing close to the centre is safe";
             case CONE -> "A widening cone aimed at the opponent";
             case BEAM -> "A narrow beam from the caster that stops at blocks";
-            case CHAIN -> "Strikes the opponent, then jumps between nearby enemies";
             case DASH -> "The caster rushes at the opponent, striking along its path";
             case TELEPORT -> "Moves the caster to a nearby safe landing spot";
             case SELF -> "Empowers the caster; only caster buffs apply";
@@ -786,13 +777,11 @@ public final class AbilitiesGuiService implements Listener {
         return switch (shape) {
             case BEAM -> "Opponent must be this close; also the beam's length";
             case DASH -> "Opponent must be this close; also the furthest dash";
-            case CHAIN -> "Opponent must be this close for the first strike";
             default -> "How close the opponent must be to start casting";
         };
     }
     private static String sizeHelp(Shape shape) {
         return switch (shape) {
-            case CHAIN -> "How far the strike can jump between victims";
             case TELEPORT -> "Furthest distance the caster can blink";
             case DASH -> "How wide the path that hits victims is";
             default -> "Size of the affected area";
@@ -808,8 +797,6 @@ public final class AbilitiesGuiService implements Listener {
                     "Can linger and pulse, e.g. sustained breath");
             case BEAM -> List.of("Aim locks when casting starts; stops at blocks",
                     "Activation range is also the beam length", "Can linger and pulse, e.g. a searing ray");
-            case CHAIN -> List.of("Needs sight of the first target", "Each jump needs sight from the previous victim",
-                    "Jumps follow alliance and target rules");
             case DASH -> List.of("Stops in front of the target or a wall", "Fizzles without a safe landing spot",
                     "Set a Minimum Range so it closes distance");
             case TELEPORT ->

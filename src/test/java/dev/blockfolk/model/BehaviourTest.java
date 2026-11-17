@@ -30,9 +30,11 @@ class BehaviourTest {
         assertEquals(BehaviourActionType.DROP_INVENTORY, BehaviourActionType.fromStored("drop_inventory"));
         assertEquals(BehaviourActionType.HARVEST, BehaviourActionType.fromStored("harvest"));
         assertEquals(BehaviourActionType.CHANGE_FIGHT_OPTIONS, BehaviourActionType.fromStored("change_fight_options"));
-        assertEquals("At Sunrise", BehaviourEvent.SUNRISE.displayName());
-        assertEquals("At Noon", BehaviourEvent.NOON.displayName());
-        assertEquals("At Sunset", BehaviourEvent.SUNSET.displayName());
+        assertEquals("At Night — 00:00", BehaviourEvent.NIGHT.displayName());
+        assertEquals("At Morning — 05:00", BehaviourEvent.MORNING.displayName());
+        assertEquals("At Noon — 10:00", BehaviourEvent.NOON.displayName());
+        assertEquals("At Afternoon — 14:00", BehaviourEvent.AFTERNOON.displayName());
+        assertEquals("At Evening — 19:00", BehaviourEvent.EVENING.displayName());
     }
 
     @Test

@@ -61,7 +61,7 @@ class AttackGeometryTest {
         FighterAttack dash = FighterAttack.builder("dash", "Dash").shape(Shape.DASH).size(1).build();
         assertTrue(AttackGeometry.contains(dash, new Vector(3, 0, 0.5), aim, 4));
         assertFalse(AttackGeometry.contains(dash, new Vector(5, 0, 0), aim, 4));
-        assertFalse(AttackGeometry.contains(attack(Shape.CHAIN), new Vector(), aim, 8));
+        assertFalse(AttackGeometry.contains(attack(Shape.TELEPORT), new Vector(), aim, 8));
         assertFalse(AttackGeometry.contains(attack(Shape.SELF), new Vector(), aim, 8));
     }
 }

@@ -1,7 +1,6 @@
 package dev.blockfolk.combat;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -249,7 +248,7 @@ public final class NpcSpecialAttackService {
 
     private static Location origin(LivingEntity npc, FighterAttack attack) {
         return switch (attack.shape()) {
-            case CONE, BEAM, CHAIN -> npc.getEyeLocation();
+            case CONE, BEAM -> npc.getEyeLocation();
             default -> npc.getLocation();
         };
     }
@@ -326,7 +325,6 @@ public final class NpcSpecialAttackService {
                 visualize(attack, center, cast.direction(), true);
                 yield List.of();
             }
-            case CHAIN -> chainVictims(npc, target, attack, canHit);
             case DASH -> dash(instanceId, npc, target, cast, canHit);
             default -> {
                 visualize(attack, center, cast.direction(), !pulse);
@@ -381,42 +379,6 @@ public final class NpcSpecialAttackService {
 
     private static boolean eligible(LivingEntity npc, LivingEntity victim, Predicate<LivingEntity> canHit) {
         return !victim.equals(npc) && canHit.test(victim) && npc.hasLineOfSight(victim);
-    }
-
-    /**
-     * Strikes the target, then repeatedly jumps to the nearest eligible entity
-     * within jump radius that the previous victim can see.
-     */
-    private static List<LivingEntity> chainVictims(LivingEntity npc, LivingEntity target, FighterAttack attack,
-            Predicate<LivingEntity> canHit) {
-        List<LivingEntity> chain = new ArrayList<>();
-        if (target == null || !eligible(npc, target, canHit))
-            return chain;
-        chain.add(target);
-        double jumpSquared = attack.size() * attack.size();
-        while (chain.size() < attack.chainTargets()) {
-            LivingEntity previous = chain.getLast();
-            Location from = previous.getLocation();
-            LivingEntity next = from.getNearbyLivingEntities(attack.size()).stream()
-                    .filter(candidate -> !candidate.equals(npc) && !chain.contains(candidate))
-                    .filter(candidate -> candidate.getWorld() == from.getWorld()
-                            && candidate.getLocation().distanceSquared(from) <= jumpSquared)
-                    .filter(candidate -> canHit.test(candidate) && previous.hasLineOfSight(candidate))
-                    .min(Comparator.comparingDouble(candidate -> candidate.getLocation().distanceSquared(from)))
-                    .orElse(null);
-            if (next == null)
-                break;
-            chain.add(next);
-        }
-        Particle particle = AbilityVisuals.particle(attack.visual());
-        Location from = npc.getEyeLocation();
-        for (LivingEntity victim : chain) {
-            Location to = victim.getEyeLocation();
-            line(particle, from, to, 0.4);
-            from = to;
-        }
-        npc.getWorld().playSound(npc.getLocation(), AbilityVisuals.impactSound(attack.visual()), 0.7f, 1.1f);
-        return chain;
     }
 
     /**
@@ -649,14 +611,6 @@ public final class NpcSpecialAttackService {
         Location center = origin(player, attack);
         if (attack.origin() == Origin.TARGET)
             center.add(direction.clone().multiply(Math.min(6, attack.range())));
-        if (attack.shape() == Shape.CHAIN) {
-            Particle particle = AbilityVisuals.particle(attack.visual());
-            Location first = center.clone().add(direction.clone().multiply(Math.min(6, attack.range())));
-            line(particle, center, first, 0.4);
-            circle(particle, first.clone().subtract(0, 1.4, 0), attack.size(), 0.15);
-            player.getWorld().playSound(player.getLocation(), AbilityVisuals.impactSound(attack.visual()), 0.7f, 1.1f);
-            return;
-        }
         visualize(attack, center, direction, true);
     }
 
@@ -698,11 +652,8 @@ public final class NpcSpecialAttackService {
                             center.clone().add(Math.cos(angle) * 0.7, i * 0.13, Math.sin(angle) * 0.7), 1, 0, 0, 0, 0);
                 }
             }
-            case CHAIN -> {
-                // Chains draw their hops on impact; while casting only the caster glows.
-            }
         }
-        if (impact && attack.shape() != Shape.CHAIN)
+        if (impact)
             center.getWorld().playSound(center, AbilityVisuals.impactSound(attack.visual()), 0.7f, 1.1f);
     }
 

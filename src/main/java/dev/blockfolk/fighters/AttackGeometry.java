@@ -15,8 +15,8 @@ public final class AttackGeometry {
             }
             case CONE -> cone(attack, relative, direction, Math.min(range, attack.coneLength()));
             case BEAM, DASH -> beam(attack, relative, direction, range);
-            // Chains pick victims hop by hop; teleport and self never hit others.
-            case CHAIN, TELEPORT, SELF -> false;
+            // Teleport and self never hit others.
+            case TELEPORT, SELF -> false;
         };
     }
     private static boolean cone(FighterAttack attack, Vector relative, Vector direction, double range) {

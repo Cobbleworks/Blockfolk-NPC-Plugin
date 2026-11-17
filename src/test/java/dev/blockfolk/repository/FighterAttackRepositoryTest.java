@@ -41,6 +41,33 @@ class FighterAttackRepositoryTest {
     }
 
     @Test
+    void removedChainAbilitiesLoadAsTargetCentredAreasWithTheirJumpRadius() throws Exception {
+        YamlConfiguration yaml = new YamlConfiguration();
+        yaml.loadFromString("""
+                attacks:
+                  chain-lightning:
+                    origin: NPC
+                    shape: CHAIN
+                    range: 12
+                    size: 5
+                    chain-targets: 4
+                    visual: LIGHTNING
+                  nova:
+                    shape: RING
+                """);
+        assertEquals(List.of("chain-lightning"), FighterAttackRepository.legacyChainKeys(yaml));
+        FighterAttack converted = FighterAttackRepository.decode(yaml).getFirst();
+        assertEquals(FighterAttack.Shape.SPHERE, converted.shape());
+        assertEquals(FighterAttack.Origin.TARGET, converted.origin());
+        assertEquals(12, converted.range());
+        assertEquals(5, converted.size());
+        assertEquals(FighterAttack.Visual.LIGHTNING, converted.visual());
+        String saved = FighterAttackRepository.encode(FighterAttackRepository.decode(yaml)).saveToString();
+        assertFalse(saved.contains("CHAIN"));
+        assertFalse(saved.contains("chain-targets"));
+    }
+
+    @Test
     void olderConesUseTheirSavedRangeAsLengthWhenTheNewFieldIsMissing() throws Exception {
         YamlConfiguration yaml = new YamlConfiguration();
         yaml.loadFromString("attacks:\n  old_cone:\n    shape: CONE\n    range: 12\n    angle: 45\n");

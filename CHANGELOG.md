@@ -4,6 +4,10 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ## [Unreleased]
 
+### Changed
+
+- Time behaviours now cover five day periods instead of three: **At Night** (00:00), **At Morning** (05:00), **At Noon** (10:00), **At Afternoon** (14:00), and **At Evening** (19:00). Each runs when its period begins. Saved **At Sunrise** actions move to **At Morning** (one in-game hour earlier) and **At Sunset** actions to **At Evening** (one hour later). **At Noon** keeps its actions but now runs at 10:00 instead of 12:00. The AI context reports the same five periods as the time of day.
+
 ### Fixed
 
 - BeautyQuests receives NPC clicks before Blockfolk cancels mannequin interaction or runs normal click actions. Quest selection no longer also fires the NPC's click routine, and left-click selection detects invulnerable NPCs before damage processing. Shift-right-click still opens the Blockfolk admin editor.
@@ -24,12 +28,12 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 - Open Shop behaviour action that opens a chosen shop for the triggering player, for example on right-click or from a question answer. Shops configured on a preset by earlier development builds move into the library automatically, and that preset's Open Shop actions are pointed at them.
 - `/bf config ai model` without a model shows the model currently in use.
 - `/bf config ai reasoning <none|minimal|low|medium|high>` changes the AI reasoning effort at runtime and saves it to `openrouter.reasoning-effort`. Without a value it shows the current effort. Also works from the console.
-- Ring, Chain, Dash, and Self ability shapes. Rings spare a safe inner area, chains jump between nearby enemies, dashes rush the caster towards its target and strike along the path, and Self abilities empower the caster.
+- Ring, Dash, and Self ability shapes. Rings spare a safe inner area, dashes rush the caster towards its target and strike along the path, and Self abilities empower the caster.
 - Lingering pulses: spheres, rings, cones, and beams can strike up to 10 times at their marked spot and aim, without pausing weapon combat.
 - Ability triggers (Always, Caster below 50% / 25% health, Target below 50% health) and a minimum range for automatic casts. Abilities whose trigger is met are preferred.
 - Darkness, Nausea, Hunger, Mining Fatigue, Levitation, Glowing, Pull, and Launch victim effects, plus Regeneration, Speed, Strength, Resistance, and Absorption caster buffs.
 - Holy, Sculk, Cherry, Wind, and Glow visual themes, with a matching impact sound for every theme.
-- Frost Nova, Chain Lightning, Poison Cloud, Gravity Well, Searing Ray, Shadow Dash, Updraft, Finishing Blow, War Cry, and Second Wind templates.
+- Frost Nova, Poison Cloud, Gravity Well, Searing Ray, Shadow Dash, Updraft, Finishing Blow, War Cry, and Second Wind templates.
 - Use Ability behaviour action with a shared-library selector for event routines, waypoint actions, and question branches.
 - Instant, Delayed, and On Next Attack cast modes, with successful-hit charge triggers, caster particles, charge indicators, and saved timing modes.
 - Enchant, Hearts, Smoke, Soul Flame, Bubbles, Spores, and Totem visual themes, plus changing icons and descriptions for particle and shape selectors.

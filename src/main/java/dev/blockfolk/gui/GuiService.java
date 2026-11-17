@@ -3812,9 +3812,11 @@ public final class GuiService implements Listener {
             case DROP_ITEM -> Material.DROPPER;
             case RECEIVE_ITEM -> Material.HOPPER;
             case LOW_HEALTH -> Material.GLISTERING_MELON_SLICE;
-            case SUNRISE -> Material.ORANGE_DYE;
+            case NIGHT -> Material.BLACK_BED;
+            case MORNING -> Material.ORANGE_DYE;
             case NOON -> Material.COOKED_BEEF;
-            case SUNSET -> Material.SUNFLOWER;
+            case AFTERNOON -> Material.SUNFLOWER;
+            case EVENING -> Material.LANTERN;
             case PLAYER_CHAT -> Material.WRITABLE_BOOK;
             case ENTITY_NEARBY -> Material.OBSERVER;
             case NPC_NEARBY -> Material.VILLAGER_SPAWN_EGG;

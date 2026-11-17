@@ -6,9 +6,12 @@ public enum BehaviourEvent {
                     "On Entity Nearby"), NPC_NEARBY("On Nearby NPC"), NEARBY_AGGRESSION("On Nearby Aggression"), DEATH(
                             "On Death"), DAMAGE_TAKEN("On Damage Taken"), LOW_HEALTH("On Low Health — 25% HP"), HEAL(
                                     "On Heal — 2+ Hearts"), DROP_ITEM("On Drop Item"), RECEIVE_ITEM(
-                                            "On Receive Item"), SUNRISE("At Sunrise"), NOON("At Noon"), SUNSET(
-                                                    "At Sunset"), COMBAT_ENTERED(
-                                                            "On Combat Entered"), COMBAT_EXITED("On Combat Exited");
+                                            "On Receive Item"), NIGHT("At Night — 00:00"), MORNING(
+                                                    "At Morning — 05:00"), NOON("At Noon — 10:00"), AFTERNOON(
+                                                            "At Afternoon — 14:00"), EVENING(
+                                                                    "At Evening — 19:00"), COMBAT_ENTERED(
+                                                                            "On Combat Entered"), COMBAT_EXITED(
+                                                                                    "On Combat Exited");
 
     private final String displayName;
 

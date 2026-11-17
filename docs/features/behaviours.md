@@ -10,7 +10,19 @@ The standard editor provides these triggers:
 - players: **On Left-Click**, **On Right-Click**, **On Player Approach**, and **On Player Leaves**;
 - combat and health: **On Damage Taken**, **On Nearby Aggression**, **On Low Health**, **On Heal**, **On Combat Entered**, and **On Combat Exited**;
 - world: **On Entity Nearby**, **On Nearby NPC**, **On Drop Item**, and **On Receive Item**;
-- time: **At Sunrise**, **At Noon**, and **At Sunset**.
+- time: **At Night**, **At Morning**, **At Noon**, **At Afternoon**, and **At Evening**.
+
+Each time event runs once when its day period begins, for every active NPC in that world:
+
+| Event | Starts | World time |
+| --- | --- | --- |
+| At Night | 00:00 | 18000 |
+| At Morning | 05:00 | 23000 |
+| At Noon | 10:00 | 4000 |
+| At Afternoon | 14:00 | 8000 |
+| At Evening | 19:00 | 13000 |
+
+A Minecraft day lasts 20 minutes, so each period lasts about four minutes. When time jumps forward by less than half a day, for example by sleeping, every period start that was passed still fires; larger jumps fire nothing. Presets saved with **At Sunrise** or **At Sunset** load those actions into **At Morning** and **At Evening**.
 
 Nearby chat is configured from the AI menu rather than shown as a deterministic behaviour row.
 

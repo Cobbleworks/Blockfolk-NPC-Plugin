@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
+import dev.blockfolk.model.BehaviourEvent;
+import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.SpecialAttack;
@@ -57,6 +59,28 @@ class NpcDefinitionRepositoryTest {
         assertEquals(List.of(attacked, attacked, attacked, attacked, attacked, damaged, damaged),
                 NpcDefinitionRepository.mergeDamageActions(List.of(attacked, attacked, attacked, attacked, attacked),
                         List.of(damaged, damaged, damaged)));
+    }
+
+    @Test
+    void sunriseAndSunsetRowsMoveToMorningAndEveningWithoutReplacingNewRows() throws Exception {
+        YamlConfiguration old = new YamlConfiguration();
+        old.loadFromString("""
+                behaviours:
+                  sunrise:
+                  - type: wait
+                    value: '1.0'
+                  sunset:
+                  - type: wait
+                    value: '2.0'
+                """);
+        NpcDefinition definition = new NpcDefinition("guard");
+        BehaviourAction evening = new BehaviourAction(BehaviourActionType.WAIT, "3.0");
+        definition.setBehaviourActions(BehaviourEvent.EVENING, List.of(evening));
+        NpcDefinitionRepository.migrateLegacyTimeEvents(old, definition,
+                stored -> stored.stream().map(BehaviourActionCodec::decode).toList());
+        assertEquals(List.of(new BehaviourAction(BehaviourActionType.WAIT, "1.0")),
+                definition.getBehaviourActions(BehaviourEvent.MORNING));
+        assertEquals(List.of(evening), definition.getBehaviourActions(BehaviourEvent.EVENING));
     }
 
     @Test

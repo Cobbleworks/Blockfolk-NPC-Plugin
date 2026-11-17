@@ -72,6 +72,7 @@ import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.BehaviourEvent;
+import dev.blockfolk.model.DayPeriod;
 import dev.blockfolk.model.FightOptions;
 import dev.blockfolk.model.MovementProfile;
 import dev.blockfolk.model.NpcDefinition;
@@ -1406,31 +1407,27 @@ public final class NpcBehaviourService implements Listener {
         for (World world : Bukkit.getWorlds()) {
             UUID worldId = world.getUID();
             activeWorlds.add(worldId);
-            long current = Math.floorMod(world.getTime(), 24000L);
+            long current = Math.floorMod(world.getTime(), DayPeriod.TICKS_PER_DAY);
             Long previous = lastWorldTimes.put(worldId, current);
             if (previous == null || previous == current) {
                 continue;
             }
-            long elapsed = Math.floorMod(current - previous, 24000L);
+            long elapsed = Math.floorMod(current - previous, DayPeriod.TICKS_PER_DAY);
             // More than half a day backwards is most likely an administrative time change.
             if (elapsed == 0L || elapsed > 12000L) {
                 continue;
             }
-            if (crossedTime(previous, elapsed, 0L)) {
-                triggerTimeEvent(world, BehaviourEvent.SUNRISE);
-            }
-            if (crossedTime(previous, elapsed, 6000L)) {
-                triggerTimeEvent(world, BehaviourEvent.NOON);
-            }
-            if (crossedTime(previous, elapsed, 12000L)) {
-                triggerTimeEvent(world, BehaviourEvent.SUNSET);
+            for (DayPeriod period : DayPeriod.values()) {
+                if (crossedTime(previous, elapsed, period.startTick())) {
+                    triggerTimeEvent(world, period.event());
+                }
             }
         }
         lastWorldTimes.keySet().retainAll(activeWorlds);
     }
 
     private boolean crossedTime(long previous, long elapsed, long threshold) {
-        long distance = Math.floorMod(threshold - previous, 24000L);
+        long distance = Math.floorMod(threshold - previous, DayPeriod.TICKS_PER_DAY);
         return distance > 0L && distance <= elapsed;
     }
 

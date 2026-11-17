@@ -41,6 +41,9 @@ import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.util.LocationCodec;
 
 public final class NpcDefinitionRepository {
+    /** Removed time events load into the day period that replaced them. */
+    private static final Map<String, BehaviourEvent> LEGACY_TIME_EVENTS = Map.of("sunrise", BehaviourEvent.MORNING,
+            "sunset", BehaviourEvent.EVENING);
 
     private final JavaPlugin plugin;
     private final File definitionsFolder;
@@ -364,6 +367,7 @@ public final class NpcDefinitionRepository {
             String path = "behaviours." + event.name().toLowerCase(Locale.ROOT);
             definition.setBehaviourActions(event, decodeActions(configuration.getMapList(path), file, "behaviour"));
         }
+        migrateLegacyTimeEvents(configuration, definition, stored -> decodeActions(stored, file, "behaviour"));
         List<BehaviourAction> attackedActions = decodeActions(configuration.getMapList("behaviours.npc_attacked"), file,
                 "behaviour");
         if (!attackedActions.isEmpty()) {
@@ -399,6 +403,19 @@ public final class NpcDefinitionRepository {
             }
         }
         return definition;
+    }
+
+    /**
+     * Moves Sunrise and Sunset rows into Morning and Evening unless those rows
+     * already have actions.
+     */
+    static void migrateLegacyTimeEvents(YamlConfiguration configuration, NpcDefinition definition,
+            java.util.function.Function<List<Map<?, ?>>, List<BehaviourAction>> decoder) {
+        LEGACY_TIME_EVENTS.forEach((legacyName, event) -> {
+            List<BehaviourAction> legacy = decoder.apply(configuration.getMapList("behaviours." + legacyName));
+            if (!legacy.isEmpty() && definition.getBehaviourActions(event).isEmpty())
+                definition.setBehaviourActions(event, legacy);
+        });
     }
 
     private List<BehaviourAction> decodeActions(List<Map<?, ?>> storedActions, File file, String kind) {

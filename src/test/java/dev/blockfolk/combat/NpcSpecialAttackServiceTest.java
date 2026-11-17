@@ -413,27 +413,6 @@ class NpcSpecialAttackServiceTest {
     }
 
     @Test
-    void chainJumpsBetweenNearbyEligibleVictimsUpToItsLimit() {
-        FighterAttack chain = FighterAttack.builder("chain", "Chain").shape(FighterAttack.Shape.CHAIN).size(4)
-                .chainTargets(3).delayTicks(0).damage(3).build();
-        Actor near = new Actor(6);
-        Actor next = new Actor(9);
-        Actor ally = new Actor(4);
-        Actor beyond = new Actor(10);
-        nearby = List.of(npc.entity, target.entity, ally.entity, near.entity, next.entity, beyond.entity);
-        NpcSpecialAttackService local = new NpcSpecialAttackService(() -> List.of(chain), (id, to) -> false, victim -> {
-        });
-        assertEquals(0, local.useAbility(instanceId, npc.entity, target.entity, "chain",
-                SpecialAttackOptions.disabled(), victim -> victim != ally.entity, 0));
-        assertEquals(17, target.health);
-        assertEquals(17, near.health);
-        assertEquals(17, next.health);
-        assertEquals(20, beyond.health);
-        assertEquals(20, ally.health);
-        assertEquals(20, npc.health);
-    }
-
-    @Test
     void dashStopsInFrontOfTheTargetAndHitsAlongItsPath() {
         FighterAttack dash = FighterAttack.builder("dash", "Dash").shape(FighterAttack.Shape.DASH).range(10).size(1)
                 .delayTicks(0).damage(4).build();

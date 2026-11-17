@@ -14,8 +14,7 @@ import org.bukkit.inventory.ItemStack;
 public record FighterAttack(String key, String name, Origin origin, Shape shape, double range, double size,
         double angle, int delayTicks, int cooldownTicks, double damage, Set<Effect> effects, int effectSeconds,
         int effectLevel, double knockback, Visual visual, double coneLength, ItemStack icon, CastMode castMode,
-        double minRange, double innerRadius, int chainTargets, int pulses, int pulseIntervalTicks,
-        Condition condition) {
+        double minRange, double innerRadius, int pulses, int pulseIntervalTicks, Condition condition) {
     public static final double MAX_RANGE = 24;
     public static final double MAX_SIZE = 8;
     public static final double MAX_DAMAGE = 100;
@@ -25,8 +24,6 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
     public static final int MAX_COOLDOWN_TICKS = 2400;
     public static final int MAX_EFFECT_SECONDS = 30;
     public static final int MAX_EFFECT_LEVEL = 5;
-    public static final int MIN_CHAIN_TARGETS = 2;
-    public static final int MAX_CHAIN_TARGETS = 8;
     public static final int MAX_PULSES = 10;
     /** Matches vanilla hurt immunity so every pulse can deal its damage. */
     public static final int MIN_PULSE_INTERVAL_TICKS = 10;
@@ -39,7 +36,7 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
         }
     }
     public enum Shape {
-        SPHERE, RING, CONE, BEAM, CHAIN, DASH, TELEPORT, SELF;
+        SPHERE, RING, CONE, BEAM, DASH, TELEPORT, SELF;
         public Shape next() {
             return values()[(ordinal() + 1) % values().length];
         }
@@ -49,7 +46,7 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
         }
         /** Shapes that are aimed at, or travel to, the opponent. */
         public boolean aimed() {
-            return this == CONE || this == BEAM || this == CHAIN || this == DASH;
+            return this == CONE || this == BEAM || this == DASH;
         }
         /** Shapes that can linger and strike repeatedly. */
         public boolean supportsPulses() {
@@ -137,7 +134,7 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
         icon = icon == null || icon.isEmpty() ? null : icon.clone();
         if (icon != null)
             icon.setAmount(1);
-        boolean wholeBlocks = shape == Shape.TELEPORT || shape == Shape.RING || shape == Shape.CHAIN;
+        boolean wholeBlocks = shape == Shape.TELEPORT || shape == Shape.RING;
         size = bounded(size, wholeBlocks ? 1 : 0.25, MAX_SIZE, 2);
         innerRadius = bounded(innerRadius, 0, MAX_SIZE, 0);
         if (shape == Shape.RING)
@@ -158,7 +155,6 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
         effectLevel = Math.clamp(effectLevel, 1, MAX_EFFECT_LEVEL);
         knockback = bounded(knockback, 0, MAX_FORCE, 0.8);
         visual = Objects.requireNonNullElse(visual, Visual.SOUL);
-        chainTargets = Math.clamp(chainTargets, MIN_CHAIN_TARGETS, MAX_CHAIN_TARGETS);
         pulses = shape.supportsPulses() ? Math.clamp(pulses, 1, MAX_PULSES) : 1;
         pulseIntervalTicks = Math.clamp(pulseIntervalTicks, MIN_PULSE_INTERVAL_TICKS, MAX_PULSE_INTERVAL_TICKS);
         condition = Objects.requireNonNullElse(condition, Condition.ALWAYS);
@@ -182,7 +178,7 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
             int delayTicks, int cooldownTicks, double damage, Set<Effect> effects, int effectSeconds, int effectLevel,
             double knockback, Visual visual, double coneLength, ItemStack icon, CastMode castMode) {
         this(key, name, origin, shape, range, size, angle, delayTicks, cooldownTicks, damage, effects, effectSeconds,
-                effectLevel, knockback, visual, coneLength, icon, castMode, 0, 0, 3, 1, 20, Condition.ALWAYS);
+                effectLevel, knockback, visual, coneLength, icon, castMode, 0, 0, 1, 20, Condition.ALWAYS);
     }
 
     public static Builder builder(String key, String name) {
@@ -275,7 +271,6 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
         private CastMode castMode;
         private double minRange;
         private double innerRadius;
-        private int chainTargets = 3;
         private int pulses = 1;
         private int pulseIntervalTicks = 20;
         private Condition condition = Condition.ALWAYS;
@@ -305,7 +300,6 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
             castMode = attack.castMode;
             minRange = attack.minRange;
             innerRadius = attack.innerRadius;
-            chainTargets = attack.chainTargets;
             pulses = attack.pulses;
             pulseIntervalTicks = attack.pulseIntervalTicks;
             condition = attack.condition;
@@ -395,10 +389,6 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
             innerRadius = value;
             return this;
         }
-        public Builder chainTargets(int value) {
-            chainTargets = value;
-            return this;
-        }
         public Builder pulses(int value) {
             pulses = value;
             return this;
@@ -414,7 +404,7 @@ public record FighterAttack(String key, String name, Origin origin, Shape shape,
         public FighterAttack build() {
             return new FighterAttack(key, name, origin, shape, range, size, angle, delayTicks, cooldownTicks, damage,
                     effects, effectSeconds, effectLevel, knockback, visual, coneLength, icon, castMode, minRange,
-                    innerRadius, chainTargets, pulses, pulseIntervalTicks, condition);
+                    innerRadius, pulses, pulseIntervalTicks, condition);
         }
     }
 }

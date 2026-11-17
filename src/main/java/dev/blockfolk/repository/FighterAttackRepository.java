@@ -16,11 +16,18 @@ import dev.blockfolk.fighters.FighterAttack.*;
 import dev.blockfolk.fighters.FighterTemplates;
 
 public final class FighterAttackRepository {
+    /**
+     * Removed shape; saved chains load as an area around the target with the old
+     * jump radius.
+     */
+    private static final String LEGACY_CHAIN_SHAPE = "CHAIN";
+    private final JavaPlugin plugin;
     private final File file;
     private final DebouncedYamlWriter writer;
     private final Map<String, FighterAttack> attacks = new LinkedHashMap<>();
 
     public FighterAttackRepository(JavaPlugin plugin) {
+        this.plugin = plugin;
         file = new File(plugin.getDataFolder(), "abilities.yml");
         writer = new DebouncedYamlWriter(plugin);
     }
@@ -32,8 +39,14 @@ public final class FighterAttackRepository {
             saveAll();
             return;
         }
-        decode(YamlConfiguration.loadConfiguration(source)).forEach(attack -> attacks.put(attack.key(), attack));
-        if (!source.equals(file))
+        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(source);
+        List<String> legacyChains = legacyChainKeys(yaml);
+        decode(yaml).forEach(attack -> attacks.put(attack.key(), attack));
+        if (!legacyChains.isEmpty())
+            plugin.getLogger()
+                    .warning("The Chain ability shape was removed; converted " + String.join(", ", legacyChains)
+                            + " to a target-centred area. Review them in the abilities menu.");
+        if (!source.equals(file) || !legacyChains.isEmpty())
             saveAll();
     }
 
@@ -86,12 +99,20 @@ public final class FighterAttackRepository {
             section.set("visual", attack.visual().name());
             section.set("min-range", attack.minRange());
             section.set("inner-radius", attack.innerRadius());
-            section.set("chain-targets", attack.chainTargets());
             section.set("pulses", attack.pulses());
             section.set("pulse-interval-ticks", attack.pulseIntervalTicks());
             section.set("condition", attack.condition().name());
         }
         return yaml;
+    }
+    static List<String> legacyChainKeys(YamlConfiguration yaml) {
+        ConfigurationSection root = yaml.getConfigurationSection("attacks");
+        if (root == null)
+            return List.of();
+        return root.getKeys(false).stream().filter(key -> isLegacyChain(root.getConfigurationSection(key))).toList();
+    }
+    private static boolean isLegacyChain(ConfigurationSection section) {
+        return section != null && LEGACY_CHAIN_SHAPE.equalsIgnoreCase(section.getString("shape", "").trim());
     }
     static List<FighterAttack> decode(YamlConfiguration yaml) {
         List<FighterAttack> attacks = new ArrayList<>();
@@ -105,9 +126,12 @@ public final class FighterAttackRepository {
             Set<Effect> effects = section.getStringList("effects").stream()
                     .map(value -> enumValue(Effect.class, value, null)).filter(java.util.Objects::nonNull)
                     .collect(Collectors.toSet());
-            attacks.add(FighterAttack.builder(key, section.getString("name", key))
-                    .origin(enumValue(Origin.class, section.getString("origin"), Origin.NPC))
-                    .shape(enumValue(Shape.class, section.getString("shape"), Shape.SPHERE))
+            boolean legacyChain = isLegacyChain(section);
+            attacks.add(FighterAttack.builder(key, section.getString("name", key)).origin(
+                    legacyChain ? Origin.TARGET : enumValue(Origin.class, section.getString("origin"), Origin.NPC))
+                    .shape(legacyChain
+                            ? Shape.SPHERE
+                            : enumValue(Shape.class, section.getString("shape"), Shape.SPHERE))
                     .range(section.getDouble("range", 8)).size(section.getDouble("size", 2))
                     .angle(section.getDouble("angle", 60)).delayTicks(section.getInt("delay-ticks", 20))
                     .cooldownTicks(section.getInt("cooldown-ticks", 200)).damage(section.getDouble("damage", 4))
@@ -118,8 +142,7 @@ public final class FighterAttackRepository {
                     .icon(section.getItemStack("icon"))
                     .castMode(enumValue(CastMode.class, section.getString("cast-mode"), null))
                     .minRange(section.getDouble("min-range", 0)).innerRadius(section.getDouble("inner-radius", 0))
-                    .chainTargets(section.getInt("chain-targets", 3)).pulses(section.getInt("pulses", 1))
-                    .pulseIntervalTicks(section.getInt("pulse-interval-ticks", 20))
+                    .pulses(section.getInt("pulses", 1)).pulseIntervalTicks(section.getInt("pulse-interval-ticks", 20))
                     .condition(enumValue(Condition.class, section.getString("condition"), Condition.ALWAYS)).build());
         }
         return attacks;

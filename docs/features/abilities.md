@@ -26,14 +26,13 @@ Hold the desired item in your main hand, then hover an ability in the library, t
 | Ring | A hollow sphere between the **Safe Inner Radius** and the **Outer Radius**. Entities close to the centre are not hit. It can be centred on the caster or the target. | A frost nova that punishes kiting, or a cage around the target. |
 | Cone | Starts at the NPC's eyes and points towards the opponent. **Cone Length** and **Cone Angle** control the volume. | Fire breath or a spreading curse. |
 | Beam | Starts at the NPC's eyes. **Beam Radius** controls width, and blocks shorten the beam. | Sonic blast or a searing ray. |
-| Chain | Strikes the opponent, then jumps to the nearest eligible entity within **Jump Radius** of the previous victim, up to **Chain Targets** victims in total. | Chain lightning against groups. |
 | Dash | The NPC rushes towards the opponent, stopping 1.5 blocks in front of it or before a wall. Entities within **Path Radius** of its path are hit. | A gap-closing charge. |
 | Teleport | Repositions the NPC to a nearby safe location within **Blink Distance**. | A short evasive blink. |
 | Self | Affects only the caster. Only caster buffs apply. | A war cry or emergency heal. |
 
 **Activation Range** controls how close the opponent must be before the NPC chooses that attack. For beams it is also the beam's length, and for dashes the furthest the NPC dashes. **Minimum Range** makes automatic casts wait until the opponent is at least that far away; use it so a dash closes distance instead of firing point-blank. **Cone Length** (1–24 blocks) is separate from activation range.
 
-Caster-centred spheres and rings follow the NPC throughout the delay. Target-centred areas keep the marked position. Delayed cones, beams, and dashes lock their aim when casting begins, so moving sideways can avoid them; a dash telegraphs its path on the ground. Charged abilities aim when the successful weapon hit releases them. All offensive shapes check line of sight and alliance/target rules. Each chain jump also needs line of sight from the previous victim.
+Caster-centred spheres and rings follow the NPC throughout the delay. Target-centred areas keep the marked position. Delayed cones, beams, and dashes lock their aim when casting begins, so moving sideways can avoid them; a dash telegraphs its path on the ground. Charged abilities aim when the successful weapon hit releases them. All offensive shapes check line of sight and alliance/target rules.
 
 Teleport and Dash check loaded chunks, world bounds, the world border, clear space for the NPC, solid ground, and common landing hazards. Teleport searches nearby positions with limited vertical changes; if no safe destination exists, the NPC stays in place. A dash without a safe landing spot fizzles without hitting anyone. Both preserve the NPC's preset spawnpoint and rebuild its navigator from the new position.
 
@@ -69,12 +68,11 @@ All victims must be attackable. The current opponent is eligible; collateral vic
 
 ## Templates and visuals
 
-There are **21 editable templates**. A new library is seeded with all of them; existing libraries keep their abilities, and every template is always offered through **Create Ability**. The classic templates are Life Drain, Freezing Spell, Poison Spit, Wither Curse, Flame Burst, Lightning Mark, Defensive Shockwave, Fear, Fire Breath, Sonic Blast, and Reposition Blink. The others show off the newer options:
+There are **20 editable templates**. A new library is seeded with all of them; existing libraries keep their abilities, and every template is always offered through **Create Ability**. The classic templates are Life Drain, Freezing Spell, Poison Spit, Wither Curse, Flame Burst, Lightning Mark, Defensive Shockwave, Fear, Fire Breath, Sonic Blast, and Reposition Blink. The others show off the newer options:
 
 | Template | Shows off |
 | --- | --- |
 | Frost Nova | Ring around the caster that slows victims outside melee range. |
-| Chain Lightning | Chain that strikes up to four enemies. |
 | Poison Cloud | Target sphere that lingers for five pulses. |
 | Gravity Well | Lingering target sphere that pulls victims in and slows them. |
 | Searing Ray | Beam that burns for four rapid pulses. |
@@ -92,7 +90,7 @@ Numeric controls use **left-click to decrease**, **right-click to increase**, **
 
 **Use Ability** is available in ordinary and custom event routines, waypoint actions, and question branches. It opens an ability selector and stores the chosen ability's stable key. The NPC can cast it without assigning it for random combat use. Cooldowns are shared with automatic casts, and an NPC can have one delayed cast or charge at a time.
 
-Targeted abilities use the current combat opponent, otherwise a valid triggering actor, otherwise the nearest selected target in sight. Target-centred areas, cones, beams, chains, and dashes require a target within activation range. Caster-centred spheres and rings, teleport, Self abilities, and charging can run without an opponent, including on invulnerable NPCs. Collateral targets still follow alliance and target-category rules. Missing definitions or unavailable casts are skipped. A delayed action waits for its cast before the sequence continues; an instant or charge action continues immediately. For example, **Use Ability (On Next Attack) → Start Combat** arms the NPC before engaging the triggering actor.
+Targeted abilities use the current combat opponent, otherwise a valid triggering actor, otherwise the nearest selected target in sight. Target-centred areas, cones, beams, and dashes require a target within activation range. Caster-centred spheres and rings, teleport, Self abilities, and charging can run without an opponent, including on invulnerable NPCs. Collateral targets still follow alliance and target-category rules. Missing definitions or unavailable casts are skipped. A delayed action waits for its cast before the sequence continues; an instant or charge action continues immediately. For example, **Use Ability (On Next Attack) → Start Combat** arms the NPC before engaging the triggering actor.
 
 **Change Fight Options → Abilities** uses the same assignment screen for behaviour routines, waypoint actions, and question branches. It temporarily replaces the NPC's assigned attacks and usage interval.
 

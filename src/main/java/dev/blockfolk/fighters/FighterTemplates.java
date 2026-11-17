@@ -26,8 +26,6 @@ public final class FighterTemplates {
                 FighterAttack.builder("frost_nova", "Frost Nova").shape(Shape.RING).range(6).size(5).innerRadius(2)
                         .delayTicks(15).cooldownTicks(280).damage(3).effects(Effect.SLOWNESS).effectLevel(3)
                         .visual(Visual.ICE).build(),
-                FighterAttack.builder("chain_lightning", "Chain Lightning").shape(Shape.CHAIN).range(12).size(5)
-                        .chainTargets(4).delayTicks(15).cooldownTicks(320).damage(4).visual(Visual.LIGHTNING).build(),
                 FighterAttack.builder("poison_cloud", "Poison Cloud").origin(Origin.TARGET).range(12).size(3)
                         .cooldownTicks(400).damage(1).effects(Effect.POISON).effectSeconds(2).pulses(5)
                         .visual(Visual.POISON).build(),

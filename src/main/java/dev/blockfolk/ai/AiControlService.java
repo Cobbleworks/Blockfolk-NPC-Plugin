@@ -41,6 +41,7 @@ import org.bukkit.scheduler.BukkitTask;
 import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.AiMemory;
 import dev.blockfolk.model.BehaviourEvent;
+import dev.blockfolk.model.DayPeriod;
 import dev.blockfolk.model.NamedLocation;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
@@ -2246,19 +2247,7 @@ public final class AiControlService {
     }
 
     private static String timeName(long time) {
-        if (time < 1000 || time >= 23000) {
-            return "dawn";
-        }
-        if (time < 6000) {
-            return "morning";
-        }
-        if (time < 12000) {
-            return "afternoon";
-        }
-        if (time < 13000) {
-            return "sunset";
-        }
-        return "night";
+        return DayPeriod.at(time).lowerName();
     }
 
     private static String lightName(int light) {
