@@ -4,7 +4,8 @@ import java.util.Optional;
 
 /**
  * A behaviour action value that points at a global {@link NamedLocation} by key
- * instead of storing fixed coordinates, so moving the location moves the target.
+ * instead of storing fixed coordinates, so moving the location moves the
+ * target.
  */
 public final class LocationLink {
 

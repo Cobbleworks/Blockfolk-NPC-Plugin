@@ -122,7 +122,10 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, String> routeOverrides = new HashMap<>();
     private final Map<UUID, WalkingSpeed> speedOverrides = new HashMap<>();
     private final Set<UUID> routePaused = new HashSet<>();
-    /** Instances whose route direction should flip the next time the route worker runs. */
+    /**
+     * Instances whose route direction should flip the next time the route worker
+     * runs.
+     */
     private final Set<UUID> routeReverseRequests = new HashSet<>();
     private final Set<UUID> externallyPaused = new HashSet<>();
     private final Map<UUID, Location> moveTargets = new HashMap<>();
@@ -160,8 +163,8 @@ public final class NpcBehaviourService implements Listener {
     private NpcPerception perception;
     private NpcVehicleService vehicleService;
     private BukkitTask behaviourTask;
-    private java.util.function.Function<String, java.util.Optional<ActionLocation>> locationResolver =
-            ignored -> java.util.Optional.empty();
+    private java.util.function.Function<String, java.util.Optional<ActionLocation>> locationResolver = ignored -> java.util.Optional
+            .empty();
     private long currentTick;
     private int proximityTick;
     private int playerLookTick;
@@ -185,7 +188,10 @@ public final class NpcBehaviourService implements Listener {
         this.shopService = shopService;
     }
 
-    /** Resolves {@link dev.blockfolk.model.LocationLink} keys to the global location's current position. */
+    /**
+     * Resolves {@link dev.blockfolk.model.LocationLink} keys to the global
+     * location's current position.
+     */
     public void setLocationResolver(
             java.util.function.Function<String, java.util.Optional<ActionLocation>> locationResolver) {
         this.locationResolver = locationResolver == null ? ignored -> java.util.Optional.empty() : locationResolver;

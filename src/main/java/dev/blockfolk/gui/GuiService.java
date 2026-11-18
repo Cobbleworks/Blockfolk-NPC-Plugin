@@ -2571,11 +2571,9 @@ public final class GuiService implements Listener {
     }
 
     private void sendWaypointPrompt(Player player, BehaviourActionType type, UUID token) {
-        Component message = UiText.prompt("Right-click the block the NPC should "
-                + (type == BehaviourActionType.MOVE_TO
-                        ? "walk to, or right-click a green location marker to link that global location"
-                        : "teleport onto")
-                + ". ");
+        Component message = UiText.prompt("Right-click the block the NPC should " + (type == BehaviourActionType.MOVE_TO
+                ? "walk to, or right-click a green location marker to link that global location"
+                : "teleport onto") + ". ");
         if (type == BehaviourActionType.MOVE_TO) {
             Component selector = Component.text("[Select saved location]", NamedTextColor.GREEN)
                     .decorate(TextDecoration.UNDERLINED)
@@ -2624,8 +2622,8 @@ public final class GuiService implements Listener {
                     finishQuestionWaypointSelection(player);
                     setQuestionBranchAction(questionSession.action(),
                             new BehaviourAction(questionSession.type(), target.value()));
-                    player.sendMessage(UiText
-                            .success(questionSession.type().displayName() + " set to " + target.display() + "."));
+                    player.sendMessage(
+                            UiText.success(questionSession.type().displayName() + " set to " + target.display() + "."));
                     openAfterQuestionBranchPicker(player, questionSession.action());
                 }
                 return;
@@ -2638,8 +2636,7 @@ public final class GuiService implements Listener {
                 player.sendMessage(UiText.error("That route point no longer exists."));
                 return;
             }
-            player.sendMessage(
-                    UiText.success(routeSession.type().displayName() + " set to " + target.display() + "."));
+            player.sendMessage(UiText.success(routeSession.type().displayName() + " set to " + target.display() + "."));
             openWaypointActions(player, routeSession.action().routeKey(), updated);
             return;
         }
@@ -4030,8 +4027,7 @@ public final class GuiService implements Listener {
         if (action.type() == BehaviourActionType.MOVE_TO || action.type() == BehaviourActionType.TELEPORT_TO) {
             String linkedKey = LocationLink.key(action.value()).orElse(null);
             if (linkedKey != null) {
-                return locationRepository.find(linkedKey)
-                        .map(named -> "Location '" + named.displayName() + "'")
+                return locationRepository.find(linkedKey).map(named -> "Location '" + named.displayName() + "'")
                         .orElse("Missing location '" + linkedKey + "'");
             }
             return ActionLocation.parse(action.value()).map(ActionLocation::display).orElse("Invalid waypoint");
