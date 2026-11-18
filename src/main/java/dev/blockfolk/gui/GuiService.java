@@ -110,6 +110,8 @@ public final class GuiService implements Listener {
             Map.entry(3, BehaviourActionType.ASK_QUESTION), Map.entry(4, BehaviourActionType.EMIT_EVENT),
             Map.entry(5, BehaviourActionType.RUN_CONSOLE_COMMAND), Map.entry(6, BehaviourActionType.AI_TRIGGER),
             Map.entry(7, BehaviourActionType.WAIT),
+            // Movement overflow: the Movement row below is full
+            Map.entry(8, BehaviourActionType.GO_BACK),
             // Movement and navigation
             Map.entry(10, BehaviourActionType.SET_ROUTE), Map.entry(11, BehaviourActionType.START_NAVIGATION),
             Map.entry(12, BehaviourActionType.STOP_NAVIGATION), Map.entry(13, BehaviourActionType.SET_WALK_SPEED),
@@ -3888,6 +3890,7 @@ public final class GuiService implements Listener {
             case CHANGE_FIGHT_OPTIONS -> Material.TARGET;
             case START_NAVIGATION -> Material.COMPASS;
             case STOP_NAVIGATION -> Material.BARRIER;
+            case GO_BACK -> Material.SPECTRAL_ARROW;
             case SET_WALK_SPEED -> Material.FEATHER;
             case MOVE_TO -> Material.LEATHER_BOOTS;
             case TELEPORT_TO -> Material.ENDER_PEARL;
@@ -3951,6 +3954,7 @@ public final class GuiService implements Listener {
             case CHANGE_FIGHT_OPTIONS -> "Changes aggression and target settings";
             case START_NAVIGATION -> "Starts or resumes route navigation";
             case STOP_NAVIGATION -> "Pauses the current route navigation";
+            case GO_BACK -> "Walks the route back the way it came";
             case SET_WALK_SPEED -> "Changes the NPC's movement speed";
             case MOVE_TO -> "Walks to a selected block or saved location";
             case TELEPORT_TO -> "Teleports to a selected block or saved location";

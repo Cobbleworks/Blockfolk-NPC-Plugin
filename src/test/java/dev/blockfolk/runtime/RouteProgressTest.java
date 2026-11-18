@@ -35,6 +35,37 @@ class RouteProgressTest {
     }
 
     @Test
+    void reverseAtBothEndsWalksBackAndForth() {
+        RouteProgress progress = new RouteProgress("route", points, points);
+        progress.arrived(); // reached first
+        progress.arrived(); // reached middle
+        progress.arrived(); // reached last, would loop to first
+        assertEquals(first, progress.targetPoint());
+
+        progress.reverse();
+        assertEquals(middle, progress.targetPoint());
+        progress.arrived();
+        assertEquals(first, progress.targetPoint());
+        progress.arrived(); // reached first, would loop to last
+        assertEquals(last, progress.targetPoint());
+
+        progress.reverse();
+        assertEquals(middle, progress.targetPoint());
+        progress.arrived();
+        assertEquals(last, progress.targetPoint());
+    }
+
+    @Test
+    void reverseBeforeReachingAnyPointOnlyFlipsDirection() {
+        RouteProgress progress = new RouteProgress("route", points, points);
+
+        progress.reverse();
+        assertEquals(first, progress.targetPoint());
+        progress.arrived();
+        assertEquals(last, progress.targetPoint());
+    }
+
+    @Test
     void failedClosingLegReturnsThroughNearestWaypoint() {
         RouteProgress progress = new RouteProgress("route", points, points);
         progress.arrived();

@@ -38,7 +38,8 @@ public enum BehaviourActionType {
                                                                                                                                                                             "Unfollow",
                                                                                                                                                                             false), OPEN_SHOP(
                                                                                                                                                                                     "Open Shop",
-                                                                                                                                                                                    true);
+                                                                                                                                                                                    true),
+    GO_BACK("Go Back", false);
 
     private final String displayName;
     private final boolean requiresValue;

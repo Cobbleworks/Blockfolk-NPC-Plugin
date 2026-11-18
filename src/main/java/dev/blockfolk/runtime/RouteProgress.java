@@ -71,6 +71,19 @@ final class RouteProgress {
         targetHandled = targetIndex == lastReachedIndex;
     }
 
+    /**
+     * Walks the route the other way from the last reached point, as if it ended
+     * there. Before any point was reached, only the direction flips.
+     */
+    void reverse() {
+        direction = -direction;
+        failedTargets.clear();
+        if (lastReachedIndex < 0)
+            return;
+        targetIndex = Math.floorMod(lastReachedIndex + direction, orderedPoints.size());
+        targetHandled = targetIndex == lastReachedIndex;
+    }
+
     void stalled(Location current) {
         failedTargets.add(targetIndex);
         if (!chooseNearest(current)) {

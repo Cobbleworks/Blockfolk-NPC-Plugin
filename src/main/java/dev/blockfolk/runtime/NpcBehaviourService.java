@@ -122,6 +122,8 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, String> routeOverrides = new HashMap<>();
     private final Map<UUID, WalkingSpeed> speedOverrides = new HashMap<>();
     private final Set<UUID> routePaused = new HashSet<>();
+    /** Instances whose route direction should flip the next time the route worker runs. */
+    private final Set<UUID> routeReverseRequests = new HashSet<>();
     private final Set<UUID> externallyPaused = new HashSet<>();
     private final Map<UUID, Location> moveTargets = new HashMap<>();
     /**
@@ -249,6 +251,7 @@ public final class NpcBehaviourService implements Listener {
         }
         behaviourTask = null;
         routePaused.clear();
+        routeReverseRequests.clear();
         externallyPaused.clear();
         moveTargets.clear();
         aiMoveTargets.clear();
@@ -402,6 +405,7 @@ public final class NpcBehaviourService implements Listener {
         routeOverrides.remove(instance.getId());
         speedOverrides.remove(instance.getId());
         routePaused.remove(instance.getId());
+        routeReverseRequests.remove(instance.getId());
         externallyPaused.remove(instance.getId());
         moveTargets.remove(instance.getId());
         pendingMoves.remove(instance.getId());
@@ -507,6 +511,14 @@ public final class NpcBehaviourService implements Listener {
      */
     public boolean isRunningWaypointActions(NpcInstance instance) {
         return waypointActionSequences.containsKey(instance.getId());
+    }
+
+    /**
+     * Returns and clears a pending GO_BACK request, which makes the route worker
+     * walk the route in the opposite direction.
+     */
+    public boolean consumeRouteReverse(NpcInstance instance) {
+        return routeReverseRequests.remove(instance.getId());
     }
 
     private void executeSequence(BehaviourEvent event, java.util.List<BehaviourAction> actions, int index,
@@ -928,6 +940,7 @@ public final class NpcBehaviourService implements Listener {
                 routePaused.add(instance.getId());
                 instances.stopNavigating(instance);
             }
+            case GO_BACK -> routeReverseRequests.add(instance.getId());
             case SET_WALK_SPEED -> speedOverrides.put(instance.getId(), WalkingSpeed.fromStored(action.value()));
             case MOVE_TO -> resolveActionLocation(action.value()).map(ActionLocation::toLocation)
                     .filter(java.util.Objects::nonNull).ifPresent(target -> {

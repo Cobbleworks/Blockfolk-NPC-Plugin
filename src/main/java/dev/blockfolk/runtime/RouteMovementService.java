@@ -116,6 +116,10 @@ public final class RouteMovementService {
             progress = new RouteProgress(route.getKey(), sourcePoints, ordered);
             progressByInstance.put(instance.getId(), progress);
         }
+        if (behaviourService.consumeRouteReverse(instance)) {
+            instanceRegistry.stopNavigating(instance);
+            progress.reverse();
+        }
 
         if (!progress.ready(instance.getLocation())) {
             return;
@@ -149,6 +153,8 @@ public final class RouteMovementService {
     }
 
     private void stop(NpcInstance instance) {
+        // A GO_BACK without an active route has nothing to reverse.
+        behaviourService.consumeRouteReverse(instance);
         if (progressByInstance.remove(instance.getId()) != null) {
             instanceRegistry.stopNavigating(instance);
         }
