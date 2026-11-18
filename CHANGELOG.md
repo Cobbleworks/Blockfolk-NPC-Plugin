@@ -15,6 +15,7 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Added
 
+- **Armor** setting in Fighting & Survival, below Max Health. It gives the NPC armor points (0 to 30, two points per armor icon) that reduce incoming damage the same way worn armor does, on top of any armor in its equipment. Minecraft caps the total at 30. Existing NPCs start with 0. Stored as `combat.armor` in the preset file.
 - **Go Back** behaviour action that makes an NPC walk its route in the opposite direction from the waypoint it last reached, instead of looping to the first point. Put it on both end waypoints to make an NPC patrol back and forth.
 - While choosing a **Move To** target with the waypoint compass, all global locations are shown as markers. Right-clicking a location's block links the action to that location, so the NPC follows the location if it is moved later. Right-clicking any other block still stores fixed coordinates.
 - AI NPCs see every route they own and can choose one to start. The AI context lists each assigned route's key, name, and waypoint count, plus which route the NPC is following or has paused. The Start Route function takes an optional `route`; omitting it resumes the current route as before. Start/Pause Route is now offered whenever the NPC owns a route, even without a default route or an earlier Set Route.

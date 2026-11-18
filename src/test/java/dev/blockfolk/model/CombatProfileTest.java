@@ -86,6 +86,17 @@ class CombatProfileTest {
     }
 
     @Test
+    void armorDefaultsToNoneIsClampedAndIsPreservedByOtherChanges() {
+        CombatProfile profile = CombatProfile.disabled().withArmor(12);
+
+        assertEquals(0, CombatProfile.disabled().armor());
+        assertEquals(12, profile.armor());
+        assertEquals(12, profile.withMaxHealth(20).withDroppedExperience(5).withRespawnSeconds(10).armor());
+        assertEquals(0, profile.withArmor(-4).armor());
+        assertEquals(CombatProfile.MAX_ARMOR, profile.withArmor(100).armor());
+    }
+
+    @Test
     void onlyNonEmptyMatchingAlliancesAreAllied() {
         CombatProfile guards = CombatProfile.disabled().withAlliance(" guards ");
 

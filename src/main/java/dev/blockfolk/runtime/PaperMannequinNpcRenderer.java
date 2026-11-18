@@ -601,6 +601,13 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer, Listener {
         boolean invulnerable = configuredHealth == 0;
         mannequin.setInvulnerable(invulnerable);
 
+        // The base value adds to armor from worn equipment; vanilla caps the total at
+        // 30.
+        AttributeInstance armor = mannequin.getAttribute(Attribute.ARMOR);
+        if (armor != null) {
+            armor.setBaseValue(definition.getCombatProfile().armor());
+        }
+
         AttributeInstance maxHealth = mannequin.getAttribute(Attribute.MAX_HEALTH);
         if (maxHealth == null) {
             return;

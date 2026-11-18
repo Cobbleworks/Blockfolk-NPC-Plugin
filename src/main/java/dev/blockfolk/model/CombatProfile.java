@@ -2,17 +2,22 @@ package dev.blockfolk.model;
 
 import java.util.Objects;
 
-public record CombatProfile(int maxHealth, int respawnSeconds, AttackReaction attackReaction, boolean targetMobs,
-        boolean targetAnimals, boolean targetPlayers, boolean targetNpcs, String alliance, boolean showBossBar,
-        int droppedExperience, SpecialAttackOptions specialAttacks) {
+public record CombatProfile(int maxHealth, int armor, int respawnSeconds, AttackReaction attackReaction,
+        boolean targetMobs, boolean targetAnimals, boolean targetPlayers, boolean targetNpcs, String alliance,
+        boolean showBossBar, int droppedExperience, SpecialAttackOptions specialAttacks) {
 
     public static final int HEALTH_STEP = 5;
     public static final int RESPAWN_STEP_SECONDS = 10;
     public static final int EXPERIENCE_STEP = 5;
     public static final int MAX_HEALTH = 1024;
+    /** One armor icon on the HUD is two armor points. */
+    public static final int ARMOR_STEP = 2;
+    /** Vanilla caps the armor attribute at 30 points, including worn equipment. */
+    public static final int MAX_ARMOR = 30;
 
     public CombatProfile {
         maxHealth = Math.max(0, Math.min(MAX_HEALTH, maxHealth));
+        armor = Math.max(0, Math.min(MAX_ARMOR, armor));
         respawnSeconds = Math.max(0, respawnSeconds);
         droppedExperience = Math.max(0, droppedExperience);
         attackReaction = Objects.requireNonNullElse(attackReaction, AttackReaction.IGNORE);
@@ -23,8 +28,8 @@ public record CombatProfile(int maxHealth, int respawnSeconds, AttackReaction at
     public CombatProfile(int maxHealth, int respawnSeconds, AttackReaction attackReaction, boolean targetMobs,
             boolean targetAnimals, boolean targetPlayers, boolean targetNpcs, String alliance, boolean showBossBar,
             int droppedExperience) {
-        this(maxHealth, respawnSeconds, attackReaction, targetMobs, targetAnimals, targetPlayers, targetNpcs, alliance,
-                showBossBar, droppedExperience, SpecialAttackOptions.disabled());
+        this(maxHealth, 0, respawnSeconds, attackReaction, targetMobs, targetAnimals, targetPlayers, targetNpcs,
+                alliance, showBossBar, droppedExperience, SpecialAttackOptions.disabled());
     }
 
     public static CombatProfile disabled() {
@@ -36,58 +41,63 @@ public record CombatProfile(int maxHealth, int respawnSeconds, AttackReaction at
     }
 
     public CombatProfile withMaxHealth(int maxHealth) {
-        return new CombatProfile(maxHealth, respawnSeconds, attackReaction, targetMobs, targetAnimals, targetPlayers,
-                targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
+        return new CombatProfile(maxHealth, armor, respawnSeconds, attackReaction, targetMobs, targetAnimals,
+                targetPlayers, targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
+    }
+
+    public CombatProfile withArmor(int armor) {
+        return new CombatProfile(maxHealth, armor, respawnSeconds, attackReaction, targetMobs, targetAnimals,
+                targetPlayers, targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
     }
 
     public CombatProfile withRespawnSeconds(int respawnSeconds) {
-        return new CombatProfile(maxHealth, respawnSeconds, attackReaction, targetMobs, targetAnimals, targetPlayers,
-                targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
+        return new CombatProfile(maxHealth, armor, respawnSeconds, attackReaction, targetMobs, targetAnimals,
+                targetPlayers, targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
     }
 
     public CombatProfile withAttackReaction(AttackReaction attackReaction) {
-        return new CombatProfile(maxHealth, respawnSeconds, attackReaction, targetMobs, targetAnimals, targetPlayers,
-                targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
+        return new CombatProfile(maxHealth, armor, respawnSeconds, attackReaction, targetMobs, targetAnimals,
+                targetPlayers, targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
     }
 
     public CombatProfile withTargetMobs(boolean targetMobs) {
-        return new CombatProfile(maxHealth, respawnSeconds, attackReaction, targetMobs, targetAnimals, targetPlayers,
-                targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
+        return new CombatProfile(maxHealth, armor, respawnSeconds, attackReaction, targetMobs, targetAnimals,
+                targetPlayers, targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
     }
 
     public CombatProfile withTargetAnimals(boolean targetAnimals) {
-        return new CombatProfile(maxHealth, respawnSeconds, attackReaction, targetMobs, targetAnimals, targetPlayers,
-                targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
+        return new CombatProfile(maxHealth, armor, respawnSeconds, attackReaction, targetMobs, targetAnimals,
+                targetPlayers, targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
     }
 
     public CombatProfile withTargetPlayers(boolean targetPlayers) {
-        return new CombatProfile(maxHealth, respawnSeconds, attackReaction, targetMobs, targetAnimals, targetPlayers,
-                targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
+        return new CombatProfile(maxHealth, armor, respawnSeconds, attackReaction, targetMobs, targetAnimals,
+                targetPlayers, targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
     }
 
     public CombatProfile withTargetNpcs(boolean targetNpcs) {
-        return new CombatProfile(maxHealth, respawnSeconds, attackReaction, targetMobs, targetAnimals, targetPlayers,
-                targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
+        return new CombatProfile(maxHealth, armor, respawnSeconds, attackReaction, targetMobs, targetAnimals,
+                targetPlayers, targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
     }
 
     public CombatProfile withAlliance(String alliance) {
-        return new CombatProfile(maxHealth, respawnSeconds, attackReaction, targetMobs, targetAnimals, targetPlayers,
-                targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
+        return new CombatProfile(maxHealth, armor, respawnSeconds, attackReaction, targetMobs, targetAnimals,
+                targetPlayers, targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
     }
 
     public CombatProfile withShowBossBar(boolean showBossBar) {
-        return new CombatProfile(maxHealth, respawnSeconds, attackReaction, targetMobs, targetAnimals, targetPlayers,
-                targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
+        return new CombatProfile(maxHealth, armor, respawnSeconds, attackReaction, targetMobs, targetAnimals,
+                targetPlayers, targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
     }
 
     public CombatProfile withDroppedExperience(int droppedExperience) {
-        return new CombatProfile(maxHealth, respawnSeconds, attackReaction, targetMobs, targetAnimals, targetPlayers,
-                targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
+        return new CombatProfile(maxHealth, armor, respawnSeconds, attackReaction, targetMobs, targetAnimals,
+                targetPlayers, targetNpcs, alliance, showBossBar, droppedExperience, specialAttacks);
     }
 
     public CombatProfile withSpecialAttacks(SpecialAttackOptions options) {
-        return new CombatProfile(maxHealth, respawnSeconds, attackReaction, targetMobs, targetAnimals, targetPlayers,
-                targetNpcs, alliance, showBossBar, droppedExperience, options);
+        return new CombatProfile(maxHealth, armor, respawnSeconds, attackReaction, targetMobs, targetAnimals,
+                targetPlayers, targetNpcs, alliance, showBossBar, droppedExperience, options);
     }
 
     public boolean alliedWith(CombatProfile other) {

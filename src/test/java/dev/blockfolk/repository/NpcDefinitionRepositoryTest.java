@@ -21,7 +21,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 class NpcDefinitionRepositoryTest {
     @Test
     void savesAndReloadsSpecialAttacksWithTheCombatProfile() throws Exception {
-        CombatProfile profile = CombatProfile.disabled().withMaxHealth(40).withAlliance("guards")
+        CombatProfile profile = CombatProfile.disabled().withMaxHealth(40).withArmor(8).withAlliance("guards")
                 .withAttackReaction(AttackReaction.HUNTING).withTargetPlayers(true)
                 .withSpecialAttacks(SpecialAttackOptions.disabled().toggle(SpecialAttack.LIFE_DRAIN)
                         .toggle(SpecialAttack.FREEZING_SPELL).toggle("fire_breath").toggle("custom_laser")

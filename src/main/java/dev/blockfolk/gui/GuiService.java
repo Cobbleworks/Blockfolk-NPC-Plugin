@@ -164,8 +164,9 @@ public final class GuiService implements Listener {
     private static final int FIGHTING_DIVIDER_COLUMN = 4;
     private static final int FIGHTING_SURVIVAL_HEADER_SLOT = 2;
     private static final int FIGHTING_HEALTH_SLOT = 11;
-    private static final int FIGHTING_RESPAWN_SLOT = 20;
-    private static final int FIGHTING_EXPERIENCE_SLOT = 29;
+    private static final int FIGHTING_ARMOR_SLOT = 20;
+    private static final int FIGHTING_RESPAWN_SLOT = 29;
+    private static final int FIGHTING_EXPERIENCE_SLOT = 38;
     private static final int FIGHTING_COMBAT_HEADER_SLOT = 6;
     private static final int FIGHTING_TARGETS_SLOT = 15;
     private static final int FIGHTING_ALLIANCE_SLOT = 24;
@@ -624,6 +625,7 @@ public final class GuiService implements Listener {
         CombatProfile combat = definition.getCombatProfile();
         inventory.setItem(EDITOR_FIGHTING_SLOT, item(Material.IRON_SWORD, "Fighting & Survival",
                 List.of(LegacyText.GRAY + "Health: " + LegacyText.WHITE + healthLabel(combat),
+                        LegacyText.GRAY + "Armor: " + LegacyText.WHITE + armorLabel(combat),
                         LegacyText.GRAY + "Respawn: " + LegacyText.WHITE + respawnLabel(combat),
                         LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName(),
                         LegacyText.GRAY + "Attack targets: " + LegacyText.WHITE + enabledTargetCount(combat) + "/4",
@@ -780,6 +782,16 @@ public final class GuiService implements Listener {
                 combat.invulnerable()
                         ? item(Material.TOTEM_OF_UNDYING, "Max Health: " + healthLabel(combat), healthLore)
                         : potionItem(PotionType.HEALING, "Max Health: " + healthLabel(combat), healthLore));
+        List<String> armorLore = new ArrayList<>(List.of(
+                combat.armor() == 0
+                        ? LegacyText.GRAY + "No armor beyond worn equipment"
+                        : LegacyText.GREEN + "Reduces damage like worn armor",
+                LegacyText.GRAY + "Added to armor from worn equipment",
+                LegacyText.DARK_GRAY + "Minecraft caps the total at " + CombatProfile.MAX_ARMOR + " points",
+                LegacyText.GRAY + "Step: " + CombatProfile.ARMOR_STEP + " points (one armor icon)"));
+        armorLore.addAll(NumericControl.lore());
+        inventory.setItem(FIGHTING_ARMOR_SLOT,
+                item(Material.IRON_CHESTPLATE, "Armor: " + armorLabel(combat), armorLore));
         List<String> respawnLore = new ArrayList<>(List.of(
                 combat.respawnSeconds() == 0
                         ? LegacyText.GRAY + "Killed NPCs will not respawn"
@@ -816,7 +828,7 @@ public final class GuiService implements Listener {
                                 GuiItems.hint("Click", "type an alliance"))));
         inventory.setItem(FIGHTING_ABILITIES_SLOT, specialAttacksItem(combat.specialAttacks()));
         inventory.setItem(FIGHTING_SURVIVAL_HEADER_SLOT, GuiItems.sectionHeader(Material.LIME_STAINED_GLASS_PANE,
-                LegacyText.GREEN, "Survival", "Health, respawning, and what it leaves behind"));
+                LegacyText.GREEN, "Survival", "Health, armor, respawning, and what it leaves behind"));
         inventory.setItem(FIGHTING_COMBAT_HEADER_SLOT, GuiItems.sectionHeader(Material.RED_STAINED_GLASS_PANE,
                 LegacyText.RED, "Combat", "Who it fights and how"));
         inventory.setItem(FIGHTING_BACK_SLOT, GuiItems.back("the NPC menu"));
@@ -1583,7 +1595,8 @@ public final class GuiService implements Listener {
         }
         CombatProfile combat = definition.getCombatProfile();
         int slot = event.getRawSlot();
-        if (slot == FIGHTING_HEALTH_SLOT || slot == FIGHTING_RESPAWN_SLOT || slot == FIGHTING_EXPERIENCE_SLOT) {
+        if (slot == FIGHTING_HEALTH_SLOT || slot == FIGHTING_ARMOR_SLOT || slot == FIGHTING_RESPAWN_SLOT
+                || slot == FIGHTING_EXPERIENCE_SLOT) {
             if (event.getClick() == ClickType.MIDDLE) {
                 requestCombatValue(player, key, slot);
                 return;
@@ -1591,17 +1604,20 @@ public final class GuiService implements Listener {
             int direction = NumericControl.direction(event.getClick());
             if (direction == 0)
                 return;
-            int step = slot == FIGHTING_HEALTH_SLOT
-                    ? CombatProfile.HEALTH_STEP
-                    : slot == FIGHTING_RESPAWN_SLOT
-                            ? CombatProfile.RESPAWN_STEP_SECONDS
-                            : CombatProfile.EXPERIENCE_STEP;
-            int current = slot == FIGHTING_HEALTH_SLOT
-                    ? combat.maxHealth()
-                    : slot == FIGHTING_RESPAWN_SLOT ? combat.respawnSeconds() : combat.droppedExperience();
-            int max = slot == FIGHTING_HEALTH_SLOT ? CombatProfile.MAX_HEALTH : Integer.MAX_VALUE;
+            int step = switch (slot) {
+                case FIGHTING_HEALTH_SLOT -> CombatProfile.HEALTH_STEP;
+                case FIGHTING_ARMOR_SLOT -> CombatProfile.ARMOR_STEP;
+                case FIGHTING_RESPAWN_SLOT -> CombatProfile.RESPAWN_STEP_SECONDS;
+                default -> CombatProfile.EXPERIENCE_STEP;
+            };
+            int current = switch (slot) {
+                case FIGHTING_HEALTH_SLOT -> combat.maxHealth();
+                case FIGHTING_ARMOR_SLOT -> combat.armor();
+                case FIGHTING_RESPAWN_SLOT -> combat.respawnSeconds();
+                default -> combat.droppedExperience();
+            };
             int value = (int) Math.clamp((long) current + (long) direction * step * (event.isShiftClick() ? 5 : 1), 0,
-                    max);
+                    combatValueMax(slot));
             setCombatValue(player, definition, slot, value);
             return;
         }
@@ -1630,10 +1646,13 @@ public final class GuiService implements Listener {
     }
 
     private void requestCombatValue(Player player, String key, int slot) {
-        String label = slot == FIGHTING_HEALTH_SLOT
-                ? "maximum health in HP"
-                : slot == FIGHTING_RESPAWN_SLOT ? "respawn time in seconds" : "dropped experience";
-        int max = slot == FIGHTING_HEALTH_SLOT ? CombatProfile.MAX_HEALTH : Integer.MAX_VALUE;
+        String label = switch (slot) {
+            case FIGHTING_HEALTH_SLOT -> "maximum health in HP";
+            case FIGHTING_ARMOR_SLOT -> "armor points";
+            case FIGHTING_RESPAWN_SLOT -> "respawn time in seconds";
+            default -> "dropped experience";
+        };
+        int max = combatValueMax(slot);
         chatInputService.request(player, "Enter " + label + " (0 to " + max + "):", value -> {
             NpcDefinition current = definitionRepository.find(key).orElse(null);
             if (current == null) {
@@ -1652,15 +1671,25 @@ public final class GuiService implements Listener {
         }, () -> definitionRepository.find(key).ifPresent(current -> openFightingEditor(player, current)));
     }
 
+    private static int combatValueMax(int slot) {
+        return switch (slot) {
+            case FIGHTING_HEALTH_SLOT -> CombatProfile.MAX_HEALTH;
+            case FIGHTING_ARMOR_SLOT -> CombatProfile.MAX_ARMOR;
+            default -> Integer.MAX_VALUE;
+        };
+    }
+
     private void setCombatValue(Player player, NpcDefinition definition, int slot, int value) {
         CombatProfile current = definition.getCombatProfile();
         definition.setCombatProfile(switch (slot) {
             case FIGHTING_HEALTH_SLOT -> current.withMaxHealth(value);
+            case FIGHTING_ARMOR_SLOT -> current.withArmor(value);
             case FIGHTING_RESPAWN_SLOT -> current.withRespawnSeconds(value);
             case FIGHTING_EXPERIENCE_SLOT -> current.withDroppedExperience(value);
             default -> current;
         });
-        if (slot == FIGHTING_HEALTH_SLOT)
+        // Health and armor are entity attributes, so live instances must be refreshed.
+        if (slot == FIGHTING_HEALTH_SLOT || slot == FIGHTING_ARMOR_SLOT)
             saveRefresh(definition);
         else
             definitionRepository.save(definition);
@@ -3822,6 +3851,10 @@ public final class GuiService implements Listener {
 
     private String healthLabel(CombatProfile combat) {
         return combat.invulnerable() ? "Invulnerable (0 HP)" : combat.maxHealth() + " HP";
+    }
+
+    private String armorLabel(CombatProfile combat) {
+        return combat.armor() == 0 ? "None (0 points)" : combat.armor() + " points";
     }
 
     private String respawnLabel(CombatProfile combat) {

@@ -233,6 +233,7 @@ public final class NpcDefinitionRepository {
 
     static void writeCombatProfile(YamlConfiguration configuration, CombatProfile profile) {
         configuration.set("combat.max-health", profile.maxHealth());
+        configuration.set("combat.armor", profile.armor());
         configuration.set("combat.respawn-seconds", profile.respawnSeconds());
         configuration.set("combat.aggression-level", profile.attackReaction().name().toLowerCase(Locale.ROOT));
         configuration.set("combat.targets.mobs", profile.targetMobs());
@@ -249,7 +250,7 @@ public final class NpcDefinitionRepository {
     }
 
     static CombatProfile readCombatProfile(YamlConfiguration configuration) {
-        return new CombatProfile(configuration.getInt("combat.max-health", 0),
+        return new CombatProfile(configuration.getInt("combat.max-health", 0), configuration.getInt("combat.armor", 0),
                 configuration.getInt("combat.respawn-seconds", 0),
                 AttackReaction.fromStored(configuration.getString("combat.aggression-level")),
                 configuration.getBoolean("combat.targets.mobs", false),
