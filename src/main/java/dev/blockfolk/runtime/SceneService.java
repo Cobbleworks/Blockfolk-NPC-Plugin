@@ -295,7 +295,8 @@ public final class SceneService {
                 NpcInstance busy = loaded.stream().filter(instance -> !taken.contains(instance.getId())).findFirst()
                         .orElse(null);
                 return Casting.failed(busy == null
-                        ? name + " is already needed for another role in this scene"
+                        ? name + " plays two roles in this scene; an NPC plays one role per scene, so remove the"
+                                + " extra role or move its steps into a follow-up scene"
                         : name + " " + blocker(busy));
             }
             NpcInstance chosen = reference == null

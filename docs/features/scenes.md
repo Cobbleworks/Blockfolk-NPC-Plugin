@@ -13,7 +13,7 @@ Scenes can start on their own (at a time of day, when the weather changes, or wh
 
 ## Create a scene
 
-Open **Scenes** from the main `/bf` menu, from an NPC's editor, or run `/bf scenes`. Choose **Create Scene** and enter a name. Use `/` to group scenes, for example `western/last-train`.
+Open **Scenes** from the main `/bf` menu or run `/bf scenes` to see every scene. **Scenes** in an NPC's editor shows only the scenes that NPC plays in, and **Create Scene** there starts a scene with that NPC already cast. Choose **Create Scene** and enter a name. Use `/` to group scenes, for example `western/last-train`.
 
 The scene editor has four columns:
 
@@ -37,7 +37,7 @@ The bottom bar of the role editor sets the preset that plays the role, the role'
 - **One NPC** (default): the free instance nearest the scene's area plays the role. Without an area, the instance nearest the player who started the scene is chosen. The scene needs this NPC.
 - **Every NPC**: every free instance of the preset plays the role. If none is free, the scene still runs.
 
-Two roles may use the same preset; each then gets a different instance.
+An NPC preset plays at most one role per scene; the role picker greys out NPCs that already have one. When a role needs more steps than fit in one row, end the row with **Start Scene** and continue in a follow-up scene (see below).
 
 ## Keeping roles in step
 
@@ -48,7 +48,7 @@ Every role runs its row on its own. Use cues when one NPC must wait for another:
 
 Cues only exist while the scene runs. Outside a scene, Give Cue does nothing and Wait For Cue goes on at once. **Move To** already waits until the NPC arrives (at most 30 seconds), so a row like *Move To saloon → Give Cue `arrived`* gives the cue on arrival.
 
-The **Cues** button in the role editor lists every cue the scene uses.
+When you add Give Cue or Wait For Cue, the cues already used in the scene are offered as clickable links in chat, so the names always match. The **Cues** button in the role editor lists them too.
 
 ## Triggers
 

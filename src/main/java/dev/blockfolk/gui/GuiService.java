@@ -974,7 +974,7 @@ public final class GuiService implements Listener {
                 lore.add(LegacyText.DARK_GRAY + "… and " + (playing.size() - 6) + " more");
         }
         lore.add("");
-        lore.add(GuiItems.hint("Click", "open scenes"));
+        lore.add(GuiItems.hint("Click", "open this NPC's scenes"));
         return lore;
     }
 
@@ -1627,7 +1627,7 @@ public final class GuiService implements Listener {
             case EDITOR_BEHAVIOUR_SLOT -> openBehaviours(player, definition, 0);
             case EDITOR_CUSTOM_BEHAVIOUR_SLOT -> {
                 if (sceneNavigation != null)
-                    sceneNavigation.openScenes(player);
+                    sceneNavigation.openScenesFor(player, definition.getKey());
             }
             case EDITOR_AI_SLOT -> openAiControl(player, definition);
             case EDITOR_ROUTES_SLOT -> npcRoutesOpener.accept(player, definition.getKey());
@@ -2541,7 +2541,7 @@ public final class GuiService implements Listener {
             openBehaviourHome(player, definition, holder);
         } else {
             String prompt = valuePrompt(type, holder.lane());
-            chatInputService.request(player, prompt, value -> {
+            chatInputService.request(player, prompt, valueChoices(type, holder.lane()), value -> {
                 setAction(definition, holder, type, value);
                 openBehaviourHome(player, definition, holder);
             }, () -> reopenActionPicker(player, holder));
@@ -3223,17 +3223,23 @@ public final class GuiService implements Listener {
             case SEND_DIALOG -> "Enter the dialog line:";
             case SHOW_HOLO_DIALOG -> "Enter the hologram dialog line:";
             case RUN_CONSOLE_COMMAND -> "Enter the command without a leading slash:";
-            case CUE, WAIT_FOR_CUE -> {
-                List<String> cues = lane == null
-                        ? List.of()
-                        : sceneRepository.find(lane.sceneKey()).map(Scene::cueNames).orElse(List.of());
-                String known = cues.isEmpty() ? "" : " (used in this scene: " + String.join(", ", cues) + ")";
-                yield type == BehaviourActionType.CUE
-                        ? "Enter the cue to give, e.g. arrived" + known + ":"
-                        : "Enter the cue to wait for" + known + ":";
-            }
+            case CUE -> valueChoices(type, lane).isEmpty()
+                    ? "Enter a name for the cue to give, e.g. arrived:"
+                    : "Click a cue used in this scene, or type a new name:";
+            case WAIT_FOR_CUE -> valueChoices(type, lane).isEmpty()
+                    ? "Enter the cue to wait for (no cues are used in this scene yet):"
+                    : "Click the cue to wait for, or type its name:";
             default -> "Enter the action value:";
         };
+    }
+
+    /**
+     * Values offered as clickable chat links: the cues already used in the scene.
+     */
+    private List<String> valueChoices(BehaviourActionType type, SceneLaneRef lane) {
+        if (lane == null || type != BehaviourActionType.CUE && type != BehaviourActionType.WAIT_FOR_CUE)
+            return List.of();
+        return sceneRepository.find(lane.sceneKey()).map(Scene::cueNames).orElse(List.of());
     }
 
     private void openQuestionEditor(Player player, QuestionTarget target) {
@@ -3437,11 +3443,10 @@ public final class GuiService implements Listener {
             case SET_ROUTE -> "Enter an existing route key:";
             case SET_WALK_SPEED -> "Enter walk speed (slouch, slow, normal, fast, very_fast):";
             case START_SCENE, STOP_SCENE -> "Enter an existing scene name:";
-            case CUE -> "Enter the cue to give:";
-            case WAIT_FOR_CUE -> "Enter the cue to wait for:";
+            case CUE, WAIT_FOR_CUE -> valuePrompt(selected, holder.target().lane());
             default -> "Enter the action value:";
         };
-        chatInputService.request(player, prompt, value -> {
+        chatInputService.request(player, prompt, valueChoices(selected, holder.target().lane()), value -> {
             String normalized = branchActionValue(player, selected, value);
             if (normalized == null) {
                 openQuestionBranchPicker(player, holder.target(), holder.optionIndex(), holder.actionIndex());
@@ -4349,6 +4354,9 @@ public final class GuiService implements Listener {
     /** Links the action editor with the scene menus. */
     public interface SceneNavigation {
         void openScenes(Player player);
+
+        /** Opens only the scenes in which the preset plays a role. */
+        void openScenesFor(Player player, String presetKey);
 
         void openRoles(Player player, String sceneKey);
 

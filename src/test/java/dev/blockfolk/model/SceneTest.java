@@ -38,6 +38,17 @@ class SceneTest {
     }
 
     @Test
+    void findsTheRoleAPresetAlreadyPlays() {
+        Scene scene = new Scene("market");
+        SceneRole smith = scene.addRole("Smith", "Cranky Kong");
+
+        assertEquals(smith, scene.roleOf("cranky-kong", null).orElseThrow());
+        assertTrue(scene.roleOf("cranky-kong", smith.getId()).isEmpty());
+        assertTrue(scene.features("Cranky Kong"));
+        assertFalse(scene.features("luigi"));
+    }
+
+    @Test
     void settingsAreClampedToSensibleRanges() {
         Scene scene = new Scene("market");
 

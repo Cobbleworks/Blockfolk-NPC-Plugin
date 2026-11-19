@@ -70,6 +70,11 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     private final ChatInputService chatInput;
     private final Consumer<Player> mainMenuOpener;
     private GuiService guiService;
+    /**
+     * Players who opened the scene list from an NPC's editor see only that NPC's
+     * scenes until they go back or open the full list.
+     */
+    private final Map<java.util.UUID, String> presetFilters = new java.util.HashMap<>();
     private SceneService sceneService;
 
     public SceneGuiService(SceneRepository scenes, NpcDefinitionRepository definitions, LocationRepository locations,
@@ -93,6 +98,13 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
 
     @Override
     public void openScenes(Player player) {
+        presetFilters.remove(player.getUniqueId());
+        openBrowser(player, "", 0);
+    }
+
+    @Override
+    public void openScenesFor(Player player, String presetKey) {
+        presetFilters.put(player.getUniqueId(), NpcDefinition.toKey(presetKey));
         openBrowser(player, "", 0);
     }
 
@@ -147,11 +159,16 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     // ------------------------------------------------------------ browser
 
     private void openBrowser(Player player, String folder, int requestedPage) {
-        List<BrowserEntry> entries = browserEntries(folder);
+        NpcDefinition filter = presetFilter(player);
+        if (filter != null)
+            folder = "";
+        List<BrowserEntry> entries = browserEntries(folder, filter);
         int pages = Math.max(1, (entries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new BrowserHolder(folder, page), 54,
-                UiText.title(folder.isEmpty() ? "Scenes" : "Scenes: " + folder));
+                filter != null
+                        ? UiText.title("Scenes", filter.getDisplayName())
+                        : UiText.title(folder.isEmpty() ? "Scenes" : "Scenes: " + folder));
         int from = page * PAGE_SIZE;
         for (int index = from; index < Math.min(from + PAGE_SIZE, entries.size()); index++) {
             BrowserEntry entry = entries.get(index);
@@ -163,7 +180,11 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             }
         }
         if (entries.isEmpty())
-            inventory.setItem(22, GuiItems.empty("No Scenes Yet", "Use Create Scene below to add one"));
+            inventory.setItem(22,
+                    filter == null
+                            ? GuiItems.empty("No Scenes Yet", "Use Create Scene below to add one")
+                            : GuiItems.empty(filter.getDisplayName() + " Plays No Role Yet",
+                                    "Create Scene below makes one with this NPC cast"));
         if (page > 0)
             inventory.setItem(GuiItems.PREVIOUS_SLOT, GuiItems.previousPage(page, pages));
         inventory.setItem(47,
@@ -177,8 +198,18 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                                 LegacyText.GRAY + "return to their routine afterwards. If a needed",
                                 LegacyText.GRAY + "NPC is busy, the scene is skipped and admins",
                                 LegacyText.GRAY + "get a short chat message saying why.")));
-        inventory.setItem(GuiItems.BACK_SLOT, GuiItems.back(folder.isEmpty() ? "the main menu" : "the parent group"));
-        inventory.setItem(GuiItems.CREATE_SLOT, GuiItems.create("Create Scene", "Use / in the name to create groups"));
+        inventory.setItem(GuiItems.BACK_SLOT,
+                GuiItems.back(filter != null
+                        ? filter.getDisplayName() + "'s menu"
+                        : folder.isEmpty() ? "the main menu" : "the parent group"));
+        inventory.setItem(GuiItems.CREATE_SLOT, filter == null
+                ? GuiItems.create("Create Scene", "Use / in the name to create groups")
+                : GuiItems.create("Create Scene", "Starts with " + filter.getDisplayName() + " cast in a role"));
+        if (filter != null)
+            inventory.setItem(48,
+                    GuiItems.item(Material.BELL, "All Scenes",
+                            List.of(LegacyText.GRAY + "Showing only scenes " + filter.getDisplayName() + " plays in",
+                                    "", GuiItems.hint("Click", "show every scene"))));
         if (page + 1 < pages)
             inventory.setItem(GuiItems.NEXT_SLOT, GuiItems.nextPage(page, pages));
         GuiLayout.fillMainBar(inventory);
@@ -199,7 +230,10 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         return GuiItems.item(sceneIcon(scene), LegacyText.GOLD + scene.getDisplayName(), lore);
     }
 
-    private List<BrowserEntry> browserEntries(String folder) {
+    private List<BrowserEntry> browserEntries(String folder, NpcDefinition filter) {
+        if (filter != null)
+            return scenes.findAll().stream().filter(scene -> scene.features(filter.getKey()))
+                    .map(scene -> new BrowserEntry(scene.getKey(), scene.getDisplayName(), scene, 0)).toList();
         String prefix = folder.isEmpty() ? "" : folder + "/";
         Map<String, BrowserEntry> result = new LinkedHashMap<>();
         for (Scene scene : scenes.findAll()) {
@@ -225,6 +259,27 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
 
     private void handleBrowserClick(InventoryClickEvent click, Player player, BrowserHolder holder) {
         int slot = click.getRawSlot();
+        NpcDefinition filter = presetFilter(player);
+        if (filter != null && slot == 48) {
+            openScenes(player);
+            return;
+        }
+        if (filter != null && slot == GuiItems.BACK_SLOT) {
+            presetFilters.remove(player.getUniqueId());
+            if (guiService != null)
+                guiService.openEditor(player, filter);
+            else
+                mainMenuOpener.accept(player);
+            return;
+        }
+        if (filter != null && slot == GuiItems.CREATE_SLOT) {
+            createScene(player, "", scene -> {
+                scene.addRole(filter.getDisplayName(), filter.getKey());
+                scenes.save(scene);
+                openEditor(player, scene.getKey());
+            }, () -> openBrowser(player, "", holder.page()));
+            return;
+        }
         if (slot == GuiItems.BACK_SLOT) {
             if (holder.folder().isEmpty())
                 mainMenuOpener.accept(player);
@@ -245,7 +300,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                     () -> openBrowser(player, holder.folder(), holder.page()));
             return;
         }
-        List<BrowserEntry> entries = browserEntries(holder.folder());
+        List<BrowserEntry> entries = browserEntries(holder.folder(), filter);
         int index = holder.page() * PAGE_SIZE + slot;
         if (slot >= PAGE_SIZE || index < 0 || index >= entries.size())
             return;
@@ -414,7 +469,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                     scene.getCooldownSeconds(), "Enter the cooldown in minutes:", 60);
             case GuiItems.BACK_SLOT -> {
                 int slash = scene.getKey().lastIndexOf('/');
-                openBrowser(player, slash < 0 ? "" : scene.getKey().substring(0, slash), 0);
+                openBrowser(player, slash < 0 || presetFilter(player) != null ? "" : scene.getKey().substring(0, slash),
+                        0);
             }
             case DELETE_SLOT -> openDelete(player, scene.getKey());
             default -> {
@@ -622,7 +678,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 UiText.title("Roles", scene.getDisplayName()));
         int from = page * PAGE_SIZE;
         for (int index = from; index < Math.min(from + PAGE_SIZE, roles.size()); index++)
-            inventory.setItem(index - from, roleItem(roles.get(index)));
+            inventory.setItem(index - from, roleItem(scene, roles.get(index)));
         if (roles.isEmpty())
             inventory.setItem(22, GuiItems.empty("No Roles Yet", "Use Add Role below to cast an NPC"));
         if (page > 0)
@@ -636,9 +692,13 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         player.openInventory(inventory);
     }
 
-    private ItemStack roleItem(SceneRole role) {
+    private ItemStack roleItem(Scene scene, SceneRole role) {
         List<String> lore = new ArrayList<>();
         lore.add(LegacyText.GRAY + "Played by: " + LegacyText.WHITE + presetName(role));
+        scene.roleOf(role.getPresetKey(), role.getId()).ifPresent(other -> {
+            lore.add(LegacyText.RED + "Also plays '" + other.getDisplayName() + "': the scene cannot");
+            lore.add(LegacyText.RED + "start until one of these roles is removed");
+        });
         lore.add(LegacyText.GRAY + "Cast: " + LegacyText.WHITE + role.getCast().displayName());
         lore.add(LegacyText.GRAY + "Scene actions: " + LegacyText.WHITE + role.getLane().size());
         lore.add(LegacyText.GRAY + "Wrap-up actions: " + LegacyText.WHITE + role.getWrapUp().size());
@@ -705,9 +765,24 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         int from = page * PAGE_SIZE;
         for (int index = from; index < Math.min(from + PAGE_SIZE, presets.size()); index++) {
             NpcDefinition preset = presets.get(index);
+            SceneRole taken = scene.roleOf(preset.getKey(), roleId).orElse(null);
+            if (taken != null) {
+                inventory.setItem(index - from,
+                        GuiItems.item(Material.GRAY_DYE, preset.getDisplayName(),
+                                List.of(LegacyText.DARK_GRAY + "Key: " + preset.getKey(),
+                                        LegacyText.RED + "Already plays '" + taken.getDisplayName() + "'",
+                                        LegacyText.GRAY + "An NPC plays one role per scene.", "",
+                                        LegacyText.GRAY + "For more steps, add them to that role,",
+                                        LegacyText.GRAY + "or end its row with Start Scene to",
+                                        LegacyText.GRAY + "continue in a follow-up scene.")));
+                continue;
+            }
+            boolean current = roleId != null
+                    && scene.findRole(roleId).map(role -> preset.getKey().equals(role.getPresetKey())).orElse(false);
             ItemStack icon = GuiItems.item(Material.PLAYER_HEAD, preset.getDisplayName(),
-                    List.of(LegacyText.DARK_GRAY + "Key: " + preset.getKey(), "",
-                            GuiItems.hint("Click", roleId == null ? "cast this NPC" : "let this NPC play the role")));
+                    List.of(LegacyText.DARK_GRAY + "Key: " + preset.getKey(), "", current
+                            ? LegacyText.GREEN + "Plays this role now"
+                            : GuiItems.hint("Click", roleId == null ? "cast this NPC" : "let this NPC play the role")));
             inventory.setItem(index - from, NpcHeadUtil.applySkin(icon, preset));
         }
         if (presets.isEmpty())
@@ -745,6 +820,12 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         if (slot >= PAGE_SIZE || index < 0 || index >= presets.size())
             return;
         NpcDefinition preset = presets.get(index);
+        SceneRole taken = scene.roleOf(preset.getKey(), holder.roleId()).orElse(null);
+        if (taken != null) {
+            player.sendMessage(UiText.warning(preset.getDisplayName() + " already plays '" + taken.getDisplayName()
+                    + "' in this scene. Add the steps to that role, or chain a follow-up scene with Start Scene."));
+            return;
+        }
         String roleId;
         if (holder.roleId() == null) {
             if (scene.getRoles().size() >= Scene.MAX_ROLES)
@@ -899,6 +980,20 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     public void onDrag(InventoryDragEvent event) {
         if (isOwnHolder(event.getView().getTopInventory().getHolder()))
             event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onQuit(org.bukkit.event.player.PlayerQuitEvent event) {
+        presetFilters.remove(event.getPlayer().getUniqueId());
+    }
+
+    /** The NPC whose scenes the player is browsing, or null for all scenes. */
+    private NpcDefinition presetFilter(Player player) {
+        String key = presetFilters.get(player.getUniqueId());
+        NpcDefinition definition = key == null ? null : definitions.find(key).orElse(null);
+        if (key != null && definition == null)
+            presetFilters.remove(player.getUniqueId());
+        return definition;
     }
 
     private static boolean isOwnHolder(InventoryHolder holder) {

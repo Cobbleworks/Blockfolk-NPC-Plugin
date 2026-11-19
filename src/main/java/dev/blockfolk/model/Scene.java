@@ -217,6 +217,22 @@ public final class Scene {
         return roles.stream().filter(role -> role.getId().equals(roleId)).findFirst();
     }
 
+    /**
+     * The role, other than {@code exceptRoleId}, that the preset already plays. A
+     * preset plays at most one role per scene; longer scripts chain scenes.
+     */
+    public Optional<SceneRole> roleOf(String presetKey, String exceptRoleId) {
+        if (presetKey == null)
+            return Optional.empty();
+        String key = NpcDefinition.toKey(presetKey);
+        return roles.stream().filter(role -> key.equals(role.getPresetKey()))
+                .filter(role -> !role.getId().equals(exceptRoleId)).findFirst();
+    }
+
+    public boolean features(String presetKey) {
+        return roleOf(presetKey, null).isPresent();
+    }
+
     /** Adds a role named after its preset, with an id unique in this scene. */
     public SceneRole addRole(String displayName, String presetKey) {
         if (roles.size() >= MAX_ROLES)
