@@ -4,15 +4,33 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitScheduler;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
+import dev.blockfolk.model.BehaviourAction;
+import dev.blockfolk.model.BehaviourActionType;
+import dev.blockfolk.model.DayPeriod;
+import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
+import dev.blockfolk.model.RegionalEvent;
+import dev.blockfolk.repository.NpcDefinitionRepository;
 
 class NpcBehaviourServiceTest {
 
@@ -82,6 +100,67 @@ class NpcBehaviourServiceTest {
                 NpcBehaviourService.conversationOverheard(speaker, npcs, List.of(new Location(null, 22.0, 64.0, 0.0))));
         assertTrue(NpcBehaviourService.conversationOverheard(speaker, npcs,
                 List.of(new Location(null, -16.0, 64.0, 0.0))));
+    }
+
+    @Test
+    void stoppedRegionalEventCannotExecuteActionsAfterAWait() {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.namespace()).thenReturn("blockfolk");
+        BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        NpcDefinitionRepository definitions = mock(NpcDefinitionRepository.class);
+        NpcInstanceRegistry instances = mock(NpcInstanceRegistry.class);
+        NpcQuestionService questions = mock(NpcQuestionService.class);
+        NpcBehaviourService behaviours = new NpcBehaviourService(plugin, definitions, instances, null, questions, 0);
+        NpcInstance instance = instanceAt("guard", 0);
+        when(definitions.find("guard")).thenReturn(Optional.of(NpcDefinition.create("Guard")));
+        when(instances.findById(instance.getId())).thenReturn(Optional.of(instance));
+        when(instances.findEntity(instance)).thenReturn(Optional.of(mock(LivingEntity.class)));
+        Runnable completion = mock(Runnable.class);
+        ArgumentCaptor<Runnable> continuation = ArgumentCaptor.forClass(Runnable.class);
+
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            behaviours.beginRegionalEvent(instance);
+            behaviours.runRegionalActions(
+                    List.of(new BehaviourAction(BehaviourActionType.WAIT, "2"),
+                            new BehaviourAction(BehaviourActionType.WAVE, null)),
+                    instance, null, "Town event", completion);
+            verify(scheduler).runTaskLater(eq(plugin), continuation.capture(), eq(40L));
+            behaviours.endRegionalEvent(instance, true);
+            continuation.getValue().run();
+            verify(instances, never()).wave(instance);
+            verify(completion).run();
+            assertFalse(behaviours.isInRegionalEvent(instance));
+        }
+    }
+
+    @Test
+    void emitEventRoutesRegionalReferencesAndStillBroadcastsLegacySignals() {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.namespace()).thenReturn("blockfolk");
+        NpcDefinitionRepository definitions = mock(NpcDefinitionRepository.class);
+        NpcInstanceRegistry instances = mock(NpcInstanceRegistry.class);
+        RegionalEventService regional = mock(RegionalEventService.class);
+        NpcBehaviourService behaviours = new NpcBehaviourService(plugin, definitions, instances, null, null, 0);
+        behaviours.setRegionalEvents(regional);
+
+        NpcInstance guard = instanceAt("guard", 0);
+        NpcDefinition definition = NpcDefinition.create("Guard");
+        definition.setCustomEventActions("town/alarm", List.of(new BehaviourAction(BehaviourActionType.WAVE, null)));
+        when(definitions.find("guard")).thenReturn(Optional.of(definition));
+        when(instances.findActive()).thenReturn(List.of(guard));
+        when(instances.findById(guard.getId())).thenReturn(Optional.of(guard));
+        LivingEntity source = mock(LivingEntity.class);
+        RegionalEvent event = new RegionalEvent(UUID.randomUUID(), UUID.randomUUID(), "Town Alarm",
+                RegionalEvent.Trigger.MANUAL, DayPeriod.EVENING, false,
+                List.of(new RegionalEvent.Phase(UUID.randomUUID(), java.util.Map.of())));
+
+        behaviours.emitEvent(event.reference(), source);
+        verify(regional).emit(event.reference(), source);
+        verify(instances, never()).findActive();
+
+        behaviours.emitEvent("town/alarm", source);
+        verify(instances).wave(guard);
     }
 
     private static NpcInstance instanceAt(String key, double x) {

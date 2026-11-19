@@ -18,7 +18,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.OpenRouterClient;
-import dev.blockfolk.gui.CustomEventGuiService;
 import dev.blockfolk.gui.GuiService;
 import dev.blockfolk.gui.RouteGuiService;
 import dev.blockfolk.gui.ShopGuiService;
@@ -27,15 +26,18 @@ import dev.blockfolk.model.NamedLocation;
 import dev.blockfolk.model.NpcColor;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
+import dev.blockfolk.model.RegionalEvent;
 import dev.blockfolk.model.Shop;
 import dev.blockfolk.repository.CustomEventRepository;
 import dev.blockfolk.repository.LocationRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
+import dev.blockfolk.repository.RegionalEventRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.repository.ShopRepository;
 import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
 import dev.blockfolk.runtime.NpcShopService;
+import dev.blockfolk.runtime.RegionalEventService;
 import dev.blockfolk.util.UiText;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -50,8 +52,9 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
     private final GuiService guiService;
     private final RouteGuiService routeGuiService;
     private final RouteRepository routeRepository;
-    private final CustomEventGuiService customEventGuiService;
     private final CustomEventRepository customEventRepository;
+    private final RegionalEventRepository regionalEventRepository;
+    private final RegionalEventService regionalEvents;
     private final NpcBehaviourService behaviourService;
     private final LocationRepository locationRepository;
     private final AiControlService aiControlService;
@@ -62,17 +65,18 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
 
     public BlockfolkCommand(NpcDefinitionRepository definitionRepository, NpcInstanceRegistry instanceRegistry,
             GuiService guiService, RouteGuiService routeGuiService, RouteRepository routeRepository,
-            CustomEventGuiService customEventGuiService, CustomEventRepository customEventRepository,
-            NpcBehaviourService behaviourService, LocationRepository locationRepository,
-            AiControlService aiControlService, ShopRepository shopRepository, NpcShopService shopService,
-            ShopGuiService shopGuiService, JavaPlugin plugin) {
+            CustomEventRepository customEventRepository, RegionalEventRepository regionalEventRepository,
+            RegionalEventService regionalEvents, NpcBehaviourService behaviourService,
+            LocationRepository locationRepository, AiControlService aiControlService, ShopRepository shopRepository,
+            NpcShopService shopService, ShopGuiService shopGuiService, JavaPlugin plugin) {
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.guiService = guiService;
         this.routeGuiService = routeGuiService;
         this.routeRepository = routeRepository;
-        this.customEventGuiService = customEventGuiService;
         this.customEventRepository = customEventRepository;
+        this.regionalEventRepository = regionalEventRepository;
+        this.regionalEvents = regionalEvents;
         this.behaviourService = behaviourService;
         this.locationRepository = locationRepository;
         this.aiControlService = aiControlService;
@@ -132,14 +136,8 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             }
             return true;
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("events") && args[1].equalsIgnoreCase("trigger")) {
-            CustomEvent customEvent = customEventRepository.find(args[2]).orElse(null);
-            if (customEvent == null) {
-                sender.sendMessage(UiText.error("Unknown custom event: " + args[2]));
-                return true;
-            }
-            behaviourService.emitCustomEvent(customEvent.getName(), sender instanceof Player player ? player : null);
-            sender.sendMessage(UiText.success("Triggered custom event '" + customEvent.getName() + "'."));
+        if (args.length >= 3 && args[0].equalsIgnoreCase("events") && args[1].equalsIgnoreCase("trigger")) {
+            triggerEvent(sender, String.join(" ", Arrays.copyOfRange(args, 2, args.length)));
             return true;
         }
         if (args.length >= 3 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("ai")
@@ -245,7 +243,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("events")) {
-            customEventGuiService.open(player);
+            guiService.openEvents(player);
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("create")) {
@@ -336,6 +334,34 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return;
         }
         player.sendMessage(UiText.info(SHOP_USAGE));
+    }
+
+    private void triggerEvent(CommandSender sender, String name) {
+        Player player = sender instanceof Player source ? source : null;
+        CustomEvent legacy = customEventRepository.find(name).orElse(null);
+        if (legacy != null) {
+            behaviourService.emitEvent(legacy.getName(), player);
+            sender.sendMessage(UiText.success("Triggered '" + legacy.getName() + "'."));
+            return;
+        }
+
+        List<RegionalEvent> matches = RegionalEvent.isReference(name)
+                ? RegionalEvent.referenceId(name).map(regionalEventRepository::event).stream().toList()
+                : regionalEventRepository.events().stream()
+                        .filter(event -> regionalEventRepository.qualifiedName(event).equalsIgnoreCase(name)).toList();
+        if (matches.isEmpty()) {
+            sender.sendMessage(UiText
+                    .error("Unknown event '" + name + "'. Use the region name followed by / and the event name."));
+            return;
+        }
+        if (matches.size() > 1) {
+            sender.sendMessage(
+                    UiText.error("Multiple events share that name. Start the intended event from the Events menu."));
+            return;
+        }
+        RegionalEvent event = matches.getFirst();
+        String error = regionalEvents.play(event, player);
+        sender.sendMessage(error == null ? UiText.success("Triggered '" + event.name() + "'.") : UiText.error(error));
     }
 
     private boolean handleNpcCommand(Player player, NpcDefinition definition, String[] args) {
@@ -568,8 +594,13 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         if (args.length == 2 && args[0].equalsIgnoreCase("events")) {
             return filter(List.of("trigger"), args[1]);
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("events") && args[1].equalsIgnoreCase("trigger")) {
-            return filter(customEventRepository.findAll().stream().map(CustomEvent::getName).toList(), args[2]);
+        if (args.length >= 3 && args[0].equalsIgnoreCase("events") && args[1].equalsIgnoreCase("trigger")) {
+            List<String> names = new ArrayList<>();
+            regionalEventRepository.events().stream().map(regionalEventRepository::qualifiedName).forEach(names::add);
+            customEventRepository.findAll().stream().map(CustomEvent::getName).forEach(names::add);
+            String prefix = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
+            int completedLength = prefix.length() - args[args.length - 1].length();
+            return filter(names, prefix).stream().map(name -> name.substring(completedLength)).distinct().toList();
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("npc")) {
             return filter(List.of("edit", "set", "tp", "inventory", "memory", "events", "combat", "equipment", "delete",

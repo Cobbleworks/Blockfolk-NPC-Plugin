@@ -11,12 +11,13 @@ Blockfolk stores its runtime configuration under `plugins/Blockfolk/`.
 | `instances.yml` | Persistent spawned instances and their UUIDs. |
 | `routes.yml` | NPC-owned routes and their point actions. |
 | `locations.yml` | Named global locations and icons. |
-| `custom-events.yml` | Global custom-event definitions and ordering. |
+| `custom-events.yml` | Saved legacy global event definitions and ordering. |
+| `regional-events.yml` | Region bounds, event triggers, and actions assigned to placed NPCs. |
 | `abilities.yml` | Shared attack definitions, origins, shapes, timing, effects, and visuals. |
 
 ## Backup
 
-Back up the entire `plugins/Blockfolk/` directory together. Presets can reference routes, locations, custom events, and abilities, so restoring only individual files can leave missing references.
+Back up the entire `plugins/Blockfolk/` directory together. Presets can reference routes, locations, events, and abilities, so restoring only individual files can leave missing references.
 
 For the cleanest snapshot, stop the server before copying the directory. Blockfolk uses debounced writes for its YAML repositories, so a live filesystem copy may catch related files at slightly different moments.
 

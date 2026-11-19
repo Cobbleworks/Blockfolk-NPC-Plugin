@@ -36,16 +36,16 @@ public final class CustomEventGuiService implements Listener {
     private final NpcDefinitionRepository definitions;
     private final RouteRepository routes;
     private final ChatInputService chatInput;
-    private final Consumer<Player> mainGuiOpener;
+    private final Consumer<Player> eventsOpener;
     private final NamespacedKey reorderEventKey;
 
     public CustomEventGuiService(JavaPlugin plugin, CustomEventRepository events, NpcDefinitionRepository definitions,
-            RouteRepository routes, ChatInputService chatInput, Consumer<Player> mainGuiOpener) {
+            RouteRepository routes, ChatInputService chatInput, Consumer<Player> eventsOpener) {
         this.events = events;
         this.definitions = definitions;
         this.routes = routes;
         this.chatInput = chatInput;
-        this.mainGuiOpener = mainGuiOpener;
+        this.eventsOpener = eventsOpener;
         this.reorderEventKey = new NamespacedKey(plugin, "reorder-custom-event");
     }
 
@@ -53,33 +53,15 @@ public final class CustomEventGuiService implements Listener {
         open(player, "", 0);
     }
 
-    public void createEvent(Player player, String folder, Consumer<CustomEvent> onCreated, Runnable onFailure) {
-        String normalizedFolder = folder == null ? "" : folder;
-        chatInput.request(player, "Enter the full custom event name (use / for groups):", value -> {
-            try {
-                String name = normalizedFolder.isEmpty() || value.contains("/")
-                        ? value
-                        : normalizedFolder + "/" + value;
-                CustomEvent event = new CustomEvent(name);
-                if (events.find(event.getName()).isPresent()) {
-                    player.sendMessage(UiText.error("A custom event with that name already exists."));
-                    onFailure.run();
-                    return;
-                }
-                events.save(event);
-                onCreated.accept(event);
-            } catch (IllegalArgumentException exception) {
-                player.sendMessage(UiText.error(exception.getMessage()));
-                onFailure.run();
-            }
-        }, onFailure);
+    boolean hasEvents() {
+        return !events.findAll().isEmpty();
     }
 
     private void open(Player player, String folder, int requestedPage) {
         List<CustomEventBrowserModel.Entry> entries = entries(folder);
         int pages = Math.max(1, (entries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        String title = folder.isEmpty() ? "Custom Events" : "Events: " + folderLabel(folder);
+        String title = folder.isEmpty() ? "Legacy Events" : "Events: " + folderLabel(folder);
         Inventory inventory = Bukkit.createInventory(new EventsHolder(folder, page), 54, UiText.title(title));
         int from = page * PAGE_SIZE;
         for (int index = from; index < Math.min(from + PAGE_SIZE, entries.size()); index++) {
@@ -95,7 +77,7 @@ public final class CustomEventGuiService implements Listener {
             }
         }
         if (entries.isEmpty())
-            inventory.setItem(22, GuiItems.empty("No Custom Events Yet", "Use Create Event below to add one"));
+            inventory.setItem(22, GuiItems.empty("No Legacy Events", "Go back to Events to create a regional event"));
         if (page > 0)
             inventory.setItem(GuiItems.PREVIOUS_SLOT, GuiItems.previousPage(page, pages));
         inventory.setItem(48,
@@ -103,8 +85,7 @@ public final class CustomEventGuiService implements Listener {
                         List.of(LegacyText.GRAY + "Defined events: " + LegacyText.WHITE + events.findAll().size(),
                                 LegacyText.GRAY + "Group: " + LegacyText.WHITE + folderLabel(folder), "",
                                 GuiItems.hint("Click", "reorder custom events"))));
-        inventory.setItem(GuiItems.BACK_SLOT, GuiItems.back(folder.isEmpty() ? "the main menu" : "the parent group"));
-        inventory.setItem(GuiItems.CREATE_SLOT, GuiItems.create("Create Event", "Use / in the name to create groups"));
+        inventory.setItem(GuiItems.BACK_SLOT, GuiItems.back(folder.isEmpty() ? "Events" : "the parent group"));
         if (page + 1 < pages)
             inventory.setItem(GuiItems.NEXT_SLOT, GuiItems.nextPage(page, pages));
         GuiLayout.fillMainBar(inventory);
@@ -119,7 +100,7 @@ public final class CustomEventGuiService implements Listener {
     private void openReorder(Player player, ReorderEventsHolder holder, int requestedPage) {
         int pages = Math.max(1, (holder.keys.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         holder.page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Reorder Custom Events"));
+        Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Reorder Legacy Events"));
         renderReorder(inventory, holder);
         player.openInventory(inventory);
         ReorderSupport.restoreCursor(player, holder, this::reorderItem);
@@ -205,7 +186,7 @@ public final class CustomEventGuiService implements Listener {
         int slot = click.getRawSlot();
         if (slot == GuiItems.BACK_SLOT) {
             if (holder.folder().isEmpty())
-                mainGuiOpener.accept(player);
+                eventsOpener.accept(player);
             else
                 open(player, CustomEventBrowserModel.parent(holder.folder()), 0);
             return;
@@ -217,10 +198,6 @@ public final class CustomEventGuiService implements Listener {
         }
         if (slot == 48) {
             openReorder(player, holder.folder(), holder.page());
-            return;
-        }
-        if (slot == 51) {
-            requestName(player, holder);
             return;
         }
         if (slot == 53) {
@@ -287,11 +264,6 @@ public final class CustomEventGuiService implements Listener {
         }
         ReorderSupport.selectOrMove(click, player, holder, PAGE_SIZE, reorderEventKey, this::reorderItem,
                 inventory -> renderReorder(inventory, holder));
-    }
-
-    private void requestName(Player player, EventsHolder holder) {
-        createEvent(player, "", event -> open(player, "unassigned:", 0),
-                () -> open(player, holder.folder(), holder.page()));
     }
 
     private void openDelete(Player player, CustomEvent event, EventsHolder back) {

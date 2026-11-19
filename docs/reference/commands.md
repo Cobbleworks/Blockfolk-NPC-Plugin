@@ -37,4 +37,6 @@
 
 NPC names in commands are stable preset keys, shown in the editor. Saved locations are global location keys. Tab completion lists both.
 
-Existing `/bf create [name]`, `/bf events [trigger <event>]`, and `/bf npc <name> duplicate` commands remain available. `/bf events trigger` also works from the console.
+Use `/bf events` to open the event editor. Run `/bf events trigger <region>/<event>` in-game or from the console to start a regional event. Existing global events still accept their original names.
+
+Existing `/bf create [name]` and `/bf npc <name> duplicate` commands remain available.
