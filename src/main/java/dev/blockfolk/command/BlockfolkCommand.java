@@ -256,7 +256,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
                         .error("Unknown scene: " + args[1] + ". Use /bf scene start|stop <scene> or /bf scenes."));
                 return true;
             }
-            sceneGuiService.openEditor(player, scene.getKey());
+            sceneGuiService.openScript(player, scene.getKey());
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("create")) {

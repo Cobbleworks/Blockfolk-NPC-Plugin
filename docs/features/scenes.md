@@ -15,7 +15,7 @@ Scenes can start on their own (at a time of day, when the weather changes, or wh
 
 Open **Scenes** from the main `/bf` menu or run `/bf scenes` to see every scene. **Scenes** in an NPC's editor shows only the scenes that NPC plays in, and **Create Scene** there starts a scene with that NPC already cast. Choose **Create Scene** and enter a name. Use `/` to group scenes, for example `western/last-train`.
 
-The scene editor has four columns:
+Selecting an existing scene opens its **Script**. Click the book in the top-left slot to open **Scene Settings**, which has four columns:
 
 - **Scene**: name, description, and **Trigger AI Behaviour** (see [Scenes and AI](#scenes-and-ai)). The description opens a multi-line text box; NPCs with [AI behaviour](./ai-behaviour.md) get it as context while they play the scene, so describe the situation rather than giving orders. Middle-click the scene icon at the top to use the item in your hand as its icon.
 - **When**: the triggers, and whether they are switched on.
@@ -76,7 +76,7 @@ The **Next Beat** action moves the scene on to its next beat. Put it in a **Whil
 
 NPCs with [AI behaviour](./ai-behaviour.md) and **Respond to NPCs** answer what nearby NPCs say, including scripted **Send Dialog** lines. In a scripted conversation this gets in the way: the AI starts replying to the script, and those replies start more replies. (**Show Holo Dialog** never starts AI replies.)
 
-Switch **Trigger AI Behaviour** off in the scene editor to keep the AI quiet while the scene runs, including its wrap-up:
+Switch **Trigger AI Behaviour** off in **Scene Settings** to keep the AI quiet while the scene runs, including its wrap-up:
 
 - the lines of the NPCs in the scene start no AI replies, neither from each other nor from NPCs nearby;
 - the NPCs in the scene do not answer anything other NPCs say;
@@ -135,7 +135,7 @@ A scene starts completely or not at all. It is skipped when a role has no free N
 - no instance is loaded (not spawned, its chunk is not loaded, or, for automatic starts, it is in another world than the one whose time, weather, or area started the scene);
 - the role has no preset, or the preset was deleted.
 
-Administrators online get a short chat message saying which scene was skipped and why, for example *Scene 'Last Train Is Late' was skipped: Luigi is busy in scene 'Market by the Lake'.* The same message is repeated at most once a minute, and it is also written to the server log. Manual starts tell the player or console who started the scene. The scene editor shows the last skip reason.
+Administrators online get a short chat message saying which scene was skipped and why, for example *Scene 'Last Train Is Late' was skipped: Luigi is busy in scene 'Market by the Lake'.* The same message is repeated at most once a minute, and it is also written to the server log. Manual starts tell the player or console who started the scene. **Scene Settings** shows the last skip reason.
 
 Set `scenes.notify-skipped: false` in `config.yml` to stop the chat messages for automatic starts.
 

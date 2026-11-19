@@ -50,7 +50,7 @@ import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.format.NamedTextColor;
 
 /**
- * Menus for scenes: the scene browser, the scene editor with triggers (one of
+ * Menus for scenes: the scene browser, the scene settings with triggers (one of
  * which watches an area), ending, and test controls, and the script, a grid of
  * beats (rows) and roles (columns). Role action rows are edited by
  * {@link GuiService#openSceneRole}, which shares the preset action editor.
@@ -84,6 +84,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     /** The script shows eight role columns and four beat rows per page. */
     private static final int SCRIPT_COLUMNS = 8;
     private static final int SCRIPT_ROWS = 4;
+    private static final int SCRIPT_SETTINGS_SLOT = 0;
     private static final int SCRIPT_ROLES_LEFT_SLOT = 46;
     private static final int SCRIPT_ROLES_RIGHT_SLOT = 52;
     /** Beat settings: advance options on row 1, actions on the bottom row. */
@@ -266,7 +267,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         lore.add(LegacyText.GRAY + "Starts: " + LegacyText.WHITE + triggerSummary(scene));
         lore.addAll(chainLore(scene));
         lore.add("");
-        lore.add(GuiItems.hint("Click", "edit"));
+        lore.add(GuiItems.hint("Click", "edit script"));
         lore.add(GuiItems.danger("Shift-right-click", "delete"));
         return GuiItems.item(sceneIcon(scene), LegacyText.GOLD + scene.getDisplayName(), lore);
     }
@@ -317,7 +318,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             createScene(player, "", scene -> {
                 scene.addRole(filter.getKey());
                 scenes.save(scene);
-                openEditor(player, scene.getKey());
+                openSettings(player, scene.getKey());
             }, () -> openBrowser(player, "", holder.page()));
             return;
         }
@@ -337,7 +338,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             return;
         }
         if (slot == GuiItems.CREATE_SLOT) {
-            createScene(player, holder.folder(), scene -> openEditor(player, scene.getKey()),
+            createScene(player, holder.folder(), scene -> openSettings(player, scene.getKey()),
                     () -> openBrowser(player, holder.folder(), holder.page()));
             return;
         }
@@ -351,21 +352,21 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         } else if (click.getClick() == ClickType.SHIFT_RIGHT) {
             openDelete(player, entry.scene().getKey());
         } else {
-            openEditor(player, entry.scene().getKey());
+            openScript(player, entry.scene().getKey());
         }
     }
 
-    // ------------------------------------------------------------- editor
+    // ----------------------------------------------------------- settings
 
-    public void openEditor(Player player, String sceneKey) {
+    private void openSettings(Player player, String sceneKey) {
         Scene scene = scenes.find(sceneKey).orElse(null);
         if (scene == null) {
             player.sendMessage(UiText.error("That scene no longer exists."));
             openBrowser(player, "", 0);
             return;
         }
-        Inventory inventory = Bukkit.createInventory(new EditorHolder(scene.getKey()), 54,
-                UiText.manageTitle(scene.getDisplayName()));
+        Inventory inventory = Bukkit.createInventory(new SettingsHolder(scene.getKey()), 54,
+                UiText.title("Scene Settings", scene.getDisplayName()));
         List<String> summary = new ArrayList<>();
         summary.add(LegacyText.DARK_GRAY + "Key: " + scene.getKey());
         summary.add(LegacyText.GRAY + "Status: " + statusText(scene));
@@ -428,7 +429,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 numericItem(Material.HOPPER, "Cooldown", seconds(scene.getCooldownSeconds()),
                         List.of(LegacyText.GRAY + "After it ends, triggers wait this long",
                                 LegacyText.GRAY + "before they may start it again.")));
-        inventory.setItem(GuiItems.BACK_SLOT, GuiItems.back("the scene list"));
+        inventory.setItem(GuiItems.BACK_SLOT, GuiItems.back("the script"));
         inventory.setItem(DELETE_SLOT,
                 GuiItems.item(Material.LAVA_BUCKET, "Delete Scene",
                         List.of(LegacyText.GRAY + "Removes the scene and its roles", "",
@@ -438,13 +439,13 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         player.openInventory(inventory);
     }
 
-    private void handleEditorClick(InventoryClickEvent click, Player player, EditorHolder holder) {
+    private void handleSettingsClick(InventoryClickEvent click, Player player, SettingsHolder holder) {
         Scene scene = scenes.find(holder.sceneKey()).orElse(null);
         if (scene == null) {
             openBrowser(player, "", 0);
             return;
         }
-        Runnable reopen = () -> openEditor(player, scene.getKey());
+        Runnable reopen = () -> openSettings(player, scene.getKey());
         switch (click.getRawSlot()) {
             case SUMMARY_SLOT -> {
                 if (click.getClick() != ClickType.MIDDLE && click.getClick() != ClickType.SHIFT_LEFT)
@@ -510,11 +511,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                     scene.getChancePercent(), "Enter the chance in percent (1-100):", 1, reopen);
             case COOLDOWN_SLOT -> adjust(click, player, scene, 30, value -> scene.setCooldownSeconds(value),
                     scene.getCooldownSeconds(), "Enter the cooldown in minutes:", 60, reopen);
-            case GuiItems.BACK_SLOT -> {
-                int slash = scene.getKey().lastIndexOf('/');
-                openBrowser(player, slash < 0 || presetFilter(player) != null ? "" : scene.getKey().substring(0, slash),
-                        0);
-            }
+            case GuiItems.BACK_SLOT -> openScript(player, scene.getKey());
             case DELETE_SLOT -> openDelete(player, scene.getKey());
             default -> {
             }
@@ -522,8 +519,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     }
 
     /**
-     * Edits the description in a multi-line text box. Saving reopens the editor;
-     * cancelling or Escape just closes the dialog.
+     * Edits the description in a multi-line text box. Save and Cancel return to
+     * Scene Settings. Escape closes the dialog.
      */
     private void openDescriptionDialog(Player player, Scene scene) {
         String sceneKey = scene.getKey();
@@ -543,7 +540,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                             current.setDescription(input);
                             scenes.save(current);
                         });
-                        openEditor(submitting, sceneKey);
+                        openSettings(submitting, sceneKey);
                     });
                 }, ClickCallback.Options.builder().uses(1).build())).build();
         ActionButton cancel = ActionButton.builder(Component.text("Cancel", NamedTextColor.RED))
@@ -551,7 +548,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                     if (audience instanceof Player cancelling && cancelling.getUniqueId().equals(player.getUniqueId()))
                         Bukkit.getScheduler().runTask(plugin, () -> {
                             if (cancelling.isOnline())
-                                openEditor(cancelling, sceneKey);
+                                openSettings(cancelling, sceneKey);
                         });
                 }, ClickCallback.Options.builder().uses(1).build())).build();
         Dialog dialog = Dialog.create(builder -> builder.empty().base(DialogBase
@@ -744,7 +741,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             return;
         }
         if (click.getRawSlot() == GuiItems.BACK_SLOT) {
-            openEditor(player, scene.getKey());
+            openSettings(player, scene.getKey());
             return;
         }
         if (click.getRawSlot() == TRIGGER_RADIUS_SLOT && scene.hasTrigger(SceneTrigger.PLAYER_ENTERS)) {
@@ -809,6 +806,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     private void openScript(Player player, String sceneKey, int requestedBeatPage, int requestedRolePage) {
         Scene scene = scenes.find(sceneKey).orElse(null);
         if (scene == null) {
+            player.sendMessage(UiText.error("That scene no longer exists."));
             openBrowser(player, "", 0);
             return;
         }
@@ -823,7 +821,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         Inventory inventory = Bukkit.createInventory(new ScriptHolder(scene.getKey(), beatPage, rolePage), 54,
                 UiText.title("Script", scene.getDisplayName()));
         String playing = sceneService == null ? null : sceneService.currentBeat(scene.getKey()).orElse(null);
-        inventory.setItem(0, scriptInfoItem(scene));
+        inventory.setItem(SCRIPT_SETTINGS_SLOT, scriptSettingsItem(scene));
         for (int column = 0; column < SCRIPT_COLUMNS; column++) {
             int roleIndex = rolePage * SCRIPT_COLUMNS + column;
             if (roleIndex < roles.size())
@@ -850,7 +848,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         if (rolePage > 0)
             inventory.setItem(SCRIPT_ROLES_LEFT_SLOT, GuiItems.item(Material.SPECTRAL_ARROW, "Previous Roles",
                     List.of(LegacyText.GRAY + "Roles page " + rolePage + " of " + rolePages)));
-        inventory.setItem(GuiItems.BACK_SLOT, GuiItems.back("the scene editor"));
+        inventory.setItem(GuiItems.BACK_SLOT, GuiItems.back("the scene list"));
         if (rolePage + 1 < rolePages)
             inventory.setItem(SCRIPT_ROLES_RIGHT_SLOT, GuiItems.item(Material.SPECTRAL_ARROW, "More Roles",
                     List.of(LegacyText.GRAY + "Roles page " + (rolePage + 2) + " of " + rolePages)));
@@ -863,7 +861,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         player.openInventory(inventory);
     }
 
-    private ItemStack scriptInfoItem(Scene scene) {
+    private ItemStack scriptSettingsItem(Scene scene) {
         List<String> lore = new ArrayList<>();
         lore.add(LegacyText.GRAY + "Each row is a beat: one step of the scene.");
         lore.add(LegacyText.GRAY + "Every role plays its actions of a beat at");
@@ -876,7 +874,9 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         lore.add(LegacyText.GRAY + "Beats: " + LegacyText.WHITE + scene.getBeats().size() + LegacyText.GRAY
                 + " · Roles: " + LegacyText.WHITE + scene.getRoles().size());
         lore.add(LegacyText.GRAY + "Status: " + statusText(scene));
-        return GuiItems.item(Material.KNOWLEDGE_BOOK, "Script", lore);
+        lore.add("");
+        lore.add(GuiItems.hint("Click", "open scene settings"));
+        return GuiItems.item(Material.KNOWLEDGE_BOOK, "Scene Settings", lore);
     }
 
     private ItemStack roleHeaderItem(Scene scene, SceneRole role) {
@@ -960,12 +960,13 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         int slot = click.getRawSlot();
         Runnable reopen = () -> openScript(player, scene.getKey(), holder.beatPage(), holder.rolePage());
         switch (slot) {
+            case SCRIPT_SETTINGS_SLOT -> openSettings(player, scene.getKey());
             case GuiItems.PREVIOUS_SLOT -> openScript(player, scene.getKey(), holder.beatPage() - 1, holder.rolePage());
             case GuiItems.NEXT_SLOT -> openScript(player, scene.getKey(), holder.beatPage() + 1, holder.rolePage());
             case SCRIPT_ROLES_LEFT_SLOT -> openScript(player, scene.getKey(), holder.beatPage(), holder.rolePage() - 1);
             case SCRIPT_ROLES_RIGHT_SLOT ->
                 openScript(player, scene.getKey(), holder.beatPage(), holder.rolePage() + 1);
-            case GuiItems.BACK_SLOT -> openEditor(player, scene.getKey());
+            case GuiItems.BACK_SLOT -> openBrowser(player, LocationBrowserModel.parent(scene.getKey()), 0);
             case GuiItems.CREATE_SLOT -> {
                 if (!scene.canAddBeat())
                     return;
@@ -983,8 +984,6 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 List<SceneRole> roles = scene.getRoles();
                 int roleIndex = holder.rolePage() * SCRIPT_COLUMNS + column - 1;
                 if (row == 0) {
-                    if (column == 0)
-                        return;
                     if (roleIndex == roles.size() && roles.size() < Scene.MAX_ROLES)
                         openPresetPicker(player, scene.getKey(), null, 0);
                     else if (roleIndex < roles.size())
@@ -1401,7 +1400,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
 
     private void handleDeleteClick(InventoryClickEvent click, Player player, DeleteHolder holder) {
         if (click.getRawSlot() == 15) {
-            openEditor(player, holder.sceneKey());
+            openSettings(player, holder.sceneKey());
             return;
         }
         if (click.getRawSlot() != 11)
@@ -1430,7 +1429,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             return;
         switch (holder) {
             case BrowserHolder browser -> handleBrowserClick(event, player, browser);
-            case EditorHolder editor -> handleEditorClick(event, player, editor);
+            case SettingsHolder settings -> handleSettingsClick(event, player, settings);
             case TriggersHolder triggers -> handleTriggersClick(event, player, triggers);
             case ScriptHolder script -> handleScriptClick(event, player, script);
             case BeatHolder beat -> handleBeatClick(event, player, beat);
@@ -1464,7 +1463,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     }
 
     private static boolean isOwnHolder(InventoryHolder holder) {
-        return holder instanceof BrowserHolder || holder instanceof EditorHolder || holder instanceof TriggersHolder
+        return holder instanceof BrowserHolder || holder instanceof SettingsHolder || holder instanceof TriggersHolder
                 || holder instanceof ScriptHolder || holder instanceof BeatHolder
                 || holder instanceof PresetPickerHolder || holder instanceof AreaPickerHolder
                 || holder instanceof DeleteHolder;
@@ -1575,7 +1574,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     private record BrowserHolder(String folder, int page) implements GuiHolder {
     }
 
-    private record EditorHolder(String sceneKey) implements GuiHolder {
+    private record SettingsHolder(String sceneKey) implements GuiHolder {
     }
 
     private record TriggersHolder(String sceneKey) implements GuiHolder {

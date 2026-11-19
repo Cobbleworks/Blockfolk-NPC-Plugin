@@ -8,7 +8,7 @@
 | `/bf locations` | Open global locations. |
 | `/bf routes` | Open routes. |
 | `/bf scenes` | Open the scene browser. |
-| `/bf scene <scene>` | Open a scene's editor. |
+| `/bf scene <scene>` | Open a scene's script. |
 | `/bf scene start <scene>` | Start a scene now. Skip reasons are shown to you. Also works from the console. |
 | `/bf scene stop <scene>` | End a running scene with its wrap-up; again to end it at once. Also works from the console. |
 | `/bf abilities` | Open the shared attack library and editor. |
