@@ -32,10 +32,12 @@ record SceneLaneRef(String sceneKey, String roleId, Part part, String beatId, Be
         return new SceneLaneRef(sceneKey, roleId, Part.REACTION, null, event);
     }
 
-    /** Rows of the role editor, top to bottom: every beat, wrap-up, reactions. */
+    /**
+     * Rows of the role editor, top to bottom: wrap-up, then reactions. Beat rows
+     * are edited one at a time from the script.
+     */
     static List<SceneLaneRef> rows(Scene scene, String roleId) {
         List<SceneLaneRef> rows = new ArrayList<>();
-        scene.getBeats().forEach(beat -> rows.add(beat(scene.getKey(), roleId, beat.getId())));
         rows.add(wrapUp(scene.getKey(), roleId));
         SceneRole.REACTION_EVENTS.forEach(event -> rows.add(reaction(scene.getKey(), roleId, event)));
         return List.copyOf(rows);

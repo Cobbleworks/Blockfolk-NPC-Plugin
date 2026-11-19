@@ -50,6 +50,7 @@ import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.SpecialAttackOptions;
 import dev.blockfolk.model.Scene;
+import dev.blockfolk.model.SceneBeat;
 import dev.blockfolk.model.SceneRole;
 import dev.blockfolk.model.LootTier;
 import dev.blockfolk.model.NamedLocation;
@@ -192,6 +193,10 @@ public final class GuiService implements Listener {
     private static final int MAX_ROW_ACTIONS = 7;
     private static final int ACTION_PICKER_ANIMATIONS_SLOT = 32;
     private static final int ACTION_PICKER_BACK_SLOT = 49;
+    /** One-beat editor: the action row on row 1, navigation on row 2. */
+    private static final int SCENE_BEAT_PREVIOUS_SLOT = 18;
+    private static final int SCENE_BEAT_BACK_SLOT = 22;
+    private static final int SCENE_BEAT_NEXT_SLOT = 26;
     private static final String AI_TRIGGER_PROMPT_INPUT = "ai_trigger_prompt";
     private static final int AI_TRIGGER_PROMPT_MAX_LENGTH = 2048;
     private static final Set<Integer> INVENTORY_EDIT_SLOTS = Set.of(1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16,
@@ -981,9 +986,9 @@ public final class GuiService implements Listener {
     }
 
     /**
-     * Edits one scene role: its actions in every beat, its wrap-up, and its
-     * reactions, with the same action rows as preset behaviour. Beats come first,
-     * five rows per page.
+     * Edits what one scene role does across the whole scene: its wrap-up and its
+     * reactions, with the same action rows as preset behaviour. Its actions per
+     * beat are edited from the script, one beat at a time ({@link #openSceneBeat}).
      */
     public void openSceneRole(Player player, String sceneKey, String roleId, int requestedPage) {
         Scene scene = sceneRepository.find(sceneKey).orElse(null);
@@ -1007,14 +1012,7 @@ public final class GuiService implements Listener {
                 break;
             SceneLaneRef lane = rows.get(rowIndex);
             List<BehaviourAction> actions = lane.actions(scene, role);
-            ItemStack rowItem = item(sceneRowMaterial(lane), sceneRowName(scene, lane),
-                    actionSummaryLore(sceneRowIntroduction(scene, lane), actions));
-            if (lane.part() == SceneLaneRef.Part.BEAT)
-                rowItem.setAmount(Math.clamp(scene.beatIndex(lane.beatId()) + 1, 1, 64));
-            inventory.setItem(row * 9, rowItem);
-            inventory.setItem(row * 9 + 1, addActionItem(actions.size(), MAX_ROW_ACTIONS));
-            for (int column = 0; column < Math.min(7, actions.size()); column++)
-                inventory.setItem(row * 9 + column + 2, actionItem(actions.get(column), column));
+            setSceneRow(inventory, row * 9, scene, lane, actions);
         }
         if (page > 0)
             inventory.setItem(45, GuiItems.previousPage(page, pages));
@@ -1034,6 +1032,74 @@ public final class GuiService implements Listener {
         if (page + 1 < pages)
             inventory.setItem(53, GuiItems.nextPage(page, pages));
         openInventory(player, inventory);
+    }
+
+    /**
+     * Edits what one role does in one beat: a single action row, opened from a cell
+     * of the scene's script. The arrows step to the role's previous or next beat.
+     */
+    public void openSceneBeat(Player player, String sceneKey, String roleId, String beatId) {
+        Scene scene = sceneRepository.find(sceneKey).orElse(null);
+        SceneRole role = scene == null ? null : scene.findRole(roleId).orElse(null);
+        SceneBeat beat = role == null ? null : scene.findBeat(beatId).orElse(null);
+        if (beat == null) {
+            player.sendMessage(UiText.error("That beat or role no longer exists."));
+            if (scene != null && sceneNavigation != null)
+                sceneNavigation.openScript(player, scene.getKey());
+            else if (sceneNavigation != null)
+                sceneNavigation.openScenes(player);
+            else
+                player.closeInventory();
+            return;
+        }
+        int index = scene.beatIndex(beatId);
+        int count = scene.getBeats().size();
+        Inventory inventory = Bukkit.createInventory(new SceneBeatHolder(scene.getKey(), role.getId(), beatId), 27,
+                UiText.title(sceneRoleName(role), "Beat " + (index + 1)));
+        NpcDefinition preset = role.getPresetKey() == null
+                ? null
+                : definitionRepository.find(role.getPresetKey()).orElse(null);
+        List<String> headerLore = List.of(LegacyText.GRAY + "Beat " + (index + 1) + " of " + count, LegacyText.GRAY
+                + "Next beat: " + LegacyText.WHITE + SceneBeatText.advance(scene, beat, this::sceneRoleName));
+        inventory.setItem(4,
+                preset == null
+                        ? item(Material.SKELETON_SKULL, "Played By: Nobody", headerLore)
+                        : definitionIcon(preset, headerLore));
+        SceneLaneRef lane = SceneLaneRef.beat(scene.getKey(), role.getId(), beatId);
+        setSceneRow(inventory, 9, scene, lane, lane.actions(scene, role));
+        if (index > 0)
+            inventory.setItem(SCENE_BEAT_PREVIOUS_SLOT, item(Material.ARROW, "Previous Beat",
+                    List.of(LegacyText.GRAY + sceneRoleName(role) + " in beat " + index)));
+        inventory.setItem(SCENE_BEAT_BACK_SLOT, GuiItems.back("the scene's script"));
+        if (index + 1 < count)
+            inventory.setItem(SCENE_BEAT_NEXT_SLOT, item(Material.ARROW, "Next Beat",
+                    List.of(LegacyText.GRAY + sceneRoleName(role) + " in beat " + (index + 2))));
+        GuiLayout.fillRow(inventory, 0);
+        GuiLayout.fillMainBar(inventory);
+        openInventory(player, inventory);
+    }
+
+    /** One action row starting at {@code first}: label, add button, actions. */
+    private void setSceneRow(Inventory inventory, int first, Scene scene, SceneLaneRef lane,
+            List<BehaviourAction> actions) {
+        ItemStack label = item(sceneRowMaterial(lane), sceneRowName(scene, lane),
+                actionSummaryLore(sceneRowIntroduction(scene, lane), actions));
+        if (lane.part() == SceneLaneRef.Part.BEAT)
+            label.setAmount(Math.clamp(scene.beatIndex(lane.beatId()) + 1, 1, 64));
+        inventory.setItem(first, label);
+        inventory.setItem(first + 1, addActionItem(actions.size(), MAX_ROW_ACTIONS));
+        for (int column = 0; column < Math.min(7, actions.size()); column++)
+            inventory.setItem(first + column + 2, actionItem(actions.get(column), column));
+    }
+
+    /**
+     * Back to the editor a scene row belongs to, after editing one of its actions.
+     */
+    private void openSceneLane(Player player, SceneLaneRef lane, int page) {
+        if (lane.part() == SceneLaneRef.Part.BEAT)
+            openSceneBeat(player, lane.sceneKey(), lane.roleId(), lane.beatId());
+        else
+            openSceneRole(player, lane.sceneKey(), lane.roleId(), page);
     }
 
     /** Roles carry no name of their own: NPCs play themselves. */
@@ -1337,6 +1403,8 @@ public final class GuiService implements Listener {
             handleBehaviourClick(event, player, behaviourHolder);
         } else if (holder instanceof SceneRoleHolder sceneRoleHolder) {
             handleSceneRoleClick(event, player, sceneRoleHolder);
+        } else if (holder instanceof SceneBeatHolder sceneBeatHolder) {
+            handleSceneBeatClick(event, player, sceneBeatHolder);
         } else if (holder instanceof ActionPickerHolder pickerHolder) {
             handleActionPickerClick(event, player, pickerHolder);
         } else if (aiGuiService.handles(holder)) {
@@ -2155,17 +2223,66 @@ public final class GuiService implements Listener {
         int rowIndex = holder.page() * 5 + row;
         if (row >= 5 || rowIndex >= rows.size())
             return;
-        SceneLaneRef lane = rows.get(rowIndex);
+        handleSceneRowClick(event, player, scene, role, rows.get(rowIndex), slot % 9, holder.page(), reopen);
+    }
+
+    private void handleSceneBeatClick(InventoryClickEvent event, Player player, SceneBeatHolder holder) {
+        event.setCancelled(true);
+        if (!isTopInventoryClick(event))
+            return;
+        Scene scene = sceneRepository.find(holder.sceneKey()).orElse(null);
+        SceneRole role = scene == null ? null : scene.findRole(holder.roleId()).orElse(null);
+        int index = scene == null ? -1 : scene.beatIndex(holder.beatId());
+        if (role == null || index < 0) {
+            openSceneBeat(player, holder.sceneKey(), holder.roleId(), holder.beatId());
+            return;
+        }
+        int slot = event.getRawSlot();
+        List<SceneBeat> beats = scene.getBeats();
+        switch (slot) {
+            case SCENE_BEAT_PREVIOUS_SLOT -> {
+                if (index > 0)
+                    openSceneBeat(player, scene.getKey(), role.getId(), beats.get(index - 1).getId());
+                return;
+            }
+            case SCENE_BEAT_NEXT_SLOT -> {
+                if (index + 1 < beats.size())
+                    openSceneBeat(player, scene.getKey(), role.getId(), beats.get(index + 1).getId());
+                return;
+            }
+            case SCENE_BEAT_BACK_SLOT -> {
+                if (sceneNavigation != null)
+                    sceneNavigation.openScript(player, scene.getKey());
+                else
+                    player.closeInventory();
+                return;
+            }
+            default -> {
+            }
+        }
+        if (slot / 9 != 1)
+            return;
+        handleSceneRowClick(event, player, scene, role,
+                SceneLaneRef.beat(scene.getKey(), role.getId(), holder.beatId()), slot % 9, 0,
+                () -> openSceneBeat(player, scene.getKey(), role.getId(), holder.beatId()));
+    }
+
+    /**
+     * A click on one scene action row; {@code slotInRow} is the slot within the row
+     * (0 label, 1 add, 2-8 actions).
+     */
+    private void handleSceneRowClick(InventoryClickEvent event, Player player, Scene scene, SceneRole role,
+            SceneLaneRef lane, int slotInRow, int page, Runnable reopen) {
         List<BehaviourAction> actions = lane.actions(scene, role);
-        int column = slot % 9 - 2;
-        if (slot % 9 == 0 && handleBehaviourClipboardClick(event, player, actions, pasted -> {
+        int column = slotInRow - 2;
+        if (slotInRow == 0 && handleBehaviourClipboardClick(event, player, actions, pasted -> {
             lane.store(scene, role, pasted);
             sceneRepository.save(scene);
             reopen.run();
         })) {
             return;
         }
-        if (slot % 9 == 0 || column >= 7)
+        if (slotInRow == 0 || column >= 7)
             return;
         if (column >= 0 && column < actions.size() && event.isRightClick()) {
             List<BehaviourAction> changed = new ArrayList<>(actions);
@@ -2178,14 +2295,14 @@ public final class GuiService implements Listener {
         NpcDefinition preset = scenePreset(player, role);
         if (preset == null)
             return;
-        if (slot % 9 == 1) {
+        if (slotInRow == 1) {
             if (actions.size() < MAX_ROW_ACTIONS)
-                openActionPicker(player, preset, null, lane, actions.size(), holder.page());
+                openActionPicker(player, preset, null, lane, actions.size(), page);
         } else if (column < actions.size() && actions.get(column).type() == BehaviourActionType.ASK_QUESTION
                 && !event.isShiftClick()) {
-            openQuestionEditor(player, QuestionTarget.definition(preset.getKey(), null, lane, column, holder.page()));
+            openQuestionEditor(player, QuestionTarget.definition(preset.getKey(), null, lane, column, page));
         } else if (column < actions.size()) {
-            openActionPicker(player, preset, null, lane, column, holder.page());
+            openActionPicker(player, preset, null, lane, column, page);
         }
     }
 
@@ -3189,7 +3306,7 @@ public final class GuiService implements Listener {
         if (holder.lane() == null)
             openBehaviours(player, definition, holder.page());
         else
-            openSceneRole(player, holder.lane().sceneKey(), holder.lane().roleId(), holder.page());
+            openSceneLane(player, holder.lane(), holder.page());
     }
 
     /** Chat prompt for actions whose value is typed in. */
@@ -3649,7 +3766,7 @@ public final class GuiService implements Listener {
         if (target.lane() == null)
             openBehaviours(player, definition, target.page());
         else
-            openSceneRole(player, target.lane().sceneKey(), target.lane().roleId(), target.page());
+            openSceneLane(player, target.lane(), target.page());
     }
 
     private void handleConfirmationClick(InventoryClickEvent event, Player player, ConfirmationHolder holder) {
@@ -3833,12 +3950,13 @@ public final class GuiService implements Listener {
                 || holder instanceof PropertiesHolder || holder instanceof FightingHolder
                 || holder instanceof TargetsHolder || holder instanceof FightOptionsActionHolder
                 || holder instanceof InstancesHolder || holder instanceof BehaviourHolder
-                || holder instanceof SceneRoleHolder || holder instanceof ActionPickerHolder
-                || holder instanceof AnimationPickerHolder || holder instanceof BehaviourValuePickerHolder
-                || holder instanceof RoutePointActionsHolder || holder instanceof RoutePointActionPickerHolder
-                || holder instanceof RoutePointAnimationPickerHolder || holder instanceof RoutePointValuePickerHolder
-                || holder instanceof SavedLocationPickerHolder || holder instanceof QuestionEditorHolder
-                || holder instanceof QuestionBranchPickerHolder || holder instanceof QuestionBranchRoutePickerHolder
+                || holder instanceof SceneRoleHolder || holder instanceof SceneBeatHolder
+                || holder instanceof ActionPickerHolder || holder instanceof AnimationPickerHolder
+                || holder instanceof BehaviourValuePickerHolder || holder instanceof RoutePointActionsHolder
+                || holder instanceof RoutePointActionPickerHolder || holder instanceof RoutePointAnimationPickerHolder
+                || holder instanceof RoutePointValuePickerHolder || holder instanceof SavedLocationPickerHolder
+                || holder instanceof QuestionEditorHolder || holder instanceof QuestionBranchPickerHolder
+                || holder instanceof QuestionBranchRoutePickerHolder
                 || holder instanceof QuestionBranchAnimationPickerHolder || holder instanceof ConfirmationHolder
                 || aiGuiService.handles(holder);
     }
@@ -4219,6 +4337,9 @@ public final class GuiService implements Listener {
     }
 
     private record SceneRoleHolder(String sceneKey, String roleId, int page) implements GuiHolder {
+    }
+
+    private record SceneBeatHolder(String sceneKey, String roleId, String beatId) implements GuiHolder {
     }
 
     private record ActionPickerHolder(String key, BehaviourEvent event, SceneLaneRef lane, int actionIndex,

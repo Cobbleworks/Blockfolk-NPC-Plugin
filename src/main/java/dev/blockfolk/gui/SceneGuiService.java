@@ -878,7 +878,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         lore.add(LegacyText.GRAY + "While active: " + LegacyText.WHITE
                 + (reactions.isEmpty() ? "normal behaviour" : String.join(", ", reactions)));
         lore.add("");
-        lore.add(GuiItems.hint("Click", "edit its beats, wrap-up, and reactions"));
+        lore.add(GuiItems.hint("Click", "edit its wrap-up and While Active reactions"));
         lore.add(GuiItems.danger("Shift-right-click", "remove role"));
         return roleHead(role, LegacyText.GOLD + presetName(role), lore);
     }
@@ -917,10 +917,9 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                             : guiService.actionSummary(actions.get(index))));
         lore.add("");
         lore.add(GuiItems.hint("Click", "edit its actions"));
-        ItemStack item = roleHead(role, LegacyText.YELLOW + name + LegacyText.GRAY + " · Beat " + (beatIndex + 1),
-                lore);
-        item.setAmount(actions.size());
-        return item;
+        // No item count: the beat number in the first column is what the eye
+        // should find; the tooltip lists the actions.
+        return roleHead(role, LegacyText.YELLOW + name + LegacyText.GRAY + " · Beat " + (beatIndex + 1), lore);
     }
 
     private ItemStack roleHead(SceneRole role, String name, List<String> lore) {
@@ -977,8 +976,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 if (column == 0) {
                     openBeat(player, scene.getKey(), beats.get(beatIndex).getId());
                 } else if (roleIndex < roles.size() && guiService != null) {
-                    // The role editor lists beats first, five rows per page.
-                    guiService.openSceneRole(player, scene.getKey(), roles.get(roleIndex).getId(), beatIndex / 5);
+                    guiService.openSceneBeat(player, scene.getKey(), roles.get(roleIndex).getId(),
+                            beats.get(beatIndex).getId());
                 }
             }
         }

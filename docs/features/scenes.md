@@ -33,18 +33,17 @@ The scene editor has four columns:
  Beat 3     1 action    1 action    ·
 ```
 
-- Click a cell to edit what that NPC does in that beat. A grey cell means the NPC holds still while the others play.
+- Click a cell to edit what that NPC does in that beat. Hover over a head to see its actions; a grey cell means the NPC holds still while the others play. In the beat editor, the arrows step to the same NPC's previous or next beat.
 - **Add Beat** in the bottom bar adds a beat at the end. The arrows page through beats, and through roles when there are more than eight.
 - Click a beat to choose when the next beat starts, or to move, duplicate, or delete it.
 - The beat playing right now glows while the scene runs.
 
 ### Roles
 
-Choose **Add Role** in the top row, then pick the NPC preset that plays it. Click a role's head to open its role editor, and shift-right-click it to remove the role together with its actions. The role editor lists these rows, built exactly like [event behaviour](./behaviours.md):
+Choose **Add Role** in the top row, then pick the NPC preset that plays it. Click a role's head in the top row to open its role editor, and shift-right-click it to remove the role together with its actions. The role editor holds what applies to the whole scene, in rows built exactly like [event behaviour](./behaviours.md):
 
 | Row | Runs |
 | --- | --- |
-| **Beat 1, Beat 2, …** | The role's actions in each beat. These are the same rows as the cells of the script. |
 | **Wrap-Up** | When the scene ends, before the NPC goes back to its normal routine. |
 | **While Active: …** | Instead of the preset's own reaction while the scene runs: On Idle, On Right-Click, On Player Approach, On Player Leaves, On Left-Click, On Receive Item, On Nearby NPC, and On Damage Taken. An empty row keeps the preset's own reaction. **While Active: On Idle** repeats once the role has played its part in every beat. |
 
