@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import org.bukkit.block.Block;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -69,6 +70,24 @@ public final class LocationRepository {
 
     public Collection<NamedLocation> findAll() {
         return locationOrder.stream().map(locations::get).filter(java.util.Objects::nonNull).toList();
+    }
+
+    /**
+     * The global location whose marker a player clicked: the one standing on this
+     * block, or the one occupying the block's space.
+     */
+    public Optional<NamedLocation> findAt(Block block) {
+        ActionLocation above = ActionLocation.above(block);
+        String world = block.getWorld().getName();
+        for (NamedLocation named : findAll()) {
+            ActionLocation location = named.location();
+            if (location.equals(above))
+                return Optional.of(named);
+            if (location.worldName().equals(world) && (int) Math.floor(location.x()) == block.getX()
+                    && (int) Math.floor(location.y()) == block.getY() && (int) Math.floor(location.z()) == block.getZ())
+                return Optional.of(named);
+        }
+        return Optional.empty();
     }
 
     public NamedLocation save(NamedLocation location) {

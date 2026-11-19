@@ -120,7 +120,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         routeGuiService.setNpcMenuOpener(guiService::openEditor);
         guiService.setLocationsOpener(routeGuiService::openLocationsFromMain);
-        routeGuiService.setLocationPreviewActive(guiService::isSelectingMoveToWaypoint);
+        routeGuiService.setLocationPreviewActive(
+                player -> guiService.isSelectingMoveToWaypoint(player) || sceneGuiService.isSelectingArea(player));
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService,
                 fighterAttackRepository);
         questionService = new NpcQuestionService(this, instanceRegistry, chatInputService,
@@ -298,6 +299,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
         if (guiService != null) {
             guiService.stop();
         }
+        if (sceneGuiService != null)
+            sceneGuiService.stop();
         if (combatService != null) {
             combatService.stop();
         }

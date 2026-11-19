@@ -98,7 +98,7 @@ Open **Starts When** and switch on everything that should start the scene:
 
 Time and weather come from the world the scene's NPCs are in, and only NPCs from that world are cast. **Rain starts** and **Snow starts** depend on whether the biome an NPC of the scene stands in is cold enough for snow.
 
-Clicking **Player enters the area** asks for the area's centre, a [global location](./locations.md), and switches the trigger on once you pick one. While it is on, right-click it to choose another location, and set the **Area Radius** next to it. Only NPCs in the area's world are cast.
+Clicking **Player enters the area** asks for the area's centre, a [global location](./locations.md), and switches the trigger on once you pick one. You get a selector compass and every global location is highlighted in green, as in the location editor: right-click a marker to pick it, use **[Pick from list]** in chat to choose from the Locations list instead, or drop the compass to cancel. While it is on, right-click it to choose another location, and set the **Area Radius** next to it. Only NPCs in the area's world are cast.
 
 Each trigger rolls the scene's **Chance** and respects its **Cooldown**. Switching **Triggers** off in the editor keeps the triggers but only allows manual starts.
 

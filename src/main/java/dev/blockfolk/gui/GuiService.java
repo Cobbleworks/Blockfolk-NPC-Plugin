@@ -2847,28 +2847,13 @@ public final class GuiService implements Listener {
      */
     private WaypointTarget waypointTarget(BehaviourActionType type, Block block) {
         if (type == BehaviourActionType.MOVE_TO) {
-            NamedLocation named = namedLocationAt(block);
+            NamedLocation named = locationRepository.findAt(block).orElse(null);
             if (named != null)
                 return new WaypointTarget(LocationLink.serialize(named.key()),
                         "global location '" + named.displayName() + "'");
         }
         ActionLocation location = ActionLocation.above(block);
         return new WaypointTarget(location.serialize(), location.display());
-    }
-
-    /** The global location standing on this block, or occupying its space. */
-    private NamedLocation namedLocationAt(Block block) {
-        ActionLocation above = ActionLocation.above(block);
-        String world = block.getWorld().getName();
-        for (NamedLocation named : locationRepository.findAll()) {
-            ActionLocation location = named.location();
-            if (location.equals(above))
-                return named;
-            if (location.worldName().equals(world) && (int) Math.floor(location.x()) == block.getX()
-                    && (int) Math.floor(location.y()) == block.getY() && (int) Math.floor(location.z()) == block.getZ())
-                return named;
-        }
-        return null;
     }
 
     /** True while the player holds an active Move To waypoint compass session. */

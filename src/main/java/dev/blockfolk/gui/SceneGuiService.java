@@ -8,15 +8,23 @@ import java.util.function.Consumer;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
 import dev.blockfolk.input.ChatInputService;
@@ -47,6 +55,9 @@ import io.papermc.paper.registry.data.dialog.input.TextDialogInput;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.format.NamedTextColor;
 
 /**
@@ -108,6 +119,9 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     private final Map<java.util.UUID, String> presetFilters = new java.util.HashMap<>();
     /** The script page each player looked at last, so returning keeps it. */
     private final Map<java.util.UUID, ScriptView> scriptViews = new java.util.HashMap<>();
+    /** Players choosing the Player Enters area with the selector compass. */
+    private final Map<java.util.UUID, AreaSession> areaSessions = new java.util.HashMap<>();
+    private NamespacedKey areaToolKey;
     private SceneService sceneService;
 
     public SceneGuiService(Plugin plugin, SceneRepository scenes, NpcDefinitionRepository definitions,
@@ -770,7 +784,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             // Turning it on (or right-clicking) asks for the area first; the
             // picker switches the trigger on once a location is chosen.
             if (!scene.hasTrigger(trigger) || click.isRightClick()) {
-                openAreaPicker(player, scene.getKey(), "", 0);
+                beginAreaSelection(player, scene.getKey());
                 return;
             }
             scene.setTrigger(trigger, false);
@@ -1328,6 +1342,145 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
 
     // ---------------------------------------------------------------- area
 
+    /**
+     * Hands the player a selector compass and shows every global location marker
+     * as in the location editor; right-clicking a marker makes it the area.
+     */
+    private void beginAreaSelection(Player player, String sceneKey) {
+        finishAreaSelection(player);
+        AreaSession session = new AreaSession(sceneKey, java.util.UUID.randomUUID());
+        areaSessions.put(player.getUniqueId(), session);
+        ItemStack held = player.getInventory().getItemInMainHand();
+        player.getInventory().setItemInMainHand(createAreaTool(session));
+        if (!held.getType().isAir())
+            player.getInventory().addItem(held).values()
+                    .forEach(leftover -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
+        player.closeInventory();
+        sendAreaPrompt(player, session);
+    }
+
+    private void sendAreaPrompt(Player player, AreaSession session) {
+        Component list = Component.text("[Pick from list]", NamedTextColor.GREEN).decorate(TextDecoration.UNDERLINED)
+                .hoverEvent(HoverEvent.showText(Component.text("Open global Locations", NamedTextColor.YELLOW)))
+                .clickEvent(ClickEvent.callback(audience -> {
+                    if (audience instanceof Player clicked && clicked.getUniqueId().equals(player.getUniqueId()))
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            if (session.equals(areaSessions.get(clicked.getUniqueId())))
+                                openAreaPicker(clicked, session.sceneKey(), "", 0);
+                        });
+                }));
+        player.sendMessage(UiText.prompt("Right-click a green location marker to make it the scene's area. ")
+                .append(list).append(Component.space())
+                .append(Component.text("Drop the compass to cancel.", NamedTextColor.YELLOW)));
+    }
+
+    private ItemStack createAreaTool(AreaSession session) {
+        ItemStack tool = new ItemStack(Material.RECOVERY_COMPASS);
+        ItemMeta meta = tool.getItemMeta();
+        meta.displayName(LegacyText.component(LegacyText.AQUA + "Scene Area Selector"));
+        meta.lore(LegacyText.components(List.of(LegacyText.YELLOW + "Right-click a location marker to select it",
+                LegacyText.GREEN + "Global locations are highlighted in green",
+                LegacyText.RED + "Drop this compass to cancel")));
+        meta.setEnchantmentGlintOverride(true);
+        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        meta.getPersistentDataContainer().set(areaToolKey(), PersistentDataType.STRING, session.token().toString());
+        tool.setItemMeta(meta);
+        return tool;
+    }
+
+    private AreaSession validAreaSession(Player player, ItemStack item) {
+        AreaSession session = areaSessions.get(player.getUniqueId());
+        if (session == null || item == null || item.getType() != Material.RECOVERY_COMPASS || !item.hasItemMeta())
+            return null;
+        String token = item.getItemMeta().getPersistentDataContainer().get(areaToolKey(), PersistentDataType.STRING);
+        return session.token().toString().equals(token) ? session : null;
+    }
+
+    private void finishAreaSelection(Player player) {
+        AreaSession session = areaSessions.remove(player.getUniqueId());
+        if (session == null)
+            return;
+        ItemStack[] contents = player.getInventory().getContents();
+        for (int slot = 0; slot < contents.length; slot++) {
+            ItemStack item = contents[slot];
+            if (item != null && item.getType() == Material.RECOVERY_COMPASS && item.hasItemMeta()
+                    && session.token().toString().equals(item.getItemMeta().getPersistentDataContainer()
+                            .get(areaToolKey(), PersistentDataType.STRING)))
+                player.getInventory().setItem(slot, null);
+        }
+    }
+
+    private NamespacedKey areaToolKey() {
+        if (areaToolKey == null)
+            areaToolKey = new NamespacedKey(plugin, "scene-area-selector-token");
+        return areaToolKey;
+    }
+
+    /** True while the player holds the area selector, so location markers show. */
+    public boolean isSelectingArea(Player player) {
+        return areaSessions.containsKey(player.getUniqueId());
+    }
+
+    /** Takes the selector compasses back, e.g. when the plugin shuts down. */
+    public void stop() {
+        for (java.util.UUID playerId : List.copyOf(areaSessions.keySet())) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null)
+                finishAreaSelection(player);
+        }
+        areaSessions.clear();
+    }
+
+    @EventHandler
+    public void onAreaToolUse(PlayerInteractEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND)
+            return;
+        Player player = event.getPlayer();
+        AreaSession session = validAreaSession(player, event.getItem());
+        if (session == null)
+            return;
+        // The compass never breaks or uses blocks while selecting.
+        event.setCancelled(true);
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null)
+            return;
+        NamedLocation location = locations.findAt(event.getClickedBlock()).orElse(null);
+        if (location == null) {
+            player.sendMessage(UiText.info("That block is not a global location. Right-click a green marker."));
+            return;
+        }
+        finishAreaSelection(player);
+        applyArea(player, session.sceneKey(), location);
+        openTriggers(player, session.sceneKey());
+    }
+
+    @EventHandler
+    public void onAreaToolDrop(PlayerDropItemEvent event) {
+        Player player = event.getPlayer();
+        AreaSession session = validAreaSession(player, event.getItemDrop().getItemStack());
+        if (session == null)
+            return;
+        event.getItemDrop().remove();
+        areaSessions.remove(player.getUniqueId());
+        player.sendMessage(UiText.warning("Area selection cancelled."));
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (player.isOnline())
+                openTriggers(player, session.sceneKey());
+        });
+    }
+
+    private void applyArea(Player player, String sceneKey, NamedLocation location) {
+        Scene scene = scenes.find(sceneKey).orElse(null);
+        if (scene == null) {
+            player.sendMessage(UiText.error("That scene no longer exists."));
+            return;
+        }
+        scene.setAreaLocationKey(location.key());
+        scene.setTrigger(SceneTrigger.PLAYER_ENTERS, true);
+        scenes.save(scene);
+        player.sendMessage(UiText.success("The scene now starts when a player comes within " + scene.getAreaRadius()
+                + " blocks of '" + location.displayName() + "'."));
+    }
+
     private void openAreaPicker(Player player, String sceneKey, String folder, int requestedPage) {
         List<LocationBrowserModel.Entry> entries = LocationBrowserModel.entries(locations.findAll(), folder);
         int pages = Math.max(1, (entries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
@@ -1355,7 +1508,9 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         if (page > 0)
             inventory.setItem(GuiItems.PREVIOUS_SLOT, GuiItems.previousPage(page, pages));
         inventory.setItem(GuiItems.BACK_SLOT,
-                GuiItems.back(folder.isEmpty() ? "the triggers" : "the parent location group"));
+                GuiItems.back(folder.isEmpty()
+                        ? isSelectingArea(player) ? "the selector compass" : "the triggers"
+                        : "the parent location group"));
         if (page + 1 < pages)
             inventory.setItem(GuiItems.NEXT_SLOT, GuiItems.nextPage(page, pages));
         GuiLayout.fillMainBar(inventory);
@@ -1365,7 +1520,12 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     private void handleAreaPickerClick(InventoryClickEvent click, Player player, AreaPickerHolder holder) {
         int slot = click.getRawSlot();
         if (slot == GuiItems.BACK_SLOT) {
-            if (holder.folder().isEmpty())
+            AreaSession session = areaSessions.get(player.getUniqueId());
+            if (holder.folder().isEmpty() && session != null && session.sceneKey().equals(holder.sceneKey())) {
+                // Back to the compass, which is still in hand.
+                player.closeInventory();
+                sendAreaPrompt(player, session);
+            } else if (holder.folder().isEmpty())
                 openTriggers(player, holder.sceneKey());
             else
                 openAreaPicker(player, holder.sceneKey(), LocationBrowserModel.parent(holder.folder()), 0);
@@ -1385,13 +1545,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             openAreaPicker(player, holder.sceneKey(), entry.path(), 0);
             return;
         }
-        scenes.find(holder.sceneKey()).ifPresent(scene -> {
-            scene.setAreaLocationKey(entry.location().key());
-            scene.setTrigger(SceneTrigger.PLAYER_ENTERS, true);
-            scenes.save(scene);
-            player.sendMessage(UiText.success("The scene now starts when a player comes within " + scene.getAreaRadius()
-                    + " blocks of '" + entry.location().displayName() + "'."));
-        });
+        finishAreaSelection(player);
+        applyArea(player, holder.sceneKey(), entry.location());
         openTriggers(player, holder.sceneKey());
     }
 
@@ -1463,6 +1618,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
 
     @EventHandler
     public void onQuit(org.bukkit.event.player.PlayerQuitEvent event) {
+        finishAreaSelection(event.getPlayer());
         presetFilters.remove(event.getPlayer().getUniqueId());
         scriptViews.remove(event.getPlayer().getUniqueId());
     }
@@ -1610,5 +1766,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     }
 
     private record DeleteHolder(String sceneKey) implements GuiHolder {
+    }
+
+    private record AreaSession(String sceneKey, java.util.UUID token) {
     }
 }
