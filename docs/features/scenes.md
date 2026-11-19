@@ -9,7 +9,7 @@ Scenes can start on their own (at a time of day, when the weather changes, or wh
 | **Last Train Is Late** · western town | Starts at **Evening**. The watcher's scene actions: *Move To station → Send Dialog → Move To saloon → Give Cue `told`*. Luigi's: *Wait For Cue `told` → Send Dialog → Move To station*. |
 | **Market by the Lake** · jungle | Starts at **Noon**, ends at **Evening**. The shopkeeper and smith *Move To* the lake. Wägö *Waits* two minutes first, and while the scene runs his **On Player Approach** opens his shop. |
 | **Champion's Exhibition** · desert city | Starts when a **player enters the area** around the colosseum. Aurelion and his training partner walk in, Aurelion addresses the crowd, then a cue starts the sparring. |
-| **Snowed In** · snowland | Starts when **snow starts** in the area and ends **when the weather changes**. Plinfa walks indoors, and while the scene runs her **On Player Approach** calls out to passing players. |
+| **Snowed In** · snowland | Starts when **snow starts** where Plinfa is and ends **when the weather changes**. Plinfa walks indoors, and while the scene runs her **On Player Approach** calls out to passing players. |
 
 ## Create a scene
 
@@ -17,8 +17,8 @@ Open **Scenes** from the main `/bf` menu or run `/bf scenes` to see every scene.
 
 The scene editor has four columns:
 
-- **Scene**: name, description, and whether triggers are switched on. Middle-click the scene icon at the top to use the item in your hand as its icon.
-- **When & Where**: the triggers, the scene's area (a [global location](./locations.md)), and the area's radius.
+- **Scene**: name and description. Middle-click the scene icon at the top to use the item in your hand as its icon.
+- **When**: the triggers, and whether they are switched on.
 - **Cast & Ending**: the roles, and when the scene ends.
 - **Playback**: start or stop the scene right now, the chance that a trigger really starts it, and the cooldown before triggers may start it again.
 
@@ -32,10 +32,9 @@ Open **Roles** and choose **Add Role**, then pick the NPC preset that plays it. 
 | **Wrap-Up** | When the scene ends, before the NPC goes back to its normal routine. |
 | **While Active: …** | Instead of the preset's own reaction while the scene runs: On Idle, On Right-Click, On Player Approach, On Player Leaves, On Left-Click, On Receive Item, On Nearby NPC, and On Damage Taken. An empty row keeps the preset's own reaction. **While Active: On Idle** repeats once the role finished its scene actions. |
 
-The bottom bar of the role editor sets the preset that plays the role, the role's name, and its **Cast**:
+NPCs play themselves: a role has no name of its own and is shown with its NPC's name. **Played By** in the bottom bar of the role editor swaps the NPC.
 
-- **One NPC** (default): the free instance nearest the scene's area plays the role. Without an area, the instance nearest the player who started the scene is chosen. The scene needs this NPC.
-- **Every NPC**: every free instance of the preset plays the role. If none is free, the scene still runs.
+Every free instance of the NPC plays the role. Usually there is just one; filler NPCs with several instances all do the same thing. If an NPC should act differently from the others, make it a separate preset. A role needs at least one free instance, otherwise the scene is skipped (see [Skipped scenes](#skipped-scenes)).
 
 An NPC preset plays at most one role per scene; the role picker greys out NPCs that already have one. When a role needs more steps than fit in one row, end the row with **Start Scene** and continue in a follow-up scene (see below).
 
@@ -60,7 +59,9 @@ Open **Starts When** and switch on everything that should start the scene:
 | Weather | Rain or snow starts, Rain starts, Snow starts, Thunderstorm starts, Weather clears |
 | Area | Player enters the area |
 
-Time and weather are checked in the world of the scene's area, or the main world for scenes without an area. **Rain starts** and **Snow starts** depend on whether the area is cold enough for snow. **Player enters the area** needs an area.
+Time and weather come from the world the scene's NPCs are in, and only NPCs from that world are cast. **Rain starts** and **Snow starts** depend on whether the biome an NPC of the scene stands in is cold enough for snow.
+
+Clicking **Player enters the area** asks for the area's centre, a [global location](./locations.md), and switches the trigger on once you pick one. While it is on, right-click it to choose another location, and set the **Area Radius** next to it. Only NPCs in the area's world are cast.
 
 Each trigger rolls the scene's **Chance** and respects its **Cooldown**. Switching **Triggers** off in the editor keeps the triggers but only allows manual starts.
 
@@ -71,7 +72,7 @@ Each trigger rolls the scene's **Chance** and respects its **Cooldown**. Switchi
 | **When everyone is done** | Every role finished its scene actions. This is at most 30 minutes after the start. |
 | **After a set time** | The chosen time has passed. |
 | **At a time of day** | The chosen part of the day begins. |
-| **When the weather changes** | Rain, snow, or thunder starts or stops in the scene's world. |
+| **When the weather changes** | Rain, snow, or thunder starts or stops in the world the scene plays in. |
 
 When a scene ends, scene actions still running stop, every role runs its **Wrap-Up**, and each NPC returns to its normal routine once its wrap-up is done. Wrap-ups are cut off after five minutes.
 
@@ -91,11 +92,10 @@ An NPC plays in one scene at a time.
 
 ## Skipped scenes
 
-A scene starts completely or not at all. It is skipped when a **One NPC** role cannot be cast because:
+A scene starts completely or not at all. It is skipped when a role has no free NPC because:
 
-- the NPC already plays in another scene;
-- the NPC is in combat;
-- no instance is loaded (not spawned, its chunk is not loaded, or it is in another world than the scene's area);
+- every instance already plays in another scene or is in combat;
+- no instance is loaded (not spawned, its chunk is not loaded, or, for automatic starts, it is in another world than the one whose time, weather, or area started the scene);
 - the role has no preset, or the preset was deleted.
 
 Administrators online get a short chat message saying which scene was skipped and why, for example *Scene 'Last Train Is Late' was skipped: Luigi is busy in scene 'Market by the Lake'.* The same message is repeated at most once a minute, and it is also written to the server log. Manual starts tell the player or console who started the scene. The scene editor shows the last skip reason.
@@ -113,12 +113,14 @@ Both work from a player or the console, so quest plugins and command blocks can 
 
 NPC actions can do the same: **Start Scene** and **Stop Scene** are in the **Scenes** group of the action picker, along with **Give Cue** and **Wait For Cue**. Start Scene runs one tick later, so a scene's last action can start the next scene with the same NPCs.
 
+The scene icon's tooltip shows these chains: **Leads to** lists the scenes its Start Scene actions start, and **Follows** lists the scenes that start it.
+
 ## Coming from custom events
 
 Scenes replace custom events. On the first start after the update, Blockfolk converts them automatically:
 
 - every custom event becomes a scene with the same name, without triggers and without cooldown;
-- every preset that reacted to it becomes a role with **Every NPC** cast, and its reaction becomes the role's scene actions;
+- every preset that reacted to it becomes a role, and its reaction becomes the role's scene actions;
 - **Emit Custom Event** actions become **Start Scene** actions for that scene;
 - `/bf events trigger <event>` keeps working as `/bf scene start <event>`;
 - `custom-events.yml` is renamed to `custom-events.yml.migrated`.

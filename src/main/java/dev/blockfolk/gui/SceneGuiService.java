@@ -35,9 +35,10 @@ import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.UiText;
 
 /**
- * Menus for scenes: the scene browser, the scene editor with triggers, area,
- * ending, and test controls, and the role list. Role action rows are edited by
- * {@link GuiService#openSceneRole}, which shares the preset action editor.
+ * Menus for scenes: the scene browser, the scene editor with triggers (one of
+ * which watches an area), ending, and test controls, and the role list. Role
+ * action rows are edited by {@link GuiService#openSceneRole}, which shares the
+ * preset action editor.
  */
 public final class SceneGuiService implements Listener, GuiService.SceneNavigation {
 
@@ -45,10 +46,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     private static final int SUMMARY_SLOT = 4;
     private static final int NAME_SLOT = 19;
     private static final int DESCRIPTION_SLOT = 28;
-    private static final int ENABLED_SLOT = 37;
     private static final int TRIGGERS_SLOT = 21;
-    private static final int AREA_SLOT = 30;
-    private static final int RADIUS_SLOT = 39;
+    private static final int ENABLED_SLOT = 30;
     private static final int ROLES_SLOT = 23;
     private static final int ENDING_SLOT = 32;
     private static final int END_SETTING_SLOT = 41;
@@ -56,6 +55,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     private static final int CHANCE_SLOT = 34;
     private static final int COOLDOWN_SLOT = 43;
     private static final int DELETE_SLOT = 53;
+    /** Radius of the Player Enters area, beside its toggle in the triggers menu. */
+    private static final int TRIGGER_RADIUS_SLOT = 41;
     /** Trigger toggles: time of day on row 1, weather on row 3, area on row 5. */
     private static final Map<Integer, SceneTrigger> TRIGGER_SLOTS = Map.ofEntries(Map.entry(11, SceneTrigger.NIGHT),
             Map.entry(12, SceneTrigger.MORNING), Map.entry(13, SceneTrigger.NOON),
@@ -224,6 +225,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         lore.add(LegacyText.GRAY + "Status: " + statusText(scene));
         lore.add(LegacyText.GRAY + "Roles: " + LegacyText.WHITE + scene.getRoles().size());
         lore.add(LegacyText.GRAY + "Starts: " + LegacyText.WHITE + triggerSummary(scene));
+        lore.addAll(chainLore(scene));
         lore.add("");
         lore.add(GuiItems.hint("Click", "edit"));
         lore.add(GuiItems.danger("Shift-right-click", "delete"));
@@ -274,7 +276,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         }
         if (filter != null && slot == GuiItems.CREATE_SLOT) {
             createScene(player, "", scene -> {
-                scene.addRole(filter.getDisplayName(), filter.getKey());
+                scene.addRole(filter.getKey());
                 scenes.save(scene);
                 openEditor(player, scene.getKey());
             }, () -> openBrowser(player, "", holder.page()));
@@ -331,14 +333,15 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         if (sceneService != null)
             sceneService.lastSkip(scene.getKey())
                     .ifPresent(reason -> summary.add(LegacyText.GOLD + "Last skipped: " + reason));
+        summary.addAll(chainLore(scene));
         summary.add("");
         summary.add(GuiItems.hint("Middle-click", "use the item in your hand as icon"));
         inventory.setItem(SUMMARY_SLOT,
                 GuiItems.item(sceneIcon(scene), LegacyText.GOLD + scene.getDisplayName(), summary));
         inventory.setItem(10, GuiItems.sectionHeader(Material.LIGHT_BLUE_STAINED_GLASS_PANE, LegacyText.AQUA, "Scene",
                 "Name and description"));
-        inventory.setItem(12, GuiItems.sectionHeader(Material.LIME_STAINED_GLASS_PANE, LegacyText.GREEN, "When & Where",
-                "What starts it and its area"));
+        inventory.setItem(12,
+                GuiItems.sectionHeader(Material.LIME_STAINED_GLASS_PANE, LegacyText.GREEN, "When", "What starts it"));
         inventory.setItem(14, GuiItems.sectionHeader(Material.PURPLE_STAINED_GLASS_PANE, LegacyText.LIGHT_PURPLE,
                 "Cast & Ending", "Who plays and when it ends"));
         inventory.setItem(16, GuiItems.sectionHeader(Material.RED_STAINED_GLASS_PANE, LegacyText.RED, "Playback",
@@ -354,11 +357,6 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         inventory.setItem(ENABLED_SLOT, GuiItems.toggle(Material.LIME_DYE, Material.GRAY_DYE, "Triggers",
                 scene.isEnabled(), "triggers start the scene", "only manual starts work", List.of()));
         inventory.setItem(TRIGGERS_SLOT, GuiItems.item(Material.CLOCK, "Starts When", triggerLore(scene)));
-        inventory.setItem(AREA_SLOT, areaItem(scene));
-        inventory.setItem(RADIUS_SLOT,
-                numericItem(Material.COMPASS, "Area Radius", scene.getAreaRadius() + " blocks",
-                        List.of(LegacyText.GRAY + "How far around the area location players",
-                                LegacyText.GRAY + "count as inside and NPCs are cast from")));
         inventory.setItem(ROLES_SLOT, GuiItems.item(Material.PLAYER_HEAD, "Roles", rolesLore(scene)));
         List<GuiItems.Option> endings = java.util.Arrays.stream(SceneEnding.values())
                 .map(ending -> new GuiItems.Option(endingMaterial(ending), ending.displayName(), ending.summary()))
@@ -418,18 +416,6 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 reopen.run();
             }
             case TRIGGERS_SLOT -> openTriggers(player, scene.getKey());
-            case AREA_SLOT -> {
-                if (click.isRightClick()) {
-                    scene.setAreaLocationKey(null);
-                    scenes.save(scene);
-                    GuiItems.click(player);
-                    reopen.run();
-                } else {
-                    openAreaPicker(player, scene.getKey(), "", 0);
-                }
-            }
-            case RADIUS_SLOT -> adjust(click, player, scene, 4, value -> scene.setAreaRadius(value),
-                    scene.getAreaRadius(), "Enter the area radius in blocks:", 1);
             case ROLES_SLOT -> openRoles(player, scene.getKey(), 0);
             case ENDING_SLOT -> {
                 int direction = GuiItems.cycleDirection(click.getClick());
@@ -443,7 +429,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             case END_SETTING_SLOT -> {
                 if (scene.getEnding() == SceneEnding.DURATION) {
                     adjust(click, player, scene, 30, value -> scene.setDurationSeconds(value),
-                            scene.getDurationSeconds(), "Enter how many minutes the scene lasts:", 60);
+                            scene.getDurationSeconds(), "Enter how many minutes the scene lasts:", 60, reopen);
                 } else if (scene.getEnding() == SceneEnding.TIME_OF_DAY) {
                     int direction = GuiItems.cycleDirection(click.getClick());
                     if (direction == 0)
@@ -464,9 +450,9 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 reopen.run();
             }
             case CHANCE_SLOT -> adjust(click, player, scene, 5, value -> scene.setChancePercent(value),
-                    scene.getChancePercent(), "Enter the chance in percent (1-100):", 1);
+                    scene.getChancePercent(), "Enter the chance in percent (1-100):", 1, reopen);
             case COOLDOWN_SLOT -> adjust(click, player, scene, 30, value -> scene.setCooldownSeconds(value),
-                    scene.getCooldownSeconds(), "Enter the cooldown in minutes:", 60);
+                    scene.getCooldownSeconds(), "Enter the cooldown in minutes:", 60, reopen);
             case GuiItems.BACK_SLOT -> {
                 int slash = scene.getKey().lastIndexOf('/');
                 openBrowser(player, slash < 0 || presetFilter(player) != null ? "" : scene.getKey().substring(0, slash),
@@ -481,11 +467,10 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     /**
      * Numeric control: left/right steps down/up, shift five steps, middle-click
      * types a value. {@code typedUnit} converts a typed number into stored units
-     * (60 for minutes stored as seconds).
+     * (60 for minutes stored as seconds). {@code reopen} shows the menu again.
      */
     private void adjust(InventoryClickEvent click, Player player, Scene scene, int step, Consumer<Integer> setter,
-            int current, String prompt, int typedUnit) {
-        Runnable reopen = () -> openEditor(player, scene.getKey());
+            int current, String prompt, int typedUnit, Runnable reopen) {
         if (click.getClick() == ClickType.MIDDLE) {
             chatInput.request(player, prompt, value -> {
                 try {
@@ -519,27 +504,6 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         return GuiItems.item(material, name + ": " + value, lore);
     }
 
-    private ItemStack areaItem(Scene scene) {
-        List<String> lore = new ArrayList<>();
-        if (!scene.hasArea()) {
-            lore.add(LegacyText.GRAY + "No area: NPCs are cast from anywhere");
-            lore.add(LegacyText.GRAY + "and time/weather use the main world.");
-        } else {
-            NamedLocation location = locations.find(scene.getAreaLocationKey()).orElse(null);
-            lore.add(location == null
-                    ? LegacyText.RED + "Missing location '" + scene.getAreaLocationKey() + "'"
-                    : LegacyText.WHITE + location.displayName() + LegacyText.GRAY + " · "
-                            + location.location().display());
-            lore.add(LegacyText.GRAY + "NPCs nearest to it are cast; only NPCs");
-            lore.add(LegacyText.GRAY + "in its world can take part.");
-        }
-        lore.add("");
-        lore.add(GuiItems.hint("Click", "choose a global location"));
-        if (scene.hasArea())
-            lore.add(GuiItems.danger("Right-click", "remove the area"));
-        return GuiItems.item(Material.LODESTONE, "Area", lore);
-    }
-
     private ItemStack endSettingItem(Scene scene) {
         return switch (scene.getEnding()) {
             case DURATION -> numericItem(Material.CLOCK, "Lasts", seconds(scene.getDurationSeconds()),
@@ -557,8 +521,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                             LegacyText.GRAY + "While Active reactions need another",
                             LegacyText.GRAY + "ending, or the scene ends too soon."));
             case WEATHER_CHANGES -> GuiItems.item(Material.GRAY_DYE, "No Setting Needed",
-                    List.of(LegacyText.GRAY + "Ends when rain, snow, or thunder",
-                            LegacyText.GRAY + "starts or stops in the scene's world."));
+                    List.of(LegacyText.GRAY + "Ends when rain, snow, or thunder starts",
+                            LegacyText.GRAY + "or stops in the world the scene plays in."));
         };
     }
 
@@ -596,8 +560,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             lore.add(LegacyText.RED + "No roles yet: add the NPCs that take part");
         } else {
             for (SceneRole role : scene.getRoles().stream().limit(8).toList())
-                lore.add(LegacyText.WHITE + "• " + role.getDisplayName() + LegacyText.GRAY + " (" + presetName(role)
-                        + ")");
+                lore.add(LegacyText.WHITE + "• " + presetName(role));
             if (scene.getRoles().size() > 8)
                 lore.add(LegacyText.DARK_GRAY + "… and " + (scene.getRoles().size() - 8) + " more");
         }
@@ -623,18 +586,27 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         inventory.setItem(36, GuiItems.sectionHeader(Material.LIME_STAINED_GLASS_PANE, LegacyText.GREEN, "Area",
                 "When someone arrives"));
         TRIGGER_SLOTS.forEach((slot, trigger) -> {
+            if (trigger.kind() == SceneTrigger.Kind.AREA) {
+                inventory.setItem(slot, areaTriggerItem(scene, trigger));
+                return;
+            }
             List<String> description = new ArrayList<>();
-            if (trigger.kind() == SceneTrigger.Kind.AREA && !scene.hasArea())
-                description.add(LegacyText.RED + "Set an area in the scene editor first");
-            if ((trigger == SceneTrigger.RAIN || trigger == SceneTrigger.SNOW) && !scene.hasArea())
-                description.add(LegacyText.GOLD + "Without an area the main world's spawn decides");
+            if (trigger == SceneTrigger.RAIN || trigger == SceneTrigger.SNOW)
+                description.add(LegacyText.GRAY + "The biome the scene's NPCs stand in decides");
             inventory.setItem(slot, GuiItems.toggle(triggerMaterial(trigger), triggerMaterial(trigger),
                     trigger.displayName(), scene.hasTrigger(trigger), trigger.summary(), "ignored", description));
         });
+        if (scene.hasTrigger(SceneTrigger.PLAYER_ENTERS))
+            inventory.setItem(TRIGGER_RADIUS_SLOT,
+                    numericItem(Material.COMPASS, "Area Radius", scene.getAreaRadius() + " blocks",
+                            List.of(LegacyText.GRAY + "How far around the area location",
+                                    LegacyText.GRAY + "players count as inside")));
         inventory.setItem(4,
                 GuiItems.item(Material.KNOWLEDGE_BOOK, "Triggers",
                         List.of(LegacyText.GRAY + "Turn on everything that should start",
                                 LegacyText.GRAY + "this scene. Chance and cooldown apply.", "",
+                                LegacyText.GRAY + "Time and weather come from the world",
+                                LegacyText.GRAY + "the scene's NPCs are in.", "",
                                 LegacyText.GRAY + "Manual starts always work:",
                                 LegacyText.WHITE + "/bf scene start " + scene.getKey(),
                                 LegacyText.GRAY + "or the Start Scene action of any NPC.")));
@@ -654,13 +626,57 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             openEditor(player, scene.getKey());
             return;
         }
+        if (click.getRawSlot() == TRIGGER_RADIUS_SLOT && scene.hasTrigger(SceneTrigger.PLAYER_ENTERS)) {
+            adjust(click, player, scene, 4, value -> scene.setAreaRadius(value), scene.getAreaRadius(),
+                    "Enter the area radius in blocks:", 1, () -> openTriggers(player, scene.getKey()));
+            return;
+        }
         SceneTrigger trigger = TRIGGER_SLOTS.get(click.getRawSlot());
         if (trigger == null)
             return;
+        if (trigger.kind() == SceneTrigger.Kind.AREA) {
+            // Turning it on (or right-clicking) asks for the area first; the
+            // picker switches the trigger on once a location is chosen.
+            if (!scene.hasTrigger(trigger) || click.isRightClick()) {
+                openAreaPicker(player, scene.getKey(), "", 0);
+                return;
+            }
+            scene.setTrigger(trigger, false);
+            scene.setAreaLocationKey(null);
+            scenes.save(scene);
+            GuiItems.click(player);
+            openTriggers(player, scene.getKey());
+            return;
+        }
         scene.setTrigger(trigger, !scene.hasTrigger(trigger));
         scenes.save(scene);
         GuiItems.click(player);
         openTriggers(player, scene.getKey());
+    }
+
+    private ItemStack areaTriggerItem(Scene scene, SceneTrigger trigger) {
+        boolean active = scene.hasTrigger(trigger);
+        List<String> lore = new ArrayList<>();
+        lore.add(LegacyText.GRAY + trigger.summary());
+        if (active) {
+            NamedLocation location = scene.hasArea() ? locations.find(scene.getAreaLocationKey()).orElse(null) : null;
+            lore.add(LegacyText.GRAY + "Area: "
+                    + (location == null
+                            ? LegacyText.RED + "missing location '" + scene.getAreaLocationKey() + "'"
+                            : LegacyText.WHITE + location.displayName() + LegacyText.GRAY + " · "
+                                    + location.location().display()));
+            lore.add(LegacyText.GRAY + "Radius: " + LegacyText.WHITE + scene.getAreaRadius() + " blocks");
+            lore.add("");
+            lore.add(GuiItems.hint("Click", "turn off"));
+            lore.add(GuiItems.hint("Right-click", "choose another location"));
+        } else {
+            lore.add("");
+            lore.add(GuiItems.hint("Click", "choose the area's location to turn on"));
+        }
+        ItemStack item = GuiItems.item(triggerMaterial(trigger),
+                (active ? LegacyText.GREEN : LegacyText.RED) + trigger.displayName() + ": " + (active ? "On" : "Off"),
+                lore);
+        return active ? GuiItems.glint(item) : item;
     }
 
     // --------------------------------------------------------------- roles
@@ -694,12 +710,11 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
 
     private ItemStack roleItem(Scene scene, SceneRole role) {
         List<String> lore = new ArrayList<>();
-        lore.add(LegacyText.GRAY + "Played by: " + LegacyText.WHITE + presetName(role));
-        scene.roleOf(role.getPresetKey(), role.getId()).ifPresent(other -> {
-            lore.add(LegacyText.RED + "Also plays '" + other.getDisplayName() + "': the scene cannot");
-            lore.add(LegacyText.RED + "start until one of these roles is removed");
-        });
-        lore.add(LegacyText.GRAY + "Cast: " + LegacyText.WHITE + role.getCast().displayName());
+        lore.add(LegacyText.GRAY + "Every free instance of this NPC plays it");
+        if (scene.roleOf(role.getPresetKey(), role.getId()).isPresent()) {
+            lore.add(LegacyText.RED + "This NPC has two roles: the scene cannot");
+            lore.add(LegacyText.RED + "start until one of them is removed");
+        }
         lore.add(LegacyText.GRAY + "Scene actions: " + LegacyText.WHITE + role.getLane().size());
         lore.add(LegacyText.GRAY + "Wrap-up actions: " + LegacyText.WHITE + role.getWrapUp().size());
         List<String> reactions = role.getReactions().keySet().stream().map(BehaviourEvent::displayName).toList();
@@ -710,7 +725,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         lore.add(GuiItems.danger("Shift-right-click", "remove role"));
         NpcDefinition preset = role.getPresetKey() == null ? null : definitions.find(role.getPresetKey()).orElse(null);
         ItemStack icon = GuiItems.item(preset == null ? Material.SKELETON_SKULL : Material.PLAYER_HEAD,
-                role.getDisplayName(), lore);
+                presetName(role), lore);
         return preset == null ? icon : NpcHeadUtil.applySkin(icon, preset);
     }
 
@@ -742,7 +757,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                     }
                     scene.removeRole(role.getId());
                     scenes.save(scene);
-                    player.sendMessage(UiText.success("Removed role '" + role.getDisplayName() + "'."));
+                    player.sendMessage(UiText.success("Removed " + presetName(role) + " from the scene."));
                     openRoles(player, scene.getKey(), holder.page());
                 } else if (guiService != null) {
                     guiService.openSceneRole(player, scene.getKey(), role.getId(), 0);
@@ -770,9 +785,9 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 inventory.setItem(index - from,
                         GuiItems.item(Material.GRAY_DYE, preset.getDisplayName(),
                                 List.of(LegacyText.DARK_GRAY + "Key: " + preset.getKey(),
-                                        LegacyText.RED + "Already plays '" + taken.getDisplayName() + "'",
+                                        LegacyText.RED + "Already has a role in this scene",
                                         LegacyText.GRAY + "An NPC plays one role per scene.", "",
-                                        LegacyText.GRAY + "For more steps, add them to that role,",
+                                        LegacyText.GRAY + "For more steps, add them to its role,",
                                         LegacyText.GRAY + "or end its row with Start Scene to",
                                         LegacyText.GRAY + "continue in a follow-up scene.")));
                 continue;
@@ -822,17 +837,18 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         NpcDefinition preset = presets.get(index);
         SceneRole taken = scene.roleOf(preset.getKey(), holder.roleId()).orElse(null);
         if (taken != null) {
-            player.sendMessage(UiText.warning(preset.getDisplayName() + " already plays '" + taken.getDisplayName()
-                    + "' in this scene. Add the steps to that role, or chain a follow-up scene with Start Scene."));
+            player.sendMessage(UiText.warning(preset.getDisplayName()
+                    + " already has a role in this scene. Add the steps to its role, or chain a follow-up scene"
+                    + " with Start Scene."));
             return;
         }
         String roleId;
         if (holder.roleId() == null) {
             if (scene.getRoles().size() >= Scene.MAX_ROLES)
                 return;
-            roleId = scene.addRole(preset.getDisplayName(), preset.getKey()).getId();
-            player.sendMessage(UiText.success("Added role '" + preset.getDisplayName()
-                    + "'. Add its scene actions, then its wrap-up and reactions if needed."));
+            roleId = scene.addRole(preset.getKey()).getId();
+            player.sendMessage(UiText.success("Added " + preset.getDisplayName()
+                    + " to the scene. Add its scene actions, then its wrap-up and reactions if needed."));
         } else {
             SceneRole role = scene.findRole(holder.roleId()).orElse(null);
             if (role == null) {
@@ -841,7 +857,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             }
             role.setPresetKey(preset.getKey());
             roleId = role.getId();
-            player.sendMessage(UiText.success(preset.getDisplayName() + " now plays '" + role.getDisplayName() + "'."));
+            player.sendMessage(UiText.success(preset.getDisplayName() + " now plays this role."));
         }
         scenes.save(scene);
         if (guiService != null)
@@ -871,7 +887,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             inventory.setItem(index - from,
                     GuiItems.item(icon == null ? new ItemStack(Material.LODESTONE) : icon,
                             LegacyText.GOLD + entry.label(), List.of(LegacyText.GRAY + location.location().display(),
-                                    GuiItems.hint("Click", "use as the scene's centre"))));
+                                    GuiItems.hint("Click", "start the scene when a player comes near"))));
         }
         if (entries.isEmpty())
             inventory.setItem(22,
@@ -879,7 +895,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         if (page > 0)
             inventory.setItem(GuiItems.PREVIOUS_SLOT, GuiItems.previousPage(page, pages));
         inventory.setItem(GuiItems.BACK_SLOT,
-                GuiItems.back(folder.isEmpty() ? "the scene editor" : "the parent location group"));
+                GuiItems.back(folder.isEmpty() ? "the triggers" : "the parent location group"));
         if (page + 1 < pages)
             inventory.setItem(GuiItems.NEXT_SLOT, GuiItems.nextPage(page, pages));
         GuiLayout.fillMainBar(inventory);
@@ -890,7 +906,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         int slot = click.getRawSlot();
         if (slot == GuiItems.BACK_SLOT) {
             if (holder.folder().isEmpty())
-                openEditor(player, holder.sceneKey());
+                openTriggers(player, holder.sceneKey());
             else
                 openAreaPicker(player, holder.sceneKey(), LocationBrowserModel.parent(holder.folder()), 0);
             return;
@@ -911,10 +927,12 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         }
         scenes.find(holder.sceneKey()).ifPresent(scene -> {
             scene.setAreaLocationKey(entry.location().key());
+            scene.setTrigger(SceneTrigger.PLAYER_ENTERS, true);
             scenes.save(scene);
-            player.sendMessage(UiText.success("Scene area set around '" + entry.location().displayName() + "'."));
+            player.sendMessage(UiText.success("The scene now starts when a player comes within " + scene.getAreaRadius()
+                    + " blocks of '" + entry.location().displayName() + "'."));
         });
-        openEditor(player, holder.sceneKey());
+        openTriggers(player, holder.sceneKey());
     }
 
     // -------------------------------------------------------------- delete
@@ -1017,6 +1035,28 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         String triggers = String.join(", ", scene.getTriggers().stream()
                 .map(trigger -> trigger.displayName().toLowerCase(java.util.Locale.ROOT)).toList());
         return scene.isEnabled() ? triggers : triggers + LegacyText.RED + " (switched off)";
+    }
+
+    /**
+     * Which scenes this one starts with Start Scene, and which scenes start it, so
+     * chains are visible from the scene icon.
+     */
+    private List<String> chainLore(Scene scene) {
+        List<String> lore = new ArrayList<>();
+        List<String> next = scene.startedScenes().stream().map(this::sceneName).toList();
+        List<String> previous = scenes.findAll().stream().filter(other -> !other.getKey().equals(scene.getKey()))
+                .filter(other -> other.startedScenes().contains(scene.getKey())).map(Scene::getDisplayName).toList();
+        if (!next.isEmpty())
+            lore.add(LegacyText.GRAY + "Leads to: " + LegacyText.AQUA
+                    + String.join(LegacyText.GRAY + ", " + LegacyText.AQUA, next));
+        if (!previous.isEmpty())
+            lore.add(LegacyText.GRAY + "Follows: " + LegacyText.AQUA
+                    + String.join(LegacyText.GRAY + ", " + LegacyText.AQUA, previous));
+        return lore;
+    }
+
+    private String sceneName(String sceneKey) {
+        return scenes.find(sceneKey).map(Scene::getDisplayName).orElse(LegacyText.RED + "missing '" + sceneKey + "'");
     }
 
     private String presetName(SceneRole role) {

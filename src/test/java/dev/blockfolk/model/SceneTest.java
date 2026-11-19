@@ -28,8 +28,8 @@ class SceneTest {
     void rolesGetUniqueIdsEvenForTheSamePreset() {
         Scene scene = new Scene("market");
 
-        SceneRole first = scene.addRole("Shopkeeper", "shopkeeper");
-        SceneRole second = scene.addRole("Shopkeeper", "shopkeeper");
+        SceneRole first = scene.addRole("shopkeeper");
+        SceneRole second = scene.addRole("shopkeeper");
 
         assertEquals("shopkeeper", first.getId());
         assertEquals("shopkeeper-2", second.getId());
@@ -40,7 +40,7 @@ class SceneTest {
     @Test
     void findsTheRoleAPresetAlreadyPlays() {
         Scene scene = new Scene("market");
-        SceneRole smith = scene.addRole("Smith", "Cranky Kong");
+        SceneRole smith = scene.addRole("Cranky Kong");
 
         assertEquals(smith, scene.roleOf("cranky-kong", null).orElseThrow());
         assertTrue(scene.roleOf("cranky-kong", smith.getId()).isEmpty());
@@ -65,7 +65,7 @@ class SceneTest {
 
     @Test
     void reactionsAreLimitedToEventsAScenePlayerCanReactTo() {
-        SceneRole role = new SceneRole("wago", "Wägö", "wago");
+        SceneRole role = new SceneRole("wago", "wago");
         role.setReaction(BehaviourEvent.PLAYER_APPROACH, List.of(new BehaviourAction(BehaviourActionType.WAVE, null)));
 
         assertEquals(1, role.getReaction(BehaviourEvent.PLAYER_APPROACH).size());
@@ -77,7 +77,7 @@ class SceneTest {
 
     @Test
     void rowsHoldAtMostSevenActions() {
-        SceneRole role = new SceneRole("watcher", "Watcher", "watcher");
+        SceneRole role = new SceneRole("watcher", "watcher");
         List<BehaviourAction> actions = java.util.Collections.nCopies(9,
                 new BehaviourAction(BehaviourActionType.WAVE, null));
 
@@ -89,13 +89,13 @@ class SceneTest {
     @Test
     void cueNamesAndRouteCleanupLookInsideQuestionBranches() {
         Scene scene = new Scene("train");
-        SceneRole watcher = scene.addRole("Watcher", "watcher");
+        SceneRole watcher = scene.addRole("watcher");
         BehaviourAction route = new BehaviourAction(BehaviourActionType.SET_ROUTE, "station");
         NpcQuestion question = new NpcQuestion(UUID.randomUUID(), "Ready?", List
                 .of(new QuestionOption("Yes", List.of(route, new BehaviourAction(BehaviourActionType.CUE, "told")))),
                 List.of());
         watcher.setLane(List.of(BehaviourAction.ask(question)));
-        SceneRole luigi = scene.addRole("Luigi", "luigi");
+        SceneRole luigi = scene.addRole("luigi");
         luigi.setLane(List.of(new BehaviourAction(BehaviourActionType.WAIT_FOR_CUE, "told"), route));
 
         assertEquals(List.of("told"), scene.cueNames());
@@ -104,6 +104,18 @@ class SceneTest {
         scene.forEachAction(action -> remaining.add(action.type()));
         assertEquals(List.of(BehaviourActionType.CUE, BehaviourActionType.WAIT_FOR_CUE), remaining);
         assertFalse(scene.removeActions(action -> action.type() == BehaviourActionType.SET_ROUTE));
+    }
+
+    @Test
+    void startedScenesListTheChainWithoutTheSceneItself() {
+        Scene scene = new Scene("western/train");
+        SceneRole watcher = scene.addRole("watcher");
+        watcher.setLane(List.of(new BehaviourAction(BehaviourActionType.START_SCENE, "Western/Saloon"),
+                new BehaviourAction(BehaviourActionType.START_SCENE, "western/train")));
+        watcher.setWrapUp(List.of(new BehaviourAction(BehaviourActionType.START_SCENE, "western/saloon"),
+                new BehaviourAction(BehaviourActionType.START_SCENE, "western/night")));
+
+        assertEquals(List.of("western/saloon", "western/night"), scene.startedScenes());
     }
 
     @Test

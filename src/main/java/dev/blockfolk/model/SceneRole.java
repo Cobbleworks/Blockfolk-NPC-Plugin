@@ -8,10 +8,11 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * One part in a scene, played by an instance of an NPC preset. A role has the
- * actions it performs when the scene starts (its lane), what it does when the
- * scene ends (its wrap-up), and reactions that replace the preset's own
- * behaviour while the scene runs.
+ * One part in a scene, played by every free instance of an NPC preset. NPCs
+ * play themselves, so a role has no name of its own. A role has the actions it
+ * performs when the scene starts (its lane), what it does when the scene ends
+ * (its wrap-up), and reactions that replace the preset's own behaviour while
+ * the scene runs.
  */
 public final class SceneRole {
 
@@ -21,43 +22,14 @@ public final class SceneRole {
             BehaviourEvent.PLAYER_APPROACH, BehaviourEvent.PLAYER_LEAVES, BehaviourEvent.LEFT_CLICK,
             BehaviourEvent.RECEIVE_ITEM, BehaviourEvent.NPC_NEARBY, BehaviourEvent.DAMAGE_TAKEN);
 
-    /** How many instances of the preset play the role. */
-    public enum Cast {
-        ONE("One NPC", "The free instance nearest the scene plays the role; the scene needs it"), ALL("Every NPC",
-                "Every free instance plays the role; none being free is fine");
-
-        private final String displayName;
-        private final String summary;
-
-        Cast(String displayName, String summary) {
-            this.displayName = displayName;
-            this.summary = summary;
-        }
-
-        public String displayName() {
-            return displayName;
-        }
-
-        public String summary() {
-            return summary;
-        }
-
-        public static Cast fromStored(String value) {
-            return value != null && value.trim().equalsIgnoreCase("all") ? ALL : ONE;
-        }
-    }
-
     private final String id;
-    private String displayName;
     private String presetKey;
-    private Cast cast = Cast.ONE;
     private List<BehaviourAction> lane = new ArrayList<>();
     private List<BehaviourAction> wrapUp = new ArrayList<>();
     private final Map<BehaviourEvent, List<BehaviourAction>> reactions = new EnumMap<>(BehaviourEvent.class);
 
-    public SceneRole(String id, String displayName, String presetKey) {
+    public SceneRole(String id, String presetKey) {
         this.id = normalizeId(id);
-        setDisplayName(displayName);
         setPresetKey(presetKey);
     }
 
@@ -70,29 +42,12 @@ public final class SceneRole {
         return id;
     }
 
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    public void setDisplayName(String displayName) {
-        String trimmed = displayName == null ? "" : displayName.trim();
-        this.displayName = trimmed.isEmpty() ? id : trimmed;
-    }
-
     public String getPresetKey() {
         return presetKey;
     }
 
     public void setPresetKey(String presetKey) {
         this.presetKey = presetKey == null || presetKey.isBlank() ? null : NpcDefinition.toKey(presetKey);
-    }
-
-    public Cast getCast() {
-        return cast;
-    }
-
-    public void setCast(Cast cast) {
-        this.cast = cast == null ? Cast.ONE : cast;
     }
 
     public List<BehaviourAction> getLane() {

@@ -140,20 +140,35 @@ class SceneServiceTest {
     }
 
     @Test
-    void everyInstanceRolesTakeAllFreeInstancesAndToleratesNone() {
+    void everyFreeInstanceOfARolesNpcTakesPart() {
         NpcInstance first = spawn("guard");
         NpcInstance second = spawn("guard");
-        Scene alarm = scene("alarm", "guard");
-        alarm.getRoles().getFirst().setCast(SceneRole.Cast.ALL);
-        scene("patrol", "guard").getRoles().getFirst().setCast(SceneRole.Cast.ALL);
+        scene("alarm", "guard");
+        scene("patrol", "guard");
 
         assertTrue(service.startManually("alarm", null, null));
         assertTrue(service.isCast(first));
         assertTrue(service.isCast(second));
+        assertEquals(2, runningLanes.size());
 
         CommandSender admin = mock(CommandSender.class);
         assertFalse(service.startManually("patrol", admin, null));
-        assertTrue(message(admin).contains("none of its NPCs is loaded or free"), message(admin));
+        assertTrue(message(admin).contains("Guard is busy in scene 'alarm'"), message(admin));
+    }
+
+    @Test
+    void busyInstancesStayOutWhileTheFreeOnesPlay() {
+        spawn("watcher");
+        NpcInstance busyGuard = spawn("guard");
+        scene("train", "watcher", "guard");
+        service.startManually("train", null, null);
+        NpcInstance freeGuard = spawn("guard");
+        scene("patrol", "guard");
+
+        assertTrue(service.startManually("patrol", null, null));
+
+        assertEquals(Optional.of("train"), service.sceneOf(busyGuard));
+        assertEquals(Optional.of("patrol"), service.sceneOf(freeGuard));
     }
 
     @Test
@@ -245,7 +260,7 @@ class SceneServiceTest {
     private Scene scene(String key, String... presetKeys) {
         Scene scene = new Scene(key);
         for (String preset : presetKeys) {
-            SceneRole role = scene.addRole(preset, preset);
+            SceneRole role = scene.addRole(preset);
             role.setLane(List.of(new BehaviourAction(BehaviourActionType.WAVE, null)));
         }
         scenes.put(scene.getKey(), scene);

@@ -11,8 +11,8 @@ import org.bukkit.inventory.ItemStack;
 
 /**
  * A scripted moment several NPCs play together: who takes part (roles), what
- * each of them does (lanes), what starts it (triggers), where it happens (an
- * optional area), and when it ends.
+ * each of them does (lanes), what starts it (triggers, one of which watches an
+ * area), and when it ends.
  */
 public final class Scene {
 
@@ -123,7 +123,10 @@ public final class Scene {
         this.enabled = enabled;
     }
 
-    /** The global location at the centre of the scene area, or null. */
+    /**
+     * The global location at the centre of the area the Player Enters trigger
+     * watches, or null.
+     */
     public String getAreaLocationKey() {
         return areaLocationKey;
     }
@@ -233,15 +236,15 @@ public final class Scene {
         return roleOf(presetKey, null).isPresent();
     }
 
-    /** Adds a role named after its preset, with an id unique in this scene. */
-    public SceneRole addRole(String displayName, String presetKey) {
+    /** Adds a role for the preset, with an id unique in this scene. */
+    public SceneRole addRole(String presetKey) {
         if (roles.size() >= MAX_ROLES)
             throw new IllegalStateException("A scene holds at most " + MAX_ROLES + " roles.");
-        String base = SceneRole.normalizeId(displayName);
+        String base = SceneRole.normalizeId(presetKey);
         String id = base;
         for (int suffix = 2; findRole(id).isPresent(); suffix++)
             id = base + "-" + suffix;
-        SceneRole role = new SceneRole(id, displayName, presetKey);
+        SceneRole role = new SceneRole(id, presetKey);
         roles.add(role);
         return role;
     }
@@ -273,6 +276,19 @@ public final class Scene {
 
     public void forEachAction(java.util.function.Consumer<BehaviourAction> visitor) {
         roles.forEach(role -> role.forEachAction(visitor));
+    }
+
+    /**
+     * Keys of the scenes this scene's Start Scene actions start, in the order they
+     * appear, without itself.
+     */
+    public List<String> startedScenes() {
+        java.util.Set<String> keys = new java.util.LinkedHashSet<>();
+        forEachAction(action -> {
+            if (action.type() == BehaviourActionType.START_SCENE)
+                tryKey(action.value()).filter(started -> !started.equals(key)).ifPresent(keys::add);
+        });
+        return List.copyOf(keys);
     }
 
     /** Cue names used by Cue and Wait For Cue actions in this scene. */

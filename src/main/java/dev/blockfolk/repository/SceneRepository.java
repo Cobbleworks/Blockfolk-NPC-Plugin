@@ -124,10 +124,8 @@ public final class SceneRepository {
         for (SceneRole role : scene.getRoles()) {
             Map<String, Object> stored = new LinkedHashMap<>();
             stored.put("id", role.getId());
-            stored.put("name", role.getDisplayName());
             if (role.getPresetKey() != null)
                 stored.put("preset", role.getPresetKey());
-            stored.put("cast", role.getCast().name().toLowerCase(Locale.ROOT));
             stored.put("lane", BehaviourActionCodec.encodeList(role.getLane()));
             stored.put("wrap-up", BehaviourActionCodec.encodeList(role.getWrapUp()));
             Map<String, Object> reactions = new LinkedHashMap<>();
@@ -164,12 +162,10 @@ public final class SceneRepository {
             Object id = stored.get("id");
             if (id == null)
                 continue;
-            Object name = stored.get("name");
+            // Older files also store a role name and a cast; NPCs now play
+            // themselves and every free instance takes part, so both are ignored.
             Object preset = stored.get("preset");
-            SceneRole role = new SceneRole(id.toString(), name == null ? id.toString() : name.toString(),
-                    preset == null ? null : preset.toString());
-            Object cast = stored.get("cast");
-            role.setCast(SceneRole.Cast.fromStored(cast == null ? null : cast.toString()));
+            SceneRole role = new SceneRole(id.toString(), preset == null ? null : preset.toString());
             role.setLane(BehaviourActionCodec.decodeList(stored.get("lane")));
             role.setWrapUp(BehaviourActionCodec.decodeList(stored.get("wrap-up")));
             if (stored.get("reactions") instanceof Map<?, ?> reactions) {
@@ -290,8 +286,7 @@ public final class SceneRepository {
                     continue;
                 if (scene.findRole(SceneRole.normalizeId(definition.getKey())).isPresent())
                     continue;
-                SceneRole role = new SceneRole(definition.getKey(), definition.getDisplayName(), definition.getKey());
-                role.setCast(SceneRole.Cast.ALL);
+                SceneRole role = new SceneRole(definition.getKey(), definition.getKey());
                 role.setLane(actions);
                 scene.addRole(role);
             }

@@ -1,7 +1,6 @@
 package dev.blockfolk.runtime;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -163,7 +162,7 @@ public final class SceneService {
                 requester.sendMessage(UiText.error("Unknown scene: " + sceneKey));
             return false;
         }
-        return tryStart(scene, actor, requester, false);
+        return tryStart(scene, actor, requester, false, null);
     }
 
     /**
@@ -180,7 +179,7 @@ public final class SceneService {
             }
             if (active.containsKey(scene.getKey()))
                 return;
-            tryStart(scene, actor, null, true);
+            tryStart(scene, actor, null, true, null);
         });
     }
 
@@ -225,7 +224,12 @@ public final class SceneService {
             forceEnd(scene);
     }
 
-    private boolean tryStart(Scene scene, Entity actor, CommandSender requester, boolean automatic) {
+    /**
+     * Casts and begins the scene. {@code world} limits the cast to NPCs in that
+     * world (the world whose time, weather, or area started it); null casts NPCs
+     * from every world.
+     */
+    private boolean tryStart(Scene scene, Entity actor, CommandSender requester, boolean automatic, World world) {
         if (active.containsKey(scene.getKey())) {
             if (requester != null)
                 requester.sendMessage(UiText.warning("Scene '" + scene.getDisplayName() + "' is already running."));
@@ -235,12 +239,12 @@ public final class SceneService {
             skip(scene, "it has no roles yet", requester, automatic);
             return false;
         }
-        Casting casting = cast(scene, actor);
+        Casting casting = cast(scene, world);
         if (casting.reason() != null) {
             skip(scene, casting.reason(), requester, automatic);
             return false;
         }
-        begin(scene, casting.members(), actor);
+        begin(scene, casting.members(), actor, world);
         if (requester != null)
             requester.sendMessage(UiText.success("Started scene '" + scene.getDisplayName() + "' with "
                     + casting.members().size() + (casting.members().size() == 1 ? " NPC." : " NPCs.")));
@@ -248,74 +252,54 @@ public final class SceneService {
     }
 
     /** Automatic triggers respect the scene's chance and cooldown silently. */
-    private void trigger(Scene scene, Entity actor) {
+    private void trigger(Scene scene, Entity actor, World world) {
         if (!scene.isEnabled() || active.containsKey(scene.getKey()))
             return;
         if (tick < cooldownUntilTick.getOrDefault(scene.getKey(), 0L))
             return;
         if (scene.getChancePercent() < 100 && ThreadLocalRandom.current().nextInt(100) >= scene.getChancePercent())
             return;
-        tryStart(scene, actor, null, true);
+        tryStart(scene, actor, null, true, world);
     }
 
-    private Casting cast(Scene scene, Entity actor) {
-        Location center = areaCenter(scene).orElse(null);
-        Location reference = center != null ? center : actor == null ? null : actor.getLocation();
+    /**
+     * Every free loaded instance of a role's preset plays it. A role without a
+     * single free instance skips the whole scene, so no lane waits for a cue that
+     * nobody gives.
+     */
+    private Casting cast(Scene scene, World world) {
         Set<UUID> taken = new HashSet<>();
         List<Member> members = new ArrayList<>();
         for (SceneRole role : scene.getRoles()) {
             if (role.getPresetKey() == null)
-                return Casting.failed("the role '" + role.getDisplayName() + "' has no NPC preset");
+                return Casting.failed("one of its roles has no NPC preset");
             NpcDefinition definition = definitions.find(role.getPresetKey()).orElse(null);
             if (definition == null)
-                return Casting.failed("the NPC preset '" + role.getPresetKey() + "' of role '" + role.getDisplayName()
-                        + "' no longer exists");
+                return Casting
+                        .failed("the NPC preset '" + role.getPresetKey() + "' of one of its roles no longer exists");
+            String name = definition.getDisplayName();
             List<NpcInstance> loaded = instances.findActive().stream()
-                    .filter(instance -> instance.getDefinitionKey().equals(definition.getKey())).toList();
-            // A scene with an area only casts NPCs from the area's world.
-            if (center != null)
-                loaded = loaded.stream()
-                        .filter(instance -> center.getWorld().equals(instances.currentLocation(instance).getWorld()))
-                        .toList();
-            List<NpcInstance> free = loaded.stream().filter(instance -> !taken.contains(instance.getId()))
-                    .filter(instance -> blocker(instance) == null).toList();
-            if (role.getCast() == SceneRole.Cast.ALL) {
-                for (NpcInstance instance : free) {
-                    taken.add(instance.getId());
-                    members.add(new Member(instance, role));
-                }
-                continue;
+                    .filter(instance -> instance.getDefinitionKey().equals(definition.getKey()))
+                    .filter(instance -> world == null || world.equals(instances.currentLocation(instance).getWorld()))
+                    .toList();
+            if (loaded.isEmpty())
+                return Casting.failed("no " + name + " is loaded" + (world != null ? " in " + world.getName() : "")
+                        + " (not spawned, or its chunk is not loaded)");
+            List<NpcInstance> unclaimed = loaded.stream().filter(instance -> !taken.contains(instance.getId()))
+                    .toList();
+            if (unclaimed.isEmpty())
+                return Casting
+                        .failed(name + " plays two roles in this scene; an NPC plays one role per scene, so remove"
+                                + " the extra role or move its steps into a follow-up scene");
+            List<NpcInstance> free = unclaimed.stream().filter(instance -> blocker(instance) == null).toList();
+            if (free.isEmpty())
+                return Casting.failed(name + " " + blocker(unclaimed.getFirst()));
+            for (NpcInstance instance : free) {
+                taken.add(instance.getId());
+                members.add(new Member(instance, role));
             }
-            if (free.isEmpty()) {
-                String name = definition.getDisplayName();
-                if (loaded.isEmpty())
-                    return Casting.failed(
-                            "no " + name + " is loaded" + (center != null ? " in " + center.getWorld().getName() : "")
-                                    + " (not spawned, or its chunk is not loaded)");
-                NpcInstance busy = loaded.stream().filter(instance -> !taken.contains(instance.getId())).findFirst()
-                        .orElse(null);
-                return Casting.failed(busy == null
-                        ? name + " plays two roles in this scene; an NPC plays one role per scene, so remove the"
-                                + " extra role or move its steps into a follow-up scene"
-                        : name + " " + blocker(busy));
-            }
-            NpcInstance chosen = reference == null
-                    ? free.getFirst()
-                    : free.stream().min(Comparator.comparingDouble(instance -> distanceSquared(instance, reference)))
-                            .orElseThrow();
-            taken.add(chosen.getId());
-            members.add(new Member(chosen, role));
         }
-        if (members.isEmpty())
-            return Casting.failed("none of its NPCs is loaded or free");
         return new Casting(members, null);
-    }
-
-    private double distanceSquared(NpcInstance instance, Location reference) {
-        Location location = instances.currentLocation(instance);
-        return location.getWorld() == null || !location.getWorld().equals(reference.getWorld())
-                ? Double.MAX_VALUE
-                : location.distanceSquared(reference);
     }
 
     /** Why the instance cannot join a scene now, or null when it is free. */
@@ -328,10 +312,11 @@ public final class SceneService {
         return null;
     }
 
-    private void begin(Scene scene, List<Member> members, Entity actor) {
-        Location center = areaCenter(scene).orElse(null);
-        World world = center != null
-                ? center.getWorld()
+    private void begin(Scene scene, List<Member> members, Entity actor, World triggerWorld) {
+        // Time-of-day and weather endings follow the world it started in, or the
+        // world of its first NPC.
+        World world = triggerWorld != null
+                ? triggerWorld
                 : instances.currentLocation(members.getFirst().instance).getWorld();
         ActiveScene running = new ActiveScene(scene, tick, world, actor);
         active.put(scene.getKey(), running);
@@ -501,21 +486,25 @@ public final class SceneService {
         Map<UUID, WeatherChange> weatherChanges = weatherChanges();
         for (ActiveScene scene : List.copyOf(active.values()))
             checkEnding(scene, crossed, weatherChanges);
+        Map<String, Map<World, Location>> presetWorlds = crossed.isEmpty() && weatherChanges.isEmpty()
+                ? Map.of()
+                : presetWorlds();
         for (Scene scene : scenes.findAll()) {
             if (!scene.isEnabled() || scene.getTriggers().isEmpty()) {
                 playersInside.remove(scene.getKey());
                 continue;
             }
-            World world = sceneWorld(scene).orElse(null);
-            if (world == null)
-                continue;
-            for (DayPeriod period : crossed.getOrDefault(world.getUID(), List.of())) {
-                if (scene.hasTrigger(SceneTrigger.forPeriod(period)))
-                    trigger(scene, null);
+            // Time and weather come from the worlds the scene's NPCs are in.
+            for (Map.Entry<World, Location> entry : sceneWorlds(scene, presetWorlds).entrySet()) {
+                World world = entry.getKey();
+                for (DayPeriod period : crossed.getOrDefault(world.getUID(), List.of())) {
+                    if (scene.hasTrigger(SceneTrigger.forPeriod(period)))
+                        trigger(scene, null, world);
+                }
+                WeatherChange change = weatherChanges.get(world.getUID());
+                if (change != null && weatherTriggers(scene, change, entry.getValue()))
+                    trigger(scene, null, world);
             }
-            WeatherChange change = weatherChanges.get(world.getUID());
-            if (change != null && weatherTriggers(scene, change, world))
-                trigger(scene, null);
             if (scene.hasTrigger(SceneTrigger.PLAYER_ENTERS))
                 checkPlayersEntering(scene);
             else
@@ -602,7 +591,8 @@ public final class SceneService {
         return result;
     }
 
-    private boolean weatherTriggers(Scene scene, WeatherChange change, World world) {
+    /** {@code where} is an NPC of the scene; its biome decides rain or snow. */
+    private boolean weatherTriggers(Scene scene, WeatherChange change, Location where) {
         boolean stormStarted = !change.before().storm() && change.after().storm();
         boolean stormStopped = change.before().storm() && !change.after().storm();
         boolean thunderStarted = !change.before().thunder() && change.after().thunder();
@@ -616,8 +606,7 @@ public final class SceneService {
             return true;
         if (!scene.hasTrigger(SceneTrigger.RAIN) && !scene.hasTrigger(SceneTrigger.SNOW))
             return false;
-        Location center = areaCenter(scene).orElse(world.getSpawnLocation());
-        boolean cold = center.getWorld() != null && center.getBlock().getTemperature() < SNOW_TEMPERATURE;
+        boolean cold = where.getWorld() != null && where.getBlock().getTemperature() < SNOW_TEMPERATURE;
         return cold ? scene.hasTrigger(SceneTrigger.SNOW) : scene.hasTrigger(SceneTrigger.RAIN);
     }
 
@@ -641,9 +630,10 @@ public final class SceneService {
         }
         playersInside.put(scene.getKey(), inside);
         if (entered != null)
-            trigger(scene, entered);
+            trigger(scene, entered, center.getWorld());
     }
 
+    /** The centre of the area the Player Enters trigger watches. */
     private Optional<Location> areaCenter(Scene scene) {
         if (!scene.hasArea())
             return Optional.empty();
@@ -651,12 +641,29 @@ public final class SceneService {
                 .filter(location -> location.getWorld() != null);
     }
 
-    /** The scene area's world, or the main world for scenes without an area. */
-    private Optional<World> sceneWorld(Scene scene) {
-        if (scene.hasArea())
-            return areaCenter(scene).map(Location::getWorld);
-        List<World> worlds = Bukkit.getWorlds();
-        return worlds.isEmpty() ? Optional.empty() : Optional.of(worlds.getFirst());
+    /**
+     * For every preset, the worlds its loaded instances are in, each with the
+     * location of one of them.
+     */
+    private Map<String, Map<World, Location>> presetWorlds() {
+        Map<String, Map<World, Location>> result = new HashMap<>();
+        for (NpcInstance instance : instances.findActive()) {
+            Location location = instances.currentLocation(instance);
+            if (location.getWorld() != null)
+                result.computeIfAbsent(instance.getDefinitionKey(), ignored -> new LinkedHashMap<>())
+                        .putIfAbsent(location.getWorld(), location);
+        }
+        return result;
+    }
+
+    /** The worlds the scene's NPCs are loaded in, each with one NPC's location. */
+    private static Map<World, Location> sceneWorlds(Scene scene, Map<String, Map<World, Location>> presetWorlds) {
+        Map<World, Location> result = new LinkedHashMap<>();
+        for (SceneRole role : scene.getRoles()) {
+            if (role.getPresetKey() != null)
+                presetWorlds.getOrDefault(role.getPresetKey(), Map.of()).forEach(result::putIfAbsent);
+        }
+        return result;
     }
 
     // ----------------------------------------------------------- skipping

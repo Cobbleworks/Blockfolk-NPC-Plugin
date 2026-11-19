@@ -997,7 +997,7 @@ public final class GuiService implements Listener {
         int pages = Math.max(1, (rows.size() + 4) / 5);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new SceneRoleHolder(scene.getKey(), role.getId(), page), 54,
-                UiText.title("Role", role.getDisplayName()));
+                UiText.title("Role", sceneRoleName(role)));
         for (int row = 0; row < 5; row++) {
             int rowIndex = page * 5 + row;
             if (rowIndex >= rows.size())
@@ -1018,19 +1018,12 @@ public final class GuiService implements Listener {
         List<String> presetLore = List.of(
                 preset == null
                         ? LegacyText.RED + "No NPC preset: the scene cannot start"
-                        : LegacyText.GRAY + "Played by instances of this preset",
+                        : LegacyText.GRAY + "Every free instance of this NPC plays it",
                 "", GuiItems.hint("Click", "choose another preset"));
         inventory.setItem(46,
                 preset == null
                         ? item(Material.SKELETON_SKULL, "Played By: Nobody", presetLore)
                         : definitionIcon(preset, presetLore));
-        List<GuiItems.Option> castOptions = java.util.Arrays.stream(SceneRole.Cast.values())
-                .map(cast -> new GuiItems.Option(cast == SceneRole.Cast.ONE ? Material.PLAYER_HEAD : Material.CHEST,
-                        cast.displayName(), cast.summary()))
-                .toList();
-        inventory.setItem(47, GuiItems.cycle("Cast", castOptions, role.getCast().ordinal(), List.of()));
-        inventory.setItem(48, item(Material.NAME_TAG, "Role Name",
-                List.of(LegacyText.WHITE + role.getDisplayName(), "", GuiItems.hint("Click", "rename"))));
         inventory.setItem(49, GuiItems.back("the scene's roles"));
         List<String> cues = scene.cueNames();
         inventory.setItem(50,
@@ -1045,6 +1038,14 @@ public final class GuiService implements Listener {
         if (page + 1 < pages)
             inventory.setItem(53, GuiItems.nextPage(page, pages));
         openInventory(player, inventory);
+    }
+
+    /** Roles carry no name of their own: NPCs play themselves. */
+    private String sceneRoleName(SceneRole role) {
+        if (role.getPresetKey() == null)
+            return "Nobody";
+        return definitionRepository.find(role.getPresetKey()).map(NpcDefinition::getDisplayName)
+                .orElse(role.getPresetKey());
     }
 
     private Material sceneRowMaterial(SceneLaneRef lane) {
@@ -2138,27 +2139,6 @@ public final class GuiService implements Listener {
             case 46 -> {
                 if (sceneNavigation != null)
                     sceneNavigation.choosePreset(player, scene.getKey(), role.getId());
-                return;
-            }
-            case 47 -> {
-                int direction = GuiItems.cycleDirection(event.getClick());
-                if (direction != 0) {
-                    role.setCast(GuiItems.step(role.getCast(), direction));
-                    sceneRepository.save(scene);
-                    GuiItems.click(player);
-                    reopen.run();
-                }
-                return;
-            }
-            case 48 -> {
-                chatInputService.request(player, "Enter the role name:", value -> {
-                    sceneRepository.find(holder.sceneKey())
-                            .ifPresent(current -> current.findRole(holder.roleId()).ifPresent(currentRole -> {
-                                currentRole.setDisplayName(value);
-                                sceneRepository.save(current);
-                            }));
-                    reopen.run();
-                }, reopen);
                 return;
             }
             case 49 -> {

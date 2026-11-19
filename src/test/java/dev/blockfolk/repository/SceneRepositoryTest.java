@@ -45,8 +45,7 @@ class SceneRepositoryTest {
         scene.setCooldownSeconds(900);
         scene.setEnding(SceneEnding.TIME_OF_DAY);
         scene.setEndPeriod(DayPeriod.EVENING);
-        SceneRole wago = scene.addRole("Wägö", "wago");
-        wago.setCast(SceneRole.Cast.ALL);
+        SceneRole wago = scene.addRole("wago");
         wago.setLane(List.of(new BehaviourAction(BehaviourActionType.WAIT, "120.0"),
                 new BehaviourAction(BehaviourActionType.MOVE_TO, "location:jungle/lake")));
         wago.setWrapUp(List.of(new BehaviourAction(BehaviourActionType.GO_BACK, null)));
@@ -71,9 +70,7 @@ class SceneRepositoryTest {
         assertEquals(SceneEnding.TIME_OF_DAY, read.getEnding());
         assertEquals(DayPeriod.EVENING, read.getEndPeriod());
         SceneRole role = read.findRole(wago.getId()).orElseThrow();
-        assertEquals("Wägö", role.getDisplayName());
         assertEquals("wago", role.getPresetKey());
-        assertEquals(SceneRole.Cast.ALL, role.getCast());
         assertEquals(wago.getLane(), role.getLane());
         assertEquals(wago.getWrapUp(), role.getWrapUp());
         assertEquals(wago.getReactions(), role.getReactions());
@@ -110,7 +107,7 @@ class SceneRepositoryTest {
         assertEquals(0, train.getCooldownSeconds());
         assertEquals(List.of("station-watcher", "luigi"), train.getRoles().stream().map(SceneRole::getId).toList());
         assertEquals(watcherRow, train.findRole("station-watcher").orElseThrow().getLane());
-        assertEquals(SceneRole.Cast.ALL, train.findRole("luigi").orElseThrow().getCast());
+        assertEquals("luigi", train.findRole("luigi").orElseThrow().getPresetKey());
         assertTrue(repository.find("unused").orElseThrow().getRoles().isEmpty());
         // The old emit action names the event; the scene key it starts must match.
         assertEquals(repository.find("Western/Saloon").orElseThrow().getKey(),
