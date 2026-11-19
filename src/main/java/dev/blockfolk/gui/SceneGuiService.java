@@ -88,9 +88,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     /** Beat settings: advance options on row 1, actions on the bottom row. */
     private static final int[] BEAT_ADVANCE_SLOTS = {10, 11, 12, 13};
     private static final int BEAT_SETTING_SLOT = 15;
-    private static final int BEAT_EARLIER_SLOT = 18;
-    private static final int BEAT_LATER_SLOT = 19;
-    private static final int BEAT_COPY_SLOT = 20;
+    private static final int BEAT_COPY_SLOT = 18;
     private static final int BEAT_BACK_SLOT = 22;
     private static final int BEAT_DELETE_SLOT = 26;
 
@@ -822,7 +820,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 break;
             SceneBeat beat = beats.get(beatIndex);
             int first = (row + 1) * 9;
-            inventory.setItem(first, beatItem(scene, beat, beatIndex, beat.getId().equals(playing)));
+            inventory.setItem(first, beatItem(scene, beat, beatIndex, beat.getId().equals(playing), true));
             for (int column = 0; column < SCRIPT_COLUMNS; column++) {
                 int roleIndex = rolePage * SCRIPT_COLUMNS + column;
                 if (roleIndex < roles.size())
@@ -883,7 +881,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         return roleHead(role, LegacyText.GOLD + presetName(role), lore);
     }
 
-    private ItemStack beatItem(Scene scene, SceneBeat beat, int beatIndex, boolean playing) {
+    /** {@code inScript} adds the click hints that only work in the script grid. */
+    private ItemStack beatItem(Scene scene, SceneBeat beat, int beatIndex, boolean playing, boolean inScript) {
         List<String> lore = new ArrayList<>();
         lore.add(LegacyText.GRAY + "Next beat: " + LegacyText.WHITE
                 + SceneBeatText.advance(scene, beat, this::plainPresetName));
@@ -893,8 +892,14 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 + (acting.isEmpty() ? "nobody yet" : String.join(", ", acting)));
         if (playing)
             lore.add(LegacyText.GREEN + "▶ Playing now");
-        lore.add("");
-        lore.add(GuiItems.hint("Click", "when it moves on, move, copy, delete"));
+        if (inScript) {
+            lore.add("");
+            lore.add(GuiItems.hint("Click", "when it moves on, duplicate, delete"));
+            if (beatIndex > 0)
+                lore.add(GuiItems.hint("Shift-left-click", "move up"));
+            if (beatIndex + 1 < scene.getBeats().size())
+                lore.add(GuiItems.hint("Shift-right-click", "move down"));
+        }
         ItemStack item = GuiItems.item(new ItemStack(advanceMaterial(beat.getAdvance())),
                 LegacyText.AQUA + "Beat " + (beatIndex + 1), lore);
         item.setAmount(Math.clamp(beatIndex + 1, 1, 64));
@@ -974,13 +979,34 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 if (beatIndex >= beats.size())
                     return;
                 if (column == 0) {
-                    openBeat(player, scene.getKey(), beats.get(beatIndex).getId());
+                    int direction = switch (click.getClick()) {
+                        case SHIFT_LEFT -> -1;
+                        case SHIFT_RIGHT -> 1;
+                        default -> 0;
+                    };
+                    if (direction == 0)
+                        openBeat(player, scene.getKey(), beats.get(beatIndex).getId());
+                    else
+                        moveBeat(player, scene, beats.get(beatIndex), direction, holder.rolePage());
                 } else if (roleIndex < roles.size() && guiService != null) {
                     guiService.openSceneBeat(player, scene.getKey(), roles.get(roleIndex).getId(),
                             beats.get(beatIndex).getId());
                 }
             }
         }
+    }
+
+    /** Moves a beat one row up or down and keeps it in view. */
+    private void moveBeat(Player player, Scene scene, SceneBeat beat, int direction, int rolePage) {
+        if (sceneService != null && sceneService.isRunning(scene.getKey())) {
+            player.sendMessage(UiText.warning("Stop the scene before moving beats."));
+            return;
+        }
+        if (!scene.moveBeat(beat.getId(), direction))
+            return;
+        scenes.save(scene);
+        GuiItems.click(player);
+        openScript(player, scene.getKey(), scene.beatIndex(beat.getId()) / SCRIPT_ROWS, rolePage);
     }
 
     private void handleRoleHeaderClick(InventoryClickEvent click, Player player, Scene scene, SceneRole role,
@@ -1003,7 +1029,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     // ---------------------------------------------------------------- beat
 
     /**
-     * Settings of one beat: when it moves on, and moving, copying, or deleting it.
+     * Settings of one beat: when it moves on, and copying or deleting it.
      */
     private void openBeat(Player player, String sceneKey, String beatId) {
         Scene scene = scenes.find(sceneKey).orElse(null);
@@ -1018,7 +1044,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         int index = scene.beatIndex(beatId);
         Inventory inventory = Bukkit.createInventory(new BeatHolder(scene.getKey(), beatId), 27,
                 UiText.title("Beat " + (index + 1), scene.getDisplayName()));
-        inventory.setItem(4, beatItem(scene, beat, index, false));
+        inventory.setItem(4, beatItem(scene, beat, index, false, false));
         inventory.setItem(9, GuiItems.sectionHeader(Material.LIGHT_BLUE_STAINED_GLASS_PANE, LegacyText.AQUA,
                 "Next Beat Starts", "Choose one; running actions are cut off"));
         for (int option = 0; option < BEAT_ADVANCE_SLOTS.length; option++) {
@@ -1033,16 +1059,6 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             inventory.setItem(BEAT_ADVANCE_SLOTS[option], selected ? GuiItems.glint(item) : item);
         }
         inventory.setItem(BEAT_SETTING_SLOT, beatSettingItem(scene, beat));
-        inventory.setItem(BEAT_EARLIER_SLOT,
-                GuiItems.item(Material.ARROW, "Move Earlier",
-                        List.of(index == 0
-                                ? LegacyText.DARK_GRAY + "Already the first beat"
-                                : GuiItems.hint("Click", "swap with beat " + index))));
-        inventory.setItem(BEAT_LATER_SLOT,
-                GuiItems.item(Material.ARROW, "Move Later",
-                        List.of(index + 1 >= scene.getBeats().size()
-                                ? LegacyText.DARK_GRAY + "Already the last beat"
-                                : GuiItems.hint("Click", "swap with beat " + (index + 2)))));
         inventory.setItem(BEAT_COPY_SLOT,
                 GuiItems.item(Material.PAPER, "Duplicate",
                         List.of(LegacyText.GRAY + "Inserts a copy right after this beat", "",
@@ -1140,9 +1156,9 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                     reopen.run();
                 }
             }
-            case BEAT_EARLIER_SLOT, BEAT_LATER_SLOT, BEAT_COPY_SLOT, BEAT_DELETE_SLOT -> {
+            case BEAT_COPY_SLOT, BEAT_DELETE_SLOT -> {
                 if (sceneService != null && sceneService.isRunning(scene.getKey())) {
-                    player.sendMessage(UiText.warning("Stop the scene before moving, copying, or deleting beats."));
+                    player.sendMessage(UiText.warning("Stop the scene before copying or deleting beats."));
                     return;
                 }
                 if (slot == BEAT_DELETE_SLOT) {
@@ -1155,10 +1171,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                     openScript(player, scene.getKey());
                     return;
                 }
-                boolean changed = slot == BEAT_COPY_SLOT
-                        ? scene.duplicateBeat(beat.getId()).isPresent()
-                        : scene.moveBeat(beat.getId(), slot == BEAT_EARLIER_SLOT ? -1 : 1);
-                if (!changed)
+                if (scene.duplicateBeat(beat.getId()).isEmpty())
                     return;
                 scenes.save(scene);
                 GuiItems.click(player);

@@ -35,7 +35,7 @@ The scene editor has four columns:
 
 - Click a cell to edit what that NPC does in that beat. Hover over a head to see its actions; a grey cell means the NPC holds still while the others play. In the beat editor, the arrows step to the same NPC's previous or next beat.
 - **Add Beat** in the bottom bar adds a beat at the end. The arrows page through beats, and through roles when there are more than eight.
-- Click a beat to choose when the next beat starts, or to move, duplicate, or delete it.
+- Click a beat to choose when the next beat starts, or to duplicate or delete it. Shift-left-click a beat to move it up, shift-right-click to move it down.
 - The beat playing right now glows while the scene runs.
 
 ### Roles
