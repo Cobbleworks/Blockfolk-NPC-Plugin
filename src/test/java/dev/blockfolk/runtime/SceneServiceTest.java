@@ -172,6 +172,26 @@ class SceneServiceTest {
     }
 
     @Test
+    void aiContextDescribesTheSceneAndTheOtherNpcs() {
+        NpcInstance watcher = spawn("watcher");
+        spawn("luigi");
+        spawn("guard");
+        spawn("guard");
+        Scene train = scene("train", "watcher", "luigi", "guard");
+        train.setDisplayName("Last Train Is Late");
+        train.setDescription("The evening train is overdue.\nThe town waits at the station.");
+
+        assertTrue(service.aiContext(watcher).isEmpty());
+        service.startManually("train", null, null);
+        String context = service.aiContext(watcher).orElseThrow();
+
+        assertTrue(context.contains("Name: Last Train Is Late"), context);
+        assertTrue(context.contains("Phase: playing"), context);
+        assertTrue(context.contains("The evening train is overdue.\nThe town waits at the station."), context);
+        assertTrue(context.contains("Others in the scene: Luigi, Guard (2)"), context);
+    }
+
+    @Test
     void waitForCueHoldsUntilAnotherRoleGivesTheCue() {
         NpcInstance watcher = spawn("watcher");
         NpcInstance luigi = spawn("luigi");

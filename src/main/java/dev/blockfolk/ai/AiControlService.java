@@ -200,6 +200,7 @@ public final class AiControlService {
     private java.util.function.Predicate<NpcInstance> routePaused = instance -> false;
     private BiFunction<NpcInstance, NpcDefinition, String> navigationPurpose = (instance,
             definition) -> "a destination";
+    private Function<NpcInstance, java.util.Optional<String>> sceneContext = instance -> java.util.Optional.empty();
 
     public AiControlService(Plugin plugin, NpcDefinitionRepository definitions, NpcInstanceRegistry instances,
             NpcCombatService combat, LocationRepository locations, OpenRouterClient client, int cooldownSeconds,
@@ -220,6 +221,15 @@ public final class AiControlService {
         } : started;
         processingFinished = finished == null ? ignored -> {
         } : finished;
+    }
+
+    /**
+     * @param sceneContext
+     *            what an instance should know about the scene it plays in, or empty
+     *            when it plays none
+     */
+    public void setSceneContext(Function<NpcInstance, java.util.Optional<String>> sceneContext) {
+        this.sceneContext = sceneContext == null ? instance -> java.util.Optional.empty() : sceneContext;
     }
 
     /**
@@ -1655,6 +1665,7 @@ public final class AiControlService {
         }
         appendInventory(out, instance);
         appendNearby(out, instance, actor, settings, targets);
+        appendScene(out, instance);
         if (world != null) {
             out.append("\nEnvironment:\nTime: ").append(timeName(world.getTime())).append("\nWeather: ")
                     .append(world.hasStorm() ? "raining" : "clear").append("\nBiome: ")
@@ -1708,6 +1719,24 @@ public final class AiControlService {
             }
         }
         return new RequestContext(out.toString(), targets.build());
+    }
+
+    /**
+     * The scene the NPC plays in. Its description comes from the scene's author and
+     * sets the situation the NPC acts in.
+     */
+    private void appendScene(StringBuilder out, NpcInstance instance) {
+        String scene;
+        try {
+            scene = sceneContext.apply(instance).orElse(null);
+        } catch (RuntimeException error) {
+            plugin.getLogger().log(Level.WARNING, "Could not describe the scene of " + instance.getId(), error);
+            return;
+        }
+        if (scene == null || scene.isBlank())
+            return;
+        out.append("\nCurrent scene (set up by the NPC's author; stay in character and act within it):\n")
+                .append(scene.strip()).append('\n');
     }
 
     private void appendRoutes(StringBuilder out, NpcInstance instance, NpcDefinition definition,

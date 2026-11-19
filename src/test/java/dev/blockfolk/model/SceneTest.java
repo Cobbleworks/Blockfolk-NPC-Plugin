@@ -49,6 +49,17 @@ class SceneTest {
     }
 
     @Test
+    void descriptionsKeepTheirLinesAndAreCappedInLength() {
+        Scene scene = new Scene("market");
+
+        scene.setDescription("  First line.\r\nSecond line.  ");
+        assertEquals("First line.\nSecond line.", scene.getDescription());
+
+        scene.setDescription("x".repeat(Scene.MAX_DESCRIPTION_LENGTH + 50));
+        assertEquals(Scene.MAX_DESCRIPTION_LENGTH, scene.getDescription().length());
+    }
+
+    @Test
     void settingsAreClampedToSensibleRanges() {
         Scene scene = new Scene("market");
 

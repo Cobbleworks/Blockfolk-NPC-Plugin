@@ -17,7 +17,7 @@ Open **Scenes** from the main `/bf` menu or run `/bf scenes` to see every scene.
 
 The scene editor has four columns:
 
-- **Scene**: name and description. Middle-click the scene icon at the top to use the item in your hand as its icon.
+- **Scene**: name and description. The description opens a multi-line text box; NPCs with [AI behaviour](./ai-behaviour.md) get it as context while they play the scene, so describe the situation rather than giving orders. Middle-click the scene icon at the top to use the item in your hand as its icon.
 - **When**: the triggers, and whether they are switched on.
 - **Cast & Ending**: the roles, and when the scene ends.
 - **Playback**: start or stop the scene right now, the chance that a trigger really starts it, and the cooldown before triggers may start it again.

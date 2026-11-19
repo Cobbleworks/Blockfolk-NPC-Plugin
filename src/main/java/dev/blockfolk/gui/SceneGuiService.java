@@ -17,6 +17,7 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 
 import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.model.BehaviourEvent;
@@ -32,7 +33,19 @@ import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.SceneRepository;
 import dev.blockfolk.runtime.SceneService;
 import dev.blockfolk.util.LegacyText;
+import dev.blockfolk.util.TextUtil;
 import dev.blockfolk.util.UiText;
+import io.papermc.paper.dialog.Dialog;
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.DialogBase;
+import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.body.DialogBody;
+import io.papermc.paper.registry.data.dialog.input.DialogInput;
+import io.papermc.paper.registry.data.dialog.input.TextDialogInput;
+import io.papermc.paper.registry.data.dialog.type.DialogType;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickCallback;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 /**
  * Menus for scenes: the scene browser, the scene editor with triggers (one of
@@ -43,6 +56,7 @@ import dev.blockfolk.util.UiText;
 public final class SceneGuiService implements Listener, GuiService.SceneNavigation {
 
     private static final int PAGE_SIZE = 45;
+    private static final String DESCRIPTION_INPUT_KEY = "description";
     private static final int SUMMARY_SLOT = 4;
     private static final int NAME_SLOT = 19;
     private static final int DESCRIPTION_SLOT = 28;
@@ -65,6 +79,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             Map.entry(31, SceneTrigger.SNOW), Map.entry(32, SceneTrigger.THUNDER), Map.entry(33, SceneTrigger.CLEAR),
             Map.entry(40, SceneTrigger.PLAYER_ENTERS));
 
+    private final Plugin plugin;
     private final SceneRepository scenes;
     private final NpcDefinitionRepository definitions;
     private final LocationRepository locations;
@@ -78,8 +93,9 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     private final Map<java.util.UUID, String> presetFilters = new java.util.HashMap<>();
     private SceneService sceneService;
 
-    public SceneGuiService(SceneRepository scenes, NpcDefinitionRepository definitions, LocationRepository locations,
-            ChatInputService chatInput, Consumer<Player> mainMenuOpener) {
+    public SceneGuiService(Plugin plugin, SceneRepository scenes, NpcDefinitionRepository definitions,
+            LocationRepository locations, ChatInputService chatInput, Consumer<Player> mainMenuOpener) {
+        this.plugin = plugin;
         this.scenes = scenes;
         this.definitions = definitions;
         this.locations = locations;
@@ -220,8 +236,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     private ItemStack browserItem(Scene scene) {
         List<String> lore = new ArrayList<>();
         lore.add(LegacyText.DARK_GRAY + "Key: " + scene.getKey());
-        if (!scene.getDescription().isBlank())
-            lore.add(LegacyText.GRAY + scene.getDescription());
+        lore.addAll(descriptionLines(scene, 3));
         lore.add(LegacyText.GRAY + "Status: " + statusText(scene));
         lore.add(LegacyText.GRAY + "Roles: " + LegacyText.WHITE + scene.getRoles().size());
         lore.add(LegacyText.GRAY + "Starts: " + LegacyText.WHITE + triggerSummary(scene));
@@ -348,12 +363,18 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 "Test it, chance, and cooldown"));
         inventory.setItem(NAME_SLOT, GuiItems.item(Material.NAME_TAG, "Name",
                 List.of(LegacyText.WHITE + scene.getDisplayName(), "", GuiItems.hint("Click", "rename"))));
-        inventory.setItem(DESCRIPTION_SLOT,
-                GuiItems.item(Material.WRITABLE_BOOK, "Description",
-                        List.of(scene.getDescription().isBlank()
-                                ? LegacyText.DARK_GRAY + "No description"
-                                : LegacyText.WHITE + scene.getDescription(), "", GuiItems.hint("Click", "edit"),
-                                LegacyText.DARK_GRAY + "Enter 'clear' to remove it")));
+        List<String> descriptionLore = new ArrayList<>();
+        if (scene.getDescription().isBlank())
+            descriptionLore.add(LegacyText.DARK_GRAY + "No description");
+        else
+            descriptionLore.addAll(descriptionLines(scene, 8));
+        descriptionLore.add("");
+        descriptionLore.add(LegacyText.GRAY + "NPCs controlled by AI get it as");
+        descriptionLore.add(LegacyText.GRAY + "context while they play this scene.");
+        descriptionLore.add("");
+        descriptionLore.add(GuiItems.hint("Click", "edit"));
+        descriptionLore.add(LegacyText.DARK_GRAY + "Empty the field to remove it");
+        inventory.setItem(DESCRIPTION_SLOT, GuiItems.item(Material.WRITABLE_BOOK, "Description", descriptionLore));
         inventory.setItem(ENABLED_SLOT, GuiItems.toggle(Material.LIME_DYE, Material.GRAY_DYE, "Triggers",
                 scene.isEnabled(), "triggers start the scene", "only manual starts work", List.of()));
         inventory.setItem(TRIGGERS_SLOT, GuiItems.item(Material.CLOCK, "Starts When", triggerLore(scene)));
@@ -404,11 +425,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 scenes.save(scene);
                 reopen.run();
             }, reopen);
-            case DESCRIPTION_SLOT -> chatInput.request(player, "Enter the scene description (or 'clear'):", value -> {
-                scene.setDescription(value.equalsIgnoreCase("clear") ? "" : value);
-                scenes.save(scene);
-                reopen.run();
-            }, reopen);
+            case DESCRIPTION_SLOT -> openDescriptionDialog(player, scene);
             case ENABLED_SLOT -> {
                 scene.setEnabled(!scene.isEnabled());
                 scenes.save(scene);
@@ -462,6 +479,66 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             default -> {
             }
         }
+    }
+
+    /**
+     * Edits the description in a multi-line text box. Saving reopens the editor;
+     * cancelling or Escape just closes the dialog.
+     */
+    private void openDescriptionDialog(Player player, Scene scene) {
+        String sceneKey = scene.getKey();
+        String value = scene.getDescription();
+        ActionButton save = ActionButton.builder(Component.text("Save", NamedTextColor.GREEN))
+                .action(DialogAction.customClick((view, audience) -> {
+                    if (!(audience instanceof Player submitting)
+                            || !submitting.getUniqueId().equals(player.getUniqueId()))
+                        return;
+                    String input = view.getText(DESCRIPTION_INPUT_KEY);
+                    if (input == null)
+                        return;
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (!submitting.isOnline())
+                            return;
+                        scenes.find(sceneKey).ifPresent(current -> {
+                            current.setDescription(input);
+                            scenes.save(current);
+                        });
+                        openEditor(submitting, sceneKey);
+                    });
+                }, ClickCallback.Options.builder().uses(1).build())).build();
+        ActionButton cancel = ActionButton.builder(Component.text("Cancel", NamedTextColor.RED))
+                .action(DialogAction.customClick((view, audience) -> {
+                    if (audience instanceof Player cancelling && cancelling.getUniqueId().equals(player.getUniqueId()))
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            if (cancelling.isOnline())
+                                openEditor(cancelling, sceneKey);
+                        });
+                }, ClickCallback.Options.builder().uses(1).build())).build();
+        Dialog dialog = Dialog.create(builder -> builder.empty().base(DialogBase
+                .builder(Component.text("Scene Description: " + scene.getDisplayName())).canCloseWithEscape(true)
+                .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                .body(List.of(DialogBody.plainMessage(Component.text(
+                        "What happens in this scene and why. NPCs controlled by AI read it as context while"
+                                + " they play the scene, so describe the situation, not instructions.",
+                        NamedTextColor.GRAY), 400)))
+                .inputs(List.of(DialogInput.text(DESCRIPTION_INPUT_KEY, Component.text("Description")).width(400)
+                        .initial(value).maxLength(Math.max(Scene.MAX_DESCRIPTION_LENGTH, value.length()))
+                        .multiline(TextDialogInput.MultilineOptions.create(null, 160)).build()))
+                .build()).type(DialogType.confirmation(save, cancel)));
+        player.closeInventory();
+        player.showDialog(dialog);
+    }
+
+    /** The description wrapped for item lore, cut off after {@code maxLines}. */
+    private static List<String> descriptionLines(Scene scene, int maxLines) {
+        List<String> lines = new ArrayList<>();
+        for (String paragraph : scene.getDescription().split("\\R"))
+            TextUtil.wrap(paragraph, 40).forEach(line -> lines.add(LegacyText.WHITE + line));
+        if (lines.size() <= maxLines)
+            return lines;
+        List<String> shown = new ArrayList<>(lines.subList(0, maxLines));
+        shown.add(LegacyText.DARK_GRAY + "…");
+        return shown;
     }
 
     /**

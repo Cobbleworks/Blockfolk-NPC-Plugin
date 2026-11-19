@@ -24,6 +24,7 @@ public final class Scene {
     public static final int DEFAULT_DURATION_SECONDS = 300;
     public static final int MAX_DURATION_SECONDS = 24 * 60 * 60;
     public static final int MAX_ROLES = 28;
+    public static final int MAX_DESCRIPTION_LENGTH = 2000;
 
     private final String key;
     private String displayName;
@@ -100,8 +101,15 @@ public final class Scene {
         return description;
     }
 
+    /**
+     * Several lines are allowed. AI-controlled NPCs get it as context while they
+     * play the scene.
+     */
     public void setDescription(String description) {
-        this.description = description == null ? "" : description.trim();
+        String normalized = description == null ? "" : description.replace("\r\n", "\n").replace('\r', '\n').strip();
+        this.description = normalized.length() > MAX_DESCRIPTION_LENGTH
+                ? normalized.substring(0, MAX_DESCRIPTION_LENGTH)
+                : normalized;
     }
 
     public ItemStack getIcon() {

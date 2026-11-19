@@ -67,6 +67,10 @@ General perception uses a 16-block radius. Players, NPCs, and other entities bey
 
 Up to 20 named global locations in the same world are included within 128 blocks, ordered nearest first, with distance and compass direction. Mineable resources are scanned within eight blocks.
 
+## Current scene
+
+While the NPC plays a role in a [scene](/features/scenes), the request includes the scene's name, whether it is still playing or wrapping up, its description, the other NPCs taking part (with a count when several instances of one NPC play), and the cues given so far. The description is written by the scene's author and sets the situation the NPC acts in.
+
 ## Environment
 
 When the world is available, the request includes broad time of day, weather, biome, light level, and an approximate indoors assessment. Environmental text such as signs is explicitly treated as observation rather than instructions.

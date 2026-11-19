@@ -149,6 +149,42 @@ public final class SceneService {
         return scene == null ? Optional.empty() : Optional.of(scene.scene.getDisplayName());
     }
 
+    /**
+     * What an AI-controlled NPC should know about the scene it plays in: its name,
+     * description, whether it is ending, who else takes part, and the cues given so
+     * far. Empty when the instance plays no scene.
+     */
+    public Optional<String> aiContext(NpcInstance instance) {
+        ActiveScene scene = castOf.get(instance.getId());
+        if (scene == null)
+            return Optional.empty();
+        StringBuilder out = new StringBuilder();
+        out.append("Name: ").append(scene.scene.getDisplayName()).append('\n');
+        out.append("Phase: ").append(scene.phase == Phase.RUNNING ? "playing" : "ending (wrapping up)").append('\n');
+        if (!scene.scene.getDescription().isBlank())
+            out.append("Description:\n").append(scene.scene.getDescription()).append('\n');
+        Map<String, Integer> others = new LinkedHashMap<>();
+        for (Member member : scene.members.values()) {
+            if (member.instance.getId().equals(instance.getId()))
+                continue;
+            String name = definitions.find(member.instance.getDefinitionKey()).map(NpcDefinition::getDisplayName)
+                    .orElse(member.instance.getDefinitionKey());
+            others.merge(name, 1, Integer::sum);
+        }
+        out.append("Others in the scene: ");
+        if (others.isEmpty())
+            out.append("nobody");
+        else
+            out.append(String.join(", ", others.entrySet().stream().map(
+                    entry -> entry.getValue() == 1 ? entry.getKey() : entry.getKey() + " (" + entry.getValue() + ")")
+                    .toList()));
+        out.append('\n');
+        if (!scene.cues.isEmpty())
+            out.append("Cues given so far: ").append(String.join(", ", scene.cues.stream().sorted().toList()))
+                    .append('\n');
+        return Optional.of(out.toString());
+    }
+
     // ------------------------------------------------------- starting/stopping
 
     /**

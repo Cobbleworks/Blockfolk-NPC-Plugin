@@ -101,7 +101,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 getConfig().getString("mineskin-api-key", ""));
         routeGuiService = new RouteGuiService(this, routeRepository, locationRepository, definitionRepository,
                 instanceRegistry, chatInputService, this::openMainGui);
-        sceneGuiService = new SceneGuiService(sceneRepository, definitionRepository, locationRepository,
+        sceneGuiService = new SceneGuiService(this, sceneRepository, definitionRepository, locationRepository,
                 chatInputService, this::openMainGui);
         guiService = new GuiService(this, definitionRepository, routeRepository, instanceRegistry, chatInputService,
                 skinResolver, routeGuiService::openRoutes, routeGuiService::openNpcRoutes, routeGuiService::createRoute,
@@ -196,6 +196,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         sceneService.setCombatService(combatService);
         sceneService.setLocationResolver(key -> locationRepository.find(key).map(NamedLocation::location));
         behaviourService.setSceneService(sceneService);
+        aiControlService.setSceneContext(sceneService::aiContext);
         sceneGuiService.setSceneService(sceneService);
         routeMovementService = new RouteMovementService(this, definitionRepository, routeRepository, instanceRegistry,
                 combatService, behaviourService);
