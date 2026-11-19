@@ -32,6 +32,7 @@ public final class Scene {
     private String description = "";
     private ItemStack icon;
     private boolean enabled = true;
+    private boolean triggersAiBehaviour = true;
     private String areaLocationKey;
     private int areaRadius = DEFAULT_RADIUS;
     private final Set<SceneTrigger> triggers = EnumSet.noneOf(SceneTrigger.class);
@@ -138,6 +139,20 @@ public final class Scene {
      * The global location at the centre of the area the Player Enters trigger
      * watches, or null.
      */
+    /**
+     * Whether the cast's lines may start AI replies while the scene runs. When off,
+     * NPCs in the scene neither start nor join NPC conversations, and their
+     * preset's AI Trigger actions wait; AI Trigger actions in the scene's own rows
+     * still run.
+     */
+    public boolean triggersAiBehaviour() {
+        return triggersAiBehaviour;
+    }
+
+    public void setTriggersAiBehaviour(boolean triggersAiBehaviour) {
+        this.triggersAiBehaviour = triggersAiBehaviour;
+    }
+
     public String getAreaLocationKey() {
         return areaLocationKey;
     }

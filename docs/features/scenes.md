@@ -17,7 +17,7 @@ Open **Scenes** from the main `/bf` menu or run `/bf scenes` to see every scene.
 
 The scene editor has four columns:
 
-- **Scene**: name and description. The description opens a multi-line text box; NPCs with [AI behaviour](./ai-behaviour.md) get it as context while they play the scene, so describe the situation rather than giving orders. Middle-click the scene icon at the top to use the item in your hand as its icon.
+- **Scene**: name, description, and **Trigger AI Behaviour** (see [Scenes and AI](#scenes-and-ai)). The description opens a multi-line text box; NPCs with [AI behaviour](./ai-behaviour.md) get it as context while they play the scene, so describe the situation rather than giving orders. Middle-click the scene icon at the top to use the item in your hand as its icon.
 - **When**: the triggers, and whether they are switched on.
 - **Cast & Ending**: the **Script** with the roles and beats, and when the scene ends.
 - **Playback**: start or stop the scene right now, the chance that a trigger really starts it, and the cooldown before triggers may start it again.
@@ -71,6 +71,20 @@ The NPCs stay in the scene from the first beat to the last. Between beats they a
 ### Waiting for a player
 
 The **Next Beat** action moves the scene on to its next beat. Put it in a **While Active** row, for example **While Active: On Right-Click**, or in a question answer, and set the beat to **Only by Next Beat**: the scene then waits until a player talks to the NPC. Several Next Beat actions in the same beat move the scene on only once. Outside a scene, Next Beat does nothing.
+
+## Scenes and AI
+
+NPCs with [AI behaviour](./ai-behaviour.md) and **Respond to NPCs** answer what nearby NPCs say, including scripted **Send Dialog** lines. In a scripted conversation this gets in the way: the AI starts replying to the script, and those replies start more replies. (**Show Holo Dialog** never starts AI replies.)
+
+Switch **Trigger AI Behaviour** off in the scene editor to keep the AI quiet while the scene runs, including its wrap-up:
+
+- the lines of the NPCs in the scene start no AI replies, neither from each other nor from NPCs nearby;
+- the NPCs in the scene do not answer anything other NPCs say;
+- **AI Trigger** actions from the NPCs' own presets wait until the scene is over.
+
+The AI still runs when the scene asks for it: **AI Trigger** actions in beats, wrap-ups, and While Active rows work as usual. AI NPCs within hearing range still remember the scene's lines, so an AI Trigger in a later beat knows what was said. Replies to players chatting with the NPCs are not affected.
+
+The setting is on by default, so scenes behave as before.
 
 ## Triggers
 

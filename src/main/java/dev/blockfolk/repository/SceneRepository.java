@@ -112,6 +112,7 @@ public final class SceneRepository {
         section.set("description", scene.getDescription().isBlank() ? null : scene.getDescription());
         section.set("icon", scene.getIcon());
         section.set("enabled", scene.isEnabled());
+        section.set("trigger-ai-behaviour", scene.triggersAiBehaviour());
         if (scene.hasArea()) {
             section.set("area.location", scene.getAreaLocationKey());
             section.set("area.radius", scene.getAreaRadius());
@@ -166,6 +167,7 @@ public final class SceneRepository {
         if (icon instanceof ItemStack item)
             scene.setIcon(item);
         scene.setEnabled(section.getBoolean("enabled", true));
+        scene.setTriggersAiBehaviour(section.getBoolean("trigger-ai-behaviour", true));
         scene.setAreaLocationKey(section.getString("area.location"));
         scene.setAreaRadius(section.getInt("area.radius", Scene.DEFAULT_RADIUS));
         for (String stored : section.getStringList("triggers"))

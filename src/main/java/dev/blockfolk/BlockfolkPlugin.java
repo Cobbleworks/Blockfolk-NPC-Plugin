@@ -196,6 +196,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         sceneService.setCombatService(combatService);
         sceneService.setLocationResolver(key -> locationRepository.find(key).map(NamedLocation::location));
         behaviourService.setSceneService(sceneService);
+        conversationService.setQuietFilter(sceneService::suppressesAi);
         aiControlService.setSceneContext(sceneService::aiContext);
         sceneGuiService.setSceneService(sceneService);
         routeMovementService = new RouteMovementService(this, definitionRepository, routeRepository, instanceRegistry,

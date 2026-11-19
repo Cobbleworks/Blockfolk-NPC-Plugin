@@ -62,6 +62,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     private static final int SUMMARY_SLOT = 4;
     private static final int NAME_SLOT = 19;
     private static final int DESCRIPTION_SLOT = 28;
+    private static final int AI_BEHAVIOUR_SLOT = 37;
     private static final int TRIGGERS_SLOT = 21;
     private static final int ENABLED_SLOT = 30;
     private static final int SCRIPT_SLOT = 23;
@@ -398,6 +399,16 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         descriptionLore.add(GuiItems.hint("Click", "edit"));
         descriptionLore.add(LegacyText.DARK_GRAY + "Empty the field to remove it");
         inventory.setItem(DESCRIPTION_SLOT, GuiItems.item(Material.WRITABLE_BOOK, "Description", descriptionLore));
+        inventory.setItem(AI_BEHAVIOUR_SLOT,
+                GuiItems.toggle(Material.OXIDIZED_COPPER_GOLEM_STATUE, Material.GRAY_DYE, "Trigger AI Behaviour",
+                        scene.triggersAiBehaviour(), "the NPCs' lines may start AI replies",
+                        "only AI Trigger actions of the scene",
+                        List.of(LegacyText.GRAY + "When off, NPCs in this scene do not",
+                                LegacyText.GRAY + "answer other NPCs, and their lines start",
+                                LegacyText.GRAY + "no AI replies. AI Trigger actions in",
+                                LegacyText.GRAY + "beats, wrap-up, and While Active rows",
+                                LegacyText.GRAY + "still run; the preset's own wait.",
+                                LegacyText.GRAY + "Replies to player chat still work.")));
         inventory.setItem(ENABLED_SLOT, GuiItems.toggle(Material.LIME_DYE, Material.GRAY_DYE, "Triggers",
                 scene.isEnabled(), "triggers start the scene", "only manual starts work", List.of()));
         inventory.setItem(TRIGGERS_SLOT, GuiItems.item(Material.CLOCK, "Starts When", triggerLore(scene)));
@@ -449,6 +460,12 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 reopen.run();
             }, reopen);
             case DESCRIPTION_SLOT -> openDescriptionDialog(player, scene);
+            case AI_BEHAVIOUR_SLOT -> {
+                scene.setTriggersAiBehaviour(!scene.triggersAiBehaviour());
+                scenes.save(scene);
+                GuiItems.click(player);
+                reopen.run();
+            }
             case ENABLED_SLOT -> {
                 scene.setEnabled(!scene.isEnabled());
                 scenes.save(scene);

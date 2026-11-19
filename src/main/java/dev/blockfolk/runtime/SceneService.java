@@ -163,6 +163,16 @@ public final class SceneService {
         return Optional.of(skip.reason() + " (" + duration(tick - skip.tick()) + " ago)");
     }
 
+    /**
+     * Whether the instance plays in a scene that keeps AI quiet: its lines start no
+     * AI replies, it answers no other NPC, and its preset's AI Trigger actions
+     * wait. Holds during the wrap-up too.
+     */
+    public boolean suppressesAi(NpcInstance instance) {
+        ActiveScene scene = castOf.get(instance.getId());
+        return scene != null && !scene.scene.triggersAiBehaviour();
+    }
+
     /** The scene the instance plays in, if any. */
     public Optional<String> sceneOf(NpcInstance instance) {
         ActiveScene scene = castOf.get(instance.getId());

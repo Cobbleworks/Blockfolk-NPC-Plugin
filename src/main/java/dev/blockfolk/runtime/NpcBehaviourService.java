@@ -71,6 +71,7 @@ import dev.blockfolk.util.EntityHealth;
 import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
+import dev.blockfolk.model.BehaviourActions;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.DayPeriod;
 import dev.blockfolk.model.FightOptions;
@@ -332,6 +333,9 @@ public final class NpcBehaviourService implements Listener {
             } else if (sceneService.isCast(instance) && isScheduleEvent(event)) {
                 // The scene owns the NPC's day; its time-of-day routine waits.
                 actions = List.of();
+            } else if (sceneService.suppressesAi(instance)) {
+                // Only AI Trigger actions the scene itself asks for may run.
+                actions = BehaviourActions.removeIf(actions, action -> action.type() == BehaviourActionType.AI_TRIGGER);
             }
         }
         executeSequence(event, actions, 0, instance, definition, actor, eventDetail, alive, completion);
@@ -937,7 +941,7 @@ public final class NpcBehaviourService implements Listener {
         switch (action.type()) {
             case SEND_DIALOG -> {
                 sendDialog(event, instance, definition, action.value(), actor);
-                npcSpoke(instance, definition, action.value());
+                npcSpoke(instance, definition, action.value(), true);
             }
             // Holo Dialog is often repeating flavour text, so NPCs do not answer it.
             case SHOW_HOLO_DIALOG -> dialogService.showHologram(instance, definition, action.value());
@@ -1066,7 +1070,7 @@ public final class NpcBehaviourService implements Listener {
                         conversationService.npcAnsweredPlayer(instance, definition, action.text(),
                                 actor instanceof Player player ? player : null, chatMessage);
                     else
-                        npcSpoke(instance, definition, action.text());
+                        npcSpoke(instance, definition, action.text(), false);
                 }
                 case PLAY_ANIMATION -> playAiAnimation(instance, action.animation());
                 case START_COMBAT -> {
@@ -2829,9 +2833,13 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private void npcSpoke(NpcInstance instance, NpcDefinition definition, String line) {
+    /**
+     * {@code scripted}: a Send Dialog line, which the speaker's AI has not noted
+     * yet.
+     */
+    private void npcSpoke(NpcInstance instance, NpcDefinition definition, String line, boolean scripted) {
         if (conversationService != null)
-            conversationService.npcSpoke(instance, definition, line);
+            conversationService.npcSpoke(instance, definition, line, scripted);
     }
 
     private String placeholders(String value, NpcInstance instance, NpcDefinition definition, Entity actor) {

@@ -320,6 +320,23 @@ class SceneServiceTest {
     }
 
     @Test
+    void aQuietSceneSuppressesAiForItsCastUntilItEnds() {
+        NpcInstance watcher = spawn("watcher");
+        NpcInstance stranger = spawn("stranger");
+        Scene train = scene("train", "watcher");
+        train.setTriggersAiBehaviour(false);
+        scene("loud", "stranger");
+
+        service.startManually("train", null, null);
+        service.startManually("loud", null, null);
+
+        assertTrue(service.suppressesAi(watcher));
+        assertFalse(service.suppressesAi(stranger));
+        service.forceStop("train");
+        assertFalse(service.suppressesAi(watcher));
+    }
+
+    @Test
     void reactionsReplacePresetEventsOnlyWhileTheSceneRuns() {
         NpcInstance wago = spawn("wago");
         Scene market = scene("market", "wago");

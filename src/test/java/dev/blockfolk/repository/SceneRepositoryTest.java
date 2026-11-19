@@ -39,6 +39,7 @@ class SceneRepositoryTest {
         Scene scene = Scene.create("jungle/Market by the Lake");
         scene.setDescription("The traders meet at the lake.");
         scene.setEnabled(false);
+        scene.setTriggersAiBehaviour(false);
         scene.setAreaLocationKey("jungle/lake");
         scene.setAreaRadius(40);
         scene.setTrigger(SceneTrigger.NOON, true);
@@ -72,6 +73,7 @@ class SceneRepositoryTest {
         assertEquals("Market by the Lake", read.getDisplayName());
         assertEquals("The traders meet at the lake.", read.getDescription());
         assertFalse(read.isEnabled());
+        assertFalse(read.triggersAiBehaviour());
         assertEquals("jungle/lake", read.getAreaLocationKey());
         assertEquals(40, read.getAreaRadius());
         assertEquals(Set.of(SceneTrigger.NOON, SceneTrigger.PLAYER_ENTERS), read.getTriggers());
