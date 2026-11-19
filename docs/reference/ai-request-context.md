@@ -69,7 +69,7 @@ Up to 20 named global locations in the same world are included within 128 blocks
 
 ## Current scene
 
-While the NPC plays a role in a [scene](/features/scenes), the request includes the scene's name, whether it is still playing or wrapping up, its description, the other NPCs taking part (with a count when several instances of one NPC play), and the cues given so far. The description is written by the scene's author and sets the situation the NPC acts in.
+While the NPC plays a role in a [scene](/features/scenes), the request includes the scene's name, whether it is still playing or wrapping up, its description, the other NPCs taking part (with a count when several instances of one NPC play), and, for scenes with several beats, which beat it is at. The description is written by the scene's author and sets the situation the NPC acts in.
 
 ## Environment
 

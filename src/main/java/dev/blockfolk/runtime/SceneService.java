@@ -29,6 +29,8 @@ import dev.blockfolk.model.DayPeriod;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.Scene;
+import dev.blockfolk.model.SceneBeat;
+import dev.blockfolk.model.SceneBeatAdvance;
 import dev.blockfolk.model.SceneEnding;
 import dev.blockfolk.model.SceneRole;
 import dev.blockfolk.model.SceneTrigger;
@@ -37,9 +39,10 @@ import dev.blockfolk.repository.SceneRepository;
 import dev.blockfolk.util.UiText;
 
 /**
- * Runs scenes: casts their roles, plays every role's lane at the same time,
- * passes cues between lanes, watches triggers and endings, and hands the NPCs
- * back to their normal routine afterwards.
+ * Runs scenes: casts their roles, plays the scene's beats one after another
+ * (every role's actions of a beat at the same time), watches triggers and
+ * endings, and hands the NPCs back to their normal routine afterwards. The cast
+ * is held from the first beat to the last, so a started scene plays through.
  *
  * <p>
  * An NPC plays in one scene at a time. A scene that cannot cast a required role
@@ -49,8 +52,8 @@ import dev.blockfolk.util.UiText;
 public final class SceneService {
 
     private static final long TICK_INTERVAL = 10L;
-    /** Scenes that end "when everyone is done" stop after this long anyway. */
-    private static final long LANES_FINISHED_LIMIT_TICKS = 30L * 60L * 20L;
+    /** Scenes that end after their last beat stop after this long anyway. */
+    private static final long BEATS_FINISHED_LIMIT_TICKS = 30L * 60L * 20L;
     /** Wrap-up actions that never finish are cut off after this long. */
     private static final long WRAP_UP_LIMIT_TICKS = 5L * 60L * 20L;
     /** The same skip reason is announced at most once per this many ticks. */
@@ -130,9 +133,26 @@ public final class SceneService {
             long remaining = cooldownUntilTick.getOrDefault(sceneKey, 0L) - tick;
             return remaining > 0 ? "Cooling down (" + duration(remaining) + " left)" : "Not running";
         }
-        String phase = scene.phase == Phase.RUNNING ? "Running" : "Wrapping up";
+        String phase = scene.phase == Phase.WRAPPING_UP
+                ? "Wrapping up"
+                : scene.scriptDone ? "Running, every beat done," : "Running beat " + beatLabel(scene) + ",";
         return phase + " for " + duration(tick - scene.startTick) + " (" + scene.members.size()
                 + (scene.members.size() == 1 ? " NPC)" : " NPCs)");
+    }
+
+    /**
+     * The id of the beat the scene plays now; empty when it is not running, every
+     * beat is done, or it is wrapping up.
+     */
+    public Optional<String> currentBeat(String sceneKey) {
+        ActiveScene scene = active.get(sceneKey);
+        if (scene == null || scene.phase != Phase.RUNNING || scene.scriptDone || scene.beat == null)
+            return Optional.empty();
+        return Optional.of(scene.beat.getId());
+    }
+
+    private static String beatLabel(ActiveScene scene) {
+        return (scene.beatIndex + 1) + "/" + scene.scene.getBeats().size();
     }
 
     /** Why the scene was skipped the last time, if it was skipped since startup. */
@@ -151,8 +171,8 @@ public final class SceneService {
 
     /**
      * What an AI-controlled NPC should know about the scene it plays in: its name,
-     * description, whether it is ending, who else takes part, and the cues given so
-     * far. Empty when the instance plays no scene.
+     * description, whether it is ending, who else takes part, and how far the scene
+     * got. Empty when the instance plays no scene.
      */
     public Optional<String> aiContext(NpcInstance instance) {
         ActiveScene scene = castOf.get(instance.getId());
@@ -179,8 +199,11 @@ public final class SceneService {
                     entry -> entry.getValue() == 1 ? entry.getKey() : entry.getKey() + " (" + entry.getValue() + ")")
                     .toList()));
         out.append('\n');
-        if (!scene.cues.isEmpty())
-            out.append("Cues given so far: ").append(String.join(", ", scene.cues.stream().sorted().toList()))
+        if (scene.phase == Phase.RUNNING && scene.scene.getBeats().size() > 1)
+            out.append("Progress: ")
+                    .append(scene.scriptDone
+                            ? "every beat is done"
+                            : "beat " + (scene.beatIndex + 1) + " of " + scene.scene.getBeats().size())
                     .append('\n');
         return Optional.of(out.toString());
     }
@@ -202,7 +225,8 @@ public final class SceneService {
     }
 
     /**
-     * Start Scene action. Runs a tick later so the calling lane can finish first.
+     * Start Scene action. Runs a tick later so the calling actions can finish
+     * first.
      */
     public void startFromAction(String sceneKey, Entity actor) {
         if (sceneKey == null)
@@ -300,8 +324,8 @@ public final class SceneService {
 
     /**
      * Every free loaded instance of a role's preset plays it. A role without a
-     * single free instance skips the whole scene, so no lane waits for a cue that
-     * nobody gives.
+     * single free instance skips the whole scene, so it never plays with a part
+     * missing.
      */
     private Casting cast(Scene scene, World world) {
         Set<UUID> taken = new HashSet<>();
@@ -326,7 +350,7 @@ public final class SceneService {
             if (unclaimed.isEmpty())
                 return Casting
                         .failed(name + " plays two roles in this scene; an NPC plays one role per scene, so remove"
-                                + " the extra role or move its steps into a follow-up scene");
+                                + " the extra role and give its actions to the other one");
             List<NpcInstance> free = unclaimed.stream().filter(instance -> blocker(instance) == null).toList();
             if (free.isEmpty())
                 return Casting.failed(name + " " + blocker(unclaimed.getFirst()));
@@ -362,19 +386,7 @@ public final class SceneService {
             castOf.put(member.instance.getId(), running);
             behaviour.interruptMovement(member.instance);
         }
-        String detail = "The scene '" + scene.getDisplayName() + "' started.";
-        for (Member member : List.copyOf(members)) {
-            List<BehaviourAction> lane = member.role.getLane();
-            if (lane.isEmpty()) {
-                member.laneDone = true;
-                continue;
-            }
-            Run run = new Run();
-            member.run = run;
-            behaviour.runSceneSequence(lane, member.instance, actor, detail, () -> isLive(running, member, run),
-                    () -> laneFinished(running, member, run));
-        }
-        checkLanesFinished(running);
+        startBeat(running, 0);
     }
 
     private boolean isLive(ActiveScene scene, Member member, Run run) {
@@ -382,19 +394,143 @@ public final class SceneService {
                 && scene.members.get(member.instance.getId()) == member;
     }
 
-    private void laneFinished(ActiveScene scene, Member member, Run run) {
-        if (run.cancelled || member.run != run)
-            return;
-        member.laneDone = true;
-        member.run = null;
-        checkLanesFinished(scene);
+    // ----------------------------------------------------------------- beats
+
+    /**
+     * Starts the beat at {@code index}: actions still running from the previous
+     * beat are cut off, and every role with actions in this beat starts them.
+     */
+    private void startBeat(ActiveScene scene, int index) {
+        SceneBeat beat = scene.scene.getBeats().get(index);
+        scene.beatIndex = index;
+        scene.beat = beat;
+        scene.beatSerial++;
+        int serial = scene.beatSerial;
+        String detail = index == 0
+                ? "The scene '" + scene.scene.getDisplayName() + "' started."
+                : "The scene '" + scene.scene.getDisplayName() + "' moved on to beat " + (index + 1) + ".";
+        // A row that finishes at once must not move the scene on while the
+        // other rows of this beat are still being started.
+        scene.startingBeat = true;
+        for (Member member : List.copyOf(scene.members.values())) {
+            cutRun(member);
+            List<BehaviourAction> actions = beat.getActions(member.role.getId());
+            member.beatDone = actions.isEmpty();
+            if (actions.isEmpty())
+                continue;
+            Run run = new Run();
+            member.run = run;
+            behaviour.runSceneSequence(actions, member.instance, scene.actor(), detail,
+                    () -> isLive(scene, member, run), () -> beatFinished(scene, member, run));
+            if (scene.beatSerial != serial || active.get(scene.scene.getKey()) != scene) {
+                scene.startingBeat = false;
+                return;
+            }
+        }
+        scene.startingBeat = false;
+        if (beat.getAdvance() == SceneBeatAdvance.AFTER_TIME)
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (scene.beatSerial == serial)
+                    advance(scene);
+            }, beat.getSeconds() * 20L);
+        checkBeatDone(scene);
     }
 
-    private void checkLanesFinished(ActiveScene scene) {
-        if (scene.phase != Phase.RUNNING || scene.scene.getEnding() != SceneEnding.LANES_FINISHED)
+    /** Stops the member's running actions, if any. */
+    private void cutRun(Member member) {
+        if (member.run == null)
             return;
-        if (scene.members.values().stream().allMatch(member -> member.laneDone))
+        member.run.cancelled = true;
+        member.run = null;
+        behaviour.interruptMovement(member.instance);
+    }
+
+    private void beatFinished(ActiveScene scene, Member member, Run run) {
+        if (run.cancelled || member.run != run)
+            return;
+        member.run = null;
+        member.beatDone = true;
+        checkBeatDone(scene);
+    }
+
+    /** Moves on once the current beat's advance rule is met. */
+    private void checkBeatDone(ActiveScene scene) {
+        if (!isPlaying(scene) || scene.startingBeat)
+            return;
+        SceneBeat beat = scene.beat;
+        boolean done = switch (beat.getAdvance()) {
+            case EVERYONE_DONE -> scene.members.values().stream().allMatch(member -> member.beatDone);
+            // Without the chosen role (removed, or its NPCs left), wait for everyone.
+            case ROLE_DONE -> beat.getAdvanceRoleId() == null || scene.scene.findRole(beat.getAdvanceRoleId()).isEmpty()
+                    ? scene.members.values().stream().allMatch(member -> member.beatDone)
+                    : scene.members.values().stream()
+                            .filter(member -> member.role.getId().equals(beat.getAdvanceRoleId()))
+                            .allMatch(member -> member.beatDone);
+            case AFTER_TIME, NEXT_BEAT_ONLY -> false;
+        };
+        if (done)
+            advance(scene);
+    }
+
+    /**
+     * Starts the next beat. After the last beat the scene ends if it ends after its
+     * last beat, and otherwise holds its cast until its ending.
+     */
+    private void advance(ActiveScene scene) {
+        if (!isPlaying(scene))
+            return;
+        int next = scene.beatIndex + 1;
+        if (next < scene.scene.getBeats().size()) {
+            startBeat(scene, next);
+            return;
+        }
+        scene.scriptDone = true;
+        scene.beatSerial++;
+        for (Member member : scene.members.values()) {
+            cutRun(member);
+            member.beatDone = true;
+        }
+        if (scene.scene.getEnding() == SceneEnding.BEATS_FINISHED)
             beginWrapUp(scene);
+    }
+
+    /** Whether the scene still works through its beats. */
+    private boolean isPlaying(ActiveScene scene) {
+        return scene.phase == Phase.RUNNING && !scene.scriptDone && scene.beat != null
+                && active.get(scene.scene.getKey()) == scene;
+    }
+
+    /**
+     * Next Beat action: the instance's scene moves on to its next beat, cutting off
+     * what still runs in the current one. Runs a tick later so the calling actions
+     * finish first; several Next Beat actions in the same beat move on only once.
+     */
+    public void nextBeat(NpcInstance instance) {
+        ActiveScene scene = castOf.get(instance.getId());
+        if (scene == null || !isPlaying(scene))
+            return;
+        int serial = scene.beatSerial;
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (scene.beatSerial == serial)
+                advance(scene);
+        });
+    }
+
+    /**
+     * Whether the member has nothing left to do in the script: it finished the
+     * current beat and has no actions in a later one.
+     */
+    private static boolean partDone(ActiveScene scene, Member member) {
+        if (scene.scriptDone)
+            return true;
+        if (!member.beatDone)
+            return false;
+        List<SceneBeat> beats = scene.scene.getBeats();
+        for (int index = scene.beatIndex + 1; index < beats.size(); index++) {
+            if (beats.get(index).hasActions(member.role.getId()))
+                return false;
+        }
+        return true;
     }
 
     private void beginWrapUp(ActiveScene scene) {
@@ -402,7 +538,7 @@ public final class SceneService {
             return;
         scene.phase = Phase.WRAPPING_UP;
         scene.wrapUpTick = tick;
-        scene.waiters.clear();
+        scene.beatSerial++;
         String detail = "The scene '" + scene.scene.getDisplayName() + "' ended.";
         for (Member member : List.copyOf(scene.members.values())) {
             if (member.run != null) {
@@ -453,7 +589,6 @@ public final class SceneService {
         active.remove(scene.scene.getKey());
         scene.members.keySet().forEach(id -> castOf.remove(id, scene));
         scene.members.clear();
-        scene.waiters.clear();
         if (scene.scene.getCooldownSeconds() > 0)
             cooldownUntilTick.put(scene.scene.getKey(), tick + scene.scene.getCooldownSeconds() * 20L);
     }
@@ -469,47 +604,14 @@ public final class SceneService {
         if (scene == null || scene.phase != Phase.RUNNING)
             return null;
         Member member = scene.members.get(instance.getId());
-        if (member == null || event == BehaviourEvent.IDLE && !member.laneDone)
+        // Idle reactions wait until the role played its part in every beat.
+        if (member == null || event == BehaviourEvent.IDLE && !partDone(scene, member))
             return null;
         List<BehaviourAction> actions = member.role.getReaction(event);
         if (actions.isEmpty())
             return null;
         return new Reaction(actions, () -> scene.phase == Phase.RUNNING && active.get(scene.scene.getKey()) == scene
                 && scene.members.get(instance.getId()) == member);
-    }
-
-    /**
-     * Give Cue: lets every lane waiting for this cue in the instance's scene go on.
-     */
-    public void cue(NpcInstance instance, String cue) {
-        ActiveScene scene = castOf.get(instance.getId());
-        if (scene == null || cue == null || scene.phase != Phase.RUNNING)
-            return;
-        String name = normalizeCue(cue);
-        if (!scene.cues.add(name))
-            return;
-        List<Runnable> waiting = scene.waiters.remove(name);
-        if (waiting != null)
-            Bukkit.getScheduler().runTask(plugin, () -> waiting.forEach(Runnable::run));
-    }
-
-    /**
-     * Wait For Cue: holds the lane until the cue is given. Returns false when the
-     * lane may go on at once: the cue was already given, or the NPC plays no scene.
-     */
-    public boolean awaitCue(NpcInstance instance, String cue, Runnable continuation) {
-        ActiveScene scene = castOf.get(instance.getId());
-        if (scene == null || cue == null || scene.phase != Phase.RUNNING)
-            return false;
-        String name = normalizeCue(cue);
-        if (scene.cues.contains(name))
-            return false;
-        scene.waiters.computeIfAbsent(name, ignored -> new ArrayList<>()).add(continuation);
-        return true;
-    }
-
-    static String normalizeCue(String cue) {
-        return cue.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     // ------------------------------------------------------------ ticking
@@ -559,12 +661,12 @@ public final class SceneService {
             // Despawned, dead, or unloaded: the scene goes on without it.
             if (member.run != null)
                 member.run.cancelled = true;
-            member.laneDone = true;
+            member.beatDone = true;
             release(scene, member);
         }
         if (active.get(scene.scene.getKey()) != scene)
             return;
-        checkLanesFinished(scene);
+        checkBeatDone(scene);
         if (scene.phase == Phase.WRAPPING_UP && tick - scene.wrapUpTick >= WRAP_UP_LIMIT_TICKS) {
             plugin.getLogger().warning(() -> "The wrap-up of scene '" + scene.scene.getKey()
                     + "' took longer than five minutes and was cut off.");
@@ -578,7 +680,7 @@ public final class SceneService {
             return;
         long elapsed = tick - scene.startTick;
         boolean end = switch (scene.scene.getEnding()) {
-            case LANES_FINISHED -> elapsed >= LANES_FINISHED_LIMIT_TICKS;
+            case BEATS_FINISHED -> elapsed >= BEATS_FINISHED_LIMIT_TICKS;
             case DURATION -> elapsed >= scene.scene.getDurationSeconds() * 20L;
             case TIME_OF_DAY -> scene.world != null
                     && crossed.getOrDefault(scene.world.getUID(), List.of()).contains(scene.scene.getEndPeriod());
@@ -748,10 +850,16 @@ public final class SceneService {
         private final World world;
         private final UUID actorId;
         private final Map<UUID, Member> members = new LinkedHashMap<>();
-        private final Set<String> cues = new HashSet<>();
-        private final Map<String, List<Runnable>> waiters = new HashMap<>();
         private Phase phase = Phase.RUNNING;
         private long wrapUpTick;
+        /** The beat playing now, and its position when it started. */
+        private SceneBeat beat;
+        private int beatIndex;
+        /** Changes whenever the scene moves on, so late callbacks are ignored. */
+        private int beatSerial;
+        private boolean startingBeat;
+        /** Every beat is done; the cast stays until the scene's ending. */
+        private boolean scriptDone;
 
         private ActiveScene(Scene scene, long startTick, World world, Entity actor) {
             this.scene = scene;
@@ -769,7 +877,8 @@ public final class SceneService {
         private final NpcInstance instance;
         private final SceneRole role;
         private Run run;
-        private boolean laneDone;
+        /** Finished its actions in the current beat, or has none in it. */
+        private boolean beatDone;
 
         private Member(NpcInstance instance, SceneRole role) {
             this.instance = instance;

@@ -87,33 +87,84 @@ class SceneTest {
     }
 
     @Test
-    void rowsHoldAtMostSevenActions() {
-        SceneRole role = new SceneRole("watcher", "watcher");
+    void beatRowsHoldAtMostSevenActions() {
+        SceneBeat beat = new SceneBeat();
         List<BehaviourAction> actions = java.util.Collections.nCopies(9,
                 new BehaviourAction(BehaviourActionType.WAVE, null));
 
-        role.setLane(actions);
+        beat.setActions("watcher", actions);
 
-        assertEquals(SceneRole.MAX_ACTIONS, role.getLane().size());
+        assertEquals(SceneRole.MAX_ACTIONS, beat.getActions("watcher").size());
+        beat.setActions("watcher", List.of());
+        assertFalse(beat.hasActions("watcher"));
     }
 
     @Test
-    void cueNamesAndRouteCleanupLookInsideQuestionBranches() {
+    void aSceneAlwaysHasAtLeastOneBeat() {
+        Scene scene = new Scene("train");
+        SceneBeat only = scene.getBeats().getFirst();
+
+        assertTrue(scene.removeBeat(only.getId()));
+        assertEquals(1, scene.getBeats().size());
+        scene.setBeats(List.of());
+        assertEquals(1, scene.getBeats().size());
+    }
+
+    @Test
+    void beatsCanBeMovedDuplicatedAndRemovedByTheirId() {
+        Scene scene = new Scene("train");
+        SceneBeat first = scene.getBeats().getFirst();
+        first.setActions("watcher", List.of(new BehaviourAction(BehaviourActionType.WAVE, null)));
+        SceneBeat second = scene.addBeat();
+
+        assertTrue(scene.moveBeat(second.getId(), -1));
+        assertEquals(List.of(second, first), scene.getBeats());
+        assertFalse(scene.moveBeat(second.getId(), -1));
+
+        SceneBeat copy = scene.duplicateBeat(first.getId()).orElseThrow();
+        assertEquals(2, scene.beatIndex(copy.getId()));
+        assertFalse(copy.getId().equals(first.getId()));
+        assertEquals(first.getActions("watcher"), copy.getActions("watcher"));
+
+        assertTrue(scene.removeBeat(second.getId()));
+        assertEquals(List.of(first, copy), scene.getBeats());
+        assertEquals(-1, scene.beatIndex(second.getId()));
+    }
+
+    @Test
+    void removingARoleRemovesItsBeatActionsAndTheRuleWaitingForIt() {
+        Scene scene = new Scene("train");
+        SceneRole luigi = scene.addRole("luigi");
+        SceneBeat beat = scene.getBeats().getFirst();
+        beat.setActions(luigi.getId(), List.of(new BehaviourAction(BehaviourActionType.WAVE, null)));
+        beat.setAdvance(SceneBeatAdvance.ROLE_DONE);
+        beat.setAdvanceRoleId(luigi.getId());
+
+        assertTrue(scene.removeRole(luigi.getId()));
+
+        assertFalse(beat.hasActions("luigi"));
+        assertEquals(SceneBeatAdvance.EVERYONE_DONE, beat.getAdvance());
+        assertEquals(null, beat.getAdvanceRoleId());
+    }
+
+    @Test
+    void actionCleanupLooksInsideBeatsAndQuestionBranches() {
         Scene scene = new Scene("train");
         SceneRole watcher = scene.addRole("watcher");
         BehaviourAction route = new BehaviourAction(BehaviourActionType.SET_ROUTE, "station");
-        NpcQuestion question = new NpcQuestion(UUID.randomUUID(), "Ready?", List
-                .of(new QuestionOption("Yes", List.of(route, new BehaviourAction(BehaviourActionType.CUE, "told")))),
+        NpcQuestion question = new NpcQuestion(UUID.randomUUID(), "Ready?", List.of(
+                new QuestionOption("Yes", List.of(route, new BehaviourAction(BehaviourActionType.NEXT_BEAT, null)))),
                 List.of());
-        watcher.setLane(List.of(BehaviourAction.ask(question)));
+        scene.getBeats().getFirst().setActions(watcher.getId(), List.of(BehaviourAction.ask(question)));
         SceneRole luigi = scene.addRole("luigi");
-        luigi.setLane(List.of(new BehaviourAction(BehaviourActionType.WAIT_FOR_CUE, "told"), route));
+        scene.addBeat().setActions(luigi.getId(), List.of(route));
+        luigi.setWrapUp(List.of(route));
 
-        assertEquals(List.of("told"), scene.cueNames());
         assertTrue(scene.removeActions(action -> action.type() == BehaviourActionType.SET_ROUTE));
         List<BehaviourActionType> remaining = new java.util.ArrayList<>();
         scene.forEachAction(action -> remaining.add(action.type()));
-        assertEquals(List.of(BehaviourActionType.CUE, BehaviourActionType.WAIT_FOR_CUE), remaining);
+        assertEquals(List.of(BehaviourActionType.NEXT_BEAT), remaining);
+        assertFalse(scene.getBeats().get(1).hasActions("luigi"));
         assertFalse(scene.removeActions(action -> action.type() == BehaviourActionType.SET_ROUTE));
     }
 
@@ -121,8 +172,9 @@ class SceneTest {
     void startedScenesListTheChainWithoutTheSceneItself() {
         Scene scene = new Scene("western/train");
         SceneRole watcher = scene.addRole("watcher");
-        watcher.setLane(List.of(new BehaviourAction(BehaviourActionType.START_SCENE, "Western/Saloon"),
-                new BehaviourAction(BehaviourActionType.START_SCENE, "western/train")));
+        scene.getBeats().getFirst().setActions(watcher.getId(),
+                List.of(new BehaviourAction(BehaviourActionType.START_SCENE, "Western/Saloon"),
+                        new BehaviourAction(BehaviourActionType.START_SCENE, "western/train")));
         watcher.setWrapUp(List.of(new BehaviourAction(BehaviourActionType.START_SCENE, "western/saloon"),
                 new BehaviourAction(BehaviourActionType.START_SCENE, "western/night")));
 
@@ -135,7 +187,9 @@ class SceneTest {
         assertEquals(SceneTrigger.PLAYER_ENTERS, SceneTrigger.fromStored("player-enters").orElseThrow());
         assertEquals(SceneTrigger.NOON, SceneTrigger.forPeriod(DayPeriod.NOON));
         assertTrue(SceneTrigger.fromStored("meteor-shower").isEmpty());
-        assertEquals(SceneEnding.LANES_FINISHED, SceneEnding.fromStored("nonsense"));
+        assertEquals(SceneEnding.BEATS_FINISHED, SceneEnding.fromStored("nonsense"));
+        assertEquals(SceneEnding.BEATS_FINISHED, SceneEnding.fromStored("lanes-finished"));
+        assertEquals(SceneBeatAdvance.NEXT_BEAT_ONLY, SceneBeatAdvance.fromStored("next-beat-only"));
         assertEquals(SceneEnding.WEATHER_CHANGES, SceneEnding.fromStored("weather-changes"));
     }
 

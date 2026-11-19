@@ -12,7 +12,7 @@ Spawning a preset creates one NPC by default. Additional copies are created expl
 
 A behaviour routine starts with an **event** such as a player approaching, the NPC taking damage, or a route point being reached. The attached **actions** run from left to right. Actions can speak, move, fight, interact with the world, emit another event, or invoke AI.
 
-[Scenes](/features/scenes) coordinate several NPCs. Each NPC playing a role runs its own action row at the same time as the others, and cues keep them in step. A scene starts at a time of day, on a weather change, when a player enters its area, or on command.
+[Scenes](/features/scenes) coordinate several NPCs. A scene's script runs beat by beat: in each beat every NPC playing a role runs its actions at the same time, and then the next beat starts. A scene starts at a time of day, on a weather change, when a player enters its area, or on command.
 
 ## Routes and locations
 

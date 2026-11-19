@@ -23,6 +23,8 @@ import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.DayPeriod;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.Scene;
+import dev.blockfolk.model.SceneBeat;
+import dev.blockfolk.model.SceneBeatAdvance;
 import dev.blockfolk.model.SceneEnding;
 import dev.blockfolk.model.SceneRole;
 import dev.blockfolk.model.SceneTrigger;
@@ -46,8 +48,16 @@ class SceneRepositoryTest {
         scene.setEnding(SceneEnding.TIME_OF_DAY);
         scene.setEndPeriod(DayPeriod.EVENING);
         SceneRole wago = scene.addRole("wago");
-        wago.setLane(List.of(new BehaviourAction(BehaviourActionType.WAIT, "120.0"),
+        SceneRole smith = scene.addRole("smith");
+        SceneBeat arrive = scene.getBeats().getFirst();
+        arrive.setActions(wago.getId(), List.of(new BehaviourAction(BehaviourActionType.WAIT, "120.0"),
                 new BehaviourAction(BehaviourActionType.MOVE_TO, "location:jungle/lake")));
+        arrive.setAdvance(SceneBeatAdvance.ROLE_DONE);
+        arrive.setAdvanceRoleId(wago.getId());
+        SceneBeat greet = scene.addBeat();
+        greet.setActions(smith.getId(), List.of(new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Welcome!")));
+        greet.setAdvance(SceneBeatAdvance.AFTER_TIME);
+        greet.setSeconds(45);
         wago.setWrapUp(List.of(new BehaviourAction(BehaviourActionType.GO_BACK, null)));
         wago.setReaction(BehaviourEvent.PLAYER_APPROACH,
                 List.of(new BehaviourAction(BehaviourActionType.OPEN_SHOP, "wago")));
@@ -71,9 +81,52 @@ class SceneRepositoryTest {
         assertEquals(DayPeriod.EVENING, read.getEndPeriod());
         SceneRole role = read.findRole(wago.getId()).orElseThrow();
         assertEquals("wago", role.getPresetKey());
-        assertEquals(wago.getLane(), role.getLane());
         assertEquals(wago.getWrapUp(), role.getWrapUp());
         assertEquals(wago.getReactions(), role.getReactions());
+        List<SceneBeat> beats = read.getBeats();
+        assertEquals(2, beats.size());
+        assertEquals(arrive.getId(), beats.get(0).getId());
+        assertEquals(arrive.getActions("wago"), beats.get(0).getActions("wago"));
+        assertTrue(beats.get(0).getActions("smith").isEmpty());
+        assertEquals(SceneBeatAdvance.ROLE_DONE, beats.get(0).getAdvance());
+        assertEquals("wago", beats.get(0).getAdvanceRoleId());
+        assertEquals(greet.getActions("smith"), beats.get(1).getActions("smith"));
+        assertEquals(SceneBeatAdvance.AFTER_TIME, beats.get(1).getAdvance());
+        assertEquals(45, beats.get(1).getSeconds());
+    }
+
+    @Test
+    void oldRoleLanesBecomeTheFirstBeatAndCueActionsAreDropped() throws Exception {
+        YamlConfiguration stored = new YamlConfiguration();
+        stored.loadFromString("""
+                scene:
+                  key: western/train
+                  end:
+                    mode: lanes-finished
+                  roles:
+                  - id: watcher
+                    preset: watcher
+                    lane:
+                    - type: send_dialog
+                      value: Late again!
+                    - type: cue
+                      value: told
+                  - id: luigi
+                    preset: luigi
+                    lane:
+                    - type: wait_for_cue
+                      value: told
+                    - type: wave
+                """);
+
+        Scene read = SceneRepository.read(stored.getConfigurationSection("scene"));
+
+        assertEquals(SceneEnding.BEATS_FINISHED, read.getEnding());
+        assertEquals(1, read.getBeats().size());
+        SceneBeat beat = read.getBeats().getFirst();
+        assertEquals(List.of(new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Late again!")),
+                beat.getActions("watcher"));
+        assertEquals(List.of(new BehaviourAction(BehaviourActionType.WAVE, null)), beat.getActions("luigi"));
     }
 
     @Test
@@ -106,7 +159,7 @@ class SceneRepositoryTest {
         assertTrue(train.getTriggers().isEmpty());
         assertEquals(0, train.getCooldownSeconds());
         assertEquals(List.of("station-watcher", "luigi"), train.getRoles().stream().map(SceneRole::getId).toList());
-        assertEquals(watcherRow, train.findRole("station-watcher").orElseThrow().getLane());
+        assertEquals(watcherRow, train.getBeats().getFirst().getActions("station-watcher"));
         assertEquals("luigi", train.findRole("luigi").orElseThrow().getPresetKey());
         assertTrue(repository.find("unused").orElseThrow().getRoles().isEmpty());
         // The old emit action names the event; the scene key it starts must match.

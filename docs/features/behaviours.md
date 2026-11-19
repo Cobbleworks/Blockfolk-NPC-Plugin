@@ -57,7 +57,7 @@ Set `line-of-sight` to `false` to let NPCs notice everything in range, also thro
 | World & inventory | Interact, Mine Blocks, Take Item, Show Inventory, Drop Inventory, Harvest, Open Shop |
 | Combat | Start Combat, Change Fight Options |
 | Animation | Sleeping, Swimming, Fall Flying, Standing, Sneaking, Sitting, Wave, Jump |
-| Scenes | Start Scene, Stop Scene, Give Cue, Wait For Cue |
+| Scenes | Start Scene, Stop Scene, Next Beat |
 
 **Move To** pauses the rest of its action sequence until the NPC arrives. If it cannot arrive, the sequence continues after 30 seconds.
 
@@ -90,7 +90,7 @@ Dialog line duration is calculated at 12 characters per second with a minimum of
 
 ## Scenes
 
-[Scenes](/features/scenes) let several NPCs act together: every role has its own action row, all roles start at once, and **Give Cue** / **Wait For Cue** keep them in step. **Start Scene** and **Stop Scene** start or end a scene from any routine, waypoint, or question branch.
+[Scenes](/features/scenes) let several NPCs act together, beat by beat: in each beat every role plays its actions at the same time, then the next beat starts. **Next Beat** moves a scene on, for example when a player talks to an NPC. **Start Scene** and **Stop Scene** start or end a scene from any routine, waypoint, or question branch.
 
 ## Waypoint actions
 

@@ -25,6 +25,8 @@ import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.DayPeriod;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.Scene;
+import dev.blockfolk.model.SceneBeat;
+import dev.blockfolk.model.SceneBeatAdvance;
 import dev.blockfolk.model.SceneEnding;
 import dev.blockfolk.model.SceneRole;
 import dev.blockfolk.model.SceneTrigger;
@@ -126,7 +128,6 @@ public final class SceneRepository {
             stored.put("id", role.getId());
             if (role.getPresetKey() != null)
                 stored.put("preset", role.getPresetKey());
-            stored.put("lane", BehaviourActionCodec.encodeList(role.getLane()));
             stored.put("wrap-up", BehaviourActionCodec.encodeList(role.getWrapUp()));
             Map<String, Object> reactions = new LinkedHashMap<>();
             role.getReactions().forEach((event, actions) -> reactions.put(event.name().toLowerCase(Locale.ROOT),
@@ -136,6 +137,22 @@ public final class SceneRepository {
             roles.add(stored);
         }
         section.set("roles", roles);
+        List<Map<String, Object>> beats = new ArrayList<>();
+        for (SceneBeat beat : scene.getBeats()) {
+            Map<String, Object> stored = new LinkedHashMap<>();
+            stored.put("id", beat.getId());
+            stored.put("advance", beat.getAdvance().storedName());
+            stored.put("seconds", beat.getSeconds());
+            if (beat.getAdvanceRoleId() != null)
+                stored.put("role", beat.getAdvanceRoleId());
+            Map<String, Object> actions = new LinkedHashMap<>();
+            for (String roleId : beat.actingRoles())
+                actions.put(roleId, BehaviourActionCodec.encodeList(beat.getActions(roleId)));
+            if (!actions.isEmpty())
+                stored.put("actions", actions);
+            beats.add(stored);
+        }
+        section.set("beats", beats);
     }
 
     static Scene read(ConfigurationSection section) {
@@ -158,6 +175,9 @@ public final class SceneRepository {
         scene.setEnding(SceneEnding.fromStored(section.getString("end.mode")));
         scene.setDurationSeconds(section.getInt("end.duration-seconds", Scene.DEFAULT_DURATION_SECONDS));
         scene.setEndPeriod(period(section.getString("end.time")));
+        // Before beats, each role had one action row (its lane) that all ran at
+        // once; those rows become the first beat.
+        SceneBeat legacyBeat = new SceneBeat();
         for (Map<?, ?> stored : section.getMapList("roles")) {
             Object id = stored.get("id");
             if (id == null)
@@ -166,7 +186,6 @@ public final class SceneRepository {
             // themselves and every free instance takes part, so both are ignored.
             Object preset = stored.get("preset");
             SceneRole role = new SceneRole(id.toString(), preset == null ? null : preset.toString());
-            role.setLane(BehaviourActionCodec.decodeList(stored.get("lane")));
             role.setWrapUp(BehaviourActionCodec.decodeList(stored.get("wrap-up")));
             if (stored.get("reactions") instanceof Map<?, ?> reactions) {
                 for (Map.Entry<?, ?> entry : reactions.entrySet()) {
@@ -180,10 +199,40 @@ public final class SceneRepository {
                     }
                 }
             }
-            if (scene.findRole(role.getId()).isEmpty() && scene.getRoles().size() < Scene.MAX_ROLES)
+            if (scene.findRole(role.getId()).isEmpty() && scene.getRoles().size() < Scene.MAX_ROLES) {
                 scene.addRole(role);
+                legacyBeat.setActions(role.getId(), BehaviourActionCodec.decodeList(stored.get("lane")));
+            }
         }
+        List<SceneBeat> beats = new ArrayList<>();
+        for (Map<?, ?> stored : section.getMapList("beats"))
+            beats.add(readBeat(stored, scene));
+        if (beats.isEmpty())
+            beats.add(legacyBeat);
+        scene.setBeats(beats);
         return scene;
+    }
+
+    private static SceneBeat readBeat(Map<?, ?> stored, Scene scene) {
+        Object id = stored.get("id");
+        SceneBeat beat = new SceneBeat(id == null ? null : id.toString());
+        Object advance = stored.get("advance");
+        beat.setAdvance(SceneBeatAdvance.fromStored(advance == null ? null : advance.toString()));
+        if (stored.get("seconds") instanceof Number seconds)
+            beat.setSeconds(seconds.intValue());
+        Object role = stored.get("role");
+        if (role != null && scene.findRole(role.toString()).isPresent())
+            beat.setAdvanceRoleId(role.toString());
+        else if (beat.getAdvance() == SceneBeatAdvance.ROLE_DONE)
+            beat.setAdvance(SceneBeatAdvance.EVERYONE_DONE);
+        if (stored.get("actions") instanceof Map<?, ?> actions) {
+            for (Map.Entry<?, ?> entry : actions.entrySet()) {
+                String roleId = entry.getKey().toString();
+                if (scene.findRole(roleId).isPresent())
+                    beat.setActions(roleId, BehaviourActionCodec.decodeList(entry.getValue()));
+            }
+        }
+        return beat;
     }
 
     private static DayPeriod period(String value) {
@@ -199,8 +248,9 @@ public final class SceneRepository {
     /**
      * Turns the removed custom events into scenes: every event becomes a scene
      * without triggers, and every preset that reacted to it becomes an
-     * all-instances role whose lane is that reaction. Emit Custom Event actions
-     * already load as Start Scene with the same name, so they start the new scene.
+     * all-instances role whose actions in the first beat are that reaction. Emit
+     * Custom Event actions already load as Start Scene with the same name, so they
+     * start the new scene.
      *
      * @return how many scenes were created
      */
@@ -287,8 +337,8 @@ public final class SceneRepository {
                 if (scene.findRole(SceneRole.normalizeId(definition.getKey())).isPresent())
                     continue;
                 SceneRole role = new SceneRole(definition.getKey(), definition.getKey());
-                role.setLane(actions);
                 scene.addRole(role);
+                scene.getBeats().getFirst().setActions(role.getId(), actions);
             }
             scenes.put(key, scene);
             if (fresh)

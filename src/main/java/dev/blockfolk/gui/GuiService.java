@@ -127,7 +127,7 @@ public final class GuiService implements Listener {
             Map.entry(30, BehaviourActionType.USE_ABILITY),
             // Scenes
             Map.entry(37, BehaviourActionType.START_SCENE), Map.entry(38, BehaviourActionType.STOP_SCENE),
-            Map.entry(39, BehaviourActionType.CUE), Map.entry(40, BehaviourActionType.WAIT_FOR_CUE));
+            Map.entry(39, BehaviourActionType.NEXT_BEAT));
     private static final int MAIN_PREVIOUS_SLOT = 45;
     private static final int MAIN_ROUTES_SLOT = 46;
     private static final int MAIN_LOCATIONS_SLOT = 47;
@@ -458,8 +458,10 @@ public final class GuiService implements Listener {
                         List.of(LegacyText.GRAY + "Named global positions for movement actions", "",
                                 GuiItems.hint("Click", "open locations"))));
         inventory.setItem(MAIN_EVENTS_SLOT,
-                item(Material.BELL, "Scenes", List.of(LegacyText.GRAY + "Moments several NPCs play together",
-                        LegacyText.GRAY + "at a time, place, or on cue", "", GuiItems.hint("Click", "open scenes"))));
+                item(Material.BELL, "Scenes",
+                        List.of(LegacyText.GRAY + "Moments several NPCs play together",
+                                LegacyText.GRAY + "beat by beat, at a time or place", "",
+                                GuiItems.hint("Click", "open scenes"))));
         inventory.setItem(MAIN_OVERVIEW_SLOT,
                 item(Material.NETHER_STAR, "Blockfolk Overview",
                         List.of(LegacyText.GRAY + "Presets: " + LegacyText.WHITE + definitions.size(),
@@ -979,8 +981,9 @@ public final class GuiService implements Listener {
     }
 
     /**
-     * Edits one scene role: its scene actions, wrap-up, and reactions, with the
-     * same action rows as preset behaviour.
+     * Edits one scene role: its actions in every beat, its wrap-up, and its
+     * reactions, with the same action rows as preset behaviour. Beats come first,
+     * five rows per page.
      */
     public void openSceneRole(Player player, String sceneKey, String roleId, int requestedPage) {
         Scene scene = sceneRepository.find(sceneKey).orElse(null);
@@ -993,7 +996,7 @@ public final class GuiService implements Listener {
                 player.closeInventory();
             return;
         }
-        List<SceneLaneRef> rows = SceneLaneRef.rows(scene.getKey(), role.getId());
+        List<SceneLaneRef> rows = SceneLaneRef.rows(scene, role.getId());
         int pages = Math.max(1, (rows.size() + 4) / 5);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new SceneRoleHolder(scene.getKey(), role.getId(), page), 54,
@@ -1003,9 +1006,12 @@ public final class GuiService implements Listener {
             if (rowIndex >= rows.size())
                 break;
             SceneLaneRef lane = rows.get(rowIndex);
-            List<BehaviourAction> actions = lane.actions(role);
-            inventory.setItem(row * 9, item(sceneRowMaterial(lane), sceneRowName(lane),
-                    actionSummaryLore(sceneRowIntroduction(lane), actions)));
+            List<BehaviourAction> actions = lane.actions(scene, role);
+            ItemStack rowItem = item(sceneRowMaterial(lane), sceneRowName(scene, lane),
+                    actionSummaryLore(sceneRowIntroduction(scene, lane), actions));
+            if (lane.part() == SceneLaneRef.Part.BEAT)
+                rowItem.setAmount(Math.clamp(scene.beatIndex(lane.beatId()) + 1, 1, 64));
+            inventory.setItem(row * 9, rowItem);
             inventory.setItem(row * 9 + 1, addActionItem(actions.size(), MAX_ROW_ACTIONS));
             for (int column = 0; column < Math.min(7, actions.size()); column++)
                 inventory.setItem(row * 9 + column + 2, actionItem(actions.get(column), column));
@@ -1024,17 +1030,7 @@ public final class GuiService implements Listener {
                 preset == null
                         ? item(Material.SKELETON_SKULL, "Played By: Nobody", presetLore)
                         : definitionIcon(preset, presetLore));
-        inventory.setItem(49, GuiItems.back("the scene's roles"));
-        List<String> cues = scene.cueNames();
-        inventory.setItem(50,
-                item(Material.BELL, "Cues", cues.isEmpty()
-                        ? List.of(LegacyText.GRAY + "Give Cue and Wait For Cue keep roles",
-                                LegacyText.GRAY + "in step, e.g. wait until another NPC arrived", "",
-                                LegacyText.DARK_GRAY + "No cues used in this scene yet")
-                        : java.util.stream.Stream
-                                .concat(java.util.stream.Stream.of(LegacyText.GRAY + "Cues used in this scene:"),
-                                        cues.stream().map(cue -> LegacyText.WHITE + "• " + cue))
-                                .toList()));
+        inventory.setItem(49, GuiItems.back("the scene's script"));
         if (page + 1 < pages)
             inventory.setItem(53, GuiItems.nextPage(page, pages));
         openInventory(player, inventory);
@@ -1050,26 +1046,28 @@ public final class GuiService implements Listener {
 
     private Material sceneRowMaterial(SceneLaneRef lane) {
         return switch (lane.part()) {
-            case LANE -> Material.MAP;
+            case BEAT -> Material.MAP;
             case WRAP_UP -> Material.RED_BED;
             case REACTION -> eventMaterial(lane.event());
         };
     }
 
-    private String sceneRowName(SceneLaneRef lane) {
+    private String sceneRowName(Scene scene, SceneLaneRef lane) {
         return switch (lane.part()) {
-            case LANE -> "Scene Actions";
+            case BEAT -> "Beat " + (scene.beatIndex(lane.beatId()) + 1);
             case WRAP_UP -> "Wrap-Up";
             case REACTION -> "While Active: " + lane.event().displayName();
         };
     }
 
-    private List<String> sceneRowIntroduction(SceneLaneRef lane) {
+    private List<String> sceneRowIntroduction(Scene scene, SceneLaneRef lane) {
         List<String> lore = new ArrayList<>();
         switch (lane.part()) {
-            case LANE -> {
-                lore.add(LegacyText.GRAY + "Runs when the scene starts, left to right,");
+            case BEAT -> {
+                lore.add(LegacyText.GRAY + "Runs left to right when this beat starts,");
                 lore.add(LegacyText.GRAY + "at the same time as the other roles");
+                scene.findBeat(lane.beatId()).ifPresent(beat -> lore.add(LegacyText.GRAY + "Next beat: "
+                        + LegacyText.WHITE + SceneBeatText.advance(scene, beat, this::sceneRoleName)));
             }
             case WRAP_UP -> {
                 lore.add(LegacyText.GRAY + "Runs when the scene ends, before the NPC");
@@ -1077,8 +1075,8 @@ public final class GuiService implements Listener {
             }
             case REACTION -> {
                 if (lane.event() == BehaviourEvent.IDLE) {
-                    lore.add(LegacyText.GRAY + "Repeats once the scene actions are done,");
-                    lore.add(LegacyText.GRAY + "instead of the preset's idle routine");
+                    lore.add(LegacyText.GRAY + "Repeats once the role played its part in");
+                    lore.add(LegacyText.GRAY + "every beat, instead of its idle routine");
                 } else {
                     lore.add(LegacyText.GRAY + "Replaces the preset's own reaction");
                     lore.add(LegacyText.GRAY + "while the scene runs; empty keeps it");
@@ -1090,18 +1088,15 @@ public final class GuiService implements Listener {
         return lore;
     }
 
-    private SceneRole sceneRole(SceneLaneRef lane) {
-        return sceneRepository.find(lane.sceneKey()).flatMap(scene -> scene.findRole(lane.roleId())).orElse(null);
-    }
-
     /**
      * The action row an editor holder points at: preset behaviour or a scene row.
      */
     private List<BehaviourAction> actionsFor(NpcDefinition definition, BehaviourEvent event, SceneLaneRef lane) {
         if (lane == null)
             return definition.getBehaviourActions(event);
-        SceneRole role = sceneRole(lane);
-        return role == null ? new ArrayList<>() : lane.actions(role);
+        Scene scene = sceneRepository.find(lane.sceneKey()).orElse(null);
+        SceneRole role = scene == null ? null : scene.findRole(lane.roleId()).orElse(null);
+        return role == null ? new ArrayList<>() : lane.actions(scene, role);
     }
 
     private void storeActions(NpcDefinition definition, BehaviourEvent event, SceneLaneRef lane,
@@ -1115,7 +1110,7 @@ public final class GuiService implements Listener {
         SceneRole role = scene == null ? null : scene.findRole(lane.roleId()).orElse(null);
         if (role == null)
             return;
-        lane.store(role, actions);
+        lane.store(scene, role, actions);
         sceneRepository.save(scene);
     }
 
@@ -1153,7 +1148,7 @@ public final class GuiService implements Listener {
         inventory.setItem(27, GuiItems.sectionHeader(Material.RED_STAINED_GLASS_PANE, LegacyText.RED,
                 "Combat & Animations", "Fighting, abilities, and poses"));
         inventory.setItem(36, GuiItems.sectionHeader(Material.MAGENTA_STAINED_GLASS_PANE, LegacyText.LIGHT_PURPLE,
-                "Scenes", "Start scenes and keep roles in step"));
+                "Scenes", "Start, stop, and move scenes on"));
         for (Map.Entry<Integer, BehaviourActionType> entry : ACTION_PICKER_ACTIONS.entrySet()) {
             BehaviourActionType type = entry.getValue();
             if (!includeQuestion && type == BehaviourActionType.ASK_QUESTION)
@@ -2143,7 +2138,7 @@ public final class GuiService implements Listener {
             }
             case 49 -> {
                 if (sceneNavigation != null)
-                    sceneNavigation.openRoles(player, scene.getKey());
+                    sceneNavigation.openScript(player, scene.getKey());
                 else
                     player.closeInventory();
                 return;
@@ -2155,16 +2150,16 @@ public final class GuiService implements Listener {
             default -> {
             }
         }
-        List<SceneLaneRef> rows = SceneLaneRef.rows(scene.getKey(), role.getId());
+        List<SceneLaneRef> rows = SceneLaneRef.rows(scene, role.getId());
         int row = slot / 9;
         int rowIndex = holder.page() * 5 + row;
         if (row >= 5 || rowIndex >= rows.size())
             return;
         SceneLaneRef lane = rows.get(rowIndex);
-        List<BehaviourAction> actions = lane.actions(role);
+        List<BehaviourAction> actions = lane.actions(scene, role);
         int column = slot % 9 - 2;
         if (slot % 9 == 0 && handleBehaviourClipboardClick(event, player, actions, pasted -> {
-            lane.store(role, pasted);
+            lane.store(scene, role, pasted);
             sceneRepository.save(scene);
             reopen.run();
         })) {
@@ -2175,7 +2170,7 @@ public final class GuiService implements Listener {
         if (column >= 0 && column < actions.size() && event.isRightClick()) {
             List<BehaviourAction> changed = new ArrayList<>(actions);
             changed.remove(column);
-            lane.store(role, changed);
+            lane.store(scene, role, changed);
             sceneRepository.save(scene);
             reopen.run();
             return;
@@ -2295,7 +2290,7 @@ public final class GuiService implements Listener {
                 openWaypointActions(player, holder.routeKey(), updated);
             }
         } else {
-            String prompt = valuePrompt(type, null);
+            String prompt = valuePrompt(type);
             chatInputService.request(player, prompt, value -> {
                 RoutePoint updated = setRoutePointAction(action, type, value);
                 if (updated != null) {
@@ -2520,8 +2515,8 @@ public final class GuiService implements Listener {
             setAction(definition, holder, type, null);
             openBehaviourHome(player, definition, holder);
         } else {
-            String prompt = valuePrompt(type, holder.lane());
-            chatInputService.request(player, prompt, valueChoices(type, holder.lane()), value -> {
+            String prompt = valuePrompt(type);
+            chatInputService.request(player, prompt, value -> {
                 setAction(definition, holder, type, value);
                 openBehaviourHome(player, definition, holder);
             }, () -> reopenActionPicker(player, holder));
@@ -3198,28 +3193,13 @@ public final class GuiService implements Listener {
     }
 
     /** Chat prompt for actions whose value is typed in. */
-    private String valuePrompt(BehaviourActionType type, SceneLaneRef lane) {
+    private String valuePrompt(BehaviourActionType type) {
         return switch (type) {
             case SEND_DIALOG -> "Enter the dialog line:";
             case SHOW_HOLO_DIALOG -> "Enter the hologram dialog line:";
             case RUN_CONSOLE_COMMAND -> "Enter the command without a leading slash:";
-            case CUE -> valueChoices(type, lane).isEmpty()
-                    ? "Enter a name for the cue to give, e.g. arrived:"
-                    : "Click a cue used in this scene, or type a new name:";
-            case WAIT_FOR_CUE -> valueChoices(type, lane).isEmpty()
-                    ? "Enter the cue to wait for (no cues are used in this scene yet):"
-                    : "Click the cue to wait for, or type its name:";
             default -> "Enter the action value:";
         };
-    }
-
-    /**
-     * Values offered as clickable chat links: the cues already used in the scene.
-     */
-    private List<String> valueChoices(BehaviourActionType type, SceneLaneRef lane) {
-        if (lane == null || type != BehaviourActionType.CUE && type != BehaviourActionType.WAIT_FOR_CUE)
-            return List.of();
-        return sceneRepository.find(lane.sceneKey()).map(Scene::cueNames).orElse(List.of());
     }
 
     private void openQuestionEditor(Player player, QuestionTarget target) {
@@ -3423,10 +3403,9 @@ public final class GuiService implements Listener {
             case SET_ROUTE -> "Enter an existing route key:";
             case SET_WALK_SPEED -> "Enter walk speed (slouch, slow, normal, fast, very_fast):";
             case START_SCENE, STOP_SCENE -> "Enter an existing scene name:";
-            case CUE, WAIT_FOR_CUE -> valuePrompt(selected, holder.target().lane());
             default -> "Enter the action value:";
         };
-        chatInputService.request(player, prompt, valueChoices(selected, holder.target().lane()), value -> {
+        chatInputService.request(player, prompt, value -> {
             String normalized = branchActionValue(player, selected, value);
             if (normalized == null) {
                 openQuestionBranchPicker(player, holder.target(), holder.optionIndex(), holder.actionIndex());
@@ -3574,11 +3553,6 @@ public final class GuiService implements Listener {
             }
             if (type == BehaviourActionType.START_SCENE || type == BehaviourActionType.STOP_SCENE) {
                 return sceneRepository.find(value).orElseThrow().getKey();
-            }
-            if (type == BehaviourActionType.CUE || type == BehaviourActionType.WAIT_FOR_CUE) {
-                if (value.isBlank())
-                    throw new IllegalArgumentException();
-                return value.trim();
             }
             if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
                 return FightOptions.fromStored(value.equalsIgnoreCase("none") ? "" : value).storedValue();
@@ -4010,8 +3984,7 @@ public final class GuiService implements Listener {
             case HARVEST -> Material.IRON_HOE;
             case START_SCENE -> Material.BELL;
             case STOP_SCENE -> Material.LIGHTNING_ROD;
-            case CUE -> Material.NOTE_BLOCK;
-            case WAIT_FOR_CUE -> Material.SCULK_SENSOR;
+            case NEXT_BEAT -> Material.REPEATER;
             case SIT -> Material.OAK_STAIRS;
             case SLEEP -> Material.RED_BED;
             case SWIM -> Material.WATER_BUCKET;
@@ -4077,8 +4050,7 @@ public final class GuiService implements Listener {
             case HARVEST -> "Harvests crops and plants carried seeds on nearby soil";
             case START_SCENE -> "Starts a scene; skipped if its NPCs are busy";
             case STOP_SCENE -> "Ends a running scene with its wrap-up";
-            case CUE -> "Lets roles waiting for this cue go on";
-            case WAIT_FOR_CUE -> "Waits until another role gives this cue";
+            case NEXT_BEAT -> "In a scene: moves on to its next beat";
             case SIT -> "Seats the NPC with bent legs";
             case SLEEP -> "Puts the NPC into its sleeping pose";
             case SWIM -> "Puts the NPC into its swimming pose";
@@ -4090,6 +4062,17 @@ public final class GuiService implements Listener {
             case FOLLOW -> "Starts following the nearest player";
             case UNFOLLOW -> "Stops following the current player";
         };
+    }
+
+    /**
+     * One line naming the action and its setting, for overviews such as the scene
+     * script.
+     */
+    String actionSummary(BehaviourAction action) {
+        String value = actionValueDisplay(action);
+        if (value == null || value.equals("No setting required"))
+            return action.type().displayName();
+        return action.type().displayName() + ": " + TextUtil.abbreviateSingleLine(value, 40);
     }
 
     private String actionValueDisplay(BehaviourAction action) {
@@ -4122,12 +4105,6 @@ public final class GuiService implements Listener {
         if (action.type() == BehaviourActionType.START_SCENE || action.type() == BehaviourActionType.STOP_SCENE) {
             return sceneRepository.find(action.value()).map(scene -> "Scene '" + scene.getDisplayName() + "'")
                     .orElse("Missing scene '" + action.value() + "'");
-        }
-        if (action.type() == BehaviourActionType.CUE) {
-            return "Cue '" + action.value() + "'";
-        }
-        if (action.type() == BehaviourActionType.WAIT_FOR_CUE) {
-            return "Until cue '" + action.value() + "'";
         }
         if (action.type() == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             return FightOptions.fromStored(action.value()).displayName();
@@ -4338,7 +4315,8 @@ public final class GuiService implements Listener {
         /** Opens only the scenes in which the preset plays a role. */
         void openScenesFor(Player player, String presetKey);
 
-        void openRoles(Player player, String sceneKey);
+        /** Opens the scene's script: its beats and roles. */
+        void openScript(Player player, String sceneKey);
 
         void choosePreset(Player player, String sceneKey, String roleId);
 

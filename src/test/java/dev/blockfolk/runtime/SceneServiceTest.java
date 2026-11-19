@@ -38,6 +38,8 @@ import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.Scene;
+import dev.blockfolk.model.SceneBeat;
+import dev.blockfolk.model.SceneBeatAdvance;
 import dev.blockfolk.model.SceneEnding;
 import dev.blockfolk.model.SceneRole;
 import dev.blockfolk.repository.NpcDefinitionRepository;
@@ -50,9 +52,10 @@ class SceneServiceTest {
     private final Map<String, Scene> scenes = new HashMap<>();
     private final Map<String, NpcDefinition> presets = new HashMap<>();
     private final List<NpcInstance> loaded = new ArrayList<>();
-    /** Lane completions in start order, so tests can finish lanes by hand. */
+    /** Action row completions in start order, so tests can finish rows by hand. */
     private final List<Runnable> runningLanes = new ArrayList<>();
     private final List<BooleanSupplier> laneAlive = new ArrayList<>();
+    private final List<NpcInstance> laneOwners = new ArrayList<>();
     private NpcBehaviourService behaviour;
     private SceneService service;
 
@@ -69,6 +72,7 @@ class SceneServiceTest {
         when(instances.currentLocation(any())).thenAnswer(call -> ((NpcInstance) call.getArgument(0)).getLocation());
         behaviour = mock(NpcBehaviourService.class);
         doAnswer(call -> {
+            laneOwners.add(call.getArgument(1));
             laneAlive.add(call.getArgument(4));
             runningLanes.add(call.getArgument(5));
             return null;
@@ -192,31 +196,127 @@ class SceneServiceTest {
     }
 
     @Test
-    void waitForCueHoldsUntilAnotherRoleGivesTheCue() {
+    void beatsPlayOneAfterAnotherWhileTheCastIsHeld() {
         NpcInstance watcher = spawn("watcher");
         NpcInstance luigi = spawn("luigi");
-        scene("train", "watcher", "luigi");
-        service.startManually("train", null, null);
-        boolean[] continued = {false};
+        Scene train = scene("train", "watcher", "luigi");
+        SceneBeat first = train.getBeats().getFirst();
+        first.setActions("luigi", List.of());
+        train.addBeat().setActions("luigi", List.of(wave()));
 
-        assertTrue(service.awaitCue(luigi, "Told", () -> continued[0] = true));
+        service.startManually("train", null, null);
+
+        assertEquals(List.of(watcher), laneOwners);
+        assertTrue(service.isCast(luigi));
+        assertEquals(Optional.of(first.getId()), service.currentBeat("train"));
+        assertTrue(service.status("train").contains("beat 1/2"), service.status("train"));
+
+        runningLanes.getFirst().run();
+
+        assertEquals(List.of(watcher, luigi), laneOwners);
+        assertTrue(service.status("train").contains("beat 2/2"), service.status("train"));
+        runningLanes.get(1).run();
+        assertFalse(service.isRunning("train"));
+    }
+
+    @Test
+    void roleDoneMovesOnAndCutsOffTheOthers() {
+        spawn("watcher");
+        NpcInstance luigi = spawn("luigi");
+        Scene train = scene("train", "watcher", "luigi");
+        SceneBeat first = train.getBeats().getFirst();
+        first.setAdvance(SceneBeatAdvance.ROLE_DONE);
+        first.setAdvanceRoleId("watcher");
+        train.addBeat().setActions("luigi", List.of(wave()));
+        service.startManually("train", null, null);
+
+        runningLanes.getFirst().run();
+
+        assertFalse(laneAlive.get(1).getAsBoolean());
+        verify(behaviour, org.mockito.Mockito.times(2)).interruptMovement(luigi);
+        assertEquals(luigi, laneOwners.get(2));
+        assertTrue(service.isRunning("train"));
+    }
+
+    @Test
+    void nextBeatOnlyWaitsForTheActionAndMovesOnOnce() {
+        NpcInstance watcher = spawn("watcher");
+        Scene train = scene("train", "watcher");
+        train.getBeats().getFirst().setAdvance(SceneBeatAdvance.NEXT_BEAT_ONLY);
+        train.addBeat().setActions("watcher", List.of(wave()));
+        train.addBeat().setActions("watcher", List.of(wave()));
+        service.startManually("train", null, null);
+
+        runningLanes.getFirst().run();
+        assertEquals(1, runningLanes.size());
+
+        List<Runnable> scheduled = new ArrayList<>();
         try (var bukkit = mockStatic(Bukkit.class)) {
             BukkitScheduler scheduler = mock(BukkitScheduler.class);
             bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
             when(scheduler.runTask(any(Plugin.class), any(Runnable.class))).thenAnswer(call -> {
-                ((Runnable) call.getArgument(1)).run();
+                scheduled.add(call.getArgument(1));
                 return null;
             });
-            service.cue(watcher, "told");
+            // Two Next Beat actions in the same beat, e.g. two players clicking.
+            service.nextBeat(watcher);
+            service.nextBeat(watcher);
+        }
+        scheduled.forEach(Runnable::run);
+
+        assertEquals(2, runningLanes.size());
+        assertTrue(service.status("train").contains("beat 2/3"), service.status("train"));
+    }
+
+    @Test
+    void afterTimeMovesOnOnceTheTimeIsUp() {
+        spawn("watcher");
+        Scene train = scene("train", "watcher");
+        SceneBeat first = train.getBeats().getFirst();
+        first.setAdvance(SceneBeatAdvance.AFTER_TIME);
+        first.setSeconds(12);
+        train.addBeat().setActions("watcher", List.of(wave()));
+        ArgumentCaptor<Runnable> timer = ArgumentCaptor.forClass(Runnable.class);
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            BukkitScheduler scheduler = mock(BukkitScheduler.class);
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            service.startManually("train", null, null);
+            verify(scheduler).runTaskLater(any(Plugin.class), timer.capture(), org.mockito.ArgumentMatchers.eq(240L));
         }
 
-        assertTrue(continued[0]);
-        // A cue that was already given lets later waiters go on at once.
-        assertFalse(service.awaitCue(watcher, "told", () -> {
-        }));
-        // Outside a scene there is nothing to wait for.
-        assertFalse(service.awaitCue(spawn("stranger"), "told", () -> {
-        }));
+        // The watcher's row is still running when the time is up; it is cut off.
+        assertEquals(1, runningLanes.size());
+        timer.getValue().run();
+
+        assertEquals(2, runningLanes.size());
+        assertFalse(laneAlive.getFirst().getAsBoolean());
+    }
+
+    @Test
+    void anotherEndingKeepsTheCastAfterTheLastBeat() {
+        NpcInstance wago = spawn("wago");
+        NpcInstance smith = spawn("smith");
+        Scene market = scene("market", "wago", "smith");
+        market.setEnding(SceneEnding.DURATION);
+        market.getBeats().getFirst().setActions("smith", List.of());
+        market.addBeat().setActions("smith", List.of(wave()));
+        market.getRoles().getFirst().setReaction(BehaviourEvent.IDLE, List.of(wave()));
+        market.getRoles().get(1).setReaction(BehaviourEvent.IDLE, List.of(wave()));
+        service.startManually("market", null, null);
+
+        // Smith acts later, so his idle reaction waits; Wago's waits for his row.
+        assertNull(service.reaction(smith, BehaviourEvent.IDLE));
+        assertNull(service.reaction(wago, BehaviourEvent.IDLE));
+        runningLanes.getFirst().run();
+        assertNotNull(service.reaction(wago, BehaviourEvent.IDLE));
+        assertNull(service.reaction(smith, BehaviourEvent.IDLE));
+        runningLanes.get(1).run();
+
+        assertTrue(service.isRunning("market"));
+        assertTrue(service.isCast(smith));
+        assertTrue(service.currentBeat("market").isEmpty());
+        assertTrue(service.status("market").contains("every beat done"), service.status("market"));
+        assertNotNull(service.reaction(smith, BehaviourEvent.IDLE));
     }
 
     @Test
@@ -234,7 +334,7 @@ class SceneServiceTest {
         assertNotNull(approach);
         assertTrue(approach.alive().getAsBoolean());
         assertNull(service.reaction(wago, BehaviourEvent.RIGHT_CLICK));
-        // Idle reactions wait until the role finished its scene actions.
+        // Idle reactions wait until the role played its part in every beat.
         assertNull(service.reaction(wago, BehaviourEvent.IDLE));
         runningLanes.getFirst().run();
         assertNotNull(service.reaction(wago, BehaviourEvent.IDLE));
@@ -281,10 +381,14 @@ class SceneServiceTest {
         Scene scene = new Scene(key);
         for (String preset : presetKeys) {
             SceneRole role = scene.addRole(preset);
-            role.setLane(List.of(new BehaviourAction(BehaviourActionType.WAVE, null)));
+            scene.getBeats().getFirst().setActions(role.getId(), List.of(wave()));
         }
         scenes.put(scene.getKey(), scene);
         return scene;
+    }
+
+    private static BehaviourAction wave() {
+        return new BehaviourAction(BehaviourActionType.WAVE, null);
     }
 
     private static String message(CommandSender sender) {

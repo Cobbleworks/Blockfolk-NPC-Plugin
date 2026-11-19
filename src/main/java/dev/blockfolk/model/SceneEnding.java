@@ -6,8 +6,8 @@ import java.util.Locale;
  * When a running scene ends and its roles start their wrap-up actions.
  */
 public enum SceneEnding {
-    LANES_FINISHED("When everyone is done", "Ends once every role finished its scene actions"), DURATION(
-            "After a set time", "Ends after the chosen number of minutes"), TIME_OF_DAY("At a time of day",
+    BEATS_FINISHED("After the last beat", "Ends once the last beat is done"), DURATION("After a set time",
+            "Ends after the chosen number of minutes"), TIME_OF_DAY("At a time of day",
                     "Ends when the chosen part of the day begins"), WEATHER_CHANGES("When the weather changes",
                             "Ends when rain, snow, or thunder starts or stops");
 
@@ -33,11 +33,15 @@ public enum SceneEnding {
 
     public static SceneEnding fromStored(String value) {
         if (value == null)
-            return LANES_FINISHED;
+            return BEATS_FINISHED;
+        String normalized = value.trim().toUpperCase(Locale.ROOT).replace('-', '_');
+        // Before beats, this ending waited for every role's single action row.
+        if (normalized.equals("LANES_FINISHED"))
+            return BEATS_FINISHED;
         try {
-            return valueOf(value.trim().toUpperCase(Locale.ROOT).replace('-', '_'));
+            return valueOf(normalized);
         } catch (IllegalArgumentException exception) {
-            return LANES_FINISHED;
+            return BEATS_FINISHED;
         }
     }
 }

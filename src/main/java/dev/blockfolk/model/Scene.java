@@ -11,8 +11,8 @@ import org.bukkit.inventory.ItemStack;
 
 /**
  * A scripted moment several NPCs play together: who takes part (roles), what
- * each of them does (lanes), what starts it (triggers, one of which watches an
- * area), and when it ends.
+ * they do step by step (beats), what starts it (triggers, one of which watches
+ * an area), and when it ends.
  */
 public final class Scene {
 
@@ -25,6 +25,7 @@ public final class Scene {
     public static final int MAX_DURATION_SECONDS = 24 * 60 * 60;
     public static final int MAX_ROLES = 28;
     public static final int MAX_DESCRIPTION_LENGTH = 2000;
+    public static final int MAX_BEATS = 64;
 
     private final String key;
     private String displayName;
@@ -36,10 +37,12 @@ public final class Scene {
     private final Set<SceneTrigger> triggers = EnumSet.noneOf(SceneTrigger.class);
     private int chancePercent = 100;
     private int cooldownSeconds = DEFAULT_COOLDOWN_SECONDS;
-    private SceneEnding ending = SceneEnding.LANES_FINISHED;
+    private SceneEnding ending = SceneEnding.BEATS_FINISHED;
     private int durationSeconds = DEFAULT_DURATION_SECONDS;
     private DayPeriod endPeriod = DayPeriod.EVENING;
     private final List<SceneRole> roles = new ArrayList<>();
+    /** Never empty: a scene always has at least one beat. */
+    private final List<SceneBeat> beats = new ArrayList<>(List.of(new SceneBeat()));
 
     public Scene(String key) {
         this.key = normalizeKey(key);
@@ -199,7 +202,7 @@ public final class Scene {
     }
 
     public void setEnding(SceneEnding ending) {
-        this.ending = ending == null ? SceneEnding.LANES_FINISHED : ending;
+        this.ending = ending == null ? SceneEnding.BEATS_FINISHED : ending;
     }
 
     public int getDurationSeconds() {
@@ -230,7 +233,7 @@ public final class Scene {
 
     /**
      * The role, other than {@code exceptRoleId}, that the preset already plays. A
-     * preset plays at most one role per scene; longer scripts chain scenes.
+     * preset plays at most one role per scene and acts in as many beats as needed.
      */
     public Optional<SceneRole> roleOf(String presetKey, String exceptRoleId) {
         if (presetKey == null)
@@ -263,13 +266,96 @@ public final class Scene {
         roles.add(role);
     }
 
+    /** Removes the role together with its actions in every beat. */
     public boolean removeRole(String roleId) {
-        return roles.removeIf(role -> role.getId().equals(roleId));
+        if (!roles.removeIf(role -> role.getId().equals(roleId)))
+            return false;
+        beats.forEach(beat -> beat.forgetRole(roleId));
+        return true;
+    }
+
+    // ---------------------------------------------------------------- beats
+
+    public List<SceneBeat> getBeats() {
+        return List.copyOf(beats);
+    }
+
+    public Optional<SceneBeat> findBeat(String beatId) {
+        if (beatId == null)
+            return Optional.empty();
+        return beats.stream().filter(beat -> beat.getId().equals(beatId)).findFirst();
+    }
+
+    /** Position of the beat, or -1. */
+    public int beatIndex(String beatId) {
+        for (int index = 0; index < beats.size(); index++) {
+            if (beats.get(index).getId().equals(beatId))
+                return index;
+        }
+        return -1;
+    }
+
+    /** Replaces every beat; an empty list leaves one empty beat. */
+    public void setBeats(List<SceneBeat> replacement) {
+        beats.clear();
+        if (replacement != null)
+            replacement.stream().limit(MAX_BEATS).forEach(beats::add);
+        if (beats.isEmpty())
+            beats.add(new SceneBeat());
+    }
+
+    public boolean canAddBeat() {
+        return beats.size() < MAX_BEATS;
+    }
+
+    /** Adds an empty beat at the end. */
+    public SceneBeat addBeat() {
+        if (!canAddBeat())
+            throw new IllegalStateException("A scene holds at most " + MAX_BEATS + " beats.");
+        SceneBeat beat = new SceneBeat();
+        beats.add(beat);
+        return beat;
+    }
+
+    /** Inserts a copy right after the beat. */
+    public Optional<SceneBeat> duplicateBeat(String beatId) {
+        int index = beatIndex(beatId);
+        if (index < 0 || !canAddBeat())
+            return Optional.empty();
+        SceneBeat copy = beats.get(index).copy();
+        beats.add(index + 1, copy);
+        return Optional.of(copy);
+    }
+
+    /** Moves the beat one step earlier (-1) or later (+1). */
+    public boolean moveBeat(String beatId, int direction) {
+        int index = beatIndex(beatId);
+        int target = index + Integer.signum(direction);
+        if (index < 0 || direction == 0 || target < 0 || target >= beats.size())
+            return false;
+        java.util.Collections.swap(beats, index, target);
+        return true;
+    }
+
+    /** Removes the beat; removing the only beat leaves an empty one. */
+    public boolean removeBeat(String beatId) {
+        if (!beats.removeIf(beat -> beat.getId().equals(beatId)))
+            return false;
+        if (beats.isEmpty())
+            beats.add(new SceneBeat());
+        return true;
+    }
+
+    /** How many beats the role acts in. */
+    public int beatsActedIn(String roleId) {
+        return (int) beats.stream().filter(beat -> beat.hasActions(roleId)).count();
     }
 
     /** Rewrites every role action, including question branches. */
     public boolean mapActions(java.util.function.UnaryOperator<BehaviourAction> mapper) {
         boolean changed = false;
+        for (SceneBeat beat : beats)
+            changed |= beat.mapActions(mapper);
         for (SceneRole role : roles)
             changed |= role.mapActions(mapper);
         return changed;
@@ -277,12 +363,18 @@ public final class Scene {
 
     public boolean removeActions(java.util.function.Predicate<BehaviourAction> filter) {
         boolean changed = false;
+        for (SceneBeat beat : beats)
+            changed |= beat.removeActions(filter);
         for (SceneRole role : roles)
             changed |= role.removeActions(filter);
         return changed;
     }
 
+    /**
+     * Visits every beat, wrap-up, and reaction action, including question branches.
+     */
     public void forEachAction(java.util.function.Consumer<BehaviourAction> visitor) {
+        beats.forEach(beat -> beat.forEachAction(visitor));
         roles.forEach(role -> role.forEachAction(visitor));
     }
 
@@ -297,16 +389,5 @@ public final class Scene {
                 tryKey(action.value()).filter(started -> !started.equals(key)).ifPresent(keys::add);
         });
         return List.copyOf(keys);
-    }
-
-    /** Cue names used by Cue and Wait For Cue actions in this scene. */
-    public List<String> cueNames() {
-        java.util.Set<String> names = new java.util.LinkedHashSet<>();
-        forEachAction(action -> {
-            if ((action.type() == BehaviourActionType.CUE || action.type() == BehaviourActionType.WAIT_FOR_CUE)
-                    && action.value() != null)
-                names.add(action.value());
-        });
-        return List.copyOf(names);
     }
 }

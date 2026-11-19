@@ -25,6 +25,8 @@ import dev.blockfolk.model.DayPeriod;
 import dev.blockfolk.model.NamedLocation;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.Scene;
+import dev.blockfolk.model.SceneBeat;
+import dev.blockfolk.model.SceneBeatAdvance;
 import dev.blockfolk.model.SceneEnding;
 import dev.blockfolk.model.SceneRole;
 import dev.blockfolk.model.SceneTrigger;
@@ -49,9 +51,9 @@ import net.kyori.adventure.text.format.NamedTextColor;
 
 /**
  * Menus for scenes: the scene browser, the scene editor with triggers (one of
- * which watches an area), ending, and test controls, and the role list. Role
- * action rows are edited by {@link GuiService#openSceneRole}, which shares the
- * preset action editor.
+ * which watches an area), ending, and test controls, and the script, a grid of
+ * beats (rows) and roles (columns). Role action rows are edited by
+ * {@link GuiService#openSceneRole}, which shares the preset action editor.
  */
 public final class SceneGuiService implements Listener, GuiService.SceneNavigation {
 
@@ -62,7 +64,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     private static final int DESCRIPTION_SLOT = 28;
     private static final int TRIGGERS_SLOT = 21;
     private static final int ENABLED_SLOT = 30;
-    private static final int ROLES_SLOT = 23;
+    private static final int SCRIPT_SLOT = 23;
     private static final int ENDING_SLOT = 32;
     private static final int END_SETTING_SLOT = 41;
     private static final int RUN_SLOT = 25;
@@ -78,6 +80,19 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             Map.entry(29, SceneTrigger.PRECIPITATION), Map.entry(30, SceneTrigger.RAIN),
             Map.entry(31, SceneTrigger.SNOW), Map.entry(32, SceneTrigger.THUNDER), Map.entry(33, SceneTrigger.CLEAR),
             Map.entry(40, SceneTrigger.PLAYER_ENTERS));
+    /** The script shows eight role columns and four beat rows per page. */
+    private static final int SCRIPT_COLUMNS = 8;
+    private static final int SCRIPT_ROWS = 4;
+    private static final int SCRIPT_ROLES_LEFT_SLOT = 46;
+    private static final int SCRIPT_ROLES_RIGHT_SLOT = 52;
+    /** Beat settings: advance options on row 1, actions on the bottom row. */
+    private static final int[] BEAT_ADVANCE_SLOTS = {10, 11, 12, 13};
+    private static final int BEAT_SETTING_SLOT = 15;
+    private static final int BEAT_EARLIER_SLOT = 18;
+    private static final int BEAT_LATER_SLOT = 19;
+    private static final int BEAT_COPY_SLOT = 20;
+    private static final int BEAT_BACK_SLOT = 22;
+    private static final int BEAT_DELETE_SLOT = 26;
 
     private final Plugin plugin;
     private final SceneRepository scenes;
@@ -91,6 +106,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
      * scenes until they go back or open the full list.
      */
     private final Map<java.util.UUID, String> presetFilters = new java.util.HashMap<>();
+    /** The script page each player looked at last, so returning keeps it. */
+    private final Map<java.util.UUID, ScriptView> scriptViews = new java.util.HashMap<>();
     private SceneService sceneService;
 
     public SceneGuiService(Plugin plugin, SceneRepository scenes, NpcDefinitionRepository definitions,
@@ -126,8 +143,13 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     }
 
     @Override
-    public void openRoles(Player player, String sceneKey) {
-        openRoles(player, sceneKey, 0);
+    public void openScript(Player player, String sceneKey) {
+        ScriptView view = scriptViews.get(player.getUniqueId());
+        String key = Scene.tryKey(sceneKey).orElse(sceneKey);
+        if (view != null && view.sceneKey().equals(key))
+            openScript(player, key, view.beatPage(), view.rolePage());
+        else
+            openScript(player, key, 0, 0);
     }
 
     @Override
@@ -159,7 +181,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 return;
             }
             scenes.save(scene);
-            player.sendMessage(UiText.success("Created scene '" + scene.getDisplayName() + "'. Add roles next."));
+            player.sendMessage(UiText.success(
+                    "Created scene '" + scene.getDisplayName() + "'. Open its Script to add roles and beats."));
             onCreated.accept(scene);
         }, onCancel);
     }
@@ -207,8 +230,9 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         inventory.setItem(47,
                 GuiItems.item(Material.KNOWLEDGE_BOOK, "How Scenes Work",
                         List.of(LegacyText.GRAY + "A scene is a moment several NPCs play together.",
-                                LegacyText.GRAY + "Each role runs its own action row at the same",
-                                LegacyText.GRAY + "time; Give Cue / Wait For Cue keep them in step.",
+                                LegacyText.GRAY + "Its script runs beat by beat: in each beat every",
+                                LegacyText.GRAY + "role plays its actions at the same time, then",
+                                LegacyText.GRAY + "the next beat starts.",
                                 LegacyText.GRAY + "Triggers start it at a time, in some weather, or",
                                 LegacyText.GRAY + "when a player walks into its area.", "",
                                 LegacyText.GRAY + "NPCs pause their route while in a scene and",
@@ -238,7 +262,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         lore.add(LegacyText.DARK_GRAY + "Key: " + scene.getKey());
         lore.addAll(descriptionLines(scene, 3));
         lore.add(LegacyText.GRAY + "Status: " + statusText(scene));
-        lore.add(LegacyText.GRAY + "Roles: " + LegacyText.WHITE + scene.getRoles().size());
+        lore.add(LegacyText.GRAY + "Roles: " + LegacyText.WHITE + scene.getRoles().size() + LegacyText.GRAY
+                + " · Beats: " + LegacyText.WHITE + scene.getBeats().size());
         lore.add(LegacyText.GRAY + "Starts: " + LegacyText.WHITE + triggerSummary(scene));
         lore.addAll(chainLore(scene));
         lore.add("");
@@ -378,7 +403,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         inventory.setItem(ENABLED_SLOT, GuiItems.toggle(Material.LIME_DYE, Material.GRAY_DYE, "Triggers",
                 scene.isEnabled(), "triggers start the scene", "only manual starts work", List.of()));
         inventory.setItem(TRIGGERS_SLOT, GuiItems.item(Material.CLOCK, "Starts When", triggerLore(scene)));
-        inventory.setItem(ROLES_SLOT, GuiItems.item(Material.PLAYER_HEAD, "Roles", rolesLore(scene)));
+        inventory.setItem(SCRIPT_SLOT, GuiItems.item(Material.WRITABLE_BOOK, "Script", scriptLore(scene)));
         List<GuiItems.Option> endings = java.util.Arrays.stream(SceneEnding.values())
                 .map(ending -> new GuiItems.Option(endingMaterial(ending), ending.displayName(), ending.summary()))
                 .toList();
@@ -433,7 +458,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                 reopen.run();
             }
             case TRIGGERS_SLOT -> openTriggers(player, scene.getKey());
-            case ROLES_SLOT -> openRoles(player, scene.getKey(), 0);
+            case SCRIPT_SLOT -> openScript(player, scene.getKey());
             case ENDING_SLOT -> {
                 int direction = GuiItems.cycleDirection(click.getClick());
                 if (direction == 0)
@@ -592,11 +617,12 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                         .toList();
                 yield GuiItems.cycle("Ends At", periods, scene.getEndPeriod().ordinal(), List.of());
             }
-            case LANES_FINISHED -> GuiItems.item(Material.GRAY_DYE, "No Setting Needed",
-                    List.of(LegacyText.GRAY + "Ends once every role finished its",
-                            LegacyText.GRAY + "scene actions (at the latest after 30 min).",
-                            LegacyText.GRAY + "While Active reactions need another",
-                            LegacyText.GRAY + "ending, or the scene ends too soon."));
+            case BEATS_FINISHED -> GuiItems.item(Material.GRAY_DYE, "No Setting Needed",
+                    List.of(LegacyText.GRAY + "Ends once the last beat is done",
+                            LegacyText.GRAY + "(at the latest after 30 min). With",
+                            LegacyText.GRAY + "another ending the NPCs stay in the",
+                            LegacyText.GRAY + "scene after the last beat, so While",
+                            LegacyText.GRAY + "Active reactions keep working."));
             case WEATHER_CHANGES -> GuiItems.item(Material.GRAY_DYE, "No Setting Needed",
                     List.of(LegacyText.GRAY + "Ends when rain, snow, or thunder starts",
                             LegacyText.GRAY + "or stops in the world the scene plays in."));
@@ -631,18 +657,21 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         return lore;
     }
 
-    private List<String> rolesLore(Scene scene) {
+    private List<String> scriptLore(Scene scene) {
         List<String> lore = new ArrayList<>();
+        lore.add(LegacyText.GRAY + "Who takes part and what they do, beat by beat");
         if (scene.getRoles().isEmpty()) {
             lore.add(LegacyText.RED + "No roles yet: add the NPCs that take part");
         } else {
+            lore.add(LegacyText.GRAY + "Roles:");
             for (SceneRole role : scene.getRoles().stream().limit(8).toList())
                 lore.add(LegacyText.WHITE + "• " + presetName(role));
             if (scene.getRoles().size() > 8)
                 lore.add(LegacyText.DARK_GRAY + "… and " + (scene.getRoles().size() - 8) + " more");
         }
+        lore.add(LegacyText.GRAY + "Beats: " + LegacyText.WHITE + scene.getBeats().size());
         lore.add("");
-        lore.add(GuiItems.hint("Click", "manage roles and their actions"));
+        lore.add(GuiItems.hint("Click", "edit roles and beats"));
         return lore;
     }
 
@@ -756,92 +785,402 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         return active ? GuiItems.glint(item) : item;
     }
 
-    // --------------------------------------------------------------- roles
+    // -------------------------------------------------------------- script
 
-    private void openRoles(Player player, String sceneKey, int requestedPage) {
+    /**
+     * The scene's script: one row per beat, one column per role. Row 0 holds the
+     * role headers, rows 1-4 four beats; both page when there are more.
+     */
+    private void openScript(Player player, String sceneKey, int requestedBeatPage, int requestedRolePage) {
         Scene scene = scenes.find(sceneKey).orElse(null);
         if (scene == null) {
             openBrowser(player, "", 0);
             return;
         }
         List<SceneRole> roles = scene.getRoles();
-        int pages = Math.max(1, (roles.size() + PAGE_SIZE - 1) / PAGE_SIZE);
-        int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(new RolesHolder(scene.getKey(), page), 54,
-                UiText.title("Roles", scene.getDisplayName()));
-        int from = page * PAGE_SIZE;
-        for (int index = from; index < Math.min(from + PAGE_SIZE, roles.size()); index++)
-            inventory.setItem(index - from, roleItem(scene, roles.get(index)));
-        if (roles.isEmpty())
-            inventory.setItem(22, GuiItems.empty("No Roles Yet", "Use Add Role below to cast an NPC"));
-        if (page > 0)
-            inventory.setItem(GuiItems.PREVIOUS_SLOT, GuiItems.previousPage(page, pages));
+        List<SceneBeat> beats = scene.getBeats();
+        int columns = roles.size() + (roles.size() < Scene.MAX_ROLES ? 1 : 0);
+        int rolePages = Math.max(1, (columns + SCRIPT_COLUMNS - 1) / SCRIPT_COLUMNS);
+        int rolePage = Math.clamp(requestedRolePage, 0, rolePages - 1);
+        int beatPages = Math.max(1, (beats.size() + SCRIPT_ROWS - 1) / SCRIPT_ROWS);
+        int beatPage = Math.clamp(requestedBeatPage, 0, beatPages - 1);
+        scriptViews.put(player.getUniqueId(), new ScriptView(scene.getKey(), beatPage, rolePage));
+        Inventory inventory = Bukkit.createInventory(new ScriptHolder(scene.getKey(), beatPage, rolePage), 54,
+                UiText.title("Script", scene.getDisplayName()));
+        String playing = sceneService == null ? null : sceneService.currentBeat(scene.getKey()).orElse(null);
+        inventory.setItem(0, scriptInfoItem(scene));
+        for (int column = 0; column < SCRIPT_COLUMNS; column++) {
+            int roleIndex = rolePage * SCRIPT_COLUMNS + column;
+            if (roleIndex < roles.size())
+                inventory.setItem(column + 1, roleHeaderItem(scene, roles.get(roleIndex)));
+            else if (roleIndex == roles.size() && roles.size() < Scene.MAX_ROLES)
+                inventory.setItem(column + 1, GuiItems.create("Add Role", "Choose the NPC preset that plays it"));
+        }
+        for (int row = 0; row < SCRIPT_ROWS; row++) {
+            int beatIndex = beatPage * SCRIPT_ROWS + row;
+            if (beatIndex >= beats.size())
+                break;
+            SceneBeat beat = beats.get(beatIndex);
+            int first = (row + 1) * 9;
+            inventory.setItem(first, beatItem(scene, beat, beatIndex, beat.getId().equals(playing)));
+            for (int column = 0; column < SCRIPT_COLUMNS; column++) {
+                int roleIndex = rolePage * SCRIPT_COLUMNS + column;
+                if (roleIndex < roles.size())
+                    inventory.setItem(first + column + 1, cellItem(roles.get(roleIndex), beat, beatIndex));
+            }
+        }
+        if (beatPage > 0)
+            inventory.setItem(GuiItems.PREVIOUS_SLOT, GuiItems.item(Material.ARROW, "Earlier Beats",
+                    List.of(LegacyText.GRAY + "Page " + beatPage + " of " + beatPages)));
+        if (rolePage > 0)
+            inventory.setItem(SCRIPT_ROLES_LEFT_SLOT, GuiItems.item(Material.SPECTRAL_ARROW, "Previous Roles",
+                    List.of(LegacyText.GRAY + "Roles page " + rolePage + " of " + rolePages)));
         inventory.setItem(GuiItems.BACK_SLOT, GuiItems.back("the scene editor"));
-        if (roles.size() < Scene.MAX_ROLES)
-            inventory.setItem(GuiItems.CREATE_SLOT, GuiItems.create("Add Role", "Choose the NPC preset that plays it"));
-        if (page + 1 < pages)
-            inventory.setItem(GuiItems.NEXT_SLOT, GuiItems.nextPage(page, pages));
+        if (rolePage + 1 < rolePages)
+            inventory.setItem(SCRIPT_ROLES_RIGHT_SLOT, GuiItems.item(Material.SPECTRAL_ARROW, "More Roles",
+                    List.of(LegacyText.GRAY + "Roles page " + (rolePage + 2) + " of " + rolePages)));
+        if (scene.canAddBeat())
+            inventory.setItem(GuiItems.CREATE_SLOT, GuiItems.create("Add Beat", "Adds a step after the last beat"));
+        if (beatPage + 1 < beatPages)
+            inventory.setItem(GuiItems.NEXT_SLOT, GuiItems.item(Material.ARROW, "Later Beats",
+                    List.of(LegacyText.GRAY + "Page " + (beatPage + 2) + " of " + beatPages)));
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
     }
 
-    private ItemStack roleItem(Scene scene, SceneRole role) {
+    private ItemStack scriptInfoItem(Scene scene) {
+        List<String> lore = new ArrayList<>();
+        lore.add(LegacyText.GRAY + "Each row is a beat: one step of the scene.");
+        lore.add(LegacyText.GRAY + "Every role plays its actions of a beat at");
+        lore.add(LegacyText.GRAY + "the same time; then the next beat starts.");
+        lore.add(LegacyText.GRAY + "A role without actions in a beat holds still.");
+        lore.add("");
+        lore.add(LegacyText.GRAY + "Columns are the roles. Click a cell to edit");
+        lore.add(LegacyText.GRAY + "what that NPC does in that beat.");
+        lore.add("");
+        lore.add(LegacyText.GRAY + "Beats: " + LegacyText.WHITE + scene.getBeats().size() + LegacyText.GRAY
+                + " · Roles: " + LegacyText.WHITE + scene.getRoles().size());
+        lore.add(LegacyText.GRAY + "Status: " + statusText(scene));
+        return GuiItems.item(Material.KNOWLEDGE_BOOK, "Script", lore);
+    }
+
+    private ItemStack roleHeaderItem(Scene scene, SceneRole role) {
         List<String> lore = new ArrayList<>();
         lore.add(LegacyText.GRAY + "Every free instance of this NPC plays it");
         if (scene.roleOf(role.getPresetKey(), role.getId()).isPresent()) {
             lore.add(LegacyText.RED + "This NPC has two roles: the scene cannot");
             lore.add(LegacyText.RED + "start until one of them is removed");
         }
-        lore.add(LegacyText.GRAY + "Scene actions: " + LegacyText.WHITE + role.getLane().size());
+        lore.add(LegacyText.GRAY + "Acts in: " + LegacyText.WHITE + scene.beatsActedIn(role.getId()) + " of "
+                + scene.getBeats().size() + " beats");
         lore.add(LegacyText.GRAY + "Wrap-up actions: " + LegacyText.WHITE + role.getWrapUp().size());
         List<String> reactions = role.getReactions().keySet().stream().map(BehaviourEvent::displayName).toList();
         lore.add(LegacyText.GRAY + "While active: " + LegacyText.WHITE
                 + (reactions.isEmpty() ? "normal behaviour" : String.join(", ", reactions)));
         lore.add("");
-        lore.add(GuiItems.hint("Click", "edit its actions"));
+        lore.add(GuiItems.hint("Click", "edit its beats, wrap-up, and reactions"));
         lore.add(GuiItems.danger("Shift-right-click", "remove role"));
+        return roleHead(role, LegacyText.GOLD + presetName(role), lore);
+    }
+
+    private ItemStack beatItem(Scene scene, SceneBeat beat, int beatIndex, boolean playing) {
+        List<String> lore = new ArrayList<>();
+        lore.add(LegacyText.GRAY + "Next beat: " + LegacyText.WHITE
+                + SceneBeatText.advance(scene, beat, this::plainPresetName));
+        List<String> acting = beat.actingRoles().stream().map(scene::findRole).flatMap(java.util.Optional::stream)
+                .map(this::plainPresetName).toList();
+        lore.add(LegacyText.GRAY + "Acting: " + LegacyText.WHITE
+                + (acting.isEmpty() ? "nobody yet" : String.join(", ", acting)));
+        if (playing)
+            lore.add(LegacyText.GREEN + "▶ Playing now");
+        lore.add("");
+        lore.add(GuiItems.hint("Click", "when it moves on, move, copy, delete"));
+        ItemStack item = GuiItems.item(new ItemStack(advanceMaterial(beat.getAdvance())),
+                LegacyText.AQUA + "Beat " + (beatIndex + 1), lore);
+        item.setAmount(Math.clamp(beatIndex + 1, 1, 64));
+        return playing ? GuiItems.glint(item) : item;
+    }
+
+    private ItemStack cellItem(SceneRole role, SceneBeat beat, int beatIndex) {
+        List<dev.blockfolk.model.BehaviourAction> actions = beat.getActions(role.getId());
+        String name = plainPresetName(role);
+        if (actions.isEmpty())
+            return GuiItems.item(new ItemStack(Material.LIGHT_GRAY_STAINED_GLASS_PANE),
+                    LegacyText.GRAY + name + " holds still",
+                    List.of(LegacyText.DARK_GRAY + "No actions in beat " + (beatIndex + 1), "",
+                            GuiItems.hint("Click", "add actions")));
+        List<String> lore = new ArrayList<>();
+        for (int index = 0; index < actions.size(); index++)
+            lore.add(LegacyText.GRAY + (index + 1) + ". " + LegacyText.WHITE
+                    + (guiService == null
+                            ? actions.get(index).type().displayName()
+                            : guiService.actionSummary(actions.get(index))));
+        lore.add("");
+        lore.add(GuiItems.hint("Click", "edit its actions"));
+        ItemStack item = roleHead(role, LegacyText.YELLOW + name + LegacyText.GRAY + " · Beat " + (beatIndex + 1),
+                lore);
+        item.setAmount(actions.size());
+        return item;
+    }
+
+    private ItemStack roleHead(SceneRole role, String name, List<String> lore) {
         NpcDefinition preset = role.getPresetKey() == null ? null : definitions.find(role.getPresetKey()).orElse(null);
-        ItemStack icon = GuiItems.item(preset == null ? Material.SKELETON_SKULL : Material.PLAYER_HEAD,
-                presetName(role), lore);
+        ItemStack icon = GuiItems.item(new ItemStack(preset == null ? Material.SKELETON_SKULL : Material.PLAYER_HEAD),
+                name, lore);
         return preset == null ? icon : NpcHeadUtil.applySkin(icon, preset);
     }
 
-    private void handleRolesClick(InventoryClickEvent click, Player player, RolesHolder holder) {
+    private void handleScriptClick(InventoryClickEvent click, Player player, ScriptHolder holder) {
         Scene scene = scenes.find(holder.sceneKey()).orElse(null);
         if (scene == null) {
             openBrowser(player, "", 0);
             return;
         }
         int slot = click.getRawSlot();
+        Runnable reopen = () -> openScript(player, scene.getKey(), holder.beatPage(), holder.rolePage());
         switch (slot) {
-            case GuiItems.PREVIOUS_SLOT -> openRoles(player, scene.getKey(), holder.page() - 1);
-            case GuiItems.NEXT_SLOT -> openRoles(player, scene.getKey(), holder.page() + 1);
+            case GuiItems.PREVIOUS_SLOT -> openScript(player, scene.getKey(), holder.beatPage() - 1, holder.rolePage());
+            case GuiItems.NEXT_SLOT -> openScript(player, scene.getKey(), holder.beatPage() + 1, holder.rolePage());
+            case SCRIPT_ROLES_LEFT_SLOT -> openScript(player, scene.getKey(), holder.beatPage(), holder.rolePage() - 1);
+            case SCRIPT_ROLES_RIGHT_SLOT ->
+                openScript(player, scene.getKey(), holder.beatPage(), holder.rolePage() + 1);
             case GuiItems.BACK_SLOT -> openEditor(player, scene.getKey());
             case GuiItems.CREATE_SLOT -> {
-                if (scene.getRoles().size() < Scene.MAX_ROLES)
-                    openPresetPicker(player, scene.getKey(), null, 0);
+                if (!scene.canAddBeat())
+                    return;
+                scene.addBeat();
+                scenes.save(scene);
+                GuiItems.click(player);
+                // Show the page with the new beat.
+                openScript(player, scene.getKey(), (scene.getBeats().size() - 1) / SCRIPT_ROWS, holder.rolePage());
             }
             default -> {
-                List<SceneRole> roles = scene.getRoles();
-                int index = holder.page() * PAGE_SIZE + slot;
-                if (slot >= PAGE_SIZE || index < 0 || index >= roles.size())
+                if (slot >= 45)
                     return;
-                SceneRole role = roles.get(index);
-                if (click.getClick() == ClickType.SHIFT_RIGHT) {
-                    if (sceneService != null && sceneService.isRunning(scene.getKey())) {
-                        player.sendMessage(UiText.warning("Stop the scene before removing roles."));
+                int row = slot / 9;
+                int column = slot % 9;
+                List<SceneRole> roles = scene.getRoles();
+                int roleIndex = holder.rolePage() * SCRIPT_COLUMNS + column - 1;
+                if (row == 0) {
+                    if (column == 0)
                         return;
-                    }
-                    scene.removeRole(role.getId());
-                    scenes.save(scene);
-                    player.sendMessage(UiText.success("Removed " + presetName(role) + " from the scene."));
-                    openRoles(player, scene.getKey(), holder.page());
-                } else if (guiService != null) {
-                    guiService.openSceneRole(player, scene.getKey(), role.getId(), 0);
+                    if (roleIndex == roles.size() && roles.size() < Scene.MAX_ROLES)
+                        openPresetPicker(player, scene.getKey(), null, 0);
+                    else if (roleIndex < roles.size())
+                        handleRoleHeaderClick(click, player, scene, roles.get(roleIndex), reopen);
+                    return;
+                }
+                List<SceneBeat> beats = scene.getBeats();
+                int beatIndex = holder.beatPage() * SCRIPT_ROWS + row - 1;
+                if (beatIndex >= beats.size())
+                    return;
+                if (column == 0) {
+                    openBeat(player, scene.getKey(), beats.get(beatIndex).getId());
+                } else if (roleIndex < roles.size() && guiService != null) {
+                    // The role editor lists beats first, five rows per page.
+                    guiService.openSceneRole(player, scene.getKey(), roles.get(roleIndex).getId(), beatIndex / 5);
                 }
             }
         }
     }
+
+    private void handleRoleHeaderClick(InventoryClickEvent click, Player player, Scene scene, SceneRole role,
+            Runnable reopen) {
+        if (click.getClick() != ClickType.SHIFT_RIGHT) {
+            if (guiService != null)
+                guiService.openSceneRole(player, scene.getKey(), role.getId(), 0);
+            return;
+        }
+        if (sceneService != null && sceneService.isRunning(scene.getKey())) {
+            player.sendMessage(UiText.warning("Stop the scene before removing roles."));
+            return;
+        }
+        scene.removeRole(role.getId());
+        scenes.save(scene);
+        player.sendMessage(UiText.success("Removed " + presetName(role) + " and its actions from the scene."));
+        reopen.run();
+    }
+
+    // ---------------------------------------------------------------- beat
+
+    /**
+     * Settings of one beat: when it moves on, and moving, copying, or deleting it.
+     */
+    private void openBeat(Player player, String sceneKey, String beatId) {
+        Scene scene = scenes.find(sceneKey).orElse(null);
+        SceneBeat beat = scene == null ? null : scene.findBeat(beatId).orElse(null);
+        if (beat == null) {
+            if (scene == null)
+                openBrowser(player, "", 0);
+            else
+                openScript(player, scene.getKey());
+            return;
+        }
+        int index = scene.beatIndex(beatId);
+        Inventory inventory = Bukkit.createInventory(new BeatHolder(scene.getKey(), beatId), 27,
+                UiText.title("Beat " + (index + 1), scene.getDisplayName()));
+        inventory.setItem(4, beatItem(scene, beat, index, false));
+        inventory.setItem(9, GuiItems.sectionHeader(Material.LIGHT_BLUE_STAINED_GLASS_PANE, LegacyText.AQUA,
+                "Next Beat Starts", "Choose one; running actions are cut off"));
+        for (int option = 0; option < BEAT_ADVANCE_SLOTS.length; option++) {
+            SceneBeatAdvance advance = SceneBeatAdvance.values()[option];
+            boolean selected = beat.getAdvance() == advance;
+            List<String> lore = new ArrayList<>();
+            lore.add(LegacyText.GRAY + advance.summary());
+            lore.add("");
+            lore.add(selected ? LegacyText.GREEN + "Selected" : GuiItems.hint("Click", "select"));
+            ItemStack item = GuiItems.item(new ItemStack(advanceMaterial(advance)),
+                    (selected ? LegacyText.GREEN : LegacyText.GOLD) + advance.displayName(), lore);
+            inventory.setItem(BEAT_ADVANCE_SLOTS[option], selected ? GuiItems.glint(item) : item);
+        }
+        inventory.setItem(BEAT_SETTING_SLOT, beatSettingItem(scene, beat));
+        inventory.setItem(BEAT_EARLIER_SLOT,
+                GuiItems.item(Material.ARROW, "Move Earlier",
+                        List.of(index == 0
+                                ? LegacyText.DARK_GRAY + "Already the first beat"
+                                : GuiItems.hint("Click", "swap with beat " + index))));
+        inventory.setItem(BEAT_LATER_SLOT,
+                GuiItems.item(Material.ARROW, "Move Later",
+                        List.of(index + 1 >= scene.getBeats().size()
+                                ? LegacyText.DARK_GRAY + "Already the last beat"
+                                : GuiItems.hint("Click", "swap with beat " + (index + 2)))));
+        inventory.setItem(BEAT_COPY_SLOT,
+                GuiItems.item(Material.PAPER, "Duplicate",
+                        List.of(LegacyText.GRAY + "Inserts a copy right after this beat", "",
+                                scene.canAddBeat()
+                                        ? GuiItems.hint("Click", "duplicate")
+                                        : LegacyText.RED + "The scene has the most beats it can hold")));
+        inventory.setItem(BEAT_BACK_SLOT, GuiItems.back("the script"));
+        inventory.setItem(BEAT_DELETE_SLOT,
+                GuiItems.item(Material.LAVA_BUCKET, "Delete Beat",
+                        List.of(LegacyText.GRAY + "Removes this beat and every role's",
+                                LegacyText.GRAY + "actions in it", "", GuiItems.danger("Shift-click", "delete"))));
+        GuiLayout.fillRow(inventory, 0);
+        GuiLayout.fillMainBar(inventory);
+        player.openInventory(inventory);
+    }
+
+    private ItemStack beatSettingItem(Scene scene, SceneBeat beat) {
+        return switch (beat.getAdvance()) {
+            case AFTER_TIME -> numericItem(Material.CLOCK, "Moves On After", SceneBeatText.seconds(beat.getSeconds()),
+                    List.of(LegacyText.GRAY + "Counted from the start of the beat"));
+            case ROLE_DONE -> {
+                List<SceneRole> roles = scene.getRoles();
+                if (roles.isEmpty())
+                    yield GuiItems.item(Material.GRAY_DYE, "No Roles Yet",
+                            List.of(LegacyText.GRAY + "Add roles in the script first"));
+                List<GuiItems.Option> options = roles.stream().map(role -> new GuiItems.Option(Material.PLAYER_HEAD,
+                        plainPresetName(role), beat.hasActions(role.getId()) ? "" : "no actions in this beat"))
+                        .toList();
+                int selected = Math.max(0, indexOfRole(roles, beat.getAdvanceRoleId()));
+                yield GuiItems.cycle("Waits For", options, selected,
+                        List.of("The other roles' unfinished", "actions are cut off"));
+            }
+            case EVERYONE_DONE -> GuiItems.item(Material.GRAY_DYE, "No Setting Needed",
+                    List.of(LegacyText.GRAY + "Moves on once every role finished",
+                            LegacyText.GRAY + "its actions in this beat. Dialog lines",
+                            LegacyText.GRAY + "count as done once there was time to", LegacyText.GRAY + "read them."));
+            case NEXT_BEAT_ONLY -> GuiItems.item(Material.GRAY_DYE, "No Setting Needed",
+                    List.of(LegacyText.GRAY + "Waits for a Next Beat action, e.g. in",
+                            LegacyText.GRAY + "a While Active: On Right-Click row or",
+                            LegacyText.GRAY + "a question answer, so a player decides",
+                            LegacyText.GRAY + "when the scene goes on."));
+        };
+    }
+
+    private static int indexOfRole(List<SceneRole> roles, String roleId) {
+        for (int index = 0; index < roles.size(); index++) {
+            if (roles.get(index).getId().equals(roleId))
+                return index;
+        }
+        return -1;
+    }
+
+    private void handleBeatClick(InventoryClickEvent click, Player player, BeatHolder holder) {
+        Scene scene = scenes.find(holder.sceneKey()).orElse(null);
+        SceneBeat beat = scene == null ? null : scene.findBeat(holder.beatId()).orElse(null);
+        if (beat == null) {
+            if (scene == null)
+                openBrowser(player, "", 0);
+            else
+                openScript(player, scene.getKey());
+            return;
+        }
+        Runnable reopen = () -> openBeat(player, scene.getKey(), beat.getId());
+        int slot = click.getRawSlot();
+        for (int option = 0; option < BEAT_ADVANCE_SLOTS.length; option++) {
+            if (slot != BEAT_ADVANCE_SLOTS[option])
+                continue;
+            SceneBeatAdvance advance = SceneBeatAdvance.values()[option];
+            beat.setAdvance(advance);
+            if (advance == SceneBeatAdvance.ROLE_DONE && scene.findRole(beat.getAdvanceRoleId()).isEmpty()) {
+                // Start with a role that acts in this beat.
+                beat.setAdvanceRoleId(beat.actingRoles().isEmpty()
+                        ? scene.getRoles().stream().findFirst().map(SceneRole::getId).orElse(null)
+                        : beat.actingRoles().getFirst());
+            }
+            scenes.save(scene);
+            GuiItems.click(player);
+            reopen.run();
+            return;
+        }
+        switch (slot) {
+            case BEAT_SETTING_SLOT -> {
+                if (beat.getAdvance() == SceneBeatAdvance.AFTER_TIME) {
+                    adjust(click, player, scene, 1, beat::setSeconds, beat.getSeconds(),
+                            "Enter how many seconds the beat lasts:", 1, reopen);
+                } else if (beat.getAdvance() == SceneBeatAdvance.ROLE_DONE && !scene.getRoles().isEmpty()) {
+                    int direction = GuiItems.cycleDirection(click.getClick());
+                    if (direction == 0)
+                        return;
+                    List<SceneRole> roles = scene.getRoles();
+                    int current = Math.max(0, indexOfRole(roles, beat.getAdvanceRoleId()));
+                    beat.setAdvanceRoleId(roles.get(Math.floorMod(current + direction, roles.size())).getId());
+                    scenes.save(scene);
+                    GuiItems.click(player);
+                    reopen.run();
+                }
+            }
+            case BEAT_EARLIER_SLOT, BEAT_LATER_SLOT, BEAT_COPY_SLOT, BEAT_DELETE_SLOT -> {
+                if (sceneService != null && sceneService.isRunning(scene.getKey())) {
+                    player.sendMessage(UiText.warning("Stop the scene before moving, copying, or deleting beats."));
+                    return;
+                }
+                if (slot == BEAT_DELETE_SLOT) {
+                    if (!click.isShiftClick())
+                        return;
+                    int index = scene.beatIndex(beat.getId());
+                    scene.removeBeat(beat.getId());
+                    scenes.save(scene);
+                    player.sendMessage(UiText.success("Deleted beat " + (index + 1) + "."));
+                    openScript(player, scene.getKey());
+                    return;
+                }
+                boolean changed = slot == BEAT_COPY_SLOT
+                        ? scene.duplicateBeat(beat.getId()).isPresent()
+                        : scene.moveBeat(beat.getId(), slot == BEAT_EARLIER_SLOT ? -1 : 1);
+                if (!changed)
+                    return;
+                scenes.save(scene);
+                GuiItems.click(player);
+                reopen.run();
+            }
+            case BEAT_BACK_SLOT -> openScript(player, scene.getKey());
+            default -> {
+            }
+        }
+    }
+
+    private static Material advanceMaterial(SceneBeatAdvance advance) {
+        return switch (advance) {
+            case EVERYONE_DONE -> Material.MAP;
+            case AFTER_TIME -> Material.CLOCK;
+            case ROLE_DONE -> Material.NAME_TAG;
+            case NEXT_BEAT_ONLY -> Material.REPEATER;
+        };
+    }
+
+    // --------------------------------------------------------------- roles
 
     private void openPresetPicker(Player player, String sceneKey, String roleId, int requestedPage) {
         Scene scene = scenes.find(sceneKey).orElse(null);
@@ -863,10 +1202,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                         GuiItems.item(Material.GRAY_DYE, preset.getDisplayName(),
                                 List.of(LegacyText.DARK_GRAY + "Key: " + preset.getKey(),
                                         LegacyText.RED + "Already has a role in this scene",
-                                        LegacyText.GRAY + "An NPC plays one role per scene.", "",
-                                        LegacyText.GRAY + "For more steps, add them to its role,",
-                                        LegacyText.GRAY + "or end its row with Start Scene to",
-                                        LegacyText.GRAY + "continue in a follow-up scene.")));
+                                        LegacyText.GRAY + "An NPC plays one role per scene,",
+                                        LegacyText.GRAY + "and that role can act in every beat.")));
                 continue;
             }
             boolean current = roleId != null
@@ -897,7 +1234,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         int slot = click.getRawSlot();
         if (slot == GuiItems.BACK_SLOT) {
             if (holder.roleId() == null || guiService == null)
-                openRoles(player, scene.getKey(), 0);
+                openScript(player, scene.getKey());
             else
                 guiService.openSceneRole(player, scene.getKey(), holder.roleId(), 0);
             return;
@@ -915,21 +1252,21 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         SceneRole taken = scene.roleOf(preset.getKey(), holder.roleId()).orElse(null);
         if (taken != null) {
             player.sendMessage(UiText.warning(preset.getDisplayName()
-                    + " already has a role in this scene. Add the steps to its role, or chain a follow-up scene"
-                    + " with Start Scene."));
+                    + " already has a role in this scene. Give it the actions in the beats where it acts."));
             return;
         }
         String roleId;
         if (holder.roleId() == null) {
             if (scene.getRoles().size() >= Scene.MAX_ROLES)
                 return;
-            roleId = scene.addRole(preset.getKey()).getId();
+            roleId = null;
+            scene.addRole(preset.getKey());
             player.sendMessage(UiText.success("Added " + preset.getDisplayName()
-                    + " to the scene. Add its scene actions, then its wrap-up and reactions if needed."));
+                    + " to the scene. Click its cells in the script to give it actions."));
         } else {
             SceneRole role = scene.findRole(holder.roleId()).orElse(null);
             if (role == null) {
-                openRoles(player, scene.getKey(), 0);
+                openScript(player, scene.getKey());
                 return;
             }
             role.setPresetKey(preset.getKey());
@@ -937,10 +1274,14 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             player.sendMessage(UiText.success(preset.getDisplayName() + " now plays this role."));
         }
         scenes.save(scene);
-        if (guiService != null)
+        if (roleId != null && guiService != null) {
             guiService.openSceneRole(player, scene.getKey(), roleId, 0);
-        else
-            openRoles(player, scene.getKey(), 0);
+        } else {
+            // Show the roles page with the new column.
+            ScriptView view = scriptViews.get(player.getUniqueId());
+            int beatPage = view != null && view.sceneKey().equals(scene.getKey()) ? view.beatPage() : 0;
+            openScript(player, scene.getKey(), beatPage, (scene.getRoles().size() - 1) / SCRIPT_COLUMNS);
+        }
     }
 
     // ---------------------------------------------------------------- area
@@ -1062,7 +1403,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
             case BrowserHolder browser -> handleBrowserClick(event, player, browser);
             case EditorHolder editor -> handleEditorClick(event, player, editor);
             case TriggersHolder triggers -> handleTriggersClick(event, player, triggers);
-            case RolesHolder roles -> handleRolesClick(event, player, roles);
+            case ScriptHolder script -> handleScriptClick(event, player, script);
+            case BeatHolder beat -> handleBeatClick(event, player, beat);
             case PresetPickerHolder picker -> handlePresetPickerClick(event, player, picker);
             case AreaPickerHolder area -> handleAreaPickerClick(event, player, area);
             case DeleteHolder delete -> handleDeleteClick(event, player, delete);
@@ -1080,6 +1422,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     @EventHandler
     public void onQuit(org.bukkit.event.player.PlayerQuitEvent event) {
         presetFilters.remove(event.getPlayer().getUniqueId());
+        scriptViews.remove(event.getPlayer().getUniqueId());
     }
 
     /** The NPC whose scenes the player is browsing, or null for all scenes. */
@@ -1093,8 +1436,9 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
 
     private static boolean isOwnHolder(InventoryHolder holder) {
         return holder instanceof BrowserHolder || holder instanceof EditorHolder || holder instanceof TriggersHolder
-                || holder instanceof RolesHolder || holder instanceof PresetPickerHolder
-                || holder instanceof AreaPickerHolder || holder instanceof DeleteHolder;
+                || holder instanceof ScriptHolder || holder instanceof BeatHolder
+                || holder instanceof PresetPickerHolder || holder instanceof AreaPickerHolder
+                || holder instanceof DeleteHolder;
     }
 
     // ------------------------------------------------------------- helpers
@@ -1136,6 +1480,13 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         return scenes.find(sceneKey).map(Scene::getDisplayName).orElse(LegacyText.RED + "missing '" + sceneKey + "'");
     }
 
+    /** The NPC's name without colour codes, for use inside other text. */
+    private String plainPresetName(SceneRole role) {
+        if (role.getPresetKey() == null)
+            return "nobody";
+        return definitions.find(role.getPresetKey()).map(NpcDefinition::getDisplayName).orElse(role.getPresetKey());
+    }
+
     private String presetName(SceneRole role) {
         if (role.getPresetKey() == null)
             return LegacyText.RED + "nobody";
@@ -1166,7 +1517,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
 
     private static Material endingMaterial(SceneEnding ending) {
         return switch (ending) {
-            case LANES_FINISHED -> Material.MAP;
+            case BEATS_FINISHED -> Material.MAP;
             case DURATION -> Material.CLOCK;
             case TIME_OF_DAY -> Material.SUNFLOWER;
             case WEATHER_CHANGES -> Material.WATER_BUCKET;
@@ -1201,7 +1552,13 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     private record TriggersHolder(String sceneKey) implements GuiHolder {
     }
 
-    private record RolesHolder(String sceneKey, int page) implements GuiHolder {
+    private record ScriptHolder(String sceneKey, int beatPage, int rolePage) implements GuiHolder {
+    }
+
+    private record ScriptView(String sceneKey, int beatPage, int rolePage) {
+    }
+
+    private record BeatHolder(String sceneKey, String beatId) implements GuiHolder {
     }
 
     private record PresetPickerHolder(String sceneKey, String roleId, int page) implements GuiHolder {

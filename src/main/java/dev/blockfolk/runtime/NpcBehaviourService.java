@@ -570,13 +570,6 @@ public final class NpcBehaviourService implements Listener {
             askQuestion(event, actions, index, action, instance, definition, actor, eventDetail, alive, completion);
             return;
         }
-        if (action.type() == BehaviourActionType.WAIT_FOR_CUE) {
-            Runnable next = () -> executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail,
-                    alive, completion);
-            if (sceneService == null || !sceneService.awaitCue(instance, action.value(), next))
-                next.run();
-            return;
-        }
         if (action.type() == BehaviourActionType.USE_ABILITY) {
             int delay = combatService == null ? -1 : combatService.useAbility(instance, action.value(), actor);
             Runnable next = () -> executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail,
@@ -1030,12 +1023,9 @@ public final class NpcBehaviourService implements Listener {
                 if (sceneService != null)
                     sceneService.stopFromAction(action.value());
             }
-            case CUE -> {
+            case NEXT_BEAT -> {
                 if (sceneService != null)
-                    sceneService.cue(instance, action.value());
-            }
-            // WAIT_FOR_CUE is handled by executeSequence: it only holds the next action.
-            case WAIT_FOR_CUE -> {
+                    sceneService.nextBeat(instance);
             }
             case SIT -> instances.sit(instance);
             case SLEEP -> instances.pose(instance, Pose.SLEEPING);

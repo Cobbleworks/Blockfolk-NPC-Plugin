@@ -9,10 +9,10 @@ import java.util.Objects;
 
 /**
  * One part in a scene, played by every free instance of an NPC preset. NPCs
- * play themselves, so a role has no name of its own. A role has the actions it
- * performs when the scene starts (its lane), what it does when the scene ends
- * (its wrap-up), and reactions that replace the preset's own behaviour while
- * the scene runs.
+ * play themselves, so a role has no name of its own. What a role does in each
+ * step lives in the scene's {@link SceneBeat beats}; the role itself holds what
+ * it does when the scene ends (its wrap-up) and reactions that replace the
+ * preset's own behaviour while the scene runs.
  */
 public final class SceneRole {
 
@@ -24,7 +24,6 @@ public final class SceneRole {
 
     private final String id;
     private String presetKey;
-    private List<BehaviourAction> lane = new ArrayList<>();
     private List<BehaviourAction> wrapUp = new ArrayList<>();
     private final Map<BehaviourEvent, List<BehaviourAction>> reactions = new EnumMap<>(BehaviourEvent.class);
 
@@ -48,14 +47,6 @@ public final class SceneRole {
 
     public void setPresetKey(String presetKey) {
         this.presetKey = presetKey == null || presetKey.isBlank() ? null : NpcDefinition.toKey(presetKey);
-    }
-
-    public List<BehaviourAction> getLane() {
-        return new ArrayList<>(lane);
-    }
-
-    public void setLane(List<BehaviourAction> actions) {
-        lane = limited(actions);
     }
 
     public List<BehaviourAction> getWrapUp() {
@@ -85,18 +76,9 @@ public final class SceneRole {
         return copy;
     }
 
-    public int actionCount() {
-        return lane.size() + wrapUp.size() + reactions.values().stream().mapToInt(List::size).sum();
-    }
-
     /** Rewrites every action, including question branches. */
     public boolean mapActions(java.util.function.UnaryOperator<BehaviourAction> mapper) {
         boolean changed = false;
-        List<BehaviourAction> mappedLane = BehaviourActions.map(lane, mapper);
-        if (!mappedLane.equals(lane)) {
-            lane = new ArrayList<>(mappedLane);
-            changed = true;
-        }
         List<BehaviourAction> mappedWrapUp = BehaviourActions.map(wrapUp, mapper);
         if (!mappedWrapUp.equals(wrapUp)) {
             wrapUp = new ArrayList<>(mappedWrapUp);
@@ -115,7 +97,6 @@ public final class SceneRole {
     /** Drops every matching action, including inside question branches. */
     public boolean removeActions(java.util.function.Predicate<BehaviourAction> filter) {
         int before = countAll();
-        lane = new ArrayList<>(BehaviourActions.removeIf(lane, filter));
         wrapUp = new ArrayList<>(BehaviourActions.removeIf(wrapUp, filter));
         reactions.replaceAll((event, actions) -> new ArrayList<>(BehaviourActions.removeIf(actions, filter)));
         reactions.values().removeIf(List::isEmpty);
@@ -130,12 +111,11 @@ public final class SceneRole {
 
     /** Visits every action, including question branches. */
     public void forEachAction(java.util.function.Consumer<BehaviourAction> visitor) {
-        BehaviourActions.forEach(lane, visitor);
         BehaviourActions.forEach(wrapUp, visitor);
         reactions.values().forEach(actions -> BehaviourActions.forEach(actions, visitor));
     }
 
-    private static List<BehaviourAction> limited(List<BehaviourAction> actions) {
+    static List<BehaviourAction> limited(List<BehaviourAction> actions) {
         if (actions == null)
             return new ArrayList<>();
         return new ArrayList<>(actions.subList(0, Math.min(actions.size(), MAX_ACTIONS)));
