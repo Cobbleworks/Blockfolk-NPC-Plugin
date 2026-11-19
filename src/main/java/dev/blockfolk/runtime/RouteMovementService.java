@@ -75,7 +75,8 @@ public final class RouteMovementService {
             return;
         }
         if (combatService.isEngaged(instance) || behaviourService.isFollowing(instance)
-                || behaviourService.isMovingTo(instance) || behaviourService.isRunningWaypointActions(instance)) {
+                || behaviourService.isMovingTo(instance) || behaviourService.isRunningWaypointActions(instance)
+                || behaviourService.isRegionalRouteSuspended(instance)) {
             // Another runtime activity temporarily owns navigation. Keep the
             // route target so the NPC resumes toward the same next waypoint.
             return;

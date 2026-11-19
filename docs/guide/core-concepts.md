@@ -12,7 +12,7 @@ Spawning a preset creates one NPC by default. Additional copies are created expl
 
 A behaviour routine starts with an **event** such as a player approaching, the NPC taking damage, or a route point being reached. The attached **actions** run from left to right. Actions can speak, move, fight, interact with the world, emit another event, or invoke AI.
 
-[Custom events](/features/custom-events) are administrator-defined global signals. Emitting one runs the matching response on every active NPC configured to react, which is useful for coordinating several presets.
+[Regional events](/features/regional-events) coordinate placed NPCs across one or more phases. Events can start when a player enters a region, at a configured time of day, or on demand.
 
 ## Routes and locations
 
@@ -24,4 +24,4 @@ Normal event routines are deterministic and do not require an external service. 
 
 ## Where configuration lives
 
-Global timing and provider values live in `config.yml`. Presets, instances, routes, locations, and custom events are maintained by the plugin in separate YAML files. Use the GUI for editing those files and include the entire `plugins/Blockfolk/` directory in backups.
+Global timing and provider values live in `config.yml`. Presets, instances, routes, locations, and events are maintained by the plugin in separate YAML files. Use the GUI for editing those files and include the entire `plugins/Blockfolk/` directory in backups.

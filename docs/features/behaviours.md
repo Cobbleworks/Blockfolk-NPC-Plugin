@@ -52,7 +52,7 @@ Set `line-of-sight` to `false` to let NPCs notice everything in range, also thro
 
 | Group | Available actions |
 | --- | --- |
-| Dialogue & scripting | Send Dialog, Show Holo Dialog, Ask Question, Emit Custom Event, Console Command, AI Trigger, Wait |
+| Dialogue & scripting | Send Dialog, Show Holo Dialog, Ask Question, Emit Event, Console Command, AI Trigger, Wait |
 | Movement | Set Route, Start/Stop Navigation, Set Walk Speed, Move To, Teleport To, Follow, Unfollow |
 | World & inventory | Interact, Mine Blocks, Take Item, Show Inventory, Drop Inventory, Harvest, Open Shop |
 | Combat | Start Combat, Change Fight Options |
@@ -87,13 +87,9 @@ To set a **Move To** destination in a question branch, right-click a block with 
 
 Dialog line duration is calculated at 12 characters per second with a minimum of three seconds.
 
-## Custom events
+## Starting other events
 
-Custom events decouple one routine from another. Define global custom events in the custom-event manager, add **Emit Custom Event** to a source routine, then configure a preset's **Custom Event Behaviour** for that event.
-
-Names may contain `/` to create groups in the event browser. Custom-event actions can also emit another event, which makes it possible to coordinate several NPC presets.
-
-See [Custom events](/features/custom-events) for creation, manual triggering, ordering, event chains, and deletion behavior.
+Use **Emit Event** to start a [regional event](/features/regional-events) from a routine, waypoint, or question branch. Saved global custom event signals are also available on servers that already use them.
 
 ## Waypoint actions
 

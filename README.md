@@ -17,7 +17,7 @@ Blockfolk is a GUI-driven NPC system for Paper servers. Administrators create re
 - **Persistent NPC presets:** Reuse one definition across multiple independently stored instances
 - **In-game administration:** Configure skins, equipment, names, dialog, inventories, routes, and behavior without hand-editing YAML
 - **Saved NPC poses:** Choose standing, crouching, sleeping, sitting, swimming/crawling, or fall flying under **NPC Properties → Pose**; use Sitting in behavior, waypoint, and question animations
-- **Behavior sequences:** React to interaction, proximity, combat, time, waypoints, custom events, and other supported triggers
+- **Behavior sequences:** React to interaction, proximity, combat, time, waypoints, and other supported triggers
 - **Routes and locations:** Build NPC-owned walking routes in the world and reuse named destinations across NPCs
 - **Configurable combat:** Define attacks, targets, alliances, loot, experience, respawn timing, and nearby boss bars
 - **Abilities:** Build shared custom attacks with origins, spheres, cones, beams, teleport, timing, charged weapon hits, combined effects, and previews; assign them through Fighting & Survival or cast them with a Use Ability behaviour action
@@ -133,7 +133,7 @@ The **Manage Instances** menu provides shortcuts for teleporting to an NPC, movi
 
 ### **Behaviors and Routes**
 
-Behavior sequences contain ordered actions attached to an event. NPCs can speak, wait, walk, fight, mine, harvest, work with containers, ask questions, invoke custom events, or hand control to the optional AI layer. Routes combine world waypoints with their own arrival actions.
+Behavior sequences contain ordered actions attached to an event. NPCs can speak, wait, walk, fight, mine, harvest, work with containers, ask questions, start regional events, or hand control to the optional AI layer. Routes combine world waypoints with their own arrival actions.
 
 Mining, harvesting, and container transfers emit cancellable Bukkit events so claim, region, and logging plugins can approve, reject, or record the world change.
 

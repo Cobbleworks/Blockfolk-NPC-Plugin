@@ -72,7 +72,7 @@ class BeautyQuestsClickTest {
         doNothing().when(behaviours).trigger(any(BehaviourEvent.class), eq(instance), eq(player));
         doNothing().when(behaviours).onDamage(any());
         gui = spy(new GuiService(plugin, definitions, null, instances, null, null, null, null, null, null, null, null,
-                null, null));
+                null));
         gui.setBehaviourService(behaviours);
         doNothing().when(gui).openEditor(eq(player), any(NpcDefinition.class));
 

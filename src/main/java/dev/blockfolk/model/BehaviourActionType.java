@@ -15,8 +15,7 @@ public enum BehaviourActionType {
                                                             false), TAKE_ITEM("Take Item", false), SHOW_INVENTORY(
                                                                     "Show Inventory", false), DROP_INVENTORY(
                                                                             "Drop Inventory", false), HARVEST("Harvest",
-                                                                                    false), EMIT_EVENT(
-                                                                                            "Emit Custom Event",
+                                                                                    false), EMIT_EVENT("Emit Event",
                                                                                             true), SIT("Sitting",
                                                                                                     false), SLEEP(
                                                                                                             "Sleeping",
@@ -40,7 +39,9 @@ public enum BehaviourActionType {
                                                                                                                                                                                     "Open Shop",
                                                                                                                                                                                     true), GO_BACK(
                                                                                                                                                                                             "Go Back",
-                                                                                                                                                                                            false);
+                                                                                                                                                                                            false), FACE_TARGET(
+                                                                                                                                                                                                    "Face Target",
+                                                                                                                                                                                                    true);
 
     private final String displayName;
     private final boolean requiresValue;

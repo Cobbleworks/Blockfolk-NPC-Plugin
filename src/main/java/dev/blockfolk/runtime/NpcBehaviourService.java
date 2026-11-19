@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -77,6 +78,7 @@ import dev.blockfolk.model.FightOptions;
 import dev.blockfolk.model.MovementProfile;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
+import dev.blockfolk.model.RegionalEvent;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import io.papermc.paper.event.player.AsyncChatEvent;
@@ -137,6 +139,9 @@ public final class NpcBehaviourService implements Listener {
     private final Map<UUID, List<PendingMove>> pendingMoves = new HashMap<>();
     private final Map<UUID, FollowState> following = new HashMap<>();
     private final Map<UUID, Object> waypointActionSequences = new HashMap<>();
+    private final Map<UUID, RegionalControl> regionalControls = new HashMap<>();
+    private final Set<UUID> regionalRoutes = new HashSet<>();
+    private final Map<UUID, Object> regionalGenerations = new HashMap<>();
     private final Map<UUID, AiInteraction> aiInteractions = new HashMap<>();
     private final Map<UUID, ArrayDeque<AiInteractionRequest>> aiInteractionQueues = new HashMap<>();
     private final Map<UUID, Long> itemPickupLockedUntilTick = new HashMap<>();
@@ -158,6 +163,7 @@ public final class NpcBehaviourService implements Listener {
     private final long proximityCooldownTicks;
     private NpcCombatService combatService;
     private NpcShopService shopService;
+    private RegionalEventService regionalEvents;
     private AiControlService aiControlService;
     private NpcConversationService conversationService;
     private NpcPerception perception;
@@ -182,6 +188,10 @@ public final class NpcBehaviourService implements Listener {
         this.dialogService = dialogService;
         this.questionService = questionService;
         this.proximityCooldownTicks = Math.max(0L, proximityCooldownSeconds) * 20L;
+    }
+
+    public void setRegionalEvents(RegionalEventService regionalEvents) {
+        this.regionalEvents = regionalEvents;
     }
 
     public void setShopService(NpcShopService shopService) {
@@ -240,6 +250,7 @@ public final class NpcBehaviourService implements Listener {
         this.conversationService = conversationService;
         if (conversationService != null) {
             conversationService.setDecisionHandler((instance, result) -> definitions.find(instance.getDefinitionKey())
+                    .filter(ignored -> !isInRegionalEvent(instance))
                     .ifPresent(definition -> applyAiDecision(null, result, instance, definition, null, false, null)));
         }
     }
@@ -264,6 +275,9 @@ public final class NpcBehaviourService implements Listener {
         pendingMoves.clear();
         following.clear();
         waypointActionSequences.clear();
+        regionalControls.clear();
+        regionalRoutes.clear();
+        regionalGenerations.clear();
         aiInteractions.clear();
         itemPickupLockedUntilTick.clear();
         idleCycles.clear();
@@ -378,11 +392,20 @@ public final class NpcBehaviourService implements Listener {
         }
         Object token = new Object();
         waypointActionSequences.put(instance.getId(), token);
-        executeSequence(null, List.copyOf(actions), 0, instance, definition, null, "The NPC reached a route waypoint.",
-                () -> waypointActionSequences.remove(instance.getId(), token));
+        Runnable completion = () -> waypointActionSequences.remove(instance.getId(), token);
+        RegionalControl control = regionalControls.get(instance.getId());
+        if (control == null) {
+            executeSequence(null, List.copyOf(actions), 0, instance, definition, null,
+                    "The NPC reached a route waypoint.", completion);
+        } else if (regionalRoutes.contains(instance.getId())) {
+            executeSequence(null, List.copyOf(actions), 0, instance, definition, null,
+                    "The NPC reached a route waypoint.", completion, () -> isActiveRegionalControl(instance, control));
+        } else {
+            completion.run();
+        }
     }
 
-    public void emitCustomEvent(String eventName, Entity actor) {
+    public void emitEvent(String eventName, Entity actor) {
         if (eventName == null || eventName.isBlank())
             return;
         if (customEmissionTick != currentTick) {
@@ -390,7 +413,12 @@ public final class NpcBehaviourService implements Listener {
             customEmissionsThisTick = 0;
         }
         if (++customEmissionsThisTick > 64) {
-            plugin.getLogger().warning("Stopped a custom NPC event chain after 64 emissions in one tick.");
+            plugin.getLogger().warning("Stopped an NPC event chain after 64 emissions in one tick.");
+            return;
+        }
+        if (RegionalEvent.isReference(eventName)) {
+            if (regionalEvents != null)
+                regionalEvents.emit(eventName, actor);
             return;
         }
         for (NpcInstance target : List.copyOf(instances.findActive())) {
@@ -406,6 +434,9 @@ public final class NpcBehaviourService implements Listener {
     }
 
     public void forget(NpcInstance instance) {
+        regionalControls.remove(instance.getId());
+        regionalRoutes.remove(instance.getId());
+        regionalGenerations.remove(instance.getId());
         questionService.forget(instance);
         lowHealthTriggered.remove(instance.getId());
         routeOverrides.remove(instance.getId());
@@ -527,25 +558,138 @@ public final class NpcBehaviourService implements Listener {
         return routeReverseRequests.remove(instance.getId());
     }
 
-    private void executeSequence(BehaviourEvent event, java.util.List<BehaviourAction> actions, int index,
-            NpcInstance instance, NpcDefinition definition, Entity actor, String eventDetail, Runnable completion) {
-        if (instances.findById(instance.getId()).isEmpty()) {
+    public boolean isInRegionalEvent(NpcInstance instance) {
+        return regionalControls.containsKey(instance.getId());
+    }
+
+    public boolean isRegionalRouteSuspended(NpcInstance instance) {
+        return isInRegionalEvent(instance) && !regionalRoutes.contains(instance.getId());
+    }
+
+    public boolean canJoinRegionalEvent(NpcInstance instance) {
+        return !isInRegionalEvent(instance) && !isExternalNavigationPaused(instance)
+                && !aiInteractions.containsKey(instance.getId())
+                && (combatService == null || !combatService.isEngaged(instance));
+    }
+
+    public void beginRegionalEvent(NpcInstance instance) {
+        UUID id = instance.getId();
+        regionalControls.put(id,
+                new RegionalControl(routeOverrides.get(id), speedOverrides.get(id), routePaused.remove(id),
+                        routeReverseRequests.remove(id), moveTargets.remove(id), following.remove(id),
+                        currentPeriod(instance), new HashSet<>()));
+        regionalGenerations.put(id, new Object());
+        waypointActionSequences.remove(id);
+        aiMoveTargets.remove(id);
+        instances.stopNavigating(instance);
+        List<PendingMove> interrupted = pendingMoves.remove(id);
+        if (interrupted != null)
+            interrupted.forEach(move -> move.continuation.run());
+    }
+
+    public void runRegionalActions(List<BehaviourAction> actions, NpcInstance instance, Entity actor, String name,
+            Runnable completion) {
+        RegionalControl control = regionalControls.get(instance.getId());
+        NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+        if (definition == null || control == null) {
             completion.run();
             return;
         }
-        if (index >= actions.size()) {
+        executeSequence(null, actions, 0, instance, definition, actor, "Regional event: " + name, completion,
+                () -> isActiveRegionalControl(instance, control));
+    }
+
+    private boolean isActiveRegionalControl(NpcInstance instance, RegionalControl control) {
+        return regionalControls.get(instance.getId()) == control && instances.findEntity(instance).isPresent();
+    }
+
+    public void endRegionalEvent(NpcInstance instance, boolean resumeRoutine) {
+        UUID id = instance.getId();
+        RegionalControl control = regionalControls.remove(id);
+        if (control == null)
+            return;
+        regionalRoutes.remove(id);
+        waypointActionSequences.remove(id);
+        if (resumeRoutine)
+            questionService.forget(instance);
+        List<PendingMove> interrupted = pendingMoves.remove(id);
+        if (resumeRoutine && interrupted != null)
+            interrupted.forEach(move -> move.continuation.run());
+        if (resumeRoutine) {
+            List<Runnable> questions = List.copyOf(control.pendingQuestions());
+            control.pendingQuestions().clear();
+            questions.forEach(Runnable::run);
+        }
+        stopFollowing(instance);
+        moveTargets.remove(id);
+        aiMoveTargets.remove(id);
+        aiInteractions.remove(id);
+        aiInteractionQueues.remove(id);
+        instances.stopNavigating(instance);
+        restoreOverride(routeOverrides, id, control.route());
+        restoreOverride(speedOverrides, id, control.speed());
+        routePaused.remove(id);
+        routeReverseRequests.remove(id);
+        if (control.routePaused())
+            routePaused.add(id);
+        if (control.routeReversed())
+            routeReverseRequests.add(id);
+        if (!resumeRoutine || instances.findEntity(instance).isEmpty())
+            return;
+        DayPeriod current = currentPeriod(instance);
+        if (current != null && current != control.period()) {
+            trigger(current.event(), instance, null);
+        } else {
+            if (control.moveTarget() != null)
+                moveTargets.put(id, control.moveTarget());
+            if (control.following() != null)
+                following.put(id, control.following());
+        }
+    }
+
+    private static <T> void restoreOverride(Map<UUID, T> overrides, UUID id, T value) {
+        if (value == null)
+            overrides.remove(id);
+        else
+            overrides.put(id, value);
+    }
+
+    private static DayPeriod currentPeriod(NpcInstance instance) {
+        World world = instance.getLocation().getWorld();
+        return world == null ? null : DayPeriod.at(world.getTime());
+    }
+
+    private record RegionalControl(String route, WalkingSpeed speed, boolean routePaused, boolean routeReversed,
+            Location moveTarget, FollowState following, DayPeriod period, Set<Runnable> pendingQuestions) {
+    }
+
+    private void executeSequence(BehaviourEvent event, List<BehaviourAction> actions, int index, NpcInstance instance,
+            NpcDefinition definition, Entity actor, String eventDetail, Runnable completion) {
+        UUID id = instance.getId();
+        Object generation = regionalGenerations.get(id);
+        if (isInRegionalEvent(instance)) {
+            completion.run();
+            return;
+        }
+        executeSequence(event, actions, index, instance, definition, actor, eventDetail, completion,
+                () -> regionalGenerations.get(id) == generation && !isInRegionalEvent(instance));
+    }
+
+    private void executeSequence(BehaviourEvent event, List<BehaviourAction> actions, int index, NpcInstance instance,
+            NpcDefinition definition, Entity actor, String eventDetail, Runnable completion, BooleanSupplier active) {
+        if (!active.getAsBoolean() || instances.findById(instance.getId()).isEmpty() || index >= actions.size()) {
             completion.run();
             return;
         }
         BehaviourAction action = actions.get(index);
+        Runnable next = () -> executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail,
+                completion, active);
         if (action.type() == BehaviourActionType.ASK_QUESTION) {
-            askQuestion(event, actions, index, action, instance, definition, actor, eventDetail, completion);
+            askQuestion(event, actions, index, action, instance, definition, actor, eventDetail, completion, active);
             return;
         }
         if (action.type() == BehaviourActionType.USE_ABILITY) {
             int delay = combatService == null ? -1 : combatService.useAbility(instance, action.value(), actor);
-            Runnable next = () -> executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail,
-                    completion);
             if (delay > 0)
                 Bukkit.getScheduler().runTaskLater(plugin, next, delay + 1L);
             else
@@ -555,41 +699,57 @@ public final class NpcBehaviourService implements Listener {
         Location previousMoveTarget = action.type() == BehaviourActionType.MOVE_TO
                 ? moveTargets.get(instance.getId())
                 : null;
-        execute(event, action, instance, definition, actor, eventDetail);
+        execute(event, action, instance, definition, actor, eventDetail, active);
         if (action.type() == BehaviourActionType.MOVE_TO) {
             Location target = moveTargets.get(instance.getId());
             if (target != null && target != previousMoveTarget) {
                 pendingMoves.computeIfAbsent(instance.getId(), ignored -> new ArrayList<>())
-                        .add(new PendingMove(target, currentTick + MOVE_TO_TIMEOUT_TICKS, () -> executeSequence(event,
-                                actions, index + 1, instance, definition, actor, eventDetail, completion)));
+                        .add(new PendingMove(target, currentTick + MOVE_TO_TIMEOUT_TICKS, next));
                 return;
             }
         }
         long delayTicks = delayAfter(action);
-        if (delayTicks <= 0L) {
-            executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail, completion);
-        } else {
-            Bukkit.getScheduler().runTaskLater(plugin, () -> executeSequence(event, actions, index + 1, instance,
-                    definition, actor, eventDetail, completion), delayTicks);
-        }
+        if (delayTicks <= 0L)
+            next.run();
+        else
+            Bukkit.getScheduler().runTaskLater(plugin, next, delayTicks);
     }
 
     private void askQuestion(BehaviourEvent event, List<BehaviourAction> parent, int index, BehaviourAction action,
-            NpcInstance instance, NpcDefinition definition, Entity actor, String eventDetail, Runnable completion) {
+            NpcInstance instance, NpcDefinition definition, Entity actor, String eventDetail, Runnable completion,
+            BooleanSupplier active) {
         Player player = questionPlayer(instance, actor);
         if (player == null) {
             executeSequence(event, action.question().cancelActions(), 0, instance, definition, actor, eventDetail,
                     () -> executeSequence(event, parent, index + 1, instance, definition, actor, eventDetail,
-                            completion));
+                            completion, active),
+                    active);
             return;
         }
-        questionService.enqueue(player, instance, definition.getDisplayName(), definition.getColor().textColor(),
-                action.question(),
-                (branch, done) -> executeSequence(event, branch, 0, instance, definition, player, eventDetail,
-                        () -> executeSequence(event, parent, index + 1, instance, definition, player, eventDetail,
-                                done)));
-        // A duplicate intentionally stops only this repeated trigger. Its parent
-        // continuation is not run, preventing idle loops from producing side effects.
+        RegionalControl control = regionalControls.get(instance.getId());
+        boolean queued = questionService.enqueue(player, instance, definition.getDisplayName(),
+                definition.getColor().textColor(), action.question(), (branch, done) -> {
+                    if (control != null) {
+                        if (!active.getAsBoolean()) {
+                            done.run();
+                            completion.run();
+                            return;
+                        }
+                        control.pendingQuestions().add(done);
+                    }
+                    executeSequence(event, branch, 0, instance, definition, player, eventDetail,
+                            () -> executeSequence(event, parent, index + 1, instance, definition, player, eventDetail,
+                                    () -> {
+                                        if (control == null || control.pendingQuestions().remove(done))
+                                            done.run();
+                                        if (control != null)
+                                            completion.run();
+                                    }, active),
+                            active);
+                });
+        // A duplicate normal trigger intentionally stops the repeated sequence.
+        if (!queued && control != null)
+            completion.run();
     }
 
     private Player questionPlayer(NpcInstance instance, Entity actor) {
@@ -766,6 +926,7 @@ public final class NpcBehaviourService implements Listener {
                 conversationService.interrupt(aiGroup);
             aiControlService.invokeChat(message, aiGroup, player,
                     (instance, result) -> definitions.find(instance.getDefinitionKey())
+                            .filter(ignored -> !isInRegionalEvent(instance))
                             .ifPresent(definition -> applyAiDecision(BehaviourEvent.PLAYER_CHAT, result, instance,
                                     definition, player, false, message)));
         }
@@ -895,7 +1056,7 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void execute(BehaviourEvent event, BehaviourAction action, NpcInstance instance, NpcDefinition definition,
-            Entity actor, String eventDetail) {
+            Entity actor, String eventDetail, BooleanSupplier active) {
         switch (action.type()) {
             case SEND_DIALOG -> {
                 sendDialog(event, instance, definition, action.value(), actor);
@@ -912,8 +1073,7 @@ public final class NpcBehaviourService implements Listener {
                     } catch (IllegalArgumentException exception) {
                         break;
                     }
-                    routePaused.remove(instance.getId());
-                    instances.stopNavigating(instance);
+                    enableRoute(instance);
                 }
             }
             case RUN_CONSOLE_COMMAND -> {
@@ -936,12 +1096,7 @@ public final class NpcBehaviourService implements Listener {
                     combatService.changeFightOptions(instance, FightOptions.fromStored(action.value()));
                 }
             }
-            case START_NAVIGATION -> {
-                routePaused.remove(instance.getId());
-                // Clear the old native path. The route worker will select the
-                // nearest logical waypoint and create a fresh path next tick.
-                instances.stopNavigating(instance);
-            }
+            case START_NAVIGATION -> enableRoute(instance);
             case STOP_NAVIGATION -> {
                 routePaused.add(instance.getId());
                 instances.stopNavigating(instance);
@@ -955,6 +1110,9 @@ public final class NpcBehaviourService implements Listener {
                         instances.stand(instance);
                         instances.stopNavigating(instance);
                     });
+            case FACE_TARGET -> resolveActionLocation(action.value()).map(ActionLocation::toLocation)
+                    .filter(target -> target.getWorld() == instance.getLocation().getWorld())
+                    .ifPresent(target -> instances.lookAt(instance, target));
             case TELEPORT_TO -> resolveActionLocation(action.value()).map(ActionLocation::toLocation)
                     .filter(java.util.Objects::nonNull).ifPresent(target -> {
                         stopFollowing(instance);
@@ -965,7 +1123,7 @@ public final class NpcBehaviourService implements Listener {
             // WAIT is handled by executeSequence: it only delays the next action.
             case WAIT -> {
             }
-            case AI_TRIGGER -> invokeAi(event, eventDetail, action.value(), instance, definition, actor);
+            case AI_TRIGGER -> invokeAi(event, eventDetail, action.value(), instance, definition, actor, active);
             case INTERACT -> interactWithNearbySwitches(instance);
             case MINE_BLOCKS -> mineNearbyBlocks(instance, definition);
             case TAKE_ITEM -> takeNearbyItem(instance, actor);
@@ -977,7 +1135,7 @@ public final class NpcBehaviourService implements Listener {
             case DROP_INVENTORY -> dropInventory(instance);
             case HARVEST -> harvestNearbyCrops(instance);
             case EMIT_EVENT ->
-                emitCustomEvent(action.value(), actor != null ? actor : instances.findEntity(instance).orElse(null));
+                emitEvent(action.value(), actor != null ? actor : instances.findEntity(instance).orElse(null));
             case SIT -> instances.sit(instance);
             case SLEEP -> instances.pose(instance, Pose.SLEEPING);
             case SWIM -> instances.pose(instance, Pose.SWIMMING);
@@ -1161,11 +1319,20 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
+    private void enableRoute(NpcInstance instance) {
+        if (isInRegionalEvent(instance))
+            regionalRoutes.add(instance.getId());
+        routePaused.remove(instance.getId());
+        instances.stopNavigating(instance);
+    }
+
     private void invokeAi(BehaviourEvent event, String eventDetail, String guidance, NpcInstance instance,
-            NpcDefinition definition, Entity actor) {
+            NpcDefinition definition, Entity actor, BooleanSupplier active) {
         if (aiControlService != null)
-            aiControlService.invoke(event, eventDetail, guidance, instance, definition, actor,
-                    result -> applyAiDecision(event, result, instance, definition, actor, true, null));
+            aiControlService.invoke(event, eventDetail, guidance, instance, definition, actor, result -> {
+                if (active.getAsBoolean())
+                    applyAiDecision(event, result, instance, definition, actor, true, null);
+            });
     }
 
     /**

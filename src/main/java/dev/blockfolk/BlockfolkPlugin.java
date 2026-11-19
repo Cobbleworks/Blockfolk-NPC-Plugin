@@ -10,6 +10,7 @@ import dev.blockfolk.command.BlockfolkCommand;
 import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.gui.CustomEventGuiService;
 import dev.blockfolk.gui.GuiService;
+import dev.blockfolk.gui.RegionalEventGuiService;
 import dev.blockfolk.gui.RouteGuiService;
 import dev.blockfolk.model.NamedLocation;
 import dev.blockfolk.input.ChatInputService;
@@ -21,6 +22,7 @@ import dev.blockfolk.repository.LocationRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.NpcInstanceRepository;
 import dev.blockfolk.repository.RouteRepository;
+import dev.blockfolk.repository.RegionalEventRepository;
 import dev.blockfolk.runtime.NativeNpcNavigationService;
 import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.runtime.NpcCombatService;
@@ -30,6 +32,7 @@ import dev.blockfolk.runtime.NpcQuestionService;
 import dev.blockfolk.runtime.NpcRenderer;
 import dev.blockfolk.runtime.PaperMannequinNpcRenderer;
 import dev.blockfolk.runtime.RouteMovementService;
+import dev.blockfolk.runtime.RegionalEventService;
 import dev.blockfolk.util.ResolvedSkin;
 import dev.blockfolk.util.SkinResolver;
 import dev.blockfolk.util.SkinTextureUtil;
@@ -51,6 +54,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private RouteRepository routeRepository;
     private LocationRepository locationRepository;
     private CustomEventRepository customEventRepository;
+    private RegionalEventRepository regionalEventRepository;
+    private RegionalEventService regionalEvents;
     private dev.blockfolk.repository.FighterAttackRepository fighterAttackRepository;
     private dev.blockfolk.gui.AbilitiesGuiService abilitiesGuiService;
     private NpcInstanceRegistry instanceRegistry;
@@ -83,6 +88,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         routeRepository = new RouteRepository(this);
         locationRepository = new LocationRepository(this);
         customEventRepository = new CustomEventRepository(this);
+        regionalEventRepository = new RegionalEventRepository(this);
         fighterAttackRepository = new dev.blockfolk.repository.FighterAttackRepository(this);
         shopRepository = new dev.blockfolk.repository.ShopRepository(this);
         npcRenderer = new PaperMannequinNpcRenderer(this,
@@ -101,11 +107,10 @@ public final class BlockfolkPlugin extends JavaPlugin {
         routeGuiService = new RouteGuiService(this, routeRepository, locationRepository, definitionRepository,
                 instanceRegistry, chatInputService, this::openMainGui);
         customEventGuiService = new CustomEventGuiService(this, customEventRepository, definitionRepository,
-                routeRepository, chatInputService, this::openMainGui);
+                routeRepository, chatInputService, player -> guiService.openEvents(player));
         guiService = new GuiService(this, definitionRepository, routeRepository, instanceRegistry, chatInputService,
                 skinResolver, routeGuiService::openRoutes, routeGuiService::openNpcRoutes, routeGuiService::createRoute,
-                routeGuiService::beginEditing, customEventRepository, customEventGuiService::open,
-                customEventGuiService::createEvent, locationRepository);
+                routeGuiService::beginEditing, customEventRepository, regionalEventRepository, locationRepository);
         abilitiesGuiService = new dev.blockfolk.gui.AbilitiesGuiService(fighterAttackRepository, chatInputService,
                 this::openMainGui);
         guiService.setAbilitiesGuiService(abilitiesGuiService);
@@ -183,7 +188,14 @@ public final class BlockfolkPlugin extends JavaPlugin {
         combatService.setOutcomeListener(aiControlService::noteOutcome);
         combatService.setObservationListener(aiControlService::noteObservation);
         guiService.setBehaviourService(behaviourService);
+        regionalEvents = new RegionalEventService(this, regionalEventRepository, instanceRegistry, behaviourService);
+        behaviourService.setRegionalEvents(regionalEvents);
+        RegionalEventGuiService regionalEventGui = new RegionalEventGuiService(this, regionalEventRepository,
+                regionalEvents, instanceRegistry, definitionRepository, chatInputService, guiService,
+                customEventGuiService);
+        guiService.setEventsOpener(regionalEventGui::open);
         instanceRegistry.setSpawnListener((instance, definition) -> {
+            regionalEvents.npcRemoved(instance);
             behaviourService.forget(instance);
             behaviourService.trigger(BehaviourEvent.SPAWN, instance, null);
         });
@@ -202,6 +214,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 navigationService,
                 getConfig().getInt("chunk-loading.radius", dev.blockfolk.runtime.NpcChunkLoadService.DEFAULT_RADIUS));
         instanceRegistry.setRemovalListener(instance -> {
+            regionalEvents.npcRemoved(instance);
             behaviourService.forget(instance);
             vehicleService.forget(instance);
         });
@@ -209,6 +222,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         routeRepository.loadAll();
         locationRepository.loadAll();
         customEventRepository.loadAll();
+        regionalEventRepository.loadAll();
         fighterAttackRepository.loadAll();
         shopRepository.loadAll();
         definitionRepository.loadAll();
@@ -229,6 +243,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                         behaviourService);
                 beautyQuestsIntegration.register();
                 instanceRegistry.setRemovalListener(instance -> {
+                    regionalEvents.npcRemoved(instance);
                     behaviourService.forget(instance);
                     vehicleService.forget(instance);
                     beautyQuestsIntegration.npcRemoved(instance);
@@ -241,8 +256,9 @@ public final class BlockfolkPlugin extends JavaPlugin {
         }
 
         BlockfolkCommand executor = new BlockfolkCommand(definitionRepository, instanceRegistry, guiService,
-                routeGuiService, routeRepository, customEventGuiService, customEventRepository, behaviourService,
-                locationRepository, aiControlService, shopRepository, shopService, shopGuiService, this);
+                routeGuiService, routeRepository, customEventRepository, regionalEventRepository, regionalEvents,
+                behaviourService, locationRepository, aiControlService, shopRepository, shopService, shopGuiService,
+                this);
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> event.registrar()
                 .register("blockfolk", "Opens and controls Blockfolk.", java.util.List.of("bf"), executor));
 
@@ -251,6 +267,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(shopGuiService, this);
         getServer().getPluginManager().registerEvents(routeGuiService, this);
         getServer().getPluginManager().registerEvents(customEventGuiService, this);
+        getServer().getPluginManager().registerEvents(regionalEventGui, this);
         getServer().getPluginManager().registerEvents(chatInputService, this);
         getServer().getPluginManager().registerEvents(questionService, this);
         getServer().getPluginManager().registerEvents(combatService, this);
@@ -268,6 +285,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         questionService.start();
         behaviourService.start();
         routeMovementService.start();
+        regionalEvents.start();
         vehicleService.start();
         chunkLoadService.start();
         getLogger().info(() -> "Blockfolk enabled with " + definitionRepository.findAll().size() + " NPC definitions.");
@@ -283,6 +301,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
         if (combatService != null) {
             combatService.stop();
         }
+        if (regionalEvents != null)
+            regionalEvents.shutdown();
         if (behaviourService != null) {
             behaviourService.stop();
         }
@@ -321,6 +341,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
             locationRepository.flush();
         if (customEventRepository != null)
             customEventRepository.flush();
+        if (regionalEventRepository != null)
+            regionalEventRepository.flush();
         if (fighterAttackRepository != null)
             fighterAttackRepository.flush();
         if (shopRepository != null)
