@@ -44,4 +44,24 @@ public final class BehaviourActions {
             }
         }
     }
+
+    /**
+     * Drops every action matching {@code filter}, also inside question branches.
+     */
+    public static List<BehaviourAction> removeIf(List<BehaviourAction> actions,
+            java.util.function.Predicate<BehaviourAction> filter) {
+        List<BehaviourAction> result = new ArrayList<>(actions.size());
+        for (BehaviourAction action : actions) {
+            if (action.type() == BehaviourActionType.ASK_QUESTION && action.question() != null) {
+                NpcQuestion question = action.question();
+                List<QuestionOption> options = question.options().stream()
+                        .map(option -> option.withActions(removeIf(option.actions(), filter))).toList();
+                result.add(BehaviourAction.ask(new NpcQuestion(question.id(), question.prompt(), options,
+                        removeIf(question.cancelActions(), filter))));
+            } else if (!filter.test(action)) {
+                result.add(action);
+            }
+        }
+        return result;
+    }
 }

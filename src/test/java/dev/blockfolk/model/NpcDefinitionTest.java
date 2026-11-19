@@ -46,30 +46,18 @@ class NpcDefinitionTest {
     }
 
     @Test
-    void storesCustomEventActionsSeparatelyFromBuiltInEvents() {
+    void legacyCustomEventRowsAreHandedOutOnceForMigration() {
         NpcDefinition definition = NpcDefinition.create("Guard");
         BehaviourAction action = new BehaviourAction(BehaviourActionType.WAVE, null);
 
-        definition.setCustomEventActions("jungle/idolWasStolen", List.of(action));
-        List<BehaviourAction> copy = definition.getCustomEventActions("jungle/idolWasStolen");
-        copy.clear();
+        definition.putLegacyCustomEventActions("jungle/idolWasStolen", List.of(action));
 
-        assertEquals(List.of(action), definition.getCustomEventActions("jungle/idolWasStolen"));
-        assertEquals(1, definition.customEventActionCount());
+        assertTrue(definition.hasLegacyCustomEventActions());
+        assertEquals(java.util.Map.of("jungle/idolWasStolen", List.of(action)),
+                definition.takeLegacyCustomEventActions());
+        assertFalse(definition.hasLegacyCustomEventActions());
+        assertTrue(definition.takeLegacyCustomEventActions().isEmpty());
         assertEquals(List.of(), definition.getBehaviourActions(BehaviourEvent.SPAWN));
-    }
-
-    @Test
-    void selectedCustomEventRowSurvivesRemovingItsLastAction() {
-        NpcDefinition definition = NpcDefinition.create("Guard");
-        definition.setCustomEventActions("alarm", List.of(new BehaviourAction(BehaviourActionType.WAVE, null)));
-
-        definition.removeCustomEventAction("alarm", 0);
-
-        assertEquals(List.of("alarm"), definition.getCustomEventNames());
-        assertEquals(List.of(), definition.getCustomEventActions("alarm"));
-        definition.removeCustomEvent("alarm");
-        assertTrue(definition.getCustomEventNames().isEmpty());
     }
 
     @Test
@@ -87,12 +75,12 @@ class NpcDefinitionTest {
     }
 
     @Test
-    void findsRoutesReferencedByMovementEventsCustomEventsAndQuestions() {
+    void findsRoutesReferencedByMovementEventsAndQuestions() {
         NpcDefinition definition = NpcDefinition.create("Guard");
         definition.setMovementProfile(MovementProfile.routing("Day Patrol", WalkingSpeed.NORMAL));
         definition.setBehaviourActions(BehaviourEvent.SPAWN,
                 List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "Village/Night Patrol")));
-        definition.setCustomEventActions("alarm",
+        definition.setBehaviourActions(BehaviourEvent.NIGHT,
                 List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "Emergency")));
         definition.setBehaviourActions(BehaviourEvent.RIGHT_CLICK,
                 List.of(BehaviourAction.ask(new NpcQuestion(UUID.randomUUID(), "Choose",
@@ -218,7 +206,7 @@ class NpcDefinitionTest {
         NpcQuestion question = NpcQuestion.create("Buy bread?");
         question = question.withOptions(List.of(new QuestionOption("Yes", List.of(unset))));
         definition.setBehaviourActions(BehaviourEvent.RIGHT_CLICK, List.of(unset, BehaviourAction.ask(question)));
-        definition.setCustomEventActions("market/open", List.of(unset));
+        definition.setBehaviourActions(BehaviourEvent.NOON, List.of(unset));
 
         boolean changed = definition.mapActions(action -> action.type() == BehaviourActionType.OPEN_SHOP
                 ? new BehaviourAction(BehaviourActionType.OPEN_SHOP, "bakery")

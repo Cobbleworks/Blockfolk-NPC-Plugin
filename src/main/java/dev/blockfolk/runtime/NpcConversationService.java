@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
+import java.util.function.Predicate;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -54,6 +55,11 @@ public final class NpcConversationService {
     private final Map<UUID, Gaze> gazes = new HashMap<>();
     private AiControlService aiControlService;
     private NpcPerception perception;
+    /**
+     * NPCs whose lines start no AI replies and who answer no one, e.g. in a quiet
+     * scene.
+     */
+    private Predicate<NpcInstance> quiet = ignored -> false;
     private BiConsumer<NpcInstance, AiDecisionResult> decisionHandler = (instance, result) -> {
     };
 
@@ -67,6 +73,14 @@ public final class NpcConversationService {
 
     public void setAiControlService(AiControlService aiControlService) {
         this.aiControlService = aiControlService;
+    }
+
+    /**
+     * NPCs that start no AI replies and answer no one, such as NPCs in a quiet
+     * scene.
+     */
+    public void setQuietFilter(Predicate<NpcInstance> quiet) {
+        this.quiet = quiet == null ? ignored -> false : quiet;
     }
 
     /** Listeners must be close to the speaker or see it to hear its lines. */
@@ -89,10 +103,11 @@ public final class NpcConversationService {
     }
 
     /**
-     * Offers a visible NPC line to nearby NPCs. Main thread only.
+     * Offers a visible NPC line to nearby NPCs. {@code scripted} lines (Send
+     * Dialog) are not in the speaker's AI memory yet. Main thread only.
      */
-    public void npcSpoke(NpcInstance speaker, NpcDefinition definition, String text) {
-        spoke(speaker, definition, text, null);
+    public void npcSpoke(NpcInstance speaker, NpcDefinition definition, String text, boolean scripted) {
+        spoke(speaker, definition, text, null, scripted);
     }
 
     /**
@@ -103,10 +118,11 @@ public final class NpcConversationService {
     public void npcAnsweredPlayer(NpcInstance speaker, NpcDefinition definition, String text, Player player,
             String message) {
         String playerName = player == null ? "A player" : player.getName();
-        spoke(speaker, definition, text, message == null ? null : Line.player(playerName, stripFormatting(message)));
+        spoke(speaker, definition, text, message == null ? null : Line.player(playerName, stripFormatting(message)),
+                false);
     }
 
-    private void spoke(NpcInstance speaker, NpcDefinition definition, String text, Line answered) {
+    private void spoke(NpcInstance speaker, NpcDefinition definition, String text, Line answered, boolean scripted) {
         if (aiControlService == null || !aiControlService.configured() || !settings().enabled() || text == null) {
             return;
         }
@@ -115,7 +131,14 @@ public final class NpcConversationService {
             return;
         }
         Location origin = instances.currentLocation(speaker);
-        if (origin.getWorld() == null || !playerNearby(origin)) {
+        if (origin.getWorld() == null) {
+            return;
+        }
+        if (quiet.test(speaker)) {
+            noteQuietLine(speaker, definition, spoken, origin, scripted);
+            return;
+        }
+        if (!playerNearby(origin)) {
             return;
         }
         long now = System.currentTimeMillis();
@@ -354,8 +377,27 @@ public final class NpcConversationService {
                 .sorted(Comparator.comparingDouble(other -> distanceSquared(other, origin))).toList();
     }
 
-    private boolean respondsToNpc(NpcInstance instance) {
+    /**
+     * A quiet NPC's line starts no AI replies, but AI NPCs that heard it remember
+     * it, so an AI Trigger later in the scene knows what was said.
+     */
+    private void noteQuietLine(NpcInstance speaker, NpcDefinition definition, String spoken, Location origin,
+            boolean scripted) {
+        String name = NpcResponseIds.plainName(definition.getDisplayName());
+        if (scripted && aiEnabled(speaker))
+            aiControlService.noteAction(speaker, "You said: \"" + spoken + "\"");
+        hearers(speaker, origin).stream().filter(this::aiEnabled)
+                .forEach(hearer -> aiControlService.noteAction(hearer, name + " said: \"" + spoken + "\""));
+    }
+
+    private boolean aiEnabled(NpcInstance instance) {
         return definitions.find(instance.getDefinitionKey()).map(NpcDefinition::getAiControlSettings)
+                .map(settings -> settings.enabled() && settings.hasContext()).orElse(false);
+    }
+
+    private boolean respondsToNpc(NpcInstance instance) {
+        return !quiet.test(instance) && definitions.find(instance.getDefinitionKey())
+                .map(NpcDefinition::getAiControlSettings)
                 .map(settings -> settings.enabled() && settings.hasContext() && settings.respondToNpc()).orElse(false);
     }
 

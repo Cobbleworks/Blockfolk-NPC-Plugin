@@ -18,17 +18,17 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.OpenRouterClient;
-import dev.blockfolk.gui.CustomEventGuiService;
+import dev.blockfolk.gui.SceneGuiService;
 import dev.blockfolk.gui.GuiService;
 import dev.blockfolk.gui.RouteGuiService;
 import dev.blockfolk.gui.ShopGuiService;
-import dev.blockfolk.model.CustomEvent;
+import dev.blockfolk.model.Scene;
 import dev.blockfolk.model.NamedLocation;
 import dev.blockfolk.model.NpcColor;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.Shop;
-import dev.blockfolk.repository.CustomEventRepository;
+import dev.blockfolk.runtime.SceneService;
 import dev.blockfolk.repository.LocationRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.RouteRepository;
@@ -50,8 +50,8 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
     private final GuiService guiService;
     private final RouteGuiService routeGuiService;
     private final RouteRepository routeRepository;
-    private final CustomEventGuiService customEventGuiService;
-    private final CustomEventRepository customEventRepository;
+    private final SceneGuiService sceneGuiService;
+    private final SceneService sceneService;
     private final NpcBehaviourService behaviourService;
     private final LocationRepository locationRepository;
     private final AiControlService aiControlService;
@@ -62,17 +62,16 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
 
     public BlockfolkCommand(NpcDefinitionRepository definitionRepository, NpcInstanceRegistry instanceRegistry,
             GuiService guiService, RouteGuiService routeGuiService, RouteRepository routeRepository,
-            CustomEventGuiService customEventGuiService, CustomEventRepository customEventRepository,
-            NpcBehaviourService behaviourService, LocationRepository locationRepository,
-            AiControlService aiControlService, ShopRepository shopRepository, NpcShopService shopService,
-            ShopGuiService shopGuiService, JavaPlugin plugin) {
+            SceneGuiService sceneGuiService, SceneService sceneService, NpcBehaviourService behaviourService,
+            LocationRepository locationRepository, AiControlService aiControlService, ShopRepository shopRepository,
+            NpcShopService shopService, ShopGuiService shopGuiService, JavaPlugin plugin) {
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.guiService = guiService;
         this.routeGuiService = routeGuiService;
         this.routeRepository = routeRepository;
-        this.customEventGuiService = customEventGuiService;
-        this.customEventRepository = customEventRepository;
+        this.sceneGuiService = sceneGuiService;
+        this.sceneService = sceneService;
         this.behaviourService = behaviourService;
         this.locationRepository = locationRepository;
         this.aiControlService = aiControlService;
@@ -132,14 +131,15 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             }
             return true;
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("events") && args[1].equalsIgnoreCase("trigger")) {
-            CustomEvent customEvent = customEventRepository.find(args[2]).orElse(null);
-            if (customEvent == null) {
-                sender.sendMessage(UiText.error("Unknown custom event: " + args[2]));
-                return true;
-            }
-            behaviourService.emitCustomEvent(customEvent.getName(), sender instanceof Player player ? player : null);
-            sender.sendMessage(UiText.success("Triggered custom event '" + customEvent.getName() + "'."));
+        // "/bf events trigger <name>" is the old custom-event command; custom events
+        // became scenes with the same names, so it keeps working for quest plugins.
+        if (args.length == 3 && (args[0].equalsIgnoreCase("scene") || args[0].equalsIgnoreCase("scenes"))
+                && (args[1].equalsIgnoreCase("start") || args[1].equalsIgnoreCase("stop"))
+                || args.length == 3 && args[0].equalsIgnoreCase("events") && args[1].equalsIgnoreCase("trigger")) {
+            if (args[1].equalsIgnoreCase("stop"))
+                sceneService.stop(args[2], sender);
+            else
+                sceneService.startManually(args[2], sender, sender instanceof Player player ? player : null);
             return true;
         }
         if (args.length >= 3 && args[0].equalsIgnoreCase("config") && args[1].equalsIgnoreCase("ai")
@@ -244,8 +244,19 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             guiService.openMain(player);
             return true;
         }
-        if (args.length == 1 && args[0].equalsIgnoreCase("events")) {
-            customEventGuiService.open(player);
+        if (args.length == 1 && (args[0].equalsIgnoreCase("scenes") || args[0].equalsIgnoreCase("scene")
+                || args[0].equalsIgnoreCase("events"))) {
+            sceneGuiService.openScenes(player);
+            return true;
+        }
+        if (args.length == 2 && (args[0].equalsIgnoreCase("scene") || args[0].equalsIgnoreCase("scenes"))) {
+            Scene scene = sceneGuiService == null ? null : sceneByName(args[1]);
+            if (scene == null) {
+                player.sendMessage(UiText
+                        .error("Unknown scene: " + args[1] + ". Use /bf scene start|stop <scene> or /bf scenes."));
+                return true;
+            }
+            sceneGuiService.openScript(player, scene.getKey());
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("create")) {
@@ -546,7 +557,8 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             suggestions.add("abilities");
             suggestions.add("routes");
             suggestions.add("locations");
-            suggestions.add("events");
+            suggestions.add("scenes");
+            suggestions.add("scene");
             suggestions.add("npc");
             suggestions.add("shop");
             suggestions.add("shops");
@@ -565,11 +577,14 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         if (args.length == 2 && args[0].equalsIgnoreCase("npc")) {
             return filter(definitionRepository.findAll().stream().map(NpcDefinition::getKey).toList(), args[1]);
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("events")) {
-            return filter(List.of("trigger"), args[1]);
+        if (args.length == 2 && args[0].equalsIgnoreCase("scene")) {
+            List<String> suggestions = new ArrayList<>(List.of("start", "stop"));
+            suggestions.addAll(sceneKeys());
+            return filter(suggestions, args[1]);
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("events") && args[1].equalsIgnoreCase("trigger")) {
-            return filter(customEventRepository.findAll().stream().map(CustomEvent::getName).toList(), args[2]);
+        if (args.length == 3 && args[0].equalsIgnoreCase("scene")
+                && (args[1].equalsIgnoreCase("start") || args[1].equalsIgnoreCase("stop"))) {
+            return filter(sceneKeys(), args[2]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("npc")) {
             return filter(List.of("edit", "set", "tp", "inventory", "memory", "events", "combat", "equipment", "delete",
@@ -610,6 +625,14 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
                 && args[2].equalsIgnoreCase("memory"))
             return filter(List.of("forgetnearby"), args[3]);
         return List.of();
+    }
+
+    private List<String> sceneKeys() {
+        return sceneGuiService == null ? List.of() : sceneGuiService.sceneKeys();
+    }
+
+    private Scene sceneByName(String name) {
+        return sceneGuiService.findScene(name).orElse(null);
     }
 
     private List<String> locationSuggestions() {

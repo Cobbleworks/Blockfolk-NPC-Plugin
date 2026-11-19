@@ -212,11 +212,14 @@ final class AiGuiService {
             if (containsTrigger(definition.getBehaviourActions(event)))
                 return true;
         }
-        for (String eventName : definition.getCustomEventNames()) {
-            if (containsTrigger(definition.getCustomEventActions(eventName)))
-                return true;
-        }
-        return false;
+        return sceneTriggerCheck.test(definition);
+    }
+
+    private java.util.function.Predicate<NpcDefinition> sceneTriggerCheck = ignored -> false;
+
+    /** Also counts AI Triggers in scene roles the preset plays. */
+    void setSceneTriggerCheck(java.util.function.Predicate<NpcDefinition> check) {
+        sceneTriggerCheck = check == null ? ignored -> false : check;
     }
 
     private boolean containsTrigger(List<BehaviourAction> actions) {

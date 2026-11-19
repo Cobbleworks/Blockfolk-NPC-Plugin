@@ -47,13 +47,22 @@ final class BehaviourActionCodec {
         return actions.stream().map(BehaviourActionCodec::encode).toList();
     }
 
+    /**
+     * Decodes every readable action; unknown or malformed ones (such as the removed
+     * Give Cue and Wait For Cue) are left out instead of failing the whole row.
+     */
     static List<BehaviourAction> decodeList(Object raw) {
         if (!(raw instanceof List<?> list))
             return List.of();
         List<BehaviourAction> actions = new ArrayList<>();
         for (Object entry : list) {
-            if (entry instanceof Map<?, ?> map)
+            if (!(entry instanceof Map<?, ?> map))
+                continue;
+            try {
                 actions.add(decode(map));
+            } catch (IllegalArgumentException ignored) {
+                // Nothing to show or run for it.
+            }
         }
         return actions;
     }

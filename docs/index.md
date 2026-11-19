@@ -25,7 +25,7 @@ features:
     details: Build walking loops in-world and save named global destinations for behaviour and AI actions.
   - icon: ⚙️
     title: Behaviour routines
-    details: Compose ordered actions for interactions, proximity, combat, time, waypoints, and custom events.
+    details: Compose ordered actions for interactions, proximity, combat, time, waypoints, and scenes.
   - icon: ⚔️
     title: Configurable combat
     details: Health, respawning, aggression, targets, alliances, loot, experience, and nearby boss bars.

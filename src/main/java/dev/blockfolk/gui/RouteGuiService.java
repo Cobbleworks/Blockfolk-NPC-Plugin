@@ -106,6 +106,13 @@ public final class RouteGuiService implements Listener {
         this.waypointActionOpener = waypointActionOpener;
     }
 
+    private dev.blockfolk.repository.SceneRepository sceneRepository;
+
+    /** Lets route deletion also clean Set Route actions out of scene roles. */
+    public void setSceneRepository(dev.blockfolk.repository.SceneRepository sceneRepository) {
+        this.sceneRepository = sceneRepository;
+    }
+
     public void setBehaviourService(NpcBehaviourService behaviourService) {
         this.behaviourService = behaviourService;
     }
@@ -866,6 +873,14 @@ public final class RouteGuiService implements Listener {
             if (definition.removeRouteReferences(route.getKey())) {
                 definitionRepository.save(definition);
                 affected++;
+            }
+        }
+        if (sceneRepository != null) {
+            for (dev.blockfolk.model.Scene scene : sceneRepository.findAll()) {
+                if (scene.removeActions(action -> action.type() == dev.blockfolk.model.BehaviourActionType.SET_ROUTE
+                        && action.value() != null && dev.blockfolk.model.Scene.tryKey(action.value())
+                                .map(key -> key.equals(route.getKey())).orElse(false)))
+                    sceneRepository.save(scene);
             }
         }
         if (behaviourService != null)

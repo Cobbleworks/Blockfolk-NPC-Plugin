@@ -165,7 +165,21 @@ public final class ShopGuiService implements Listener {
             if (used[0])
                 users.add("Route " + route.getDisplayName());
         }
+        if (sceneRepository != null) {
+            for (dev.blockfolk.model.Scene scene : sceneRepository.findAll()) {
+                boolean[] used = {false};
+                scene.forEachAction(action -> used[0] |= opensShop(action, normalized));
+                if (used[0])
+                    users.add("Scene " + scene.getDisplayName());
+            }
+        }
         return users;
+    }
+
+    private dev.blockfolk.repository.SceneRepository sceneRepository;
+
+    public void setSceneRepository(dev.blockfolk.repository.SceneRepository sceneRepository) {
+        this.sceneRepository = sceneRepository;
     }
 
     private static boolean opensShop(BehaviourAction action, String key) {

@@ -71,6 +71,7 @@ import dev.blockfolk.util.EntityHealth;
 import dev.blockfolk.model.ActionLocation;
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
+import dev.blockfolk.model.BehaviourActions;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.DayPeriod;
 import dev.blockfolk.model.FightOptions;
@@ -170,8 +171,8 @@ public final class NpcBehaviourService implements Listener {
     private int playerLookTick;
     private int itemPickupTick;
     private int entityNearbyTick;
-    private long customEmissionTick = -1L;
-    private int customEmissionsThisTick;
+    private SceneService sceneService;
+    private static final java.util.function.BooleanSupplier ALWAYS = () -> true;
 
     public NpcBehaviourService(Plugin plugin, NpcDefinitionRepository definitions, NpcInstanceRegistry instances,
             DialogService dialogService, NpcQuestionService questionService, int proximityCooldownSeconds) {
@@ -208,6 +209,60 @@ public final class NpcBehaviourService implements Listener {
 
     public void setVehicleService(NpcVehicleService vehicleService) {
         this.vehicleService = vehicleService;
+    }
+
+    public void setSceneService(SceneService sceneService) {
+        this.sceneService = sceneService;
+    }
+
+    /** Whether a scene currently owns this NPC, which pauses its route. */
+    public boolean isInScene(NpcInstance instance) {
+        return sceneService != null && sceneService.isCast(instance);
+    }
+
+    /**
+     * Runs a scene lane or wrap-up for an instance. The sequence stops as soon as
+     * {@code alive} turns false; {@code completion} runs either way.
+     */
+    public void runSceneSequence(List<BehaviourAction> actions, NpcInstance instance, Entity actor, String detail,
+            java.util.function.BooleanSupplier alive, Runnable completion) {
+        NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
+        if (definition == null) {
+            completion.run();
+            return;
+        }
+        executeSequence(null, List.copyOf(actions), 0, instance, definition, actor, detail, alive, completion);
+    }
+
+    /** Drops walking goals so a scene starts or ends from a standstill. */
+    public void interruptMovement(NpcInstance instance) {
+        moveTargets.remove(instance.getId());
+        aiMoveTargets.remove(instance.getId());
+        List<PendingMove> dropped = pendingMoves.remove(instance.getId());
+        stopFollowing(instance);
+        instances.stopNavigating(instance);
+        // Their walks ended early, like a Move To that timed out. The sequences
+        // go on, so one the scene took over still runs its completion (which,
+        // for example, lets a route resume after waypoint actions).
+        if (dropped != null)
+            dropped.forEach(move -> move.continuation.run());
+    }
+
+    /**
+     * Ends a preset sequence once a scene it did not start in takes the NPC over.
+     * Otherwise an idle, waypoint, or event routine that was part-way through (in a
+     * Wait, say) carries on inside the scene, and its Stop Navigation or Move To
+     * leaves the scene's own Move To waiting until it times out.
+     */
+    private java.util.function.BooleanSupplier yieldingToScenes(NpcInstance instance,
+            java.util.function.BooleanSupplier alive) {
+        if (sceneService == null)
+            return alive;
+        Object startedIn = sceneService.sceneToken(instance);
+        return () -> {
+            Object current = sceneService.sceneToken(instance);
+            return (current == null || current == startedIn) && alive.getAsBoolean();
+        };
     }
 
     /**
@@ -290,12 +345,33 @@ public final class NpcBehaviourService implements Listener {
         }
         Runnable completion = event == BehaviourEvent.SPAWN ? () -> startIdle(instance) : () -> {
         };
-        executeSequence(event, definition.getBehaviourActions(event), 0, instance, definition, actor, eventDetail,
-                completion);
+        List<BehaviourAction> actions = definition.getBehaviourActions(event);
+        java.util.function.BooleanSupplier alive = yieldingToScenes(instance, ALWAYS);
+        if (sceneService != null) {
+            SceneService.Reaction reaction = sceneService.reaction(instance, event);
+            if (reaction != null) {
+                actions = reaction.actions();
+                alive = reaction.alive();
+            } else if (sceneService.isCast(instance) && isScheduleEvent(event)) {
+                // The scene owns the NPC's day; its time-of-day routine waits.
+                actions = List.of();
+            } else if (sceneService.suppressesAi(instance)) {
+                // Only AI Trigger actions the scene itself asks for may run.
+                actions = BehaviourActions.removeIf(actions, action -> action.type() == BehaviourActionType.AI_TRIGGER);
+            }
+        }
+        executeSequence(event, actions, 0, instance, definition, actor, eventDetail, alive, completion);
         // Recorded after the routine starts, so an AI Trigger it runs right away
         // sees this event as its trigger rather than also as a memory.
         if (aiControlService != null)
             aiControlService.recordEvent(event, instance, definition, actor, eventDetail);
+    }
+
+    private static boolean isScheduleEvent(BehaviourEvent event) {
+        return switch (event) {
+            case NIGHT, MORNING, NOON, AFTERNOON, EVENING -> true;
+            default -> false;
+        };
     }
 
     /**
@@ -379,30 +455,7 @@ public final class NpcBehaviourService implements Listener {
         Object token = new Object();
         waypointActionSequences.put(instance.getId(), token);
         executeSequence(null, List.copyOf(actions), 0, instance, definition, null, "The NPC reached a route waypoint.",
-                () -> waypointActionSequences.remove(instance.getId(), token));
-    }
-
-    public void emitCustomEvent(String eventName, Entity actor) {
-        if (eventName == null || eventName.isBlank())
-            return;
-        if (customEmissionTick != currentTick) {
-            customEmissionTick = currentTick;
-            customEmissionsThisTick = 0;
-        }
-        if (++customEmissionsThisTick > 64) {
-            plugin.getLogger().warning("Stopped a custom NPC event chain after 64 emissions in one tick.");
-            return;
-        }
-        for (NpcInstance target : List.copyOf(instances.findActive())) {
-            NpcDefinition definition = definitions.find(target.getDefinitionKey()).orElse(null);
-            if (definition == null)
-                continue;
-            List<BehaviourAction> actions = definition.getCustomEventActions(eventName);
-            if (!actions.isEmpty())
-                executeSequence(null, actions, 0, target, definition, actor,
-                        "Custom event '" + eventName + "' was emitted.", () -> {
-                        });
-        }
+                yieldingToScenes(instance, ALWAYS), () -> waypointActionSequences.remove(instance.getId(), token));
     }
 
     public void forget(NpcInstance instance) {
@@ -528,8 +581,9 @@ public final class NpcBehaviourService implements Listener {
     }
 
     private void executeSequence(BehaviourEvent event, java.util.List<BehaviourAction> actions, int index,
-            NpcInstance instance, NpcDefinition definition, Entity actor, String eventDetail, Runnable completion) {
-        if (instances.findById(instance.getId()).isEmpty()) {
+            NpcInstance instance, NpcDefinition definition, Entity actor, String eventDetail,
+            java.util.function.BooleanSupplier alive, Runnable completion) {
+        if (instances.findById(instance.getId()).isEmpty() || !alive.getAsBoolean()) {
             completion.run();
             return;
         }
@@ -539,13 +593,13 @@ public final class NpcBehaviourService implements Listener {
         }
         BehaviourAction action = actions.get(index);
         if (action.type() == BehaviourActionType.ASK_QUESTION) {
-            askQuestion(event, actions, index, action, instance, definition, actor, eventDetail, completion);
+            askQuestion(event, actions, index, action, instance, definition, actor, eventDetail, alive, completion);
             return;
         }
         if (action.type() == BehaviourActionType.USE_ABILITY) {
             int delay = combatService == null ? -1 : combatService.useAbility(instance, action.value(), actor);
             Runnable next = () -> executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail,
-                    completion);
+                    alive, completion);
             if (delay > 0)
                 Bukkit.getScheduler().runTaskLater(plugin, next, delay + 1L);
             else
@@ -561,33 +615,34 @@ public final class NpcBehaviourService implements Listener {
             if (target != null && target != previousMoveTarget) {
                 pendingMoves.computeIfAbsent(instance.getId(), ignored -> new ArrayList<>())
                         .add(new PendingMove(target, currentTick + MOVE_TO_TIMEOUT_TICKS, () -> executeSequence(event,
-                                actions, index + 1, instance, definition, actor, eventDetail, completion)));
+                                actions, index + 1, instance, definition, actor, eventDetail, alive, completion)));
                 return;
             }
         }
         long delayTicks = delayAfter(action);
         if (delayTicks <= 0L) {
-            executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail, completion);
+            executeSequence(event, actions, index + 1, instance, definition, actor, eventDetail, alive, completion);
         } else {
             Bukkit.getScheduler().runTaskLater(plugin, () -> executeSequence(event, actions, index + 1, instance,
-                    definition, actor, eventDetail, completion), delayTicks);
+                    definition, actor, eventDetail, alive, completion), delayTicks);
         }
     }
 
     private void askQuestion(BehaviourEvent event, List<BehaviourAction> parent, int index, BehaviourAction action,
-            NpcInstance instance, NpcDefinition definition, Entity actor, String eventDetail, Runnable completion) {
+            NpcInstance instance, NpcDefinition definition, Entity actor, String eventDetail,
+            java.util.function.BooleanSupplier alive, Runnable completion) {
         Player player = questionPlayer(instance, actor);
         if (player == null) {
             executeSequence(event, action.question().cancelActions(), 0, instance, definition, actor, eventDetail,
-                    () -> executeSequence(event, parent, index + 1, instance, definition, actor, eventDetail,
-                            completion));
+                    alive, () -> executeSequence(event, parent, index + 1, instance, definition, actor, eventDetail,
+                            alive, completion));
             return;
         }
         questionService.enqueue(player, instance, definition.getDisplayName(), definition.getColor().textColor(),
                 action.question(),
-                (branch, done) -> executeSequence(event, branch, 0, instance, definition, player, eventDetail,
+                (branch, done) -> executeSequence(event, branch, 0, instance, definition, player, eventDetail, alive,
                         () -> executeSequence(event, parent, index + 1, instance, definition, player, eventDetail,
-                                done)));
+                                alive, done)));
         // A duplicate intentionally stops only this repeated trigger. Its parent
         // continuation is not run, preventing idle loops from producing side effects.
     }
@@ -618,9 +673,18 @@ public final class NpcBehaviourService implements Listener {
             idleCycles.remove(instance.getId(), token);
             return;
         }
-        executeSequence(BehaviourEvent.IDLE, definition.getBehaviourActions(BehaviourEvent.IDLE), 0, instance,
-                definition, null, "The NPC has been idle.", () -> Bukkit.getScheduler().runTaskLater(plugin,
-                        () -> runIdleCycle(instance, token), IDLE_REPEAT_TICKS));
+        List<BehaviourAction> actions = definition.getBehaviourActions(BehaviourEvent.IDLE);
+        java.util.function.BooleanSupplier alive = yieldingToScenes(instance, ALWAYS);
+        if (sceneService != null && sceneService.isCast(instance)) {
+            // While a scene owns the NPC only its scene idle reaction runs, and
+            // only after the role finished its scene actions.
+            SceneService.Reaction reaction = sceneService.reaction(instance, BehaviourEvent.IDLE);
+            actions = reaction == null ? List.of() : reaction.actions();
+            alive = reaction == null ? ALWAYS : reaction.alive();
+        }
+        executeSequence(BehaviourEvent.IDLE, actions, 0, instance, definition, null, "The NPC has been idle.", alive,
+                () -> Bukkit.getScheduler().runTaskLater(plugin, () -> runIdleCycle(instance, token),
+                        IDLE_REPEAT_TICKS));
     }
 
     private long delayAfter(BehaviourAction action) {
@@ -899,7 +963,7 @@ public final class NpcBehaviourService implements Listener {
         switch (action.type()) {
             case SEND_DIALOG -> {
                 sendDialog(event, instance, definition, action.value(), actor);
-                npcSpoke(instance, definition, action.value());
+                npcSpoke(instance, definition, action.value(), true);
             }
             // Holo Dialog is often repeating flavour text, so NPCs do not answer it.
             case SHOW_HOLO_DIALOG -> dialogService.showHologram(instance, definition, action.value());
@@ -976,8 +1040,19 @@ public final class NpcBehaviourService implements Listener {
             }
             case DROP_INVENTORY -> dropInventory(instance);
             case HARVEST -> harvestNearbyCrops(instance);
-            case EMIT_EVENT ->
-                emitCustomEvent(action.value(), actor != null ? actor : instances.findEntity(instance).orElse(null));
+            case START_SCENE -> {
+                if (sceneService != null)
+                    sceneService.startFromAction(action.value(),
+                            actor != null ? actor : instances.findEntity(instance).orElse(null));
+            }
+            case STOP_SCENE -> {
+                if (sceneService != null)
+                    sceneService.stopFromAction(action.value());
+            }
+            case NEXT_BEAT -> {
+                if (sceneService != null)
+                    sceneService.nextBeat(instance);
+            }
             case SIT -> instances.sit(instance);
             case SLEEP -> instances.pose(instance, Pose.SLEEPING);
             case SWIM -> instances.pose(instance, Pose.SWIMMING);
@@ -1017,7 +1092,7 @@ public final class NpcBehaviourService implements Listener {
                         conversationService.npcAnsweredPlayer(instance, definition, action.text(),
                                 actor instanceof Player player ? player : null, chatMessage);
                     else
-                        npcSpoke(instance, definition, action.text());
+                        npcSpoke(instance, definition, action.text(), false);
                 }
                 case PLAY_ANIMATION -> playAiAnimation(instance, action.animation());
                 case START_COMBAT -> {
@@ -1394,7 +1469,8 @@ public final class NpcBehaviourService implements Listener {
         double range = conversationService.encounterRange();
         for (NpcInstance instance : active) {
             NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-            if (definition == null || definition.getBehaviourActions(BehaviourEvent.NPC_NEARBY).isEmpty())
+            if (definition == null || definition.getBehaviourActions(BehaviourEvent.NPC_NEARBY).isEmpty()
+                    && (sceneService == null || sceneService.reaction(instance, BehaviourEvent.NPC_NEARBY) == null))
                 continue;
             Location center = instances.currentLocation(instance);
             if (center.getWorld() == null || !conversationService.playerNearby(center)) {
@@ -1473,8 +1549,11 @@ public final class NpcBehaviourService implements Listener {
 
     private void tickMoveTo(NpcInstance instance) {
         Location target = moveTargets.get(instance.getId());
-        if (target == null || isNavigationPaused(instance)
-                || combatService != null && combatService.isEngaged(instance)) {
+        // A scene's Move To walks even if the NPC's route was paused (for example
+        // by a waypoint's Stop Navigation) when the scene took it over; the pause
+        // is kept for the route itself, which resumes after the scene.
+        boolean paused = isInScene(instance) ? isExternalNavigationPaused(instance) : isNavigationPaused(instance);
+        if (target == null || paused || combatService != null && combatService.isEngaged(instance)) {
             return;
         }
         Location current = instance.getLocation();
@@ -2779,9 +2858,13 @@ public final class NpcBehaviourService implements Listener {
         }
     }
 
-    private void npcSpoke(NpcInstance instance, NpcDefinition definition, String line) {
+    /**
+     * {@code scripted}: a Send Dialog line, which the speaker's AI has not noted
+     * yet.
+     */
+    private void npcSpoke(NpcInstance instance, NpcDefinition definition, String line, boolean scripted) {
         if (conversationService != null)
-            conversationService.npcSpoke(instance, definition, line);
+            conversationService.npcSpoke(instance, definition, line, scripted);
     }
 
     private String placeholders(String value, NpcInstance instance, NpcDefinition definition, Entity actor) {

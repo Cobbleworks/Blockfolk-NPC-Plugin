@@ -52,11 +52,12 @@ Set `line-of-sight` to `false` to let NPCs notice everything in range, also thro
 
 | Group | Available actions |
 | --- | --- |
-| Dialogue & scripting | Send Dialog, Show Holo Dialog, Ask Question, Emit Custom Event, Console Command, AI Trigger, Wait |
+| Dialogue & scripting | Send Dialog, Show Holo Dialog, Ask Question, Console Command, AI Trigger, Wait |
 | Movement | Set Route, Start/Stop Navigation, Set Walk Speed, Move To, Teleport To, Follow, Unfollow |
 | World & inventory | Interact, Mine Blocks, Take Item, Show Inventory, Drop Inventory, Harvest, Open Shop |
 | Combat | Start Combat, Change Fight Options |
 | Animation | Sleeping, Swimming, Fall Flying, Standing, Sneaking, Sitting, Wave, Jump |
+| Scenes | Start Scene, Stop Scene, Next Beat |
 
 **Move To** pauses the rest of its action sequence until the NPC arrives. If it cannot arrive, the sequence continues after 30 seconds.
 
@@ -81,19 +82,15 @@ To set a **Move To** destination in a question branch, right-click a block with 
 
 ## Abilities
 
-**Use Ability** opens a selector from the shared [Abilities](/features/abilities) library. It casts the selected ability or arms its **On Next Attack** charge. This action works in event routines, custom events, waypoint actions, and question branches. Delayed casts wait before the next action; instant casts and charges continue immediately. NPC-centred abilities can cast without an opponent. Targeted spells use a valid combat opponent, triggering actor, or nearby selected target. Casts respect the ability's cooldown.
+**Use Ability** opens a selector from the shared [Abilities](/features/abilities) library. It casts the selected ability or arms its **On Next Attack** charge. This action works in event routines, scene roles, waypoint actions, and question branches. Delayed casts wait before the next action; instant casts and charges continue immediately. NPC-centred abilities can cast without an opponent. Targeted spells use a valid combat opponent, triggering actor, or nearby selected target. Casts respect the ability's cooldown.
 
 ## Dialog timing
 
 Dialog line duration is calculated at 12 characters per second with a minimum of three seconds.
 
-## Custom events
+## Scenes
 
-Custom events decouple one routine from another. Define global custom events in the custom-event manager, add **Emit Custom Event** to a source routine, then configure a preset's **Custom Event Behaviour** for that event.
-
-Names may contain `/` to create groups in the event browser. Custom-event actions can also emit another event, which makes it possible to coordinate several NPC presets.
-
-See [Custom events](/features/custom-events) for creation, manual triggering, ordering, event chains, and deletion behavior.
+[Scenes](/features/scenes) let several NPCs act together, beat by beat: in each beat every role plays its actions at the same time, then the next beat starts. **Next Beat** moves a scene on, for example when a player talks to an NPC. **Start Scene** and **Stop Scene** start or end a scene from any routine, waypoint, or question branch.
 
 ## Waypoint actions
 

@@ -3,6 +3,7 @@ package dev.blockfolk.input;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -10,6 +11,11 @@ import java.util.function.Consumer;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -59,6 +65,44 @@ public final class ChatInputService implements Listener {
         } finally {
             requestingInputs.remove(playerId);
         }
+    }
+
+    /**
+     * Like {@link #request(Player, String, Consumer, Runnable)}, but also lists
+     * {@code choices} as clickable chat links. Clicking one answers the prompt as
+     * if it had been typed; typing any other value still works.
+     */
+    public void request(Player player, String prompt, List<String> choices, Consumer<String> consumer,
+            Runnable onCancel) {
+        request(player, prompt, consumer, onCancel);
+        PendingInput input = pendingInputs.get(player.getUniqueId());
+        if (input == null || choices == null || choices.isEmpty())
+            return;
+        Component line = Component.text("Click to choose: ", NamedTextColor.GRAY);
+        boolean first = true;
+        for (String choice : choices) {
+            if (!first)
+                line = line.append(Component.space());
+            first = false;
+            line = line
+                    .append(Component.text("[" + choice + "]", NamedTextColor.GREEN).decorate(TextDecoration.UNDERLINED)
+                            .hoverEvent(
+                                    HoverEvent.showText(Component.text("Use '" + choice + "'", NamedTextColor.YELLOW)))
+                            .clickEvent(ClickEvent.callback(audience -> {
+                                if (audience instanceof Player clicked
+                                        && clicked.getUniqueId().equals(player.getUniqueId()))
+                                    Bukkit.getScheduler().runTask(plugin, () -> choose(clicked, input, choice));
+                            })));
+        }
+        player.sendMessage(line);
+    }
+
+    /** Answers a still-open prompt with a clicked choice. */
+    private void choose(Player player, PendingInput input, String choice) {
+        if (!pendingInputs.remove(player.getUniqueId(), input))
+            return;
+        input.timeout.cancel();
+        input.consumer.accept(choice);
     }
 
     public boolean isPending(Player player) {

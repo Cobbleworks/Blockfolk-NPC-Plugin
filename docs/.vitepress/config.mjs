@@ -34,7 +34,7 @@ export default defineConfig({
           { text: 'NPCs & instances', link: '/features/npcs' },
           { text: 'Customization & equipment', link: '/features/customization' },
           { text: 'Behaviour routines', link: '/features/behaviours' },
-          { text: 'Custom events', link: '/features/custom-events' },
+          { text: 'Scenes', link: '/features/scenes' },
           { text: 'Combat', link: '/features/combat' },
           { text: 'Abilities', link: '/features/abilities' },
           { text: 'Shops', link: '/features/shop' },

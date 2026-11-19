@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
@@ -47,10 +48,20 @@ public final class NativeNpcNavigationService {
     private final Map<UUID, NavigationState> states = new HashMap<>();
     private final Set<UUID> configuredNavigators = new HashSet<>();
     private final Set<UUID> alwaysActiveInstances = new HashSet<>();
+    private Predicate<NpcInstance> keepActive = instance -> false;
 
     public NativeNpcNavigationService(Plugin plugin) {
         this.plugin = plugin;
         this.navigatorKey = new NamespacedKey(plugin, "navigator-instance-id");
+    }
+
+    /**
+     * Instances whose navigators keep pathfinding with no player near, on top of
+     * those kept active by chunk loading; scenes use it so a cast NPC walks its
+     * part even when whoever started the scene stands far away.
+     */
+    public void setKeepActive(Predicate<NpcInstance> keepActive) {
+        this.keepActive = keepActive == null ? instance -> false : keepActive;
     }
 
     public NavigationUpdate navigate(NpcInstance instance, Location target, WalkingSpeed walkingSpeed) {
@@ -64,7 +75,7 @@ public final class NativeNpcNavigationService {
         if (navigator == null) {
             return new NavigationUpdate(NavigationStatus.STALLED, instance.getLocation());
         }
-        syncActivation(navigator, alwaysActiveInstances.contains(instance.getId()));
+        syncActivation(navigator, alwaysActiveInstances.contains(instance.getId()) || keepActive.test(instance));
         // A stopped navigator is intentionally kept for reuse. The visible mannequin
         // can still be displaced by collisions while idle, so a new navigation run
         // must begin at the mannequin rather than snapping it back to the old husk.

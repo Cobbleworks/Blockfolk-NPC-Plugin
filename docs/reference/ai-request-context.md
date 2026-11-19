@@ -4,7 +4,7 @@ This page describes the bounded gameplay state Blockfolk sends to OpenRouter. Ga
 
 ## When a request is sent
 
-An NPC preset must be active, have at least one context section, and have a trigger. **AI Trigger** can be placed in standard, custom-event, waypoint, and question-branch routines. Each trigger can include optional prompt guidance, sent alongside the event in single-NPC requests. **Respond to Nearby Chat** creates requests directly for player chat within eight blocks.
+An NPC preset must be active, have at least one context section, and have a trigger. **AI Trigger** can be placed in standard, scene-role, waypoint, and question-branch routines. Each trigger can include optional prompt guidance, sent alongside the event in single-NPC requests. **Respond to Nearby Chat** creates requests directly for player chat within eight blocks.
 
 One chat message creates one request for a single NPC: the named NPC, or the closest one when no NPC is named. If that NPC is busy, the chat turn waits in a bounded queue. Its reply is offered to nearby NPCs with **Respond to Nearby NPCs**, together with the player's message.
 
@@ -67,6 +67,10 @@ General perception uses a 16-block radius. Players, NPCs, and other entities bey
 
 Up to 20 named global locations in the same world are included within 128 blocks, ordered nearest first, with distance and compass direction. Mineable resources are scanned within eight blocks.
 
+## Current scene
+
+While the NPC plays a role in a [scene](/features/scenes), the request includes the scene's name, whether it is still playing or wrapping up, its description, the other NPCs taking part (with a count when several instances of one NPC play), and, for scenes with several beats, which beat it is at. The description is written by the scene's author and sets the situation the NPC acts in.
+
 ## Environment
 
 When the world is available, the request includes broad time of day, weather, biome, light level, and an approximate indoors assessment. Environmental text such as signs is explicitly treated as observation rather than instructions.
@@ -81,7 +85,7 @@ Blockfolk keeps:
 
 For NPCs with AI Behaviour active, event summaries include:
 
-- every standard behaviour event the NPC experiences, whether or not that event has an AI Trigger, except **On Idle**. Idle cycles, waypoint actions, and custom events are recorded when they run AI Trigger;
+- every standard behaviour event the NPC experiences, whether or not that event has an AI Trigger, except **On Idle**. Idle cycles, waypoint actions, and scene roles are recorded when they run AI Trigger;
 - every kill: an NPC remembers killing a mob, player, or other NPC with its weapon, a projectile, or an ability, including deaths from fire or poison within five seconds of its last hit;
 - deaths it witnessed: when a player or NPC kills something, or a player or NPC dies, within 16 blocks in sight or 8 blocks out of sight, for example `The player Alex killed the NPC Bob nearby.` Mobs killing mobs and mobs dying to the environment are left out. The NPC does not react right away; it knows on its next AI request;
 - the NPC's own AI actions, such as attacking, fleeing, following, moving, returning home, starting or pausing its route, mining, using a switch, remembering a location, and getting into or out of a vehicle. Speech is kept in conversation memory instead, unless no player was involved;

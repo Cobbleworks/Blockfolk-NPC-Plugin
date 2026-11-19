@@ -15,32 +15,36 @@ public enum BehaviourActionType {
                                                             false), TAKE_ITEM("Take Item", false), SHOW_INVENTORY(
                                                                     "Show Inventory", false), DROP_INVENTORY(
                                                                             "Drop Inventory", false), HARVEST("Harvest",
-                                                                                    false), EMIT_EVENT(
-                                                                                            "Emit Custom Event",
-                                                                                            true), SIT("Sitting",
-                                                                                                    false), SLEEP(
-                                                                                                            "Sleeping",
-                                                                                                            false), SWIM(
-                                                                                                                    "Swimming",
-                                                                                                                    false), FALL_FLY(
-                                                                                                                            "Fall Flying",
-                                                                                                                            false), STAND(
-                                                                                                                                    "Standing",
-                                                                                                                                    false), SNEAK(
-                                                                                                                                            "Sneaking",
-                                                                                                                                            false), WAVE(
-                                                                                                                                                    "Wave",
-                                                                                                                                                    false), JUMP(
-                                                                                                                                                            "Jump",
-                                                                                                                                                            false), FOLLOW(
-                                                                                                                                                                    "Follow",
-                                                                                                                                                                    false), UNFOLLOW(
-                                                                                                                                                                            "Unfollow",
-                                                                                                                                                                            false), OPEN_SHOP(
-                                                                                                                                                                                    "Open Shop",
-                                                                                                                                                                                    true), GO_BACK(
-                                                                                                                                                                                            "Go Back",
-                                                                                                                                                                                            false);
+                                                                                    false), START_SCENE("Start Scene",
+                                                                                            true), STOP_SCENE(
+                                                                                                    "Stop Scene",
+                                                                                                    true), NEXT_BEAT(
+                                                                                                            "Next Beat",
+                                                                                                            false), SIT(
+                                                                                                                    "Sitting",
+                                                                                                                    false), SLEEP(
+                                                                                                                            "Sleeping",
+                                                                                                                            false), SWIM(
+                                                                                                                                    "Swimming",
+                                                                                                                                    false), FALL_FLY(
+                                                                                                                                            "Fall Flying",
+                                                                                                                                            false), STAND(
+                                                                                                                                                    "Standing",
+                                                                                                                                                    false), SNEAK(
+                                                                                                                                                            "Sneaking",
+                                                                                                                                                            false), WAVE(
+                                                                                                                                                                    "Wave",
+                                                                                                                                                                    false), JUMP(
+                                                                                                                                                                            "Jump",
+                                                                                                                                                                            false), FOLLOW(
+                                                                                                                                                                                    "Follow",
+                                                                                                                                                                                    false), UNFOLLOW(
+                                                                                                                                                                                            "Unfollow",
+                                                                                                                                                                                            false), OPEN_SHOP(
+                                                                                                                                                                                                    "Open Shop",
+                                                                                                                                                                                                    true), GO_BACK(
+                                                                                                                                                                                                            "Go Back",
+                                                                                                                                                                                                            false);
 
     private final String displayName;
     private final boolean requiresValue;
@@ -58,8 +62,16 @@ public enum BehaviourActionType {
         return requiresValue;
     }
 
+    /**
+     * Throws IllegalArgumentException for unknown names, including the removed Give
+     * Cue and Wait For Cue (scene beats replaced them).
+     */
     public static BehaviourActionType fromStored(String value) {
         String normalized = value.trim().toUpperCase(Locale.ROOT);
+        // Custom events were replaced by scenes; an old Emit Custom Event now
+        // starts the scene migrated from that event.
+        if (normalized.equals("EMIT_EVENT"))
+            return START_SCENE;
         return valueOf(normalized);
     }
 }
