@@ -7,6 +7,10 @@
 | `/bf`, `/bf npc` | Open the NPC preset browser. |
 | `/bf locations` | Open global locations. |
 | `/bf routes` | Open routes. |
+| `/bf scenes` | Open the scene browser. |
+| `/bf scene <scene>` | Open a scene's editor. |
+| `/bf scene start <scene>` | Start a scene now. Skip reasons are shown to you. Also works from the console. |
+| `/bf scene stop <scene>` | End a running scene with its wrap-up; again to end it at once. Also works from the console. |
 | `/bf abilities` | Open the shared attack library and editor. |
 | `/bf shops` | Open the shared shop library. |
 | `/bf shop` | Open the shared shop library. |
@@ -37,4 +41,4 @@
 
 NPC names in commands are stable preset keys, shown in the editor. Saved locations are global location keys. Tab completion lists both.
 
-Existing `/bf create [name]`, `/bf events [trigger <event>]`, and `/bf npc <name> duplicate` commands remain available. `/bf events trigger` also works from the console.
+Existing `/bf create [name]` and `/bf npc <name> duplicate` commands remain available. The former custom-event commands still work: `/bf events` opens the scene browser and `/bf events trigger <event>` starts the scene that event became.

@@ -40,7 +40,11 @@ public final class NpcDefinition {
     private NpcColor color;
     private NpcPose pose = NpcPose.STANDING;
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
-    private Map<String, List<BehaviourAction>> customEventBehaviours;
+    /**
+     * Rows of the removed custom events, kept only until they are migrated into
+     * scenes on startup.
+     */
+    private final Map<String, List<BehaviourAction>> legacyCustomEventActions = new java.util.LinkedHashMap<>();
     private AiControlSettings aiControlSettings;
     private List<AiMemory> aiMemories;
 
@@ -57,7 +61,6 @@ public final class NpcDefinition {
         this.pushable = true;
         this.color = NpcColor.ORANGE;
         this.behaviours = new EnumMap<>(BehaviourEvent.class);
-        this.customEventBehaviours = new java.util.LinkedHashMap<>();
         this.aiControlSettings = AiControlSettings.defaults();
         this.aiMemories = new ArrayList<>();
     }
@@ -90,7 +93,6 @@ public final class NpcDefinition {
         copy.setAiControlSettings(aiControlSettings);
         copy.setAiMemoryEntries(aiMemories);
         behaviours.forEach(copy::setBehaviourActions);
-        customEventBehaviours.forEach(copy::setCustomEventActions);
         return copy;
     }
 
@@ -308,32 +310,20 @@ public final class NpcDefinition {
         }
     }
 
-    public List<BehaviourAction> getCustomEventActions(String eventName) {
-        return new ArrayList<>(customEventBehaviours.getOrDefault(eventName, List.of()));
+    /** Stores a custom-event row read from an old preset file. */
+    public void putLegacyCustomEventActions(String eventName, List<BehaviourAction> actions) {
+        legacyCustomEventActions.put(eventName, actions == null ? List.of() : List.copyOf(actions));
     }
 
-    public void setCustomEventActions(String eventName, List<BehaviourAction> actions) {
-        if (actions == null)
-            customEventBehaviours.remove(eventName);
-        else
-            customEventBehaviours.put(eventName, new ArrayList<>(actions));
+    /** Returns and forgets the custom-event rows waiting for migration. */
+    public Map<String, List<BehaviourAction>> takeLegacyCustomEventActions() {
+        Map<String, List<BehaviourAction>> taken = new java.util.LinkedHashMap<>(legacyCustomEventActions);
+        legacyCustomEventActions.clear();
+        return taken;
     }
 
-    public void removeCustomEventAction(String eventName, int index) {
-        List<BehaviourAction> actions = customEventBehaviours.get(eventName);
-        if (actions == null || index < 0 || index >= actions.size())
-            return;
-        actions.remove(index);
-    }
-
-    public void removeCustomEvent(String eventName) {
-        customEventBehaviours.remove(eventName);
-    }
-    public int customEventActionCount() {
-        return customEventBehaviours.values().stream().mapToInt(List::size).sum();
-    }
-    public List<String> getCustomEventNames() {
-        return new ArrayList<>(customEventBehaviours.keySet());
+    public boolean hasLegacyCustomEventActions() {
+        return !legacyCustomEventActions.isEmpty();
     }
 
     public Set<String> getReferencedRouteKeys() {
@@ -344,15 +334,12 @@ public final class NpcDefinition {
         for (BehaviourEvent event : BehaviourEvent.values()) {
             collectRouteKeys(getBehaviourActions(event), routeKeys);
         }
-        for (String eventName : getCustomEventNames()) {
-            collectRouteKeys(getCustomEventActions(eventName), routeKeys);
-        }
         return Set.copyOf(routeKeys);
     }
 
     /**
-     * Rewrites every behaviour and custom event action, including question
-     * branches. Returns whether anything changed.
+     * Rewrites every behaviour action, including question branches. Returns whether
+     * anything changed.
      */
     public boolean mapActions(java.util.function.UnaryOperator<BehaviourAction> mapper) {
         boolean changed = false;
@@ -364,25 +351,15 @@ public final class NpcDefinition {
                 changed = true;
             }
         }
-        for (String eventName : getCustomEventNames()) {
-            List<BehaviourAction> actions = getCustomEventActions(eventName);
-            List<BehaviourAction> mapped = BehaviourActions.map(actions, mapper);
-            if (!mapped.equals(actions)) {
-                setCustomEventActions(eventName, mapped);
-                changed = true;
-            }
-        }
         return changed;
     }
 
     /**
-     * Visits every behaviour and custom event action, including question branches.
+     * Visits every behaviour action, including question branches.
      */
     public void forEachAction(java.util.function.Consumer<BehaviourAction> visitor) {
         for (BehaviourEvent event : BehaviourEvent.values())
             BehaviourActions.forEach(getBehaviourActions(event), visitor);
-        for (String eventName : getCustomEventNames())
-            BehaviourActions.forEach(getCustomEventActions(eventName), visitor);
     }
 
     /** Repoints direct, movement, and question-branch route references. */
@@ -393,8 +370,6 @@ public final class NpcDefinition {
             return false;
         for (BehaviourEvent event : BehaviourEvent.values())
             setBehaviourActions(event, replaceRoute(getBehaviourActions(event), oldRoute, newRoute));
-        for (String eventName : getCustomEventNames())
-            setCustomEventActions(eventName, replaceRoute(getCustomEventActions(eventName), oldRoute, newRoute));
         if (oldRoute.equals(movementProfile.routeKey()))
             movementProfile = new MovementProfile(movementProfile.enabled(), newRoute, movementProfile.walkingSpeed());
         return true;
@@ -433,9 +408,6 @@ public final class NpcDefinition {
         boolean referenced = getReferencedRouteKeys().contains(normalized);
         for (BehaviourEvent event : BehaviourEvent.values()) {
             setBehaviourActions(event, withoutRoute(getBehaviourActions(event), normalized));
-        }
-        for (String eventName : getCustomEventNames()) {
-            setCustomEventActions(eventName, withoutRoute(getCustomEventActions(eventName), normalized));
         }
         if (movementProfile.routeKey() != null && movementProfile.routeKey().equals(normalized)) {
             movementProfile = MovementProfile.disabled().withWalkingSpeed(movementProfile.walkingSpeed());

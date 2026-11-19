@@ -88,7 +88,7 @@ Numeric controls use **left-click to decrease**, **right-click to increase**, **
 
 ## Behaviours and storage
 
-**Use Ability** is available in ordinary and custom event routines, waypoint actions, and question branches. It opens an ability selector and stores the chosen ability's stable key. The NPC can cast it without assigning it for random combat use. Cooldowns are shared with automatic casts, and an NPC can have one delayed cast or charge at a time.
+**Use Ability** is available in event routines, scene roles, waypoint actions, and question branches. It opens an ability selector and stores the chosen ability's stable key. The NPC can cast it without assigning it for random combat use. Cooldowns are shared with automatic casts, and an NPC can have one delayed cast or charge at a time.
 
 Targeted abilities use the current combat opponent, otherwise a valid triggering actor, otherwise the nearest selected target in sight. Target-centred areas, cones, beams, and dashes require a target within activation range. Caster-centred spheres and rings, teleport, Self abilities, and charging can run without an opponent, including on invulnerable NPCs. Collateral targets still follow alliance and target-category rules. Missing definitions or unavailable casts are skipped. A delayed action waits for its cast before the sequence continues; an instant or charge action continues immediately. For example, **Use Ability (On Next Attack) → Start Combat** arms the NPC before engaging the triggering actor.
 

@@ -174,11 +174,6 @@ public final class NpcDefinitionRepository {
             configuration.set("behaviours." + event.name().toLowerCase(Locale.ROOT),
                     actions.isEmpty() ? null : actions);
         }
-        for (String eventName : definition.getCustomEventNames()) {
-            List<Map<String, Object>> actions = BehaviourActionCodec
-                    .encodeList(definition.getCustomEventActions(eventName));
-            configuration.set("custom-event-behaviours." + encodeEventName(eventName), actions);
-        }
         return configuration;
     }
 
@@ -399,7 +394,7 @@ public final class NpcDefinitionRepository {
                     plugin.getLogger().warning(() -> "Ignoring malformed custom event name in " + file.getName());
                     continue;
                 }
-                definition.setCustomEventActions(eventName,
+                definition.putLegacyCustomEventActions(eventName,
                         decodeActions(custom.getMapList(encodedName), file, "custom-event"));
             }
         }
@@ -439,11 +434,6 @@ public final class NpcDefinitionRepository {
         List<BehaviourAction> merged = new ArrayList<>(attacked);
         merged.addAll(damage);
         return merged.subList(0, Math.min(7, merged.size()));
-    }
-
-    private static String encodeEventName(String value) {
-        return java.util.Base64.getUrlEncoder().withoutPadding()
-                .encodeToString(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private static String decodeEventName(String value) {

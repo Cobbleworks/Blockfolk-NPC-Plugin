@@ -46,7 +46,7 @@ At least one section is required before AI behaviour can be activated.
 
 Players can use `/bf config ai mute-me on` to keep their nearby chat from triggering NPC AI responses, then `/bf config ai mute-me off` to allow responses again. Players start unmuted.
 
-Add **AI Trigger** to any standard event, custom event, waypoint, or question branch. A dialog asks for an optional prompt
+Add **AI Trigger** to any standard event, scene role, waypoint, or question branch. A dialog asks for an optional prompt
 to guide the AI for that specific trigger. Leave it empty to use the surrounding event as the request reason without
 extra guidance.
 

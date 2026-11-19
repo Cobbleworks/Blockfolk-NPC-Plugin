@@ -49,7 +49,8 @@ import dev.blockfolk.model.FightOptions;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.SpecialAttackOptions;
-import dev.blockfolk.model.CustomEvent;
+import dev.blockfolk.model.Scene;
+import dev.blockfolk.model.SceneRole;
 import dev.blockfolk.model.LootTier;
 import dev.blockfolk.model.NamedLocation;
 import dev.blockfolk.model.NpcDefinition;
@@ -62,7 +63,7 @@ import dev.blockfolk.model.QuestionOption;
 import dev.blockfolk.model.RoutePoint;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
-import dev.blockfolk.repository.CustomEventRepository;
+import dev.blockfolk.repository.SceneRepository;
 import dev.blockfolk.repository.LocationRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.runtime.NpcBehaviourService;
@@ -107,11 +108,10 @@ public final class GuiService implements Listener {
     private static final Map<Integer, BehaviourActionType> ACTION_PICKER_ACTIONS = Map.ofEntries(
             // Dialogue and scripting
             Map.entry(1, BehaviourActionType.SEND_DIALOG), Map.entry(2, BehaviourActionType.SHOW_HOLO_DIALOG),
-            Map.entry(3, BehaviourActionType.ASK_QUESTION), Map.entry(4, BehaviourActionType.EMIT_EVENT),
-            Map.entry(5, BehaviourActionType.RUN_CONSOLE_COMMAND), Map.entry(6, BehaviourActionType.AI_TRIGGER),
-            Map.entry(7, BehaviourActionType.WAIT),
+            Map.entry(3, BehaviourActionType.ASK_QUESTION), Map.entry(4, BehaviourActionType.RUN_CONSOLE_COMMAND),
+            Map.entry(5, BehaviourActionType.AI_TRIGGER), Map.entry(6, BehaviourActionType.WAIT),
             // Movement overflow: the Movement row below is full
-            Map.entry(8, BehaviourActionType.GO_BACK),
+            Map.entry(7, BehaviourActionType.GO_BACK),
             // Movement and navigation
             Map.entry(10, BehaviourActionType.SET_ROUTE), Map.entry(11, BehaviourActionType.START_NAVIGATION),
             Map.entry(12, BehaviourActionType.STOP_NAVIGATION), Map.entry(13, BehaviourActionType.SET_WALK_SPEED),
@@ -124,7 +124,10 @@ public final class GuiService implements Listener {
             Map.entry(25, BehaviourActionType.OPEN_SHOP),
             // Combat
             Map.entry(28, BehaviourActionType.START_COMBAT), Map.entry(29, BehaviourActionType.CHANGE_FIGHT_OPTIONS),
-            Map.entry(30, BehaviourActionType.USE_ABILITY));
+            Map.entry(30, BehaviourActionType.USE_ABILITY),
+            // Scenes
+            Map.entry(37, BehaviourActionType.START_SCENE), Map.entry(38, BehaviourActionType.STOP_SCENE),
+            Map.entry(39, BehaviourActionType.CUE), Map.entry(40, BehaviourActionType.WAIT_FOR_CUE));
     private static final int MAIN_PREVIOUS_SLOT = 45;
     private static final int MAIN_ROUTES_SLOT = 46;
     private static final int MAIN_LOCATIONS_SLOT = 47;
@@ -204,9 +207,8 @@ public final class GuiService implements Listener {
     private final BiConsumer<Player, String> npcRoutesOpener;
     private final RouteCreator routeCreator;
     private final BiConsumer<Player, NpcRoute> routeEditor;
-    private final CustomEventRepository customEventRepository;
-    private final Consumer<Player> customEventGuiOpener;
-    private final CustomEventCreator customEventCreator;
+    private final SceneRepository sceneRepository;
+    private SceneNavigation sceneNavigation;
     private final LocationRepository locationRepository;
     private final NamespacedKey waypointActionKey;
     private final NamespacedKey waypointTokenKey;
@@ -228,8 +230,7 @@ public final class GuiService implements Listener {
     public GuiService(Plugin plugin, NpcDefinitionRepository definitionRepository, RouteRepository routeRepository,
             NpcInstanceRegistry instanceRegistry, ChatInputService chatInputService, SkinResolver skinResolver,
             Consumer<Player> routeGuiOpener, BiConsumer<Player, String> npcRoutesOpener, RouteCreator routeCreator,
-            BiConsumer<Player, NpcRoute> routeEditor, CustomEventRepository customEventRepository,
-            Consumer<Player> customEventGuiOpener, CustomEventCreator customEventCreator,
+            BiConsumer<Player, NpcRoute> routeEditor, SceneRepository sceneRepository,
             LocationRepository locationRepository) {
         this.plugin = plugin;
         this.definitionRepository = definitionRepository;
@@ -241,15 +242,20 @@ public final class GuiService implements Listener {
         this.npcRoutesOpener = npcRoutesOpener;
         this.routeCreator = routeCreator;
         this.routeEditor = routeEditor;
-        this.customEventRepository = customEventRepository;
-        this.customEventGuiOpener = customEventGuiOpener;
-        this.customEventCreator = customEventCreator;
+        this.sceneRepository = sceneRepository;
         this.locationRepository = locationRepository;
         this.waypointActionKey = new NamespacedKey(plugin, "behaviour-waypoint-action");
         this.waypointTokenKey = new NamespacedKey(plugin, "behaviour-waypoint-token");
         this.reorderIconKey = new NamespacedKey(plugin, "reorder-definition");
         this.aiGuiService = new AiGuiService(plugin, definitionRepository, chatInputService, this::openEditor);
         this.creationDialog = new NpcCreationDialog(plugin, definitionRepository, instanceRegistry, this::openEditor);
+        this.aiGuiService.setSceneTriggerCheck(
+                definition -> sceneRepository.findAll().stream().flatMap(scene -> scene.getRoles().stream())
+                        .filter(role -> definition.getKey().equals(role.getPresetKey())).anyMatch(role -> {
+                            boolean[] found = {false};
+                            role.forEachAction(action -> found[0] |= action.type() == BehaviourActionType.AI_TRIGGER);
+                            return found[0];
+                        }));
     }
 
     public void setAbilitiesGuiService(AbilitiesGuiService service) {
@@ -258,6 +264,10 @@ public final class GuiService implements Listener {
 
     public void setLocationsOpener(Consumer<Player> opener) {
         locationsOpener = opener;
+    }
+
+    public void setSceneNavigation(SceneNavigation navigation) {
+        sceneNavigation = navigation;
     }
 
     public void setShopGuiService(ShopGuiService service) {
@@ -398,9 +408,10 @@ public final class GuiService implements Listener {
         if (pickerType == BehaviourValuePickerType.ROUTE) {
             inventory.setItem(51,
                     item(Material.EMERALD, "Create Route", List.of(GuiItems.hint("Click", "enter its name"))));
-        } else if (pickerType == BehaviourValuePickerType.CUSTOM_EVENT) {
-            inventory.setItem(51, item(Material.EMERALD, "Create New Event", List.of(
-                    LegacyText.GRAY + "Creates and selects a custom event", GuiItems.hint("Click", "enter its name"))));
+        } else if (pickerType == BehaviourValuePickerType.SCENE_START) {
+            inventory.setItem(51,
+                    item(Material.EMERALD, "Create Scene", List.of(LegacyText.GRAY + "Creates and selects a new scene",
+                            GuiItems.hint("Click", "enter its name"))));
         }
         if (page + 1 < pages) {
             inventory.setItem(53, GuiItems.nextPage(page, pages));
@@ -447,8 +458,8 @@ public final class GuiService implements Listener {
                         List.of(LegacyText.GRAY + "Named global positions for movement actions", "",
                                 GuiItems.hint("Click", "open locations"))));
         inventory.setItem(MAIN_EVENTS_SLOT,
-                item(Material.BELL, "Custom Events", List.of(LegacyText.GRAY + "Events NPCs can emit and react to", "",
-                        GuiItems.hint("Click", "open custom events"))));
+                item(Material.BELL, "Scenes", List.of(LegacyText.GRAY + "Moments several NPCs play together",
+                        LegacyText.GRAY + "at a time, place, or on cue", "", GuiItems.hint("Click", "open scenes"))));
         inventory.setItem(MAIN_OVERVIEW_SLOT,
                 item(Material.NETHER_STAR, "Blockfolk Overview",
                         List.of(LegacyText.GRAY + "Presets: " + LegacyText.WHITE + definitions.size(),
@@ -593,12 +604,7 @@ public final class GuiService implements Listener {
                         List.of(LegacyText.GRAY + "Actions run on clicks, spawn, time of day, …",
                                 LegacyText.GRAY + "Configured actions: " + LegacyText.WHITE + behaviourCount, "",
                                 GuiItems.hint("Click", "configure"))));
-        inventory.setItem(EDITOR_CUSTOM_BEHAVIOUR_SLOT,
-                item(Material.BELL, "Custom Event Behaviour",
-                        List.of(LegacyText.GRAY + "Reactions to globally emitted custom events",
-                                LegacyText.GRAY + "Configured actions: " + LegacyText.WHITE
-                                        + definition.customEventActionCount(),
-                                "", GuiItems.hint("Click", "configure"))));
+        inventory.setItem(EDITOR_CUSTOM_BEHAVIOUR_SLOT, item(Material.BELL, "Scenes", sceneRolesLore(definition)));
         AiControlSettings ai = definition.getAiControlSettings();
         String aiStatus = !ai.enabled()
                 ? LegacyText.RED + "Paused"
@@ -951,79 +957,175 @@ public final class GuiService implements Listener {
         openInventory(player, inventory);
     }
 
-    public void openCustomBehaviours(Player player, NpcDefinition definition, int requestedPage) {
-        List<CustomEvent> events = configuredCustomEvents(definition);
-        int pages = Math.max(1, (events.size() + 4) / 5);
+    private List<String> sceneRolesLore(NpcDefinition definition) {
+        List<String> lore = new ArrayList<>();
+        List<String> playing = new ArrayList<>();
+        for (Scene scene : sceneRepository.findAll()) {
+            if (scene.getRoles().stream().anyMatch(role -> definition.getKey().equals(role.getPresetKey())))
+                playing.add(scene.getDisplayName());
+        }
+        lore.add(LegacyText.GRAY + "Moments this NPC plays with others");
+        if (playing.isEmpty()) {
+            lore.add(LegacyText.DARK_GRAY + "No roles in any scene yet");
+        } else {
+            lore.add(LegacyText.GRAY + "Plays a role in:");
+            playing.stream().limit(6).forEach(name -> lore.add(LegacyText.WHITE + "• " + name));
+            if (playing.size() > 6)
+                lore.add(LegacyText.DARK_GRAY + "… and " + (playing.size() - 6) + " more");
+        }
+        lore.add("");
+        lore.add(GuiItems.hint("Click", "open scenes"));
+        return lore;
+    }
+
+    /**
+     * Edits one scene role: its scene actions, wrap-up, and reactions, with the
+     * same action rows as preset behaviour.
+     */
+    public void openSceneRole(Player player, String sceneKey, String roleId, int requestedPage) {
+        Scene scene = sceneRepository.find(sceneKey).orElse(null);
+        SceneRole role = scene == null ? null : scene.findRole(roleId).orElse(null);
+        if (role == null) {
+            player.sendMessage(UiText.error("That scene role no longer exists."));
+            if (sceneNavigation != null)
+                sceneNavigation.openScenes(player);
+            else
+                player.closeInventory();
+            return;
+        }
+        List<SceneLaneRef> rows = SceneLaneRef.rows(scene.getKey(), role.getId());
+        int pages = Math.max(1, (rows.size() + 4) / 5);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(new CustomBehaviourHolder(definition.getKey(), page), 54,
-                UiText.title("Custom Behaviour", definition.getDisplayName()));
+        Inventory inventory = Bukkit.createInventory(new SceneRoleHolder(scene.getKey(), role.getId(), page), 54,
+                UiText.title("Role", role.getDisplayName()));
         for (int row = 0; row < 5; row++) {
-            int eventIndex = page * 5 + row;
-            if (eventIndex >= events.size())
+            int rowIndex = page * 5 + row;
+            if (rowIndex >= rows.size())
                 break;
-            CustomEvent customEvent = events.get(eventIndex);
-            List<BehaviourAction> actions = definition.getCustomEventActions(customEvent.getName());
-            inventory.setItem(row * 9, item(customEventIcon(customEvent), customEvent.getName(),
-                    actionSummaryLore(List.of(
-                            LegacyText.GRAY + (customEvent.getDescription().isBlank()
-                                    ? "No description"
-                                    : customEvent.getDescription()),
-                            LegacyText.GRAY + "Actions run from left to right",
-                            GuiItems.hint("Shift-left-click", "copy row"),
-                            GuiItems.hint("Shift-right-click", "paste row"),
-                            GuiItems.danger("Right-click", "remove row")), actions)));
+            SceneLaneRef lane = rows.get(rowIndex);
+            List<BehaviourAction> actions = lane.actions(role);
+            inventory.setItem(row * 9, item(sceneRowMaterial(lane), sceneRowName(lane),
+                    actionSummaryLore(sceneRowIntroduction(lane), actions)));
             inventory.setItem(row * 9 + 1, addActionItem(actions.size(), MAX_ROW_ACTIONS));
-            for (int column = 0; column < Math.min(7, actions.size()); column++) {
-                BehaviourAction action = actions.get(column);
-                inventory.setItem(row * 9 + column + 2, actionItem(action, column));
+            for (int column = 0; column < Math.min(7, actions.size()); column++)
+                inventory.setItem(row * 9 + column + 2, actionItem(actions.get(column), column));
+        }
+        if (page > 0)
+            inventory.setItem(45, GuiItems.previousPage(page, pages));
+        NpcDefinition preset = role.getPresetKey() == null
+                ? null
+                : definitionRepository.find(role.getPresetKey()).orElse(null);
+        List<String> presetLore = List.of(
+                preset == null
+                        ? LegacyText.RED + "No NPC preset: the scene cannot start"
+                        : LegacyText.GRAY + "Played by instances of this preset",
+                "", GuiItems.hint("Click", "choose another preset"));
+        inventory.setItem(46,
+                preset == null
+                        ? item(Material.SKELETON_SKULL, "Played By: Nobody", presetLore)
+                        : definitionIcon(preset, presetLore));
+        List<GuiItems.Option> castOptions = java.util.Arrays.stream(SceneRole.Cast.values())
+                .map(cast -> new GuiItems.Option(cast == SceneRole.Cast.ONE ? Material.PLAYER_HEAD : Material.CHEST,
+                        cast.displayName(), cast.summary()))
+                .toList();
+        inventory.setItem(47, GuiItems.cycle("Cast", castOptions, role.getCast().ordinal(), List.of()));
+        inventory.setItem(48, item(Material.NAME_TAG, "Role Name",
+                List.of(LegacyText.WHITE + role.getDisplayName(), "", GuiItems.hint("Click", "rename"))));
+        inventory.setItem(49, GuiItems.back("the scene's roles"));
+        List<String> cues = scene.cueNames();
+        inventory.setItem(50,
+                item(Material.BELL, "Cues", cues.isEmpty()
+                        ? List.of(LegacyText.GRAY + "Give Cue and Wait For Cue keep roles",
+                                LegacyText.GRAY + "in step, e.g. wait until another NPC arrived", "",
+                                LegacyText.DARK_GRAY + "No cues used in this scene yet")
+                        : java.util.stream.Stream
+                                .concat(java.util.stream.Stream.of(LegacyText.GRAY + "Cues used in this scene:"),
+                                        cues.stream().map(cue -> LegacyText.WHITE + "• " + cue))
+                                .toList()));
+        if (page + 1 < pages)
+            inventory.setItem(53, GuiItems.nextPage(page, pages));
+        openInventory(player, inventory);
+    }
+
+    private Material sceneRowMaterial(SceneLaneRef lane) {
+        return switch (lane.part()) {
+            case LANE -> Material.MAP;
+            case WRAP_UP -> Material.RED_BED;
+            case REACTION -> eventMaterial(lane.event());
+        };
+    }
+
+    private String sceneRowName(SceneLaneRef lane) {
+        return switch (lane.part()) {
+            case LANE -> "Scene Actions";
+            case WRAP_UP -> "Wrap-Up";
+            case REACTION -> "While Active: " + lane.event().displayName();
+        };
+    }
+
+    private List<String> sceneRowIntroduction(SceneLaneRef lane) {
+        List<String> lore = new ArrayList<>();
+        switch (lane.part()) {
+            case LANE -> {
+                lore.add(LegacyText.GRAY + "Runs when the scene starts, left to right,");
+                lore.add(LegacyText.GRAY + "at the same time as the other roles");
+            }
+            case WRAP_UP -> {
+                lore.add(LegacyText.GRAY + "Runs when the scene ends, before the NPC");
+                lore.add(LegacyText.GRAY + "returns to its normal routine");
+            }
+            case REACTION -> {
+                if (lane.event() == BehaviourEvent.IDLE) {
+                    lore.add(LegacyText.GRAY + "Repeats once the scene actions are done,");
+                    lore.add(LegacyText.GRAY + "instead of the preset's idle routine");
+                } else {
+                    lore.add(LegacyText.GRAY + "Replaces the preset's own reaction");
+                    lore.add(LegacyText.GRAY + "while the scene runs; empty keeps it");
+                }
             }
         }
-        if (events.isEmpty())
-            inventory.setItem(22, item(Material.GRAY_DYE, "No Event Rows",
-                    List.of(LegacyText.GRAY + "Choose Add Event to select a custom event")));
-        if (page > 0)
-            inventory.setItem(45, GuiItems.previousPage(page, pages));
-        inventory.setItem(49, GuiItems.back("the NPC menu"));
-        inventory.setItem(51, item(Material.EMERALD, "Add Event",
-                List.of(GuiItems.hint("Click", "choose a custom event for a new row"))));
-        if (page + 1 < pages)
-            inventory.setItem(53, GuiItems.nextPage(page, pages));
-        openInventory(player, inventory);
+        lore.add(GuiItems.hint("Shift-left-click", "copy row"));
+        lore.add(GuiItems.hint("Shift-right-click", "paste row"));
+        return lore;
     }
 
-    private List<CustomEvent> configuredCustomEvents(NpcDefinition definition) {
-        return customEventRepository.findAll().stream()
-                .filter(event -> definition.getCustomEventNames().contains(event.getName())).toList();
+    private SceneRole sceneRole(SceneLaneRef lane) {
+        return sceneRepository.find(lane.sceneKey()).flatMap(scene -> scene.findRole(lane.roleId())).orElse(null);
     }
 
-    private void openCustomBehaviourEventPicker(Player player, NpcDefinition definition, int behaviourPage,
-            int requestedPage) {
-        List<CustomEvent> available = customEventRepository.findAll().stream()
-                .filter(event -> !definition.getCustomEventNames().contains(event.getName())).toList();
-        int pages = Math.max(1, (available.size() + PAGE_SIZE - 1) / PAGE_SIZE);
-        int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(
-                new CustomBehaviourEventPickerHolder(definition.getKey(), behaviourPage, page), 54,
-                UiText.title("Select Custom Event"));
-        int from = page * PAGE_SIZE;
-        for (int index = from; index < Math.min(from + PAGE_SIZE, available.size()); index++) {
-            CustomEvent event = available.get(index);
-            inventory.setItem(index - from,
-                    item(customEventIcon(event), event.getName(),
-                            List.of(LegacyText.GRAY
-                                    + (event.getDescription().isBlank() ? "No description" : event.getDescription()),
-                                    GuiItems.hint("Click", "add row"))));
+    /**
+     * The action row an editor holder points at: preset behaviour or a scene row.
+     */
+    private List<BehaviourAction> actionsFor(NpcDefinition definition, BehaviourEvent event, SceneLaneRef lane) {
+        if (lane == null)
+            return definition.getBehaviourActions(event);
+        SceneRole role = sceneRole(lane);
+        return role == null ? new ArrayList<>() : lane.actions(role);
+    }
+
+    private void storeActions(NpcDefinition definition, BehaviourEvent event, SceneLaneRef lane,
+            List<BehaviourAction> actions) {
+        if (lane == null) {
+            definition.setBehaviourActions(event, actions);
+            definitionRepository.save(definition);
+            return;
         }
-        if (available.isEmpty())
-            inventory.setItem(22, item(Material.GRAY_DYE, "No Events Available", List.of()));
-        if (page > 0)
-            inventory.setItem(45, GuiItems.previousPage(page, pages));
-        inventory.setItem(49, GuiItems.back("Custom Behaviour"));
-        inventory.setItem(51, item(Material.EMERALD, "Create New Event",
-                List.of(GuiItems.hint("Click", "create and add an event row"))));
-        if (page + 1 < pages)
-            inventory.setItem(53, GuiItems.nextPage(page, pages));
-        openInventory(player, inventory);
+        Scene scene = sceneRepository.find(lane.sceneKey()).orElse(null);
+        SceneRole role = scene == null ? null : scene.findRole(lane.roleId()).orElse(null);
+        if (role == null)
+            return;
+        lane.store(role, actions);
+        sceneRepository.save(scene);
+    }
+
+    /** The preset a scene row's actions are edited for: the role's preset. */
+    private NpcDefinition scenePreset(Player player, SceneRole role) {
+        NpcDefinition preset = role.getPresetKey() == null
+                ? null
+                : definitionRepository.find(role.getPresetKey()).orElse(null);
+        if (preset == null)
+            player.sendMessage(UiText.warning("Choose the NPC preset that plays this role first."));
+        return preset;
     }
 
     private void openActionPicker(Player player, NpcDefinition definition, BehaviourEvent event, int actionIndex,
@@ -1031,10 +1133,10 @@ public final class GuiService implements Listener {
         openActionPicker(player, definition, event, null, actionIndex, page);
     }
 
-    private void openActionPicker(Player player, NpcDefinition definition, BehaviourEvent event, String customEvent,
+    private void openActionPicker(Player player, NpcDefinition definition, BehaviourEvent event, SceneLaneRef lane,
             int actionIndex, int page) {
         Inventory inventory = Bukkit.createInventory(
-                new ActionPickerHolder(definition.getKey(), event, customEvent, actionIndex, page), 54,
+                new ActionPickerHolder(definition.getKey(), event, lane, actionIndex, page), 54,
                 UiText.title("Choose Action"));
         populateActionPicker(inventory, true, "the behaviour list");
         openInventory(player, inventory);
@@ -1049,6 +1151,8 @@ public final class GuiService implements Listener {
                 "World & Items", "Blocks, inventories, and shops"));
         inventory.setItem(27, GuiItems.sectionHeader(Material.RED_STAINED_GLASS_PANE, LegacyText.RED,
                 "Combat & Animations", "Fighting, abilities, and poses"));
+        inventory.setItem(36, GuiItems.sectionHeader(Material.MAGENTA_STAINED_GLASS_PANE, LegacyText.LIGHT_PURPLE,
+                "Scenes", "Start scenes and keep roles in step"));
         for (Map.Entry<Integer, BehaviourActionType> entry : ACTION_PICKER_ACTIONS.entrySet()) {
             BehaviourActionType type = entry.getValue();
             if (!includeQuestion && type == BehaviourActionType.ASK_QUESTION)
@@ -1062,7 +1166,7 @@ public final class GuiService implements Listener {
 
     private void openAnimationPicker(Player player, ActionPickerHolder action) {
         Inventory inventory = Bukkit.createInventory(new AnimationPickerHolder(action.key(), action.event(),
-                action.customEvent(), action.actionIndex(), action.page()), 27, UiText.title("Choose Animation"));
+                action.lane(), action.actionIndex(), action.page()), 27, UiText.title("Choose Animation"));
         int[] slots = {9, 10, 11, 12, 13, 14, 15, 16};
         for (int index = 0; index < ANIMATION_ACTIONS.size(); index++) {
             BehaviourActionType type = ANIMATION_ACTIONS.get(index);
@@ -1089,7 +1193,7 @@ public final class GuiService implements Listener {
         int valuePage = Math.max(0, Math.min(requestedValuePage, pages - 1));
         Inventory inventory = Bukkit
                 .createInventory(
-                        new BehaviourValuePickerHolder(action.key(), action.event(), action.customEvent(),
+                        new BehaviourValuePickerHolder(action.key(), action.event(), action.lane(),
                                 action.actionIndex(), action.page(), pickerType, folder, valuePage),
                         54, UiText.title(pickerType.title()));
         int from = valuePage * PAGE_SIZE;
@@ -1113,9 +1217,10 @@ public final class GuiService implements Listener {
         if (pickerType == BehaviourValuePickerType.ROUTE) {
             inventory.setItem(51,
                     item(Material.EMERALD, "Create Route", List.of(GuiItems.hint("Click", "enter its name"))));
-        } else if (pickerType == BehaviourValuePickerType.CUSTOM_EVENT) {
-            inventory.setItem(51, item(Material.EMERALD, "Create New Event", List.of(
-                    LegacyText.GRAY + "Creates and selects a custom event", GuiItems.hint("Click", "enter its name"))));
+        } else if (pickerType == BehaviourValuePickerType.SCENE_START) {
+            inventory.setItem(51,
+                    item(Material.EMERALD, "Create Scene", List.of(LegacyText.GRAY + "Creates and selects a new scene",
+                            GuiItems.hint("Click", "enter its name"))));
         }
         if (valuePage + 1 < pages) {
             inventory.setItem(53, GuiItems.nextPage(valuePage, pages));
@@ -1140,10 +1245,12 @@ public final class GuiService implements Listener {
                             speed.displayName(), new ItemStack(Material.FEATHER),
                             List.of(LegacyText.GRAY + "" + speed.blocksPerSecond() + " blocks/second"), false))
                     .toList();
-            case CUSTOM_EVENT -> customEventRepository.findAll().stream()
-                    .map(event -> new BehaviourPickerOption(event.getName(), event.getName(), customEventIcon(event),
-                            List.of(LegacyText.GRAY
-                                    + (event.getDescription().isBlank() ? "No description" : event.getDescription())),
+            case SCENE_START, SCENE_STOP -> sceneRepository.findAll().stream()
+                    .map(scene -> new BehaviourPickerOption(scene.getKey(), scene.getDisplayName(), sceneIcon(scene),
+                            List.of(LegacyText.DARK_GRAY + "Key: " + scene.getKey(),
+                                    LegacyText.GRAY + (scene.getDescription().isBlank()
+                                            ? scene.getRoles().size() + " role(s)"
+                                            : scene.getDescription())),
                             false))
                     .toList();
         };
@@ -1232,10 +1339,8 @@ public final class GuiService implements Listener {
             handleInstancesClick(event, player, instancesHolder);
         } else if (holder instanceof BehaviourHolder behaviourHolder) {
             handleBehaviourClick(event, player, behaviourHolder);
-        } else if (holder instanceof CustomBehaviourHolder customBehaviourHolder) {
-            handleCustomBehaviourClick(event, player, customBehaviourHolder);
-        } else if (holder instanceof CustomBehaviourEventPickerHolder customEventPicker) {
-            handleCustomBehaviourEventPickerClick(event, player, customEventPicker);
+        } else if (holder instanceof SceneRoleHolder sceneRoleHolder) {
+            handleSceneRoleClick(event, player, sceneRoleHolder);
         } else if (holder instanceof ActionPickerHolder pickerHolder) {
             handleActionPickerClick(event, player, pickerHolder);
         } else if (aiGuiService.handles(holder)) {
@@ -1381,7 +1486,8 @@ public final class GuiService implements Listener {
                 return;
             }
             case MAIN_EVENTS_SLOT -> {
-                customEventGuiOpener.accept(player);
+                if (sceneNavigation != null)
+                    sceneNavigation.openScenes(player);
                 return;
             }
             case MAIN_OVERVIEW_SLOT -> {
@@ -1519,7 +1625,10 @@ public final class GuiService implements Listener {
                 }
             }
             case EDITOR_BEHAVIOUR_SLOT -> openBehaviours(player, definition, 0);
-            case EDITOR_CUSTOM_BEHAVIOUR_SLOT -> openCustomBehaviours(player, definition, 0);
+            case EDITOR_CUSTOM_BEHAVIOUR_SLOT -> {
+                if (sceneNavigation != null)
+                    sceneNavigation.openScenes(player);
+            }
             case EDITOR_AI_SLOT -> openAiControl(player, definition);
             case EDITOR_ROUTES_SLOT -> npcRoutesOpener.accept(player, definition.getKey());
             case EDITOR_FIGHTING_SLOT -> openFightingEditor(player, definition);
@@ -2009,104 +2118,100 @@ public final class GuiService implements Listener {
         }
     }
 
-    private void handleCustomBehaviourClick(InventoryClickEvent event, Player player, CustomBehaviourHolder holder) {
+    private void handleSceneRoleClick(InventoryClickEvent event, Player player, SceneRoleHolder holder) {
         event.setCancelled(true);
         if (!isTopInventoryClick(event))
             return;
-        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
-        if (definition == null) {
-            player.closeInventory();
+        Scene scene = sceneRepository.find(holder.sceneKey()).orElse(null);
+        SceneRole role = scene == null ? null : scene.findRole(holder.roleId()).orElse(null);
+        if (role == null) {
+            openSceneRole(player, holder.sceneKey(), holder.roleId(), 0);
             return;
         }
+        Runnable reopen = () -> openSceneRole(player, holder.sceneKey(), holder.roleId(), holder.page());
         int slot = event.getRawSlot();
-        if (slot == 45) {
-            openCustomBehaviours(player, definition, holder.page() - 1);
-            return;
+        switch (slot) {
+            case 45 -> {
+                openSceneRole(player, holder.sceneKey(), holder.roleId(), holder.page() - 1);
+                return;
+            }
+            case 46 -> {
+                if (sceneNavigation != null)
+                    sceneNavigation.choosePreset(player, scene.getKey(), role.getId());
+                return;
+            }
+            case 47 -> {
+                int direction = GuiItems.cycleDirection(event.getClick());
+                if (direction != 0) {
+                    role.setCast(GuiItems.step(role.getCast(), direction));
+                    sceneRepository.save(scene);
+                    GuiItems.click(player);
+                    reopen.run();
+                }
+                return;
+            }
+            case 48 -> {
+                chatInputService.request(player, "Enter the role name:", value -> {
+                    sceneRepository.find(holder.sceneKey())
+                            .ifPresent(current -> current.findRole(holder.roleId()).ifPresent(currentRole -> {
+                                currentRole.setDisplayName(value);
+                                sceneRepository.save(current);
+                            }));
+                    reopen.run();
+                }, reopen);
+                return;
+            }
+            case 49 -> {
+                if (sceneNavigation != null)
+                    sceneNavigation.openRoles(player, scene.getKey());
+                else
+                    player.closeInventory();
+                return;
+            }
+            case 53 -> {
+                openSceneRole(player, holder.sceneKey(), holder.roleId(), holder.page() + 1);
+                return;
+            }
+            default -> {
+            }
         }
-        if (slot == 49) {
-            openEditor(player, definition);
-            return;
-        }
-        if (slot == 53) {
-            openCustomBehaviours(player, definition, holder.page() + 1);
-            return;
-        }
-        if (slot == 51) {
-            openCustomBehaviourEventPicker(player, definition, holder.page(), 0);
-            return;
-        }
+        List<SceneLaneRef> rows = SceneLaneRef.rows(scene.getKey(), role.getId());
         int row = slot / 9;
-        List<CustomEvent> customEvents = configuredCustomEvents(definition);
-        int eventIndex = holder.page() * 5 + row;
-        if (row >= 5 || eventIndex < 0 || eventIndex >= customEvents.size())
+        int rowIndex = holder.page() * 5 + row;
+        if (row >= 5 || rowIndex >= rows.size())
             return;
-        String eventName = customEvents.get(eventIndex).getName();
-        List<BehaviourAction> actions = definition.getCustomEventActions(eventName);
+        SceneLaneRef lane = rows.get(rowIndex);
+        List<BehaviourAction> actions = lane.actions(role);
         int column = slot % 9 - 2;
         if (slot % 9 == 0 && handleBehaviourClipboardClick(event, player, actions, pasted -> {
-            definition.setCustomEventActions(eventName, pasted);
-            definitionRepository.save(definition);
-            openCustomBehaviours(player, definition, holder.page());
+            lane.store(role, pasted);
+            sceneRepository.save(scene);
+            reopen.run();
         })) {
             return;
-        } else if (slot % 9 == 0 && event.isRightClick()) {
-            definition.removeCustomEvent(eventName);
-            definitionRepository.save(definition);
-            openCustomBehaviours(player, definition, holder.page());
-        } else if (slot % 9 == 1) {
-            if (actions.size() < MAX_ROW_ACTIONS)
-                openActionPicker(player, definition, null, eventName, actions.size(), holder.page());
-        } else if (column < 0 || column >= 7) {
+        }
+        if (slot % 9 == 0 || column >= 7)
             return;
-        } else if (column < actions.size() && event.isRightClick()) {
-            definition.removeCustomEventAction(eventName, column);
-            definitionRepository.save(definition);
-            openCustomBehaviours(player, definition, holder.page());
+        if (column >= 0 && column < actions.size() && event.isRightClick()) {
+            List<BehaviourAction> changed = new ArrayList<>(actions);
+            changed.remove(column);
+            lane.store(role, changed);
+            sceneRepository.save(scene);
+            reopen.run();
+            return;
+        }
+        NpcDefinition preset = scenePreset(player, role);
+        if (preset == null)
+            return;
+        if (slot % 9 == 1) {
+            if (actions.size() < MAX_ROW_ACTIONS)
+                openActionPicker(player, preset, null, lane, actions.size(), holder.page());
         } else if (column < actions.size() && actions.get(column).type() == BehaviourActionType.ASK_QUESTION
                 && !event.isShiftClick()) {
-            openQuestionEditor(player,
-                    QuestionTarget.definition(definition.getKey(), null, eventName, column, holder.page()));
+            openQuestionEditor(player, QuestionTarget.definition(preset.getKey(), null, lane, column, holder.page()));
         } else if (column < actions.size()) {
-            openActionPicker(player, definition, null, eventName, column, holder.page());
+            openActionPicker(player, preset, null, lane, column, holder.page());
         }
-    }
-
-    private void handleCustomBehaviourEventPickerClick(InventoryClickEvent click, Player player,
-            CustomBehaviourEventPickerHolder holder) {
-        click.setCancelled(true);
-        if (!isTopInventoryClick(click))
-            return;
-        NpcDefinition definition = definitionRepository.find(holder.key()).orElse(null);
-        if (definition == null) {
-            player.closeInventory();
-            return;
-        }
-        int slot = click.getRawSlot();
-        if (slot == 45 || slot == 53) {
-            openCustomBehaviourEventPicker(player, definition, holder.behaviourPage(),
-                    holder.page() + (slot == 45 ? -1 : 1));
-            return;
-        }
-        if (slot == 49) {
-            openCustomBehaviours(player, definition, holder.behaviourPage());
-            return;
-        }
-        if (slot == 51) {
-            customEventCreator.create(player, "", customEvent -> {
-                definition.setCustomEventActions(customEvent.getName(), List.of());
-                definitionRepository.save(definition);
-                openCustomBehaviours(player, definition, Integer.MAX_VALUE);
-            }, () -> openCustomBehaviourEventPicker(player, definition, holder.behaviourPage(), holder.page()));
-            return;
-        }
-        List<CustomEvent> available = customEventRepository.findAll().stream()
-                .filter(event -> !definition.getCustomEventNames().contains(event.getName())).toList();
-        int index = holder.page() * PAGE_SIZE + slot;
-        if (slot >= PAGE_SIZE || index < 0 || index >= available.size())
-            return;
-        definition.setCustomEventActions(available.get(index).getName(), List.of());
-        definitionRepository.save(definition);
-        openCustomBehaviours(player, definition, Integer.MAX_VALUE);
     }
 
     private void handleRoutePointActionsClick(InventoryClickEvent event, Player player,
@@ -2182,8 +2287,10 @@ public final class GuiService implements Listener {
             openRoutePointValuePicker(player, action, BehaviourValuePickerType.ROUTE, 0);
         } else if (type == BehaviourActionType.SET_WALK_SPEED) {
             openRoutePointValuePicker(player, action, BehaviourValuePickerType.WALK_SPEED, 0);
-        } else if (type == BehaviourActionType.EMIT_EVENT) {
-            openRoutePointValuePicker(player, action, BehaviourValuePickerType.CUSTOM_EVENT, 0);
+        } else if (type == BehaviourActionType.START_SCENE) {
+            openRoutePointValuePicker(player, action, BehaviourValuePickerType.SCENE_START, 0);
+        } else if (type == BehaviourActionType.STOP_SCENE) {
+            openRoutePointValuePicker(player, action, BehaviourValuePickerType.SCENE_STOP, 0);
         } else if (type == BehaviourActionType.MOVE_TO || type == BehaviourActionType.TELEPORT_TO) {
             beginRouteWaypointSelection(player, action, type);
         } else if (type == BehaviourActionType.WAIT) {
@@ -2208,12 +2315,7 @@ public final class GuiService implements Listener {
                 openWaypointActions(player, holder.routeKey(), updated);
             }
         } else {
-            String prompt = switch (type) {
-                case SEND_DIALOG -> "Enter the dialog line:";
-                case SHOW_HOLO_DIALOG -> "Enter the hologram dialog line:";
-                case RUN_CONSOLE_COMMAND -> "Enter the command without a leading slash:";
-                default -> "Enter the action value:";
-            };
+            String prompt = valuePrompt(type, null);
             chatInputService.request(player, prompt, value -> {
                 RoutePoint updated = setRoutePointAction(action, type, value);
                 if (updated != null) {
@@ -2284,11 +2386,11 @@ public final class GuiService implements Listener {
             }, null);
             return;
         }
-        if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.CUSTOM_EVENT) {
-            customEventCreator.create(player, holder.folder(), customEvent -> {
-                RoutePoint updated = setRoutePointAction(action, BehaviourActionType.EMIT_EVENT, customEvent.getName());
+        if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.SCENE_START && sceneNavigation != null) {
+            sceneNavigation.createScene(player, scene -> {
+                RoutePoint updated = setRoutePointAction(action, BehaviourActionType.START_SCENE, scene.getKey());
                 if (updated != null) {
-                    player.sendMessage(UiText.success("Created and selected '" + customEvent.getName() + "'."));
+                    player.sendMessage(UiText.success("Created and selected '" + scene.getDisplayName() + "'."));
                     openWaypointActions(player, holder.routeKey(), updated);
                 }
             }, () -> openRoutePointValuePicker(player, action, holder.pickerType(), holder.folder(), holder.page()));
@@ -2399,9 +2501,7 @@ public final class GuiService implements Listener {
         if (type == BehaviourActionType.ASK_QUESTION) {
             requestQuestion(player, definition, holder);
         } else if (type == BehaviourActionType.AI_TRIGGER) {
-            List<BehaviourAction> actions = holder.customEvent() == null
-                    ? definition.getBehaviourActions(holder.event())
-                    : definition.getCustomEventActions(holder.customEvent());
+            List<BehaviourAction> actions = actionsFor(definition, holder.event(), holder.lane());
             requestAiTriggerPrompt(player, actions, holder.actionIndex(), prompt -> {
                 NpcDefinition current = definitionRepository.find(holder.key()).orElse(null);
                 if (current == null)
@@ -2413,8 +2513,10 @@ public final class GuiService implements Listener {
             openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.ROUTE, 0);
         } else if (type == BehaviourActionType.SET_WALK_SPEED) {
             openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.WALK_SPEED, 0);
-        } else if (type == BehaviourActionType.EMIT_EVENT) {
-            openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.CUSTOM_EVENT, 0);
+        } else if (type == BehaviourActionType.START_SCENE) {
+            openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.SCENE_START, 0);
+        } else if (type == BehaviourActionType.STOP_SCENE) {
+            openBehaviourValuePicker(player, definition, holder, BehaviourValuePickerType.SCENE_STOP, 0);
         } else if (type == BehaviourActionType.MOVE_TO || type == BehaviourActionType.TELEPORT_TO) {
             beginWaypointSelection(player, holder, type);
         } else if (type == BehaviourActionType.WAIT) {
@@ -2425,7 +2527,7 @@ public final class GuiService implements Listener {
                         setAction(current, holder, type, key);
                         openBehaviourHome(player, current, holder);
                     }), p -> definitionRepository.find(holder.key()).ifPresent(current -> openActionPicker(p, current,
-                            holder.event(), holder.customEvent(), holder.actionIndex(), holder.page())));
+                            holder.event(), holder.lane(), holder.actionIndex(), holder.page())));
         } else if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             requestFightOptionsAction(player, definition, holder);
         } else if (type == BehaviourActionType.OPEN_SHOP) {
@@ -2433,17 +2535,12 @@ public final class GuiService implements Listener {
                 setAction(current, holder, type, key);
                 openBehaviourHome(player, current, holder);
             }), p -> definitionRepository.find(holder.key()).ifPresent(current -> openActionPicker(p, current,
-                    holder.event(), holder.customEvent(), holder.actionIndex(), holder.page())));
+                    holder.event(), holder.lane(), holder.actionIndex(), holder.page())));
         } else if (!type.requiresValue()) {
             setAction(definition, holder, type, null);
             openBehaviourHome(player, definition, holder);
         } else {
-            String prompt = switch (type) {
-                case SEND_DIALOG -> "Enter the dialog line:";
-                case SHOW_HOLO_DIALOG -> "Enter the hologram dialog line:";
-                case RUN_CONSOLE_COMMAND -> "Enter the command without a leading slash:";
-                default -> "Enter the action value:";
-            };
+            String prompt = valuePrompt(type, holder.lane());
             chatInputService.request(player, prompt, value -> {
                 setAction(definition, holder, type, value);
                 openBehaviourHome(player, definition, holder);
@@ -2453,7 +2550,7 @@ public final class GuiService implements Listener {
 
     private void reopenActionPicker(Player player, ActionPickerHolder holder) {
         definitionRepository.find(holder.key()).ifPresentOrElse(current -> openActionPicker(player, current,
-                holder.event(), holder.customEvent(), holder.actionIndex(), holder.page()), () -> openMain(player));
+                holder.event(), holder.lane(), holder.actionIndex(), holder.page()), () -> openMain(player));
     }
 
     private void requestWaitAction(Player player, NpcDefinition definition, ActionPickerHolder holder) {
@@ -2479,8 +2576,8 @@ public final class GuiService implements Listener {
         chatInputService.request(player, "Enter the question shown to the player:", prompt -> {
             BehaviourAction action = BehaviourAction.ask(NpcQuestion.create(prompt));
             setAction(definition, holder, action);
-            openQuestionEditor(player, QuestionTarget.definition(definition.getKey(), holder.event(),
-                    holder.customEvent(), holder.actionIndex(), holder.page()));
+            openQuestionEditor(player, QuestionTarget.definition(definition.getKey(), holder.event(), holder.lane(),
+                    holder.actionIndex(), holder.page()));
         }, () -> reopenActionPicker(player, holder));
     }
 
@@ -2524,9 +2621,7 @@ public final class GuiService implements Listener {
     }
 
     private void requestFightOptionsAction(Player player, NpcDefinition definition, ActionPickerHolder holder) {
-        List<BehaviourAction> actions = holder.customEvent() == null
-                ? definition.getBehaviourActions(holder.event())
-                : definition.getCustomEventActions(holder.customEvent());
+        List<BehaviourAction> actions = actionsFor(definition, holder.event(), holder.lane());
         FightOptions options = fightOptionsForAction(actions, holder.actionIndex(),
                 FightOptions.from(definition.getCombatProfile()));
         setAction(definition, holder, BehaviourActionType.CHANGE_FIGHT_OPTIONS, options.storedValue());
@@ -2738,7 +2833,7 @@ public final class GuiService implements Listener {
         player.sendMessage(UiText.warning("Waypoint selection cancelled."));
         if (definition != null) {
             Bukkit.getScheduler().runTask(plugin, () -> openActionPicker(player, definition, session.action().event(),
-                    session.action().customEvent(), session.action().actionIndex(), session.action().page()));
+                    session.action().lane(), session.action().actionIndex(), session.action().page()));
         }
     }
 
@@ -3021,11 +3116,10 @@ public final class GuiService implements Listener {
             player.closeInventory();
             return;
         }
-        ActionPickerHolder action = new ActionPickerHolder(holder.key(), holder.event(), holder.customEvent(),
+        ActionPickerHolder action = new ActionPickerHolder(holder.key(), holder.event(), holder.lane(),
                 holder.actionIndex(), holder.page());
         if (event.getRawSlot() == 22) {
-            openActionPicker(player, definition, holder.event(), holder.customEvent(), holder.actionIndex(),
-                    holder.page());
+            openActionPicker(player, definition, holder.event(), holder.lane(), holder.actionIndex(), holder.page());
             return;
         }
         int animationIndex = event.getRawSlot() - 9;
@@ -3047,7 +3141,7 @@ public final class GuiService implements Listener {
             player.closeInventory();
             return;
         }
-        ActionPickerHolder action = new ActionPickerHolder(holder.key(), holder.event(), holder.customEvent(),
+        ActionPickerHolder action = new ActionPickerHolder(holder.key(), holder.event(), holder.lane(),
                 holder.actionIndex(), holder.behaviourPage());
         int slot = event.getRawSlot();
         if (slot == 45) {
@@ -3056,7 +3150,7 @@ public final class GuiService implements Listener {
             return;
         }
         if (slot == 49) {
-            openActionPicker(player, definition, holder.event(), holder.customEvent(), holder.actionIndex(),
+            openActionPicker(player, definition, holder.event(), holder.lane(), holder.actionIndex(),
                     holder.behaviourPage());
             return;
         }
@@ -3073,10 +3167,10 @@ public final class GuiService implements Listener {
                     current -> openBehaviourHome(returningPlayer, current, action), () -> openMain(returningPlayer)));
             return;
         }
-        if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.CUSTOM_EVENT) {
-            customEventCreator.create(player, holder.folder(), customEvent -> {
-                setAction(definition, action, BehaviourActionType.EMIT_EVENT, customEvent.getName());
-                player.sendMessage(UiText.success("Created and selected '" + customEvent.getName() + "'."));
+        if (slot == 51 && holder.pickerType() == BehaviourValuePickerType.SCENE_START && sceneNavigation != null) {
+            sceneNavigation.createScene(player, scene -> {
+                setAction(definition, action, BehaviourActionType.START_SCENE, scene.getKey());
+                player.sendMessage(UiText.success("Created and selected '" + scene.getDisplayName() + "'."));
                 openBehaviourHome(player, definition, action);
             }, () -> openBehaviourValuePicker(player, definition, action, holder.pickerType(), holder.folder(),
                     holder.valuePage()));
@@ -3107,43 +3201,39 @@ public final class GuiService implements Listener {
     }
 
     private void setAction(NpcDefinition definition, ActionPickerHolder holder, BehaviourAction action) {
-        List<BehaviourAction> actions = holder.customEvent() == null
-                ? definition.getBehaviourActions(holder.event())
-                : definition.getCustomEventActions(holder.customEvent());
-        boolean actionSet = false;
+        List<BehaviourAction> actions = actionsFor(definition, holder.event(), holder.lane());
         if (holder.actionIndex() < actions.size()) {
             actions.set(holder.actionIndex(), action);
-            actionSet = true;
         } else if (actions.size() < 7) {
             actions.add(action);
-            actionSet = true;
         }
-        if (holder.customEvent() == null)
-            definition.setBehaviourActions(holder.event(), actions);
-        else
-            definition.setCustomEventActions(holder.customEvent(), actions);
-        definitionRepository.save(definition);
-        if (actionSet && action.type() == BehaviourActionType.EMIT_EVENT) {
-            setDefaultEventIconFromNpc(definition, action.value());
-        }
-    }
-
-    private void setDefaultEventIconFromNpc(NpcDefinition definition, String eventName) {
-        if (eventName == null)
-            return;
-        customEventRepository.find(eventName).ifPresent(customEvent -> {
-            if (customEvent.getIcon() != null)
-                return;
-            customEvent.setIcon(definitionIcon(definition, List.of()));
-            customEventRepository.save(customEvent);
-        });
+        storeActions(definition, holder.event(), holder.lane(), actions);
     }
 
     private void openBehaviourHome(Player player, NpcDefinition definition, ActionPickerHolder holder) {
-        if (holder.customEvent() == null)
+        if (holder.lane() == null)
             openBehaviours(player, definition, holder.page());
         else
-            openCustomBehaviours(player, definition, holder.page());
+            openSceneRole(player, holder.lane().sceneKey(), holder.lane().roleId(), holder.page());
+    }
+
+    /** Chat prompt for actions whose value is typed in. */
+    private String valuePrompt(BehaviourActionType type, SceneLaneRef lane) {
+        return switch (type) {
+            case SEND_DIALOG -> "Enter the dialog line:";
+            case SHOW_HOLO_DIALOG -> "Enter the hologram dialog line:";
+            case RUN_CONSOLE_COMMAND -> "Enter the command without a leading slash:";
+            case CUE, WAIT_FOR_CUE -> {
+                List<String> cues = lane == null
+                        ? List.of()
+                        : sceneRepository.find(lane.sceneKey()).map(Scene::cueNames).orElse(List.of());
+                String known = cues.isEmpty() ? "" : " (used in this scene: " + String.join(", ", cues) + ")";
+                yield type == BehaviourActionType.CUE
+                        ? "Enter the cue to give, e.g. arrived" + known + ":"
+                        : "Enter the cue to wait for" + known + ":";
+            }
+            default -> "Enter the action value:";
+        };
     }
 
     private void openQuestionEditor(Player player, QuestionTarget target) {
@@ -3346,7 +3436,9 @@ public final class GuiService implements Listener {
             case WAIT -> "Enter the positive number of seconds to wait:";
             case SET_ROUTE -> "Enter an existing route key:";
             case SET_WALK_SPEED -> "Enter walk speed (slouch, slow, normal, fast, very_fast):";
-            case EMIT_EVENT -> "Enter an existing custom event name:";
+            case START_SCENE, STOP_SCENE -> "Enter an existing scene name:";
+            case CUE -> "Enter the cue to give:";
+            case WAIT_FOR_CUE -> "Enter the cue to wait for:";
             default -> "Enter the action value:";
         };
         chatInputService.request(player, prompt, value -> {
@@ -3495,8 +3587,13 @@ public final class GuiService implements Listener {
             if (type == BehaviourActionType.SET_WALK_SPEED) {
                 return WalkingSpeed.fromStored(value).name().toLowerCase(java.util.Locale.ROOT);
             }
-            if (type == BehaviourActionType.EMIT_EVENT) {
-                return customEventRepository.find(value).orElseThrow().getName();
+            if (type == BehaviourActionType.START_SCENE || type == BehaviourActionType.STOP_SCENE) {
+                return sceneRepository.find(value).orElseThrow().getKey();
+            }
+            if (type == BehaviourActionType.CUE || type == BehaviourActionType.WAIT_FOR_CUE) {
+                if (value.isBlank())
+                    throw new IllegalArgumentException();
+                return value.trim();
             }
             if (type == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
                 return FightOptions.fromStored(value.equalsIgnoreCase("none") ? "" : value).storedValue();
@@ -3561,20 +3658,14 @@ public final class GuiService implements Listener {
         NpcDefinition definition = definitionRepository.find(target.definitionKey()).orElse(null);
         if (definition == null)
             return;
-        if (target.customEvent() == null)
-            definition.setBehaviourActions(target.event(), actions);
-        else
-            definition.setCustomEventActions(target.customEvent(), actions);
-        definitionRepository.save(definition);
+        storeActions(definition, target.event(), target.lane(), actions);
     }
 
     private List<BehaviourAction> definitionActions(QuestionTarget target) {
         NpcDefinition definition = definitionRepository.find(target.definitionKey()).orElse(null);
         if (definition == null)
             return List.of();
-        return target.customEvent() == null
-                ? definition.getBehaviourActions(target.event())
-                : definition.getCustomEventActions(target.customEvent());
+        return actionsFor(definition, target.event(), target.lane());
     }
 
     private List<BehaviourAction> routeActions(QuestionTarget target) {
@@ -3596,10 +3687,10 @@ public final class GuiService implements Listener {
             player.closeInventory();
             return;
         }
-        if (target.customEvent() == null)
+        if (target.lane() == null)
             openBehaviours(player, definition, target.page());
         else
-            openCustomBehaviours(player, definition, target.page());
+            openSceneRole(player, target.lane().sceneKey(), target.lane().roleId(), target.page());
     }
 
     private void handleConfirmationClick(InventoryClickEvent event, Player player, ConfirmationHolder holder) {
@@ -3783,13 +3874,12 @@ public final class GuiService implements Listener {
                 || holder instanceof PropertiesHolder || holder instanceof FightingHolder
                 || holder instanceof TargetsHolder || holder instanceof FightOptionsActionHolder
                 || holder instanceof InstancesHolder || holder instanceof BehaviourHolder
-                || holder instanceof CustomBehaviourHolder || holder instanceof CustomBehaviourEventPickerHolder
-                || holder instanceof ActionPickerHolder || holder instanceof AnimationPickerHolder
-                || holder instanceof BehaviourValuePickerHolder || holder instanceof RoutePointActionsHolder
-                || holder instanceof RoutePointActionPickerHolder || holder instanceof RoutePointAnimationPickerHolder
-                || holder instanceof RoutePointValuePickerHolder || holder instanceof SavedLocationPickerHolder
-                || holder instanceof QuestionEditorHolder || holder instanceof QuestionBranchPickerHolder
-                || holder instanceof QuestionBranchRoutePickerHolder
+                || holder instanceof SceneRoleHolder || holder instanceof ActionPickerHolder
+                || holder instanceof AnimationPickerHolder || holder instanceof BehaviourValuePickerHolder
+                || holder instanceof RoutePointActionsHolder || holder instanceof RoutePointActionPickerHolder
+                || holder instanceof RoutePointAnimationPickerHolder || holder instanceof RoutePointValuePickerHolder
+                || holder instanceof SavedLocationPickerHolder || holder instanceof QuestionEditorHolder
+                || holder instanceof QuestionBranchPickerHolder || holder instanceof QuestionBranchRoutePickerHolder
                 || holder instanceof QuestionBranchAnimationPickerHolder || holder instanceof ConfirmationHolder
                 || aiGuiService.handles(holder);
     }
@@ -3803,8 +3893,8 @@ public final class GuiService implements Listener {
         return new ItemStack(Material.RAIL);
     }
 
-    private ItemStack customEventIcon(CustomEvent event) {
-        ItemStack icon = event.getIcon();
+    private ItemStack sceneIcon(Scene scene) {
+        ItemStack icon = scene.getIcon();
         return icon == null || icon.getType().isAir() ? new ItemStack(Material.BELL) : icon;
     }
 
@@ -3933,7 +4023,10 @@ public final class GuiService implements Listener {
             case OPEN_SHOP -> Material.EMERALD;
             case DROP_INVENTORY -> Material.DROPPER;
             case HARVEST -> Material.IRON_HOE;
-            case EMIT_EVENT -> Material.SCULK_SENSOR;
+            case START_SCENE -> Material.BELL;
+            case STOP_SCENE -> Material.LIGHTNING_ROD;
+            case CUE -> Material.NOTE_BLOCK;
+            case WAIT_FOR_CUE -> Material.SCULK_SENSOR;
             case SIT -> Material.OAK_STAIRS;
             case SLEEP -> Material.RED_BED;
             case SWIM -> Material.WATER_BUCKET;
@@ -3997,7 +4090,10 @@ public final class GuiService implements Listener {
             case OPEN_SHOP -> "Opens a chosen shared shop's trading screen for the player";
             case DROP_INVENTORY -> "Drops every item in the NPC's inventory";
             case HARVEST -> "Harvests crops and plants carried seeds on nearby soil";
-            case EMIT_EVENT -> "Triggers a custom event for listening NPCs";
+            case START_SCENE -> "Starts a scene; skipped if its NPCs are busy";
+            case STOP_SCENE -> "Ends a running scene with its wrap-up";
+            case CUE -> "Lets roles waiting for this cue go on";
+            case WAIT_FOR_CUE -> "Waits until another role gives this cue";
             case SIT -> "Seats the NPC with bent legs";
             case SLEEP -> "Puts the NPC into its sleeping pose";
             case SWIM -> "Puts the NPC into its swimming pose";
@@ -4037,6 +4133,16 @@ public final class GuiService implements Listener {
         }
         if (action.type() == BehaviourActionType.WAIT) {
             return action.value() + " seconds";
+        }
+        if (action.type() == BehaviourActionType.START_SCENE || action.type() == BehaviourActionType.STOP_SCENE) {
+            return sceneRepository.find(action.value()).map(scene -> "Scene '" + scene.getDisplayName() + "'")
+                    .orElse("Missing scene '" + action.value() + "'");
+        }
+        if (action.type() == BehaviourActionType.CUE) {
+            return "Cue '" + action.value() + "'";
+        }
+        if (action.type() == BehaviourActionType.WAIT_FOR_CUE) {
+            return "Until cue '" + action.value() + "'";
         }
         if (action.type() == BehaviourActionType.CHANGE_FIGHT_OPTIONS) {
             return FightOptions.fromStored(action.value()).displayName();
@@ -4150,13 +4256,10 @@ public final class GuiService implements Listener {
     private record BehaviourHolder(String key, int page) implements GuiHolder {
     }
 
-    private record CustomBehaviourHolder(String key, int page) implements GuiHolder {
+    private record SceneRoleHolder(String sceneKey, String roleId, int page) implements GuiHolder {
     }
 
-    private record CustomBehaviourEventPickerHolder(String key, int behaviourPage, int page) implements GuiHolder {
-    }
-
-    private record ActionPickerHolder(String key, BehaviourEvent event, String customEvent, int actionIndex,
+    private record ActionPickerHolder(String key, BehaviourEvent event, SceneLaneRef lane, int actionIndex,
             int page) implements GuiHolder {
     }
 
@@ -4198,19 +4301,19 @@ public final class GuiService implements Listener {
     private record SavedLocationPickerHolder(UUID token, String folder, int page) implements GuiHolder {
     }
 
-    private record AnimationPickerHolder(String key, BehaviourEvent event, String customEvent, int actionIndex,
+    private record AnimationPickerHolder(String key, BehaviourEvent event, SceneLaneRef lane, int actionIndex,
             int page) implements GuiHolder {
     }
 
-    private record BehaviourValuePickerHolder(String key, BehaviourEvent event, String customEvent, int actionIndex,
+    private record BehaviourValuePickerHolder(String key, BehaviourEvent event, SceneLaneRef lane, int actionIndex,
             int behaviourPage, BehaviourValuePickerType pickerType, String folder, int valuePage) implements GuiHolder {
     }
 
-    private record QuestionTarget(String definitionKey, BehaviourEvent event, String customEvent, String routeKey,
+    private record QuestionTarget(String definitionKey, BehaviourEvent event, SceneLaneRef lane, String routeKey,
             RoutePoint point, int actionIndex, int page) {
-        static QuestionTarget definition(String key, BehaviourEvent event, String customEvent, int actionIndex,
+        static QuestionTarget definition(String key, BehaviourEvent event, SceneLaneRef lane, int actionIndex,
                 int page) {
-            return new QuestionTarget(key, event, customEvent, null, null, actionIndex, page);
+            return new QuestionTarget(key, event, lane, null, null, actionIndex, page);
         }
 
         static QuestionTarget route(String routeKey, RoutePoint point, int actionIndex) {
@@ -4243,16 +4346,24 @@ public final class GuiService implements Listener {
         void create(Player player, String folder, Consumer<NpcRoute> onCreated, Consumer<Player> onFinished);
     }
 
-    @FunctionalInterface
-    public interface CustomEventCreator {
-        void create(Player player, String folder, Consumer<CustomEvent> onCreated, Runnable onFailure);
+    /** Links the action editor with the scene menus. */
+    public interface SceneNavigation {
+        void openScenes(Player player);
+
+        void openRoles(Player player, String sceneKey);
+
+        void choosePreset(Player player, String sceneKey, String roleId);
+
+        void createScene(Player player, Consumer<Scene> onCreated, Runnable onCancel);
     }
 
     private enum BehaviourValuePickerType {
         ROUTE(BehaviourActionType.SET_ROUTE, "Select Route",
                 "Create a route from the main preset menu first"), WALK_SPEED(BehaviourActionType.SET_WALK_SPEED,
-                        "Select Walk Speed", "No walking speeds are available"), CUSTOM_EVENT(
-                                BehaviourActionType.EMIT_EVENT, "Select Custom Event", "Create a custom event first");
+                        "Select Walk Speed", "No walking speeds are available"), SCENE_START(
+                                BehaviourActionType.START_SCENE, "Select Scene to Start",
+                                "Create a scene first"), SCENE_STOP(BehaviourActionType.STOP_SCENE,
+                                        "Select Scene to Stop", "Create a scene first");
 
         private final BehaviourActionType actionType;
         private final String title;

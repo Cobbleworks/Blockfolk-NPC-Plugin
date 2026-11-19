@@ -6,6 +6,9 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Changed
 
+- **Scenes replace custom events.** A scene is a moment several NPCs play together. Each NPC taking part plays a role with its own action rows: **Scene Actions** that all start together, a **Wrap-Up** for when the scene ends, and **While Active** reactions that replace the preset's own On Idle, On Right-Click, On Player Approach, and other reactions while the scene runs. Scenes start at a time of day, when rain, snow, or thunder starts or the weather clears, when a player enters the scene's area, with `/bf scene start <scene>`, or with the new **Start Scene** action. Each scene has a chance and a cooldown, and ends when every role is done, after a set time, at a time of day, or when the weather changes. NPCs pause their route and their own idle and time-of-day routines while they play a role, then return to them. Manage scenes under **Scenes** in the main menu or with `/bf scenes`; they are stored in `scenes.yml`.
+- An NPC plays in one scene at a time. A scene that cannot cast a needed NPC (busy in another scene, in combat, or not loaded) is skipped as a whole, and online administrators get a short chat message saying why. Turn these messages off with `scenes.notify-skipped` in `config.yml`.
+- Existing custom events are converted on the first start: every event becomes a scene without triggers or cooldown, every preset that reacted to it becomes a role played by all its instances, and **Emit Custom Event** actions become **Start Scene** actions. `/bf events trigger <event>` keeps working and starts the converted scene. `custom-events.yml` is renamed to `custom-events.yml.migrated`. Unlike custom events, a converted scene does not take an NPC that already plays another scene, and NPCs pause their route while they take part.
 - Time behaviours now cover five day periods instead of three: **At Night** (00:00), **At Morning** (05:00), **At Noon** (10:00), **At Afternoon** (14:00), and **At Evening** (19:00). Each runs when its period begins. Saved **At Sunrise** actions move to **At Morning** (one in-game hour earlier) and **At Sunset** actions to **At Evening** (one hour later). **At Noon** keeps its actions but now runs at 10:00 instead of 12:00. The AI context reports the same five periods as the time of day.
 
 ### Fixed
@@ -15,6 +18,7 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Added
 
+- **Give Cue** and **Wait For Cue** actions keep scene roles in step: a role waiting for a cue continues once another role gives it, for example after walking to the saloon. **Stop Scene** ends a running scene with its wrap-up.
 - **Armor** setting in Fighting & Survival, below Max Health. It gives the NPC armor points (0 to 30, two points per armor icon) that reduce incoming damage the same way worn armor does, on top of any armor in its equipment. Minecraft caps the total at 30. Existing NPCs start with 0. Stored as `combat.armor` in the preset file.
 - **Go Back** behaviour action that makes an NPC walk its route in the opposite direction from the waypoint it last reached, instead of looping to the first point. Put it on both end waypoints to make an NPC patrol back and forth.
 - While choosing a **Move To** target with the waypoint compass, all global locations are shown as markers. Right-clicking a location's block links the action to that location, so the NPC follows the location if it is moved later. Right-clicking any other block still stores fixed coordinates.

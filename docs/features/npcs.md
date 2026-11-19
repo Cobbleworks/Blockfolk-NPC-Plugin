@@ -13,7 +13,7 @@ Opening a preset gives access to:
 - display name, skin, and preset spawnpoint;
 - NPC properties and name color;
 - equipment and loot;
-- event and custom-event behaviour;
+- event behaviour;
 - AI behaviour and combat;
 - spawning and managing persistent instances.
 

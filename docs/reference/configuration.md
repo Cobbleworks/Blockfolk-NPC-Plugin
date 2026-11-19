@@ -12,6 +12,7 @@ Global settings are created at `plugins/Blockfolk/config.yml`. Restart the serve
 | `mineskin-api-key` | empty | Optional key for higher MineSkin limits when resolving external skin image URLs. |
 | `health-bars.enabled` | `true` | Shows a small health bar above damaged NPCs until they are back to full health. |
 | `health-bars.view-distance` | `16` | Blocks within which players see the health bar. |
+| `scenes.notify-skipped` | `true` | Online administrators get a short chat message when a trigger could not start a scene, for example because an NPC is busy in another scene. |
 
 ## OpenRouter settings
 
