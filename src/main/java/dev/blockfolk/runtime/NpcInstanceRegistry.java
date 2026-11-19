@@ -26,6 +26,8 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
+import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
+
 import dev.blockfolk.dialog.DialogService;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
@@ -100,6 +102,47 @@ public final class NpcInstanceRegistry implements Listener {
             if (instance != null && instance.getEntityId() == removedEntityId) {
                 deleteInstance(instanceId);
             }
+        });
+    }
+
+    /**
+     * Re-indexes a mannequin that comes back with its chunk. Minecraft gives a
+     * reloaded entity a new numeric id, and right-clicks, damage, and every other
+     * lookup by entity go through that id, so without this an NPC whose chunk was
+     * unloaded once stops reacting until it respawns. A second tagged mannequin
+     * for the same NPC (one saved before a crash, loading after its replacement
+     * spawned) is removed instead.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onMannequinAdded(EntityAddToWorldEvent event) {
+        if (!(event.getEntity() instanceof Mannequin mannequin))
+            return;
+        String storedId = mannequin.getPersistentDataContainer().get(instanceKey, PersistentDataType.STRING);
+        if (storedId == null)
+            return;
+        UUID instanceId;
+        try {
+            instanceId = UUID.fromString(storedId);
+        } catch (IllegalArgumentException ignored) {
+            return;
+        }
+        UUID addedId = mannequin.getUniqueId();
+        // A tick later: the entity is not yet reachable by UUID while it is added.
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            NpcInstance instance = instances.get(instanceId);
+            // Not spawned yet (startup): spawning finds and indexes it itself.
+            if (instance == null || instance.isAwaitingRespawn() || instance.getEntityId() == 0)
+                return;
+            LivingEntity tracked = renderer.findLivingEntity(instance).orElse(null);
+            if (tracked == null)
+                return;
+            if (!tracked.getUniqueId().equals(addedId)) {
+                Entity duplicate = Bukkit.getEntity(addedId);
+                if (duplicate != null && duplicate.isValid())
+                    duplicate.remove();
+            }
+            instance.setEntityId(tracked.getEntityId());
+            indexEntity(instance);
         });
     }
 

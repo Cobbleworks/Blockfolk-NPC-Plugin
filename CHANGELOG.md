@@ -16,6 +16,8 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Fixed
 
+- NPCs no longer stop reacting to right-clicks (and to hits, quests, and other entity lookups) after their chunk was unloaded and loaded again. Minecraft gives a reloaded entity a new numeric id, which Blockfolk only picked up when the NPC respawned. A second copy of an NPC that loads from an old save after its replacement spawned is now removed.
+- Scene NPCs no longer sometimes stand still until their Move To times out. A routine the NPC was part-way through when the scene took it over (a waypoint's Stop Navigation / Wait / Start Navigation, an idle loop, a reaction) used to keep running inside the scene and could pause the NPC's walking or replace its walk target; it now ends when the scene starts. A route paused when the scene began no longer blocks the scene's Move To, and NPCs walk their part even when no player is near.
 - BeautyQuests receives NPC clicks before Blockfolk cancels mannequin interaction or runs normal click actions. Quest selection no longer also fires the NPC's click routine, and left-click selection detects invulnerable NPCs before damage processing. Shift-right-click still opens the Blockfolk admin editor.
 - BeautyQuests dialog navigation pauses also stop combat chasing, fleeing, ranged retreats, dashes, and blinks. Combat walking resumes after the external pause is released; pausing only a route does not stop combat movement.
 

@@ -126,6 +126,15 @@ public final class SceneService {
         return castOf.containsKey(instance.getId());
     }
 
+    /**
+     * An opaque token for the scene run the instance plays in, or null. Each run
+     * has its own, so a routine can tell whether a scene took the NPC over since
+     * it started.
+     */
+    public Object sceneToken(NpcInstance instance) {
+        return castOf.get(instance.getId());
+    }
+
     /** A one-line state for menus, such as "Running for 2 min (3 NPCs)". */
     public String status(String sceneKey) {
         ActiveScene scene = active.get(sceneKey);
@@ -352,9 +361,14 @@ public final class SceneService {
                     .filter(instance -> instance.getDefinitionKey().equals(definition.getKey()))
                     .filter(instance -> world == null || world.equals(instances.currentLocation(instance).getWorld()))
                     .toList();
-            if (loaded.isEmpty())
+            if (loaded.isEmpty()) {
+                boolean awaitingRespawn = instances.findAll().stream()
+                        .anyMatch(instance -> instance.getDefinitionKey().equals(definition.getKey())
+                                && instance.isAwaitingRespawn()
+                                && (world == null || instance.getStoredLocation().worldName().equals(world.getName())));
                 return Casting.failed("no " + name + " is loaded" + (world != null ? " in " + world.getName() : "")
-                        + " (not spawned, or its chunk is not loaded)");
+                        + (awaitingRespawn ? " (waiting for respawn)" : " (not spawned, or its chunk is not loaded)"));
+            }
             List<NpcInstance> unclaimed = loaded.stream().filter(instance -> !taken.contains(instance.getId()))
                     .toList();
             if (unclaimed.isEmpty())

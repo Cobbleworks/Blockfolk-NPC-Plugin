@@ -367,17 +367,7 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         }
         Inventory inventory = Bukkit.createInventory(new SettingsHolder(scene.getKey()), 54,
                 UiText.title("Scene Settings", scene.getDisplayName()));
-        List<String> summary = new ArrayList<>();
-        summary.add(LegacyText.DARK_GRAY + "Key: " + scene.getKey());
-        summary.add(LegacyText.GRAY + "Status: " + statusText(scene));
-        if (sceneService != null)
-            sceneService.lastSkip(scene.getKey())
-                    .ifPresent(reason -> summary.add(LegacyText.GOLD + "Last skipped: " + reason));
-        summary.addAll(chainLore(scene));
-        summary.add("");
-        summary.add(GuiItems.hint("Middle-click", "use the item in your hand as icon"));
-        inventory.setItem(SUMMARY_SLOT,
-                GuiItems.item(sceneIcon(scene), LegacyText.GOLD + scene.getDisplayName(), summary));
+        inventory.setItem(SUMMARY_SLOT, settingsSummary(scene));
         inventory.setItem(10, GuiItems.sectionHeader(Material.LIGHT_BLUE_STAINED_GLASS_PANE, LegacyText.AQUA, "Scene",
                 "Name and description"));
         inventory.setItem(12,
@@ -437,6 +427,19 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
         GuiLayout.fillRow(inventory, 0);
         GuiLayout.fillMainBar(inventory);
         player.openInventory(inventory);
+    }
+
+    private ItemStack settingsSummary(Scene scene) {
+        List<String> summary = new ArrayList<>();
+        summary.add(LegacyText.DARK_GRAY + "Key: " + scene.getKey());
+        summary.add(LegacyText.GRAY + "Status: " + statusText(scene));
+        if (sceneService != null)
+            sceneService.lastSkip(scene.getKey())
+                    .ifPresent(reason -> summary.add(LegacyText.GOLD + "Last skipped: " + reason));
+        summary.addAll(chainLore(scene));
+        summary.add("");
+        summary.add(GuiItems.hint("Middle-click", "use the item in your hand as icon"));
+        return GuiItems.item(sceneIcon(scene), LegacyText.GOLD + scene.getDisplayName(), summary);
     }
 
     private void handleSettingsClick(InventoryClickEvent click, Player player, SettingsHolder holder) {
@@ -505,7 +508,9 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
                     sceneService.stop(scene.getKey(), player);
                 else
                     sceneService.startManually(scene.getKey(), player, player);
-                reopen.run();
+                Inventory inventory = click.getView().getTopInventory();
+                inventory.setItem(SUMMARY_SLOT, settingsSummary(scene));
+                inventory.setItem(RUN_SLOT, runItem(scene));
             }
             case CHANCE_SLOT -> adjust(click, player, scene, 5, value -> scene.setChancePercent(value),
                     scene.getChancePercent(), "Enter the chance in percent (1-100):", 1, reopen);
@@ -643,15 +648,24 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
 
     private ItemStack runItem(Scene scene) {
         boolean running = sceneService != null && sceneService.isRunning(scene.getKey());
+        String lastSkip = sceneService == null ? null : sceneService.lastSkip(scene.getKey()).orElse(null);
         List<String> lore = new ArrayList<>();
         lore.add(LegacyText.GRAY + "Status: " + statusText(scene));
+        if (lastSkip != null) {
+            lore.add("");
+            lore.add(LegacyText.RED + "Last start was skipped");
+            TextUtil.wrap(lastSkip, 40).forEach(line -> lore.add(LegacyText.GOLD + line));
+            lore.add("");
+        }
         lore.add(LegacyText.DARK_GRAY + "/bf scene " + (running ? "stop " : "start ") + scene.getKey());
         lore.add("");
         lore.add(running
                 ? GuiItems.hint("Click", "end it (wrap-up runs; click again to end at once)")
                 : GuiItems.hint("Click", "start it now"));
-        return GuiItems.item(running ? Material.RED_CONCRETE : Material.LIME_CONCRETE,
-                running ? "Stop Scene" : "Start Scene Now", lore);
+        Material icon = running
+                ? Material.RED_CONCRETE
+                : lastSkip != null ? Material.ORANGE_CONCRETE : Material.LIME_CONCRETE;
+        return GuiItems.item(icon, running ? "Stop Scene" : "Start Scene Now", lore);
     }
 
     private List<String> triggerLore(Scene scene) {

@@ -238,9 +238,31 @@ public final class NpcBehaviourService implements Listener {
     public void interruptMovement(NpcInstance instance) {
         moveTargets.remove(instance.getId());
         aiMoveTargets.remove(instance.getId());
-        pendingMoves.remove(instance.getId());
+        List<PendingMove> dropped = pendingMoves.remove(instance.getId());
         stopFollowing(instance);
         instances.stopNavigating(instance);
+        // Their walks ended early, like a Move To that timed out. The sequences
+        // go on, so one the scene took over still runs its completion (which,
+        // for example, lets a route resume after waypoint actions).
+        if (dropped != null)
+            dropped.forEach(move -> move.continuation.run());
+    }
+
+    /**
+     * Ends a preset sequence once a scene it did not start in takes the NPC over.
+     * Otherwise an idle, waypoint, or event routine that was part-way through (in a
+     * Wait, say) carries on inside the scene, and its Stop Navigation or Move To
+     * leaves the scene's own Move To waiting until it times out.
+     */
+    private java.util.function.BooleanSupplier yieldingToScenes(NpcInstance instance,
+            java.util.function.BooleanSupplier alive) {
+        if (sceneService == null)
+            return alive;
+        Object startedIn = sceneService.sceneToken(instance);
+        return () -> {
+            Object current = sceneService.sceneToken(instance);
+            return (current == null || current == startedIn) && alive.getAsBoolean();
+        };
     }
 
     /**
@@ -324,7 +346,7 @@ public final class NpcBehaviourService implements Listener {
         Runnable completion = event == BehaviourEvent.SPAWN ? () -> startIdle(instance) : () -> {
         };
         List<BehaviourAction> actions = definition.getBehaviourActions(event);
-        java.util.function.BooleanSupplier alive = ALWAYS;
+        java.util.function.BooleanSupplier alive = yieldingToScenes(instance, ALWAYS);
         if (sceneService != null) {
             SceneService.Reaction reaction = sceneService.reaction(instance, event);
             if (reaction != null) {
@@ -433,7 +455,7 @@ public final class NpcBehaviourService implements Listener {
         Object token = new Object();
         waypointActionSequences.put(instance.getId(), token);
         executeSequence(null, List.copyOf(actions), 0, instance, definition, null, "The NPC reached a route waypoint.",
-                ALWAYS, () -> waypointActionSequences.remove(instance.getId(), token));
+                yieldingToScenes(instance, ALWAYS), () -> waypointActionSequences.remove(instance.getId(), token));
     }
 
     public void forget(NpcInstance instance) {
@@ -652,7 +674,7 @@ public final class NpcBehaviourService implements Listener {
             return;
         }
         List<BehaviourAction> actions = definition.getBehaviourActions(BehaviourEvent.IDLE);
-        java.util.function.BooleanSupplier alive = ALWAYS;
+        java.util.function.BooleanSupplier alive = yieldingToScenes(instance, ALWAYS);
         if (sceneService != null && sceneService.isCast(instance)) {
             // While a scene owns the NPC only its scene idle reaction runs, and
             // only after the role finished its scene actions.
@@ -1527,8 +1549,11 @@ public final class NpcBehaviourService implements Listener {
 
     private void tickMoveTo(NpcInstance instance) {
         Location target = moveTargets.get(instance.getId());
-        if (target == null || isNavigationPaused(instance)
-                || combatService != null && combatService.isEngaged(instance)) {
+        // A scene's Move To walks even if the NPC's route was paused (for example
+        // by a waypoint's Stop Navigation) when the scene took it over; the pause
+        // is kept for the route itself, which resumes after the scene.
+        boolean paused = isInScene(instance) ? isExternalNavigationPaused(instance) : isNavigationPaused(instance);
+        if (target == null || paused || combatService != null && combatService.isEngaged(instance)) {
             return;
         }
         Location current = instance.getLocation();
