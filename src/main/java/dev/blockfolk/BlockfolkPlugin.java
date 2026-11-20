@@ -265,6 +265,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 .register("blockfolk", "Opens and controls Blockfolk.", java.util.List.of("bf"), executor));
 
         getServer().getPluginManager().registerEvents(guiService, this);
+        getServer().getPluginManager().registerEvents(guiService.getVariantGuiService(), this);
         getServer().getPluginManager().registerEvents(abilitiesGuiService, this);
         getServer().getPluginManager().registerEvents(shopGuiService, this);
         getServer().getPluginManager().registerEvents(routeGuiService, this);
@@ -371,6 +372,32 @@ public final class BlockfolkPlugin extends JavaPlugin {
             skinResolver.resolve(skinUrl).whenComplete((resolved, error) -> Bukkit.getScheduler().runTask(this,
                     () -> finishStoredSkinResolution(definition.getKey(), skinUrl, resolved, error)));
         }
+        for (dev.blockfolk.model.NpcInstance instance : instanceRegistry.findAll()) {
+            String skinUrl = instance.getSkinUrl();
+            if (skinUrl == null || instance.getSkinTextureValue() != null
+                    || SkinTextureUtil.isMinecraftTextureUrl(skinUrl)) {
+                continue;
+            }
+            java.util.UUID instanceId = instance.getId();
+            skinResolver.resolve(skinUrl).whenComplete((resolved, error) -> Bukkit.getScheduler().runTask(this,
+                    () -> finishStoredVariantSkinResolution(instanceId, skinUrl, resolved, error)));
+        }
+    }
+
+    private void finishStoredVariantSkinResolution(java.util.UUID instanceId, String requestedUrl,
+            ResolvedSkin resolved, Throwable error) {
+        if (error != null) {
+            getLogger().log(Level.WARNING, "Could not process the stored skin for NPC variant " + instanceId, error);
+            return;
+        }
+        instanceRegistry.findById(instanceId).ifPresent(instance -> {
+            if (!requestedUrl.equals(instance.getSkinUrl()))
+                return;
+            instance.setResolvedSkin(requestedUrl, resolved.textureValue(), resolved.textureSignature());
+            instanceRegistry.save(instance);
+            instanceRegistry.refreshInstance(instance);
+            getLogger().info(() -> "Processed the external skin for NPC variant " + instanceId + ".");
+        });
     }
 
     private void finishStoredSkinResolution(String definitionKey, String requestedUrl, ResolvedSkin resolved,

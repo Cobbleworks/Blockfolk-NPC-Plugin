@@ -128,8 +128,8 @@ public final class SceneService {
 
     /**
      * An opaque token for the scene run the instance plays in, or null. Each run
-     * has its own, so a routine can tell whether a scene took the NPC over since
-     * it started.
+     * has its own, so a routine can tell whether a scene took the NPC over since it
+     * started.
      */
     public Object sceneToken(NpcInstance instance) {
         return castOf.get(instance.getId());

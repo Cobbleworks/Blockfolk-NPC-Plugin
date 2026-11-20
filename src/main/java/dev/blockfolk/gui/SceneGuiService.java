@@ -1343,8 +1343,8 @@ public final class SceneGuiService implements Listener, GuiService.SceneNavigati
     // ---------------------------------------------------------------- area
 
     /**
-     * Hands the player a selector compass and shows every global location marker
-     * as in the location editor; right-clicking a marker makes it the area.
+     * Hands the player a selector compass and shows every global location marker as
+     * in the location editor; right-clicking a marker makes it the area.
      */
     private void beginAreaSelection(Player player, String sceneKey) {
         finishAreaSelection(player);

@@ -493,8 +493,8 @@ public final class NpcBehaviourService implements Listener {
             return MovementProfile.disabled().withWalkingSpeed(speed);
         }
         return route == null
-                ? definition.getMovementProfile().withWalkingSpeed(speed)
-                : MovementProfile.routing(route, speed);
+                ? instance.defaultMovement(definition).withWalkingSpeed(speed)
+                : MovementProfile.routing(instance.resolveRoute(route), speed);
     }
 
     public boolean hasRoute(NpcInstance instance, NpcDefinition definition) {
@@ -503,7 +503,9 @@ public final class NpcBehaviourService implements Listener {
 
     /**
      * The route this instance currently walks (or would resume): the last Set Route
-     * / AI-selected route, else the enabled default route; null if none.
+     * / AI-selected route, else the enabled default route; null if none. This is
+     * the preset's route key; a variant's route swap is applied only when walking
+     * (see {@link #movementFor}), so actions and AI keep using the preset's names.
      */
     public String currentRouteKey(NpcInstance instance, NpcDefinition definition) {
         String override = routeOverrides.get(instance.getId());
@@ -529,6 +531,7 @@ public final class NpcBehaviourService implements Listener {
             instances.findById(entry.getKey()).ifPresent(instances::stopNavigating);
             return true;
         });
+        instances.removeRouteSwaps(normalized).forEach(instances::stopNavigating);
     }
 
     public boolean isFollowing(NpcInstance instance) {

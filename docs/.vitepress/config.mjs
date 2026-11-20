@@ -31,7 +31,7 @@ export default defineConfig({
       {
         text: 'Features',
         items: [
-          { text: 'NPCs & instances', link: '/features/npcs' },
+          { text: 'NPCs & variants', link: '/features/npcs' },
           { text: 'Customization & equipment', link: '/features/customization' },
           { text: 'Behaviour routines', link: '/features/behaviours' },
           { text: 'Scenes', link: '/features/scenes' },

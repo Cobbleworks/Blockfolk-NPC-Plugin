@@ -8,7 +8,7 @@ Blockfolk stores its runtime configuration under `plugins/Blockfolk/`.
 | `definitions/*.yml` | One file per NPC preset, including behaviour, combat, equipment, and AI settings. |
 | `shops.yml` | Shared shops: name and trades, keyed by shop key. |
 | `definition-order.yml` | Preset browser ordering. |
-| `instances.yml` | Persistent spawned instances and their UUIDs. |
+| `instances.yml` | Spawned variants: UUID, preset, position, spawn point, and optional `label`, `skin`, and `route-swaps` overrides. Absent overrides inherit from the preset. |
 | `routes.yml` | NPC-owned routes and their point actions. |
 | `locations.yml` | Named global locations and icons. |
 | `scenes.yml` | Scenes: triggers, area, ending, and every role's actions. |

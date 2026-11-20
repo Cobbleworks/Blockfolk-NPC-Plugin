@@ -624,12 +624,12 @@ public final class PaperMannequinNpcRenderer implements NpcRenderer, Listener {
     private ResolvableProfile createProfile(NpcInstance instance, NpcDefinition definition) {
         ResolvableProfile.Builder profile = ResolvableProfile.resolvableProfile().uuid(instance.getId())
                 .name(profileName(instance));
-        String texture = definition.getSkinTextureValue();
+        String texture = instance.resolvedSkinTextureValue(definition);
         if (texture == null) {
-            texture = SkinTextureUtil.toTextureProperty(definition.getSkinUrl());
+            texture = SkinTextureUtil.toTextureProperty(instance.resolvedSkinUrl(definition));
         }
         if (texture != null) {
-            String signature = definition.getSkinTextureSignature();
+            String signature = instance.resolvedSkinTextureSignature(definition);
             profile.addProperty(signature == null
                     ? new ProfileProperty("textures", texture)
                     : new ProfileProperty("textures", texture, signature));

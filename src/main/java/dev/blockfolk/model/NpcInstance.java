@@ -14,6 +14,12 @@ public final class NpcInstance {
     private int entityId;
     private long respawnAtEpochMillis;
     private final ItemStack[] temporaryInventory = new ItemStack[27];
+    // Variant overrides: null inherits the preset's value.
+    private String label;
+    private String skinUrl;
+    private String skinTextureValue;
+    private String skinTextureSignature;
+    private final java.util.Map<String, String> routeSwaps = new java.util.LinkedHashMap<>();
 
     public NpcInstance(UUID id, String definitionKey, Location location) {
         this(id, definitionKey, location, location);
@@ -100,5 +106,119 @@ public final class NpcInstance {
         for (int slot = 0; slot < Math.min(contents.length, temporaryInventory.length); slot++) {
             temporaryInventory[slot] = contents[slot] == null ? null : contents[slot].clone();
         }
+    }
+
+    /** Admin-only name that tells variants of one preset apart; null if unset. */
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = blankToNull(label);
+    }
+
+    /** The variant's own skin source; null inherits the preset's skin. */
+    public String getSkinUrl() {
+        return skinUrl;
+    }
+
+    public String getSkinTextureValue() {
+        return skinTextureValue;
+    }
+
+    public String getSkinTextureSignature() {
+        return skinTextureSignature;
+    }
+
+    public boolean hasSkinOverride() {
+        return skinUrl != null || skinTextureValue != null;
+    }
+
+    /** Sets an unresolved skin override; null clears it. */
+    public void setSkinUrl(String skinUrl) {
+        setResolvedSkin(skinUrl, null, null);
+    }
+
+    public void setResolvedSkin(String skinUrl, String textureValue, String textureSignature) {
+        this.skinUrl = blankToNull(skinUrl);
+        this.skinTextureValue = blankToNull(textureValue);
+        this.skinTextureSignature = this.skinTextureValue == null ? null : blankToNull(textureSignature);
+    }
+
+    public void clearSkin() {
+        setResolvedSkin(null, null, null);
+    }
+
+    /**
+     * Routes this variant walks in place of the preset's: preset route key to
+     * replacement route key. Both belong to the same preset.
+     */
+    public java.util.Map<String, String> getRouteSwaps() {
+        return java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(routeSwaps));
+    }
+
+    /** The route walked in place of {@code presetRouteKey}; null if not swapped. */
+    public String getRouteSwap(String presetRouteKey) {
+        return presetRouteKey == null ? null : routeSwaps.get(NpcRoute.normalizeKey(presetRouteKey));
+    }
+
+    /**
+     * Walks {@code replacementKey} wherever the preset walks
+     * {@code presetRouteKey}. A null or identical replacement removes the swap.
+     */
+    public void setRouteSwap(String presetRouteKey, String replacementKey) {
+        String from = NpcRoute.normalizeKey(presetRouteKey);
+        String to = blankToNull(replacementKey) == null ? null : NpcRoute.normalizeKey(replacementKey);
+        if (to == null || to.equals(from))
+            routeSwaps.remove(from);
+        else
+            routeSwaps.put(from, to);
+    }
+
+    /** The route this variant actually walks when told to walk {@code routeKey}. */
+    public String resolveRoute(String routeKey) {
+        if (routeKey == null)
+            return null;
+        String swapped = getRouteSwap(routeKey);
+        return swapped == null ? NpcRoute.normalizeKey(routeKey) : swapped;
+    }
+
+    /**
+     * Drops every swap from or to {@code routeKey}; returns whether any existed.
+     */
+    public boolean removeRouteReferences(String routeKey) {
+        String key = NpcRoute.normalizeKey(routeKey);
+        return routeSwaps.entrySet().removeIf(entry -> entry.getKey().equals(key) || entry.getValue().equals(key));
+    }
+
+    public boolean hasOverrides() {
+        return label != null || hasSkinOverride() || !routeSwaps.isEmpty();
+    }
+
+    /** Skin source URL this instance renders with: its own, else the preset's. */
+    public String resolvedSkinUrl(NpcDefinition definition) {
+        return hasSkinOverride() ? skinUrl : definition.getSkinUrl();
+    }
+
+    public String resolvedSkinTextureValue(NpcDefinition definition) {
+        return hasSkinOverride() ? skinTextureValue : definition.getSkinTextureValue();
+    }
+
+    public String resolvedSkinTextureSignature(NpcDefinition definition) {
+        return hasSkinOverride() ? skinTextureSignature : definition.getSkinTextureSignature();
+    }
+
+    /**
+     * The preset's default movement with this variant's route swap applied.
+     */
+    public MovementProfile defaultMovement(NpcDefinition definition) {
+        MovementProfile preset = definition.getMovementProfile();
+        return preset.enabled()
+                ? MovementProfile.routing(resolveRoute(preset.routeKey()), preset.walkingSpeed())
+                : preset;
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

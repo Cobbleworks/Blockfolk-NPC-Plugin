@@ -220,6 +220,7 @@ public final class GuiService implements Listener {
     private final NamespacedKey reorderIconKey;
     private final AiGuiService aiGuiService;
     private final NpcCreationDialog creationDialog;
+    private final VariantGuiService variantGuiService;
     private NpcBehaviourService behaviourService;
     private AiControlService aiControlService;
     private AbilitiesGuiService abilitiesGuiService;
@@ -254,6 +255,9 @@ public final class GuiService implements Listener {
         this.reorderIconKey = new NamespacedKey(plugin, "reorder-definition");
         this.aiGuiService = new AiGuiService(plugin, definitionRepository, chatInputService, this::openEditor);
         this.creationDialog = new NpcCreationDialog(plugin, definitionRepository, instanceRegistry, this::openEditor);
+        this.variantGuiService = new VariantGuiService(plugin, definitionRepository, routeRepository, instanceRegistry,
+                chatInputService, skinResolver, routeCreator,
+                (player, definition) -> openInstances(player, definition, 0));
         this.aiGuiService.setSceneTriggerCheck(
                 definition -> sceneRepository.findAll().stream().flatMap(scene -> scene.getRoles().stream())
                         .filter(role -> definition.getKey().equals(role.getPresetKey())).anyMatch(role -> {
@@ -261,6 +265,11 @@ public final class GuiService implements Listener {
                             role.forEachAction(action -> found[0] |= action.type() == BehaviourActionType.AI_TRIGGER);
                             return found[0];
                         }));
+    }
+
+    /** The variant editor; registered as its own listener. */
+    public VariantGuiService getVariantGuiService() {
+        return variantGuiService;
     }
 
     public void setAbilitiesGuiService(AbilitiesGuiService service) {
@@ -447,7 +456,7 @@ public final class GuiService implements Listener {
             NpcDefinition definition = definitions.get(index);
             int instances = instanceRegistry.findByDefinition(definition).size();
             List<String> lore = new ArrayList<>(List.of(LegacyText.DARK_GRAY + "Key: " + definition.getKey(),
-                    LegacyText.GRAY + "Instances: " + LegacyText.WHITE + instances, statusLine(definition), "",
+                    LegacyText.GRAY + "Variants: " + LegacyText.WHITE + instances, statusLine(definition), "",
                     GuiItems.hint("Click", "manage"), GuiItems.danger("Shift-right-click", "delete")));
             inventory.setItem(index - from, definitionIcon(definition, lore));
         }
@@ -545,7 +554,7 @@ public final class GuiService implements Listener {
                 UiText.manageTitle(definition.getDisplayName()));
         inventory.setItem(EDITOR_SUMMARY_SLOT, definitionIcon(definition, List.of(
                 LegacyText.DARK_GRAY + "Key: " + definition.getKey(),
-                LegacyText.GRAY + "Instances: " + LegacyText.WHITE + instances,
+                LegacyText.GRAY + "Variants: " + LegacyText.WHITE + instances,
                 LegacyText.GRAY + "Skin: " + LegacyText.WHITE
                         + (definition.getSkinUrl() == null ? "Default" : "Custom"),
                 LegacyText.GRAY + "Spawn: " + LegacyText.WHITE + formatLocation(definition.getStoredSpawnpoint()), "",
@@ -585,24 +594,25 @@ public final class GuiService implements Listener {
                 item(Material.RED_BED, "Preset Spawnpoint",
                         List.of(LegacyText.WHITE + formatLocation(definition.getStoredSpawnpoint()), "",
                                 GuiItems.hint("Click", "set to your current location"),
-                                LegacyText.DARK_GRAY + "Existing instances are not moved")));
+                                LegacyText.DARK_GRAY + "Existing variants are not moved")));
         if (instances == 0) {
             inventory.setItem(EDITOR_INSTANCES_SLOT,
                     item(Material.COMPASS, "Spawn NPC",
-                            List.of(LegacyText.GRAY + "No instance is spawned yet",
+                            List.of(LegacyText.GRAY + "No variant is spawned yet",
                                     definition.getSpawnpoint() == null
                                             ? LegacyText.RED + "Set a preset spawnpoint first"
                                             : LegacyText.GRAY + "Spawns at the preset spawnpoint",
                                     "", GuiItems.hint("Click", "spawn"))));
         } else {
-            List<String> instanceLore = new ArrayList<>(
-                    List.of(LegacyText.GRAY + "Spawned instances: " + LegacyText.WHITE + instances, "",
-                            GuiItems.hint("Click", "manage spawned copies")));
+            List<String> instanceLore = new ArrayList<>(List.of(
+                    LegacyText.GRAY + "Spawned variants: " + LegacyText.WHITE + instances,
+                    LegacyText.DARK_GRAY + "Copies that can have their own skin,",
+                    LegacyText.DARK_GRAY + "spawn point, and routes", "", GuiItems.hint("Click", "manage variants")));
             if (instances == 1) {
                 instanceLore.add(GuiItems.hint("Shift-left-click", "teleport to the NPC"));
                 instanceLore.add(GuiItems.hint("Middle-click", "move the NPC to you"));
             }
-            inventory.setItem(EDITOR_INSTANCES_SLOT, item(Material.ARMOR_STAND, "Instances", instanceLore));
+            inventory.setItem(EDITOR_INSTANCES_SLOT, item(Material.ARMOR_STAND, "Variants", instanceLore));
         }
         int behaviourCount = MANUAL_BEHAVIOUR_EVENTS.stream()
                 .mapToInt(event -> definition.getBehaviourActions(event).size()).sum();
@@ -1333,39 +1343,43 @@ public final class GuiService implements Listener {
         int pages = Math.max(1, (instances.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new InstancesHolder(definition.getKey(), page), 54,
-                UiText.title("Instances", definition.getDisplayName()));
+                UiText.title("Variants", definition.getDisplayName()));
         int from = page * PAGE_SIZE;
         int to = Math.min(from + PAGE_SIZE, instances.size());
         for (int index = from; index < to; index++) {
             NpcInstance instance = instances.get(index);
-            inventory.setItem(index - from,
-                    item(Material.ARMOR_STAND, "Instance " + (index + 1),
-                            List.of(LegacyText.DARK_GRAY + instance.getId().toString(),
-                                    LegacyText.GRAY + formatLocation(instance.getStoredLocation()), "",
-                                    GuiItems.hint("Left-click", "teleport to it"),
-                                    GuiItems.hint("Middle-click", "move it to you"),
-                                    GuiItems.danger("Right-click", "remove"))));
+            List<String> lore = new ArrayList<>();
+            lore.add(LegacyText.DARK_GRAY + instance.getId().toString());
+            lore.add(LegacyText.GRAY + formatLocation(instance.getStoredLocation()));
+            lore.addAll(variantGuiService.overrideSummary(instance, definition));
+            lore.add("");
+            lore.add(GuiItems.hint("Left-click", "teleport to it"));
+            lore.add(GuiItems.hint("Shift-left-click", "edit skin, spawn & routes"));
+            lore.add(GuiItems.hint("Middle-click", "move it to you"));
+            lore.add(GuiItems.danger("Right-click", "remove"));
+            ItemStack icon = variantGuiService.variantIcon(instance, definition,
+                    VariantGuiService.variantName(instance, index), lore);
+            inventory.setItem(index - from, icon);
         }
         if (instances.isEmpty()) {
-            inventory.setItem(22, GuiItems.empty("No Instances", "Use Spawn Here below to create one"));
+            inventory.setItem(22, GuiItems.empty("No Variants", "Use Spawn Here below to create one"));
         }
         if (page > 0) {
             inventory.setItem(45, GuiItems.previousPage(page, pages));
         }
         if (!instances.isEmpty()) {
             inventory.setItem(47,
-                    item(Material.REDSTONE_BLOCK, "Remove All Instances",
-                            List.of(LegacyText.RED + "Removes every spawned copy", "",
+                    item(Material.REDSTONE_BLOCK, "Remove All Variants",
+                            List.of(LegacyText.RED + "Removes every spawned variant", "",
                                     GuiItems.danger("Click", "remove (asks first)"))));
             inventory.setItem(48,
-                    item(Material.SUNFLOWER, "Refresh Instances",
+                    item(Material.SUNFLOWER, "Refresh Variants",
                             List.of(LegacyText.GRAY + "Re-applies name, skin, and equipment", "",
-                                    GuiItems.hint("Click", "refresh all copies"))));
+                                    GuiItems.hint("Click", "refresh all variants"))));
         }
         inventory.setItem(49, GuiItems.back("the NPC menu"));
-        inventory.setItem(51,
-                item(Material.COMPASS, "Spawn Here", List.of(LegacyText.GRAY + "Spawns another persistent copy",
-                        LegacyText.GRAY + "at your location", "", GuiItems.hint("Click", "spawn"))));
+        inventory.setItem(51, item(Material.COMPASS, "Spawn Here", List.of(LegacyText.GRAY + "Spawns another variant",
+                LegacyText.GRAY + "at your location, identical to the preset", "", GuiItems.hint("Click", "spawn"))));
         if (page + 1 < pages) {
             inventory.setItem(53, GuiItems.nextPage(page, pages));
         }
@@ -2087,9 +2101,9 @@ public final class GuiService implements Listener {
             case 49 -> openEditor(player, definition);
             case 51 -> {
                 if (instanceRegistry.spawnPersistent(definition, player.getLocation()) == null) {
-                    player.sendMessage(UiText.error("Could not render another NPC instance."));
+                    player.sendMessage(UiText.error("Could not render another variant."));
                 } else {
-                    player.sendMessage(UiText.success("Spawned another NPC instance at your location."));
+                    player.sendMessage(UiText.success("Spawned another variant at your location."));
                 }
                 openInstances(player, definition, holder.page());
             }
@@ -2097,8 +2111,8 @@ public final class GuiService implements Listener {
                 if (instanceRegistry.findByDefinition(definition).isEmpty())
                     return;
                 instanceRegistry.refreshDefinition(definition);
-                player.sendMessage(UiText.success(
-                        "Refreshed " + instanceRegistry.findByDefinition(definition).size() + " instance(s)."));
+                player.sendMessage(UiText
+                        .success("Refreshed " + instanceRegistry.findByDefinition(definition).size() + " variant(s)."));
                 openInstances(player, definition, holder.page());
             }
             case 53 -> openInstances(player, definition, holder.page() + 1);
@@ -2109,18 +2123,20 @@ public final class GuiService implements Listener {
                     return;
                 }
                 NpcInstance instance = instances.get(index);
-                if (event.getClick() == ClickType.MIDDLE) {
+                if (event.getClick() == ClickType.SHIFT_LEFT) {
+                    variantGuiService.open(player, definition, instance);
+                } else if (event.getClick() == ClickType.MIDDLE) {
                     Location destination = player.getLocation();
                     if (instanceRegistry.relocate(instance, destination)) {
-                        player.sendMessage(UiText.success("Moved NPC instance and its spawn location to you."));
+                        player.sendMessage(UiText.success("Moved the variant and its spawn point to you."));
                     } else {
-                        player.sendMessage(UiText.error("Could not move the NPC instance."));
+                        player.sendMessage(UiText.error("Could not move the variant."));
                     }
                     openInstances(player, definition, holder.page());
                 } else if (event.isRightClick()) {
                     openInstanceDeleteConfirmation(player, definition, instance, holder.page());
                 } else {
-                    teleportToInstance(player, instance, "NPC instance");
+                    teleportToInstance(player, instance, VariantGuiService.variantName(instance, index));
                 }
             }
         }
@@ -3780,8 +3796,8 @@ public final class GuiService implements Listener {
         if (holder.action() == ConfirmationAction.DELETE_INSTANCE) {
             boolean removed = holder.instanceId() != null && instanceRegistry.deleteInstance(holder.instanceId());
             player.sendMessage(removed
-                    ? UiText.success("Removed NPC instance.")
-                    : UiText.warning("That NPC instance no longer exists."));
+                    ? UiText.success("Removed the variant.")
+                    : UiText.warning("That variant no longer exists."));
             openInstances(player, definition, holder.returnPage());
             return;
         }
@@ -3793,7 +3809,7 @@ public final class GuiService implements Listener {
             openMain(player, holder.returnPage());
         } else {
             int removed = instanceRegistry.deleteInstances(definition);
-            player.sendMessage(UiText.success("Removed " + removed + " instance(s)."));
+            player.sendMessage(UiText.success("Removed " + removed + " variant(s)."));
             openInstances(player, definition, holder.returnPage());
         }
     }
@@ -3822,9 +3838,9 @@ public final class GuiService implements Listener {
             int returnPage) {
         Inventory inventory = Bukkit.createInventory(new ConfirmationHolder(definition.getKey(),
                 ConfirmationAction.DELETE_INSTANCE, returnPage, false, instance.getId()), 27,
-                UiText.title("Confirm Instance Removal"));
+                UiText.title("Confirm Variant Removal"));
         inventory.setItem(11, GuiItems.confirm(
-                List.of("Permanently removes this NPC instance", LegacyText.DARK_GRAY + instance.getId().toString())));
+                List.of("Permanently removes this variant", LegacyText.DARK_GRAY + instance.getId().toString())));
         inventory.setItem(15, GuiItems.cancel());
         openInventory(player, inventory);
     }

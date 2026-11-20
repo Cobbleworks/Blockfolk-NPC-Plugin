@@ -2,11 +2,11 @@
 
 Blockfolk separates reusable configuration from the NPCs placed in the world.
 
-## Presets and instances
+## Presets and variants
 
-An **NPC preset** stores the display name, skin, equipment, properties, combat profile, movement configuration, event routines, and AI settings. An **instance** is one persistent spawned copy with its own UUID and position.
+An **NPC preset** is the main NPC. It stores the display name, skin, equipment, properties, combat profile, movement configuration, event routines, and AI settings. A **variant** is one persistent spawned copy with its own UUID, position, and spawn point. A variant can also have its own skin and swap the preset's routes for others, and it shares everything else with the preset.
 
-Spawning a preset creates one NPC by default. Additional copies are created explicitly through **Manage Instances** or the spawn command. Integrations refer to each copy's persistent UUID, including after a server restart or combat respawn.
+Spawning a preset creates one NPC by default. Additional copies are created explicitly through **Variants** or the spawn command. Integrations refer to each copy's persistent UUID, including after a server restart or combat respawn. See [Variants](/features/npcs#variants).
 
 ## Events and actions
 
@@ -24,4 +24,4 @@ Normal event routines are deterministic and do not require an external service. 
 
 ## Where configuration lives
 
-Global timing and provider values live in `config.yml`. Presets, instances, routes, locations, and scenes are maintained by the plugin in separate YAML files. Use the GUI for editing those files and include the entire `plugins/Blockfolk/` directory in backups.
+Global timing and provider values live in `config.yml`. Presets, variants, routes, locations, and scenes are maintained by the plugin in separate YAML files. Use the GUI for editing those files and include the entire `plugins/Blockfolk/` directory in backups.

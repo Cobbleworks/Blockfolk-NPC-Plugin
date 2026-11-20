@@ -2,6 +2,7 @@ package dev.blockfolk.runtime;
 
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -109,8 +110,8 @@ public final class NpcInstanceRegistry implements Listener {
      * Re-indexes a mannequin that comes back with its chunk. Minecraft gives a
      * reloaded entity a new numeric id, and right-clicks, damage, and every other
      * lookup by entity go through that id, so without this an NPC whose chunk was
-     * unloaded once stops reacting until it respawns. A second tagged mannequin
-     * for the same NPC (one saved before a crash, loading after its replacement
+     * unloaded once stops reacting until it respawns. A second tagged mannequin for
+     * the same NPC (one saved before a crash, loading after its replacement
      * spawned) is removed instead.
      */
     @EventHandler(priority = EventPriority.MONITOR)
@@ -203,6 +204,34 @@ public final class NpcInstanceRegistry implements Listener {
                 indexEntity(instance);
             }
         }
+    }
+
+    /** Re-renders one instance, e.g. after its variant skin changed. */
+    public void refreshInstance(NpcInstance instance) {
+        if (instances.get(instance.getId()) != instance || instance.isAwaitingRespawn())
+            return;
+        definitionRepository.find(instance.getDefinitionKey()).ifPresent(definition -> {
+            renderer.refresh(instance, definition);
+            indexEntity(instance);
+        });
+    }
+
+    /** Persists variant changes such as a label, skin, or route swap. */
+    public void save(NpcInstance instance) {
+        if (instances.get(instance.getId()) == instance)
+            instanceRepository.saveAll(instances.values());
+    }
+
+    /**
+     * Drops variant route swaps from or to a deleted route; returns the affected
+     * instances.
+     */
+    public List<NpcInstance> removeRouteSwaps(String routeKey) {
+        List<NpcInstance> affected = instances.values().stream()
+                .filter(instance -> instance.removeRouteReferences(routeKey)).toList();
+        if (!affected.isEmpty())
+            instanceRepository.saveAll(instances.values());
+        return affected;
     }
 
     public int deleteInstances(NpcDefinition definition) {

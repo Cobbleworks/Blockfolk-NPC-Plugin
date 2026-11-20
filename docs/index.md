@@ -19,7 +19,7 @@ hero:
 features:
   - icon: 🧑‍🌾
     title: Persistent NPC presets
-    details: Reusable definitions, multiple spawned instances, skins, equipment, names, and visual properties.
+    details: Reusable definitions, spawned variants with their own skin, spawn point, and routes, skins, equipment, names, and visual properties.
   - icon: 🧭
     title: Routes & locations
     details: Build walking loops in-world and save named global destinations for behaviour and AI actions.

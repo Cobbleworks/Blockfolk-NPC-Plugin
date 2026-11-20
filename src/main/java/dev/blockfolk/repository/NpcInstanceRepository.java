@@ -55,8 +55,10 @@ public final class NpcInstanceRepository {
             }
             StoredLocation spawnLocation = LocationCodec.readStored(section.getConfigurationSection("spawn-location"));
             try {
-                instances.add(new NpcInstance(UUID.fromString(key), definitionKey, location,
-                        spawnLocation == null ? location : spawnLocation, section.getLong("respawn-at", 0L)));
+                NpcInstance instance = new NpcInstance(UUID.fromString(key), definitionKey, location,
+                        spawnLocation == null ? location : spawnLocation, section.getLong("respawn-at", 0L));
+                readOverrides(section, instance);
+                instances.add(instance);
             } catch (IllegalArgumentException exception) {
                 preserveMalformed(key, section, exception.getMessage());
             }
@@ -82,8 +84,50 @@ public final class NpcInstanceRepository {
             LocationCodec.write(section.createSection("spawn-location"), instance.getStoredSpawnLocation());
             if (instance.isAwaitingRespawn())
                 section.set("respawn-at", instance.getRespawnAtEpochMillis());
+            writeOverrides(section, instance);
         }
         return configuration;
+    }
+
+    /**
+     * Reads the optional variant overrides. Absent keys inherit from the preset.
+     */
+    static void readOverrides(ConfigurationSection section, NpcInstance instance) {
+        instance.setLabel(section.getString("label"));
+        ConfigurationSection skin = section.getConfigurationSection("skin");
+        if (skin != null)
+            instance.setResolvedSkin(skin.getString("url"), skin.getString("value"), skin.getString("signature"));
+        ConfigurationSection swaps = section.getConfigurationSection("route-swaps");
+        if (swaps != null) {
+            for (String from : swaps.getKeys(false)) {
+                try {
+                    instance.setRouteSwap(from, swaps.getString(from));
+                } catch (IllegalArgumentException ignored) {
+                    // A malformed swap just falls back to the preset's route.
+                }
+            }
+        }
+    }
+
+    /**
+     * Writes only the overrides that are set, so plain copies stay unchanged.
+     */
+    static void writeOverrides(ConfigurationSection section, NpcInstance instance) {
+        if (instance.getLabel() != null)
+            section.set("label", instance.getLabel());
+        if (instance.hasSkinOverride()) {
+            ConfigurationSection skin = section.createSection("skin");
+            if (instance.getSkinUrl() != null)
+                skin.set("url", instance.getSkinUrl());
+            if (instance.getSkinTextureValue() != null)
+                skin.set("value", instance.getSkinTextureValue());
+            if (instance.getSkinTextureSignature() != null)
+                skin.set("signature", instance.getSkinTextureSignature());
+        }
+        if (!instance.getRouteSwaps().isEmpty()) {
+            ConfigurationSection swaps = section.createSection("route-swaps");
+            instance.getRouteSwaps().forEach(swaps::set);
+        }
     }
 
     private void preserveMalformed(String key, ConfigurationSection section, String reason) {
