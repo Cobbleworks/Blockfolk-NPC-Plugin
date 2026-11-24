@@ -140,6 +140,7 @@ public final class NpcDefinitionRepository {
         configuration.set("properties.auto-board-vehicles", definition.isAutoBoardVehicles());
         configuration.set("properties.keep-chunks-loaded", definition.isKeepChunksLoaded());
         configuration.set("properties.pose", definition.getPose().name());
+        configuration.set("properties.hold-pose", definition.isHoldPose());
         configuration.set("properties.color", definition.getColor().name().toLowerCase(Locale.ROOT));
         AiControlSettings ai = definition.getAiControlSettings();
         configuration.set("ai-control.enabled", ai.enabled());
@@ -310,6 +311,7 @@ public final class NpcDefinitionRepository {
         definition.setAutoBoardVehicles(configuration.getBoolean("properties.auto-board-vehicles", false));
         definition.setKeepChunksLoaded(configuration.getBoolean("properties.keep-chunks-loaded", false));
         definition.setPose(NpcPose.fromStored(configuration.getString("properties.pose")));
+        definition.setHoldPose(configuration.getBoolean("properties.hold-pose", false));
         definition.setColor(NpcColor.fromStored(configuration.getString("properties.color")));
         java.util.EnumSet<AiActionType> allowedAiActions = java.util.EnumSet.noneOf(AiActionType.class);
         for (String stored : configuration.getStringList("ai-control.allowed-actions")) {

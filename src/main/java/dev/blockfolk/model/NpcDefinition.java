@@ -39,6 +39,7 @@ public final class NpcDefinition {
     private boolean keepChunksLoaded;
     private NpcColor color;
     private NpcPose pose = NpcPose.STANDING;
+    private boolean holdPose;
     private Map<BehaviourEvent, List<BehaviourAction>> behaviours;
     /**
      * Rows of the removed custom events, kept only until they are migrated into
@@ -90,6 +91,7 @@ public final class NpcDefinition {
         copy.setKeepChunksLoaded(keepChunksLoaded);
         copy.setColor(color);
         copy.setPose(pose);
+        copy.setHoldPose(holdPose);
         copy.setAiControlSettings(aiControlSettings);
         copy.setAiMemoryEntries(aiMemories);
         behaviours.forEach(copy::setBehaviourActions);
@@ -245,6 +247,20 @@ public final class NpcDefinition {
 
     public void setPose(NpcPose pose) {
         this.pose = Objects.requireNonNullElse(pose, NpcPose.STANDING);
+    }
+
+    /**
+     * Whether the NPC keeps its pose (sitting, sleeping, crouching, and so on) when
+     * it is hit. It then fights back only against attackers within its weapon's
+     * reach and never walks, flees, or dashes in combat. Actions it is given, such
+     * as a route or Move To, still make it stand up.
+     */
+    public boolean isHoldPose() {
+        return holdPose;
+    }
+
+    public void setHoldPose(boolean holdPose) {
+        this.holdPose = holdPose;
     }
 
     public boolean isPushable() {

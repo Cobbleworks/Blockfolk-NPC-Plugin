@@ -23,6 +23,7 @@ class NpcDefinitionTest {
         assertTrue(definition.isPushable());
         assertFalse(definition.isAutoBoardVehicles());
         assertFalse(definition.isKeepChunksLoaded());
+        assertFalse(definition.isHoldPose(), "NPCs stand up when hit unless told to hold their pose");
         assertEquals(NpcColor.ORANGE, definition.getColor());
     }
 
@@ -181,6 +182,8 @@ class NpcDefinitionTest {
         source.setPushable(false);
         source.setAutoBoardVehicles(true);
         source.setKeepChunksLoaded(true);
+        source.setPose(NpcPose.SITTING);
+        source.setHoldPose(true);
         source.setColor(NpcColor.BLUE);
         source.setBehaviourActions(BehaviourEvent.RIGHT_CLICK,
                 List.of(new BehaviourAction(BehaviourActionType.WAVE, null)));
@@ -193,6 +196,8 @@ class NpcDefinitionTest {
         assertFalse(copy.isPushable());
         assertTrue(copy.isAutoBoardVehicles());
         assertTrue(copy.isKeepChunksLoaded());
+        assertEquals(NpcPose.SITTING, copy.getPose());
+        assertTrue(copy.isHoldPose());
         assertEquals(NpcColor.BLUE, copy.getColor());
         assertEquals(source.getBehaviourActions(BehaviourEvent.RIGHT_CLICK),
                 copy.getBehaviourActions(BehaviourEvent.RIGHT_CLICK));

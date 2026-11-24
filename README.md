@@ -16,7 +16,7 @@ Blockfolk is a GUI-driven NPC system for Paper servers. Administrators create re
 
 - **Persistent NPC presets:** Reuse one definition across multiple independently stored instances
 - **In-game administration:** Configure skins, equipment, names, dialog, inventories, routes, and behavior without hand-editing YAML
-- **Saved NPC poses:** Choose standing, crouching, sleeping, sitting, swimming/crawling, or fall flying under **NPC Properties → Pose**; use Sitting in behavior, waypoint, and question animations
+- **Saved NPC poses:** Choose standing, crouching, sleeping, sitting, swimming/crawling, or fall flying under **NPC Properties → Pose**; use Sitting in behavior, waypoint, and question animations. **Hold Pose** keeps an NPC sitting or sleeping when it is hit; it then fights only within reach
 - **Behavior sequences:** React to interaction, proximity, combat, time, waypoints, and other supported triggers
 - **Scenes:** Let several NPCs play a moment together, started by time of day, weather, a player entering an area, or a command, with cues to keep them in step
 - **Routes and locations:** Build NPC-owned walking routes in the world and reuse named destinations across NPCs

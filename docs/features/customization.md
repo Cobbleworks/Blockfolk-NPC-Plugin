@@ -15,11 +15,26 @@ Click the NPC head in the preset editor to open **NPC Properties**, where you ca
 | Board Vehicles | Gets into an empty minecart or boat it walks or stands next to, including while following a route. Off by default. |
 | Keep Chunks Loaded | Keeps the chunks around each instance loaded as it moves, so it keeps walking with no player nearby. Off by default. |
 | Pose | Standing, Crouching, Sleeping, Sitting, Swimming / Crawling, or Fall Flying. |
+| Hold Pose | Keeps the NPC in its pose when it is hit instead of standing up. Off by default. See [Holding a pose](#holding-a-pose). |
 | Name Color | The color used for the visible NPC name. |
 
 On/off settings switch with a click; their icon, name color, and tooltip show the current state. Multi-option settings such as Pose and Name Color list every option in their tooltip with a `▶` marker on the current one: left-click selects the next option, right-click the previous one.
 
 The selected pose is saved in the preset, applies to all its instances, and survives respawns and restarts. Sitting bends the legs using an invisible seat; changing poses or deleting the NPC removes that seat. Swimming / Crawling uses the same horizontal player pose, while Fall Flying supplies the elytra-style pose without initiating flight. These options cover all five native poses accepted by Paper's mannequin entity plus mounted sitting. Wave and Jump remain available under behavior **Animations**, which now also includes Sitting.
+
+NPC Properties has two rows: behaviour switches on top; below them the name settings (Show Name, Name Color) and the pose settings (Pose, Hold Pose).
+
+### Holding a pose
+
+By default, an NPC that takes damage stands up, whatever its pose. Turn on **Hold Pose** to keep it sitting, sleeping, crouching, or in any other pose when it is hit, for example a guard on a bench or a sleeping villager. Hold Pose also keeps a pose that a behaviour action such as Sit or Sleep gave the NPC.
+
+While an NPC holds its pose, combat cannot move it:
+
+- With **Fights Back** or **Hunting** (see [Combat](combat.md#aggression)), it attacks only opponents within its weapon's reach, turning to face them. It does not walk towards an opponent out of reach; it watches them and lets them go after a few seconds. **Hunting** only picks targets already within reach.
+- With **Flee**, it stays where it is instead of running away.
+- Abilities that move the caster, such as dashes and blinks, have no effect.
+
+Actions you give the NPC still work as usual: a route, **Move To**, **Follow**, or a **Stand** action makes it stand up and move. Hold Pose only stops the NPC from leaving its pose on its own because it was hit.
 
 ## Riding minecarts and boats
 

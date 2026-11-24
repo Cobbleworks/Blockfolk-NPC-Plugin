@@ -52,6 +52,7 @@ class NpcCombatNavigationTest {
         when(plugin.namespace()).thenReturn("blockfolk");
         behaviours = spy(new NpcBehaviourService(plugin, definitions, instances, null, null, 0));
         doNothing().when(behaviours).trigger(any(), eq(instance), any());
+        doNothing().when(behaviours).trigger(any(), eq(instance), any(), any());
         combat = new NpcCombatService(plugin, definitions, instances, navigation);
         combat.setBehaviourService(behaviours);
 
@@ -79,6 +80,106 @@ class NpcCombatNavigationTest {
         when(target.getGameMode()).thenReturn(GameMode.SURVIVAL);
         when(target.getWorld()).thenReturn(world);
         when(target.getLocation()).thenAnswer(call -> new Location(world, 10, 64, 0));
+        when(target.getEyeLocation()).thenAnswer(call -> target.getLocation().add(0, 1.62, 0));
+        when(npc.getEyeLocation()).thenAnswer(call -> new Location(world, 0, 65.62, 0));
+    }
+
+    @Test
+    void npcHoldingItsPoseWatchesAnOpponentOutOfReachInsteadOfWalking() throws Exception {
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(() -> Bukkit.getEntity(targetId)).thenReturn(target);
+            when(definition.isHoldPose()).thenReturn(true);
+            begin("chase");
+
+            // Longer than the four-second stalled-chase timeout.
+            for (int i = 0; i < 100; i++)
+                tick();
+
+            verify(instances, never()).navigate(eq(instance), any(Location.class), any(WalkingSpeed.class));
+            verify(npc, atLeastOnce()).setRotation(anyFloat(), anyFloat());
+            assertFalse(combat.isEngaged(instance), "an opponent that stays out of reach is let go");
+        }
+    }
+
+    @Test
+    void npcHoldingItsPoseDoesNotFlee() throws Exception {
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(() -> Bukkit.getEntity(targetId)).thenReturn(target);
+            when(definition.isHoldPose()).thenReturn(true);
+            begin("flee");
+            tick();
+
+            assertFalse(combat.isEngaged(instance));
+            verify(instances, never()).navigate(eq(instance), any(Location.class), any(WalkingSpeed.class));
+        }
+    }
+
+    @Test
+    void npcHoldingItsPoseDoesNotStepBackToShoot() throws Exception {
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(() -> Bukkit.getEntity(targetId)).thenReturn(target);
+            when(definition.isHoldPose()).thenReturn(true);
+            // Without sight the archer only aims, so no arrow needs a server.
+            when(npc.hasLineOfSight(target)).thenReturn(false);
+            begin("retreat");
+            for (int i = 0; i < 20; i++)
+                tick();
+
+            verify(instances, never()).navigate(eq(instance), any(Location.class), any(WalkingSpeed.class));
+            assertTrue(combat.isEngaged(instance));
+        }
+    }
+
+    @Test
+    void huntingNpcHoldingItsPoseIgnoresTargetsOutOfReach() throws Exception {
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(() -> Bukkit.getEntity(targetId)).thenReturn(target);
+            when(definition.isHoldPose()).thenReturn(true);
+            when(definition.getCombatProfile()).thenReturn(CombatProfile.disabled().withMaxHealth(20)
+                    .withAttackReaction(AttackReaction.HUNTING).withTargetPlayers(true));
+            when(npc.getNearbyEntities(anyDouble(), anyDouble(), anyDouble())).thenReturn(List.of(target));
+
+            for (int i = 0; i < 20; i++)
+                tick();
+
+            assertFalse(combat.isEngaged(instance), "a seated guard does not pick fights it cannot reach");
+        }
+    }
+
+    @Test
+    void huntingNpcWithoutHoldPoseStillEngagesDistantTargets() throws Exception {
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(() -> Bukkit.getEntity(targetId)).thenReturn(target);
+            when(definition.getCombatProfile()).thenReturn(CombatProfile.disabled().withMaxHealth(20)
+                    .withAttackReaction(AttackReaction.HUNTING).withTargetPlayers(true));
+            when(npc.getNearbyEntities(anyDouble(), anyDouble(), anyDouble())).thenReturn(List.of(target));
+
+            for (int i = 0; i < 20 && !combat.isEngaged(instance); i++)
+                tick();
+
+            assertTrue(combat.isEngaged(instance));
+        }
+    }
+
+    @Test
+    void hitNpcStandsUpUnlessItHoldsItsPose() {
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getScheduler).thenReturn(mock(org.bukkit.scheduler.BukkitScheduler.class));
+            when(instances.findActive()).thenReturn(List.of());
+            org.bukkit.event.entity.EntityDamageEvent damage = mock(org.bukkit.event.entity.EntityDamageEvent.class);
+            when(damage.getEntity()).thenReturn(npc);
+            // The damage detail reads max health from the attribute registry, which
+            // needs a server; standing up is decided before it.
+            when(instances.findEntity(instance)).thenReturn(Optional.empty());
+
+            when(definition.isHoldPose()).thenReturn(true);
+            behaviours.onDamage(damage);
+            verify(instances, never()).stand(instance);
+
+            when(definition.isHoldPose()).thenReturn(false);
+            behaviours.onDamage(damage);
+            verify(instances).stand(instance);
+        }
     }
 
     @ParameterizedTest

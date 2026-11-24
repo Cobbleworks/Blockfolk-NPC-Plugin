@@ -133,7 +133,7 @@ public final class NpcCombatService implements Listener {
         this.specialAttackService = new NpcSpecialAttackService(
                 fighters == null ? FighterTemplates::defaults : fighters::findAll,
                 (id, location) -> instanceRegistry.findById(id)
-                        .map(instance -> !isExternalNavigationPaused(instance)
+                        .map(instance -> !isExternalNavigationPaused(instance) && !holdsPose(instance)
                                 && instanceRegistry.move(instance, location))
                         .orElse(false),
                 victim -> instanceRegistry.findByEntityId(victim.getEntityId())
@@ -401,7 +401,8 @@ public final class NpcCombatService implements Listener {
         AttackReaction reaction = options.attackReaction();
         boolean selectedTarget = isSelectedTarget(attacker, options);
         if (reaction == AttackReaction.FLEE && !selectedTarget) {
-            if (direct)
+            // An NPC holding its pose stays where it is instead of running away.
+            if (direct && !definition.isHoldPose())
                 engage(instance, definition, CombatMode.FLEE, attacker);
         } else if (reaction == AttackReaction.FIGHT_BACK || reaction == AttackReaction.HUNTING || selectedTarget) {
             engageAttacker(instance, definition, attacker);
@@ -482,6 +483,7 @@ public final class NpcCombatService implements Listener {
                 .map(LivingEntity.class::cast)
                 .filter(threat -> threat.getWorld() == npc.getWorld() && isAttackable(instance, threat))
                 .filter(threat -> threat.getLocation().distanceSquared(npc.getLocation()) <= SIGHT_RANGE * SIGHT_RANGE)
+                .filter(threat -> withinStationaryReach(definition, npc, threat))
                 .filter(threat -> !isTemporarilyUnreachable(instance, threat))
                 .min(Comparator.comparingDouble(threat -> threat.getLocation().distanceSquared(npc.getLocation())))
                 .orElse(null);
@@ -665,7 +667,7 @@ public final class NpcCombatService implements Listener {
             if (state == null && fightOptions.attackReaction() == AttackReaction.HUNTING
                     && currentTick % 10 == Math.floorMod(instance.getId().hashCode(), 10)) {
                 LivingEntity target = findNearestTarget(instance, npc, fightOptions);
-                if (target != null) {
+                if (target != null && withinStationaryReach(definition, npc, target)) {
                     engage(instance, definition, CombatMode.FIGHT, target);
                     state = states.get(instance.getId());
                 }
@@ -792,6 +794,7 @@ public final class NpcCombatService implements Listener {
             npc.getEquipment().setItemInOffHand(other, true);
         }
         NpcAttack attack = attackSelector.select(selected);
+        boolean holdingPose = definition.isHoldPose();
         if (distanceSquared > attack.rangeSquared()) {
             Location currentLocation = npc.getLocation();
             // Waiting for a quest dialog is intentional, not a stalled path.
@@ -803,6 +806,15 @@ public final class NpcCombatService implements Listener {
                 abandonUnreachable(instance, state);
                 return;
             }
+            if (holdingPose) {
+                // Watches an opponent out of reach instead of walking; the stall
+                // timeout above lets it go if it stays out of reach.
+                instanceRegistry.stopNavigating(instance);
+                state.navigationTarget = null;
+                state.retreating = false;
+                face(npc, target);
+                return;
+            }
             if (state.navigationTarget == null || state.retreating || currentTick >= state.nextRepathAt) {
                 state.navigationTarget = target.getLocation();
                 state.nextRepathAt = currentTick + 10;
@@ -811,7 +823,7 @@ public final class NpcCombatService implements Listener {
             navigateCombat(instance, state.navigationTarget, WalkingSpeed.FAST);
             return;
         }
-        if (distanceSquared < attack.minimumRangeSquared()) {
+        if (distanceSquared < attack.minimumRangeSquared() && !holdingPose) {
             if (state.navigationTarget == null || !state.retreating || currentTick >= state.nextRepathAt) {
                 state.navigationTarget = retreatLocation(npc, target, Math.sqrt(attack.minimumRangeSquared()));
                 state.nextRepathAt = currentTick + 10;
@@ -833,12 +845,33 @@ public final class NpcCombatService implements Listener {
         }
     }
 
+    /**
+     * NPCs with Hold Pose never move in combat; see
+     * {@link NpcDefinition#isHoldPose}.
+     */
+    private boolean holdsPose(NpcInstance instance) {
+        return definitionRepository.find(instance.getDefinitionKey()).map(NpcDefinition::isHoldPose).orElse(false);
+    }
+
+    /**
+     * Whether {@code target} is close enough to pick a fight with: always for NPCs
+     * that move, within the reach of a held weapon for NPCs holding their pose,
+     * which would otherwise engage targets they can never reach.
+     */
+    private boolean withinStationaryReach(NpcDefinition definition, LivingEntity npc, LivingEntity target) {
+        if (!definition.isHoldPose())
+            return true;
+        double reachSquared = Math.max(attackSelector.select(equippedItem(definition.getMainHand())).rangeSquared(),
+                attackSelector.select(equippedItem(definition.getOffHand())).rangeSquared());
+        return target.getLocation().distanceSquared(npc.getLocation()) <= reachSquared;
+    }
+
     private boolean isExternalNavigationPaused(NpcInstance instance) {
         return behaviourService != null && behaviourService.isExternalNavigationPaused(instance);
     }
 
     private void navigateCombat(NpcInstance instance, Location target, WalkingSpeed speed) {
-        if (isExternalNavigationPaused(instance)) {
+        if (isExternalNavigationPaused(instance) || holdsPose(instance)) {
             instanceRegistry.stopNavigating(instance);
             return;
         }

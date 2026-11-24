@@ -186,9 +186,11 @@ public final class GuiService implements Listener {
     private static final int PROPERTY_PICKUP_SLOT = 13;
     private static final int PROPERTY_VEHICLES_SLOT = 14;
     private static final int PROPERTY_CHUNKS_SLOT = 15;
-    private static final int PROPERTY_SHOW_NAME_SLOT = 20;
-    private static final int PROPERTY_POSE_SLOT = 22;
-    private static final int PROPERTY_COLOR_SLOT = 24;
+    /** Appearance row: the two name settings, then the two pose settings. */
+    private static final int PROPERTY_SHOW_NAME_SLOT = 19;
+    private static final int PROPERTY_COLOR_SLOT = 20;
+    private static final int PROPERTY_POSE_SLOT = 24;
+    private static final int PROPERTY_HOLD_POSE_SLOT = 25;
     private static final int PROPERTY_BACK_SLOT = 31;
     private static final int MAX_ROW_ACTIONS = 7;
     private static final int ACTION_PICKER_ANIMATIONS_SLOT = 32;
@@ -579,8 +581,10 @@ public final class GuiService implements Listener {
                                                         GuiItems.hint("Click", "set a URL or texture hash"),
                                                         LegacyText.DARK_GRAY + "Enter 'default' to clear it")),
                                         definition));
-        inventory.setItem(EDITOR_PROPERTIES_SLOT, item(Material.ARMOR_STAND, "Appearance & Properties",
-                List.of(LegacyText.GRAY + "Pose: " + LegacyText.WHITE + definition.getPose().displayName(),
+        inventory.setItem(EDITOR_PROPERTIES_SLOT,
+                item(Material.ARMOR_STAND, "Appearance & Properties", List.of(
+                        LegacyText.GRAY + "Pose: " + LegacyText.WHITE + definition.getPose().displayName()
+                                + (definition.isHoldPose() ? LegacyText.GRAY + " (held when hit)" : ""),
                         LegacyText.GRAY + "Name color: " + LegacyText.WHITE + definition.getColor().displayName(),
                         onOff("Pushable", definition.isPushable()), onOff("Name shown", definition.isShowName()),
                         onOff("Looks at players", definition.isLookAtPlayer()),
@@ -722,6 +726,12 @@ public final class GuiService implements Listener {
                 .map(pose -> new GuiItems.Option(pose.material(), pose.displayName(), null)).toList();
         inventory.setItem(PROPERTY_POSE_SLOT, GuiItems.cycle("Pose", poses, definition.getPose().ordinal(),
                 List.of("Saved across respawns and restarts")));
+        inventory.setItem(PROPERTY_HOLD_POSE_SLOT,
+                GuiItems.toggle(Material.IRON_CHAIN, Material.STRING, "Hold Pose", definition.isHoldPose(),
+                        "stays in its pose when hit", "stands up when hit",
+                        List.of("Also any pose from a behaviour action", "While holding its pose it fights back only",
+                                "within weapon reach and never walks,", "flees or dashes in combat",
+                                "Routes and Move To still make it stand")));
         List<GuiItems.Option> colors = java.util.Arrays.stream(NpcColor.values())
                 .map(color -> new GuiItems.Option(color.material(), color.displayName(), null, legacyColor(color)))
                 .toList();
@@ -1742,6 +1752,7 @@ public final class GuiService implements Listener {
         int direction = GuiItems.cycleDirection(event.getClick());
         switch (event.getRawSlot()) {
             case PROPERTY_PUSHABLE_SLOT -> definition.setPushable(!definition.isPushable());
+            case PROPERTY_HOLD_POSE_SLOT -> definition.setHoldPose(!definition.isHoldPose());
             case PROPERTY_SHOW_NAME_SLOT -> definition.setShowName(!definition.isShowName());
             case PROPERTY_LOOK_SLOT -> definition.setLookAtPlayer(!definition.isLookAtPlayer());
             case PROPERTY_PICKUP_SLOT -> definition.setItemPickup(!definition.isItemPickup());

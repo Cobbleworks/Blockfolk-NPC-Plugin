@@ -32,6 +32,8 @@ Pending combat respawns survive server restarts and keep the persistent instance
 | Flee | Moves away from attackers, except those from an enabled target category, which it fights. |
 | Hunting | Proactively seeks enabled target categories and retaliates against any attacker. |
 
+An NPC with **Hold Pose** (NPC Properties) stays in its pose when hit: it fights only within its weapon's reach and never walks, flees, or dashes in combat. See [Holding a pose](customization.md#holding-a-pose).
+
 Target categories are hostile mobs, animals, survival/adventure players, and other vulnerable Blockfolk NPCs. Peaceful mobs such as villagers and iron golems are never hunted, but an NPC that fights back still defends itself against them.
 
 An NPC under attack from several sides keeps its current opponent unless that opponent is gone, out of sight for a second, or a new attacker is more than three blocks closer. Every attacker is remembered for ten seconds: when the current opponent dies or escapes, the NPC turns to the closest remembered attacker instead of leaving combat.

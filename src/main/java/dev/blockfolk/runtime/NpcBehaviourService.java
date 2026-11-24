@@ -728,7 +728,9 @@ public final class NpcBehaviourService implements Listener {
         if (instance == null) {
             return;
         }
-        instances.stand(instance);
+        // Hold Pose keeps a sitting, sleeping, or crouching NPC in its pose when hit.
+        if (!definitions.find(instance.getDefinitionKey()).map(NpcDefinition::isHoldPose).orElse(false))
+            instances.stand(instance);
         Entity actor = event instanceof EntityDamageByEntityEvent byEntity ? damageActor(byEntity.getDamager()) : null;
         LivingEntity npc = instances.findEntity(instance).orElse(null);
         String attackerName = actor == null
