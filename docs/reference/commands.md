@@ -16,8 +16,9 @@
 | `/bf shop` | Open the shared shop library. |
 | `/bf shop create <name>` | Create a shop and open its trade editor. |
 | `/bf shop <shop>` | Open a shop's trade editor. |
-| `/bf shop <shop> rename <name>` | Rename a shop; the name is the trading screen title. |
-| `/bf shop <shop> preview` | Open the shop's trading screen for yourself. |
+| `/bf shop <shop> rename <name>` | Rename a shop; the name is the shop screen's title. |
+| `/bf shop <shop> preview` | Open the shop for yourself as players see it. |
+| `/bf shop <shop> restock` | Restock the shop's limited trades and draw a new rotation now. |
 | `/bf npc <name> edit` | Open the NPC editor. |
 | `/bf npc <name> set spawnpoint [here\|location]` | Set the preset spawnpoint to your position or a saved location. |
 | `/bf npc <name> set name <display name>` | Rename the NPC. |

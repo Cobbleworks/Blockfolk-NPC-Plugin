@@ -67,8 +67,11 @@ public final class BlockfolkPlugin extends JavaPlugin {
     private dev.blockfolk.runtime.NpcChunkLoadService chunkLoadService;
     private NpcCombatService combatService;
     private dev.blockfolk.repository.ShopRepository shopRepository;
+    private dev.blockfolk.repository.ShopStateRepository shopStateRepository;
     private dev.blockfolk.runtime.NpcShopService shopService;
     private dev.blockfolk.gui.ShopGuiService shopGuiService;
+    private dev.blockfolk.gui.ShopStorefront shopStorefront;
+    private dev.blockfolk.gui.ShopSettingsGuiService shopSettingsGuiService;
     private NpcBehaviourService behaviourService;
     private NpcQuestionService questionService;
     private SkinResolver skinResolver;
@@ -86,6 +89,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         sceneRepository = new SceneRepository(this);
         fighterAttackRepository = new dev.blockfolk.repository.FighterAttackRepository(this);
         shopRepository = new dev.blockfolk.repository.ShopRepository(this);
+        shopStateRepository = new dev.blockfolk.repository.ShopStateRepository(this);
         npcRenderer = new PaperMannequinNpcRenderer(this,
                 new dev.blockfolk.runtime.HealthBar.Settings(getConfig().getBoolean("health-bars.enabled", true),
                         getConfig().getDouble("health-bars.view-distance",
@@ -112,9 +116,15 @@ public final class BlockfolkPlugin extends JavaPlugin {
         abilitiesGuiService = new dev.blockfolk.gui.AbilitiesGuiService(fighterAttackRepository, chatInputService,
                 this::openMainGui);
         guiService.setAbilitiesGuiService(abilitiesGuiService);
-        shopService = new dev.blockfolk.runtime.NpcShopService(shopRepository);
+        shopService = new dev.blockfolk.runtime.NpcShopService(this, shopRepository, shopStateRepository,
+                createShopEconomy());
+        shopStorefront = new dev.blockfolk.gui.ShopStorefront(shopRepository, shopService);
+        shopService.setStorefront(shopStorefront);
+        shopSettingsGuiService = new dev.blockfolk.gui.ShopSettingsGuiService(shopRepository, shopService,
+                chatInputService);
         shopGuiService = new dev.blockfolk.gui.ShopGuiService(this, shopRepository, shopService, chatInputService,
                 definitionRepository, routeRepository, this::openMainGui);
+        shopGuiService.setSettings(shopSettingsGuiService);
         guiService.setShopGuiService(shopGuiService);
         shopGuiService.setSceneRepository(sceneRepository);
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
@@ -225,6 +235,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         sceneRepository.loadAll();
         fighterAttackRepository.loadAll();
         shopRepository.loadAll();
+        shopStateRepository.loadAll();
         definitionRepository.loadAll();
         routeRepository.migrateOwnership(definitionRepository.findAll(), definitionRepository::save);
         int migratedShops = shopRepository.migrateLegacyShops(definitionRepository.takeLegacyShops(),
@@ -268,6 +279,9 @@ public final class BlockfolkPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(guiService.getVariantGuiService(), this);
         getServer().getPluginManager().registerEvents(abilitiesGuiService, this);
         getServer().getPluginManager().registerEvents(shopGuiService, this);
+        getServer().getPluginManager().registerEvents(shopSettingsGuiService, this);
+        getServer().getPluginManager().registerEvents(shopStorefront, this);
+        getServer().getPluginManager().registerEvents(shopService, this);
         getServer().getPluginManager().registerEvents(routeGuiService, this);
         getServer().getPluginManager().registerEvents(sceneGuiService, this);
         getServer().getPluginManager().registerEvents(chatInputService, this);
@@ -290,6 +304,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         sceneService.start();
         vehicleService.start();
         chunkLoadService.start();
+        shopService.start();
         getLogger().info(() -> "Blockfolk enabled with " + definitionRepository.findAll().size() + " NPC definitions.");
     }
 
@@ -348,13 +363,32 @@ public final class BlockfolkPlugin extends JavaPlugin {
             sceneRepository.flush();
         if (fighterAttackRepository != null)
             fighterAttackRepository.flush();
+        if (shopService != null)
+            shopService.stop();
         if (shopRepository != null)
             shopRepository.flush();
+        if (shopStateRepository != null)
+            shopStateRepository.flush();
         if (dialogService != null) {
             dialogService.stop();
         }
         if (npcRenderer != null) {
             npcRenderer.stop();
+        }
+    }
+
+    /**
+     * Money for shop trades through Vault when it is installed. Vault's classes are
+     * only touched when the plugin is present, so Blockfolk runs without it.
+     */
+    private dev.blockfolk.runtime.ShopEconomy createShopEconomy() {
+        if (getServer().getPluginManager().getPlugin("Vault") == null)
+            return dev.blockfolk.runtime.ShopEconomy.none();
+        try {
+            return new dev.blockfolk.runtime.VaultShopEconomy();
+        } catch (LinkageError exception) {
+            getLogger().log(Level.WARNING, "Vault was found, but its economy API could not be loaded.", exception);
+            return dev.blockfolk.runtime.ShopEconomy.none();
         }
     }
 

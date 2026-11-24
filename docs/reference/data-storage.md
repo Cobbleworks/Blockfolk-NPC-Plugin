@@ -6,7 +6,8 @@ Blockfolk stores its runtime configuration under `plugins/Blockfolk/`.
 | --- | --- |
 | `config.yml` | Global timeouts, MineSkin, and OpenRouter settings. |
 | `definitions/*.yml` | One file per NPC preset, including behaviour, combat, equipment, and AI settings. |
-| `shops.yml` | Shared shops: name and trades, keyed by shop key. |
+| `shops.yml` | Shared shops, keyed by shop key: name, assortment (`rotating-slots`, `refresh-minutes`), and trades. Each trade has an `id`, its items, and optional `price`, `payout`, `availability`, `weight`, `stock`, and `stock-scope`; absent keys mean the default. |
+| `shop-state.yml` | What changes while players trade: each shop's current stock period start (`period-start`), its rotation picks, and how often limited trades were sold (`sold`, and `sold-to` per player). Deleting it restocks every shop and draws new rotations. |
 | `definition-order.yml` | Preset browser ordering. |
 | `instances.yml` | Spawned variants: UUID, preset, position, spawn point, and optional `label`, `skin`, and `route-swaps` overrides. Absent overrides inherit from the preset. |
 | `routes.yml` | NPC-owned routes and their point actions. |

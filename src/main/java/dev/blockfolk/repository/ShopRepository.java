@@ -19,10 +19,17 @@ import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcRoute;
+import dev.blockfolk.model.OfferAvailability;
+import dev.blockfolk.model.OfferTerms;
 import dev.blockfolk.model.Shop;
+import dev.blockfolk.model.ShopAssortment;
 import dev.blockfolk.model.ShopOffer;
+import dev.blockfolk.model.StockScope;
 
-/** Shared shop library stored in {@code shops.yml}, in creation order. */
+/**
+ * Shared shop library stored in {@code shops.yml}, in creation order. What
+ * changes while players trade lives in {@link ShopStateRepository}.
+ */
 public final class ShopRepository {
     private final File file;
     private final DebouncedYamlWriter writer;
@@ -35,7 +42,12 @@ public final class ShopRepository {
 
     public void loadAll() {
         shops.clear();
-        decode(YamlConfiguration.loadConfiguration(file)).forEach(shop -> shops.put(shop.key(), shop));
+        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
+        decode(yaml).forEach(shop -> shops.put(shop.key(), shop));
+        // Trades from older versions get their ids on load; store them so stock
+        // counts and rotation picks keep pointing at the same trades.
+        if (hasTradesWithoutId(yaml))
+            saveAll();
     }
 
     public List<Shop> findAll() {
@@ -118,6 +130,10 @@ public final class ShopRepository {
         for (Shop shop : shops) {
             ConfigurationSection section = root.createSection(shop.key());
             section.set("name", shop.name());
+            if (shop.assortment().rotates())
+                section.set("assortment.rotating-slots", shop.assortment().rotatingSlots());
+            if (shop.assortment().refreshes())
+                section.set("assortment.refresh-minutes", shop.assortment().refreshMinutes());
             section.set("offers", encodeOffers(shop.offers()));
         }
         return yaml;
@@ -132,7 +148,10 @@ public final class ShopRepository {
             ConfigurationSection section = root.getConfigurationSection(key);
             if (section == null || Shop.normalizeKey(key).isEmpty())
                 continue;
-            shops.add(new Shop(key, section.getString("name"), decodeOffers(section.getList("offers", List.of()))));
+            ShopAssortment assortment = new ShopAssortment(section.getInt("assortment.rotating-slots", 0),
+                    section.getInt("assortment.refresh-minutes", 0));
+            shops.add(new Shop(key, section.getString("name"), decodeOffers(section.getList("offers", List.of())),
+                    assortment));
         }
         return shops;
     }
@@ -140,9 +159,23 @@ public final class ShopRepository {
     static List<Map<String, Object>> encodeOffers(List<ShopOffer> offers) {
         return offers.stream().map(offer -> {
             Map<String, Object> saved = new LinkedHashMap<>();
+            saved.put("id", offer.id());
             putItem(saved, "cost", offer.cost());
             putItem(saved, "second-cost", offer.secondCost());
             putItem(saved, "result", offer.result());
+            OfferTerms terms = offer.terms();
+            if (terms.price() > 0)
+                saved.put("price", terms.price());
+            if (terms.payout() > 0)
+                saved.put("payout", terms.payout());
+            if (terms.availability() != OfferTerms.DEFAULT.availability())
+                saved.put("availability", terms.availability().name());
+            if (terms.weight() != OfferTerms.DEFAULT_WEIGHT)
+                saved.put("weight", terms.weight());
+            if (terms.limited()) {
+                saved.put("stock", terms.stockLimit());
+                saved.put("stock-scope", terms.stockScope().name());
+            }
             return saved;
         }).toList();
     }
@@ -151,11 +184,48 @@ public final class ShopRepository {
         List<ShopOffer> offers = new ArrayList<>();
         for (Object entry : stored) {
             if (entry instanceof Map<?, ?> saved) {
-                offers.add(new ShopOffer(itemOrNull(saved.get("cost")), itemOrNull(saved.get("second-cost")),
-                        itemOrNull(saved.get("result"))));
+                OfferTerms terms = new OfferTerms(number(saved.get("price"), 0), number(saved.get("payout"), 0),
+                        OfferAvailability.fromStored(text(saved.get("availability"))),
+                        (int) number(saved.get("weight"), OfferTerms.DEFAULT_WEIGHT),
+                        (int) number(saved.get("stock"), 0), StockScope.fromStored(text(saved.get("stock-scope"))));
+                offers.add(new ShopOffer(text(saved.get("id")), itemOrNull(saved.get("cost")),
+                        itemOrNull(saved.get("second-cost")), itemOrNull(saved.get("result")), terms));
             }
         }
         return offers;
+    }
+
+    static boolean hasTradesWithoutId(YamlConfiguration yaml) {
+        ConfigurationSection root = yaml.getConfigurationSection("shops");
+        if (root == null)
+            return false;
+        for (String key : root.getKeys(false)) {
+            ConfigurationSection section = root.getConfigurationSection(key);
+            if (section == null)
+                continue;
+            for (Object entry : section.getList("offers", List.of())) {
+                if (entry instanceof Map<?, ?> saved && !ShopOffer.isValidId(text(saved.get("id"))))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private static String text(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    private static double number(Object value, double fallback) {
+        if (value instanceof Number number)
+            return number.doubleValue();
+        if (value instanceof String string) {
+            try {
+                return Double.parseDouble(string.trim());
+            } catch (NumberFormatException ignored) {
+                return fallback;
+            }
+        }
+        return fallback;
     }
 
     private static void putItem(Map<String, Object> target, String key, ItemStack item) {

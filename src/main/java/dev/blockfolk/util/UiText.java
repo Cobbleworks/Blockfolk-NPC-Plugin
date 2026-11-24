@@ -29,6 +29,16 @@ public final class UiText {
         return feedback(message, NamedTextColor.GOLD);
     }
 
+    /** A success line built from components, such as translated item names. */
+    public static Component success(Component message) {
+        return PREFIX.append(message.colorIfAbsent(NamedTextColor.GREEN).decoration(TextDecoration.BOLD, false));
+    }
+
+    /** A warning line built from components, such as translated item names. */
+    public static Component warning(Component message) {
+        return PREFIX.append(message.colorIfAbsent(NamedTextColor.GOLD).decoration(TextDecoration.BOLD, false));
+    }
+
     public static Component error(String message) {
         return feedback(message, NamedTextColor.RED);
     }

@@ -50,6 +50,15 @@ class ShopGuiServiceTest {
     }
 
     @Test
+    void arrowsMapToTheirTradeRow() {
+        for (int index = 0; index < ShopGuiService.TRADES_PER_PAGE; index++)
+            assertEquals(index, ShopGuiService.arrowRow(ShopGuiService.tradeBaseSlot(index) + 2));
+        assertEquals(-1, ShopGuiService.arrowRow(0), "cost slot");
+        assertEquals(-1, ShopGuiService.arrowRow(4), "divider");
+        assertEquals(-1, ShopGuiService.arrowRow(47), "button row");
+    }
+
+    @Test
     void anotherPageOpensOnlyWhenTheLastOneIsFull() {
         assertEquals(1, ShopGuiService.pageCount(0));
         assertEquals(1, ShopGuiService.pageCount(9));

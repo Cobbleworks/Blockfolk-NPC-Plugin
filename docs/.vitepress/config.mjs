@@ -55,7 +55,8 @@ export default defineConfig({
       {
         text: 'Integrations',
         items: [
-          { text: 'BeautyQuests', link: '/integrations/beautyquests' }
+          { text: 'BeautyQuests', link: '/integrations/beautyquests' },
+          { text: 'Vault', link: '/integrations/vault' }
         ]
       }
     ],

@@ -303,11 +303,11 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return true;
         }
         player.sendMessage(UiText.info(
-                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|shop [create <name>|<shop> [rename <name>|preview]]|shops|abilities|routes|locations|config <chunkloaders|ai <model|mute-me|memory forgetnearby <radius>>>]"));
+                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|shop [create <name>|<shop> [rename <name>|preview|restock]]|shops|abilities|routes|locations|config <chunkloaders|ai <model|mute-me|memory forgetnearby <radius>>>]"));
         return true;
     }
 
-    private static final String SHOP_USAGE = "Usage: /bf shop [create <name>|<shop> [rename <name>|preview]]";
+    private static final String SHOP_USAGE = "Usage: /bf shop [create <name>|<shop> [rename <name>|preview|restock]]";
 
     private void handleShopCommand(Player player, String[] args) {
         if (args.length == 1) {
@@ -344,6 +344,12 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         }
         if (action.equals("preview") && args.length == 3) {
             shopService.open(player, shop);
+            return;
+        }
+        if (action.equals("restock") && args.length == 3) {
+            shopService.restockNow(shop);
+            player.sendMessage(UiText.success(
+                    "Restocked " + shop.name() + (shop.assortment().rotates() ? " and drew a new rotation." : ".")));
             return;
         }
         player.sendMessage(UiText.info(SHOP_USAGE));
@@ -572,7 +578,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return filter(suggestions, args[1]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("shop") && !args[1].equalsIgnoreCase("create")) {
-            return filter(List.of("rename", "preview"), args[2]);
+            return filter(List.of("rename", "preview", "restock"), args[2]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("npc")) {
             return filter(definitionRepository.findAll().stream().map(NpcDefinition::getKey).toList(), args[1]);

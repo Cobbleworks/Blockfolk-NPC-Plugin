@@ -26,20 +26,27 @@ import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcRoute;
+import dev.blockfolk.model.OfferAvailability;
+import dev.blockfolk.model.OfferTerms;
 import dev.blockfolk.model.Shop;
 import dev.blockfolk.model.ShopOffer;
+import dev.blockfolk.model.StockScope;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.repository.ShopRepository;
 import dev.blockfolk.runtime.NpcShopService;
+import dev.blockfolk.runtime.ShopEconomy;
+import dev.blockfolk.util.Durations;
 import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.UiText;
 
 /**
  * Shared shop library, shop picker for the Open Shop action, and trade editor.
  * Trades are edited with real items: each trade occupies a cost, an optional
- * second cost and a result slot. Editor changes are saved on close, page change
- * and every button.
+ * second cost and a result slot. The arrow between them opens the trade's
+ * settings (money, availability, stock), which stay with the trade while its
+ * items change. Editor changes are saved on close, page change and every
+ * button.
  */
 public final class ShopGuiService implements Listener {
     static final int TRADES_PER_PAGE = 10;
@@ -52,6 +59,7 @@ public final class ShopGuiService implements Listener {
     private static final int BACK_SLOT = 49;
     private static final int PREVIEW_SLOT = 50;
     private static final int SAVE_SLOT = 51;
+    private static final int ASSORTMENT_SLOT = 52;
     private static final int NEXT_SLOT = 53;
     private static final int LIST_PREVIOUS_SLOT = 45;
     private static final int LIST_BACK_SLOT = 49;
@@ -66,6 +74,7 @@ public final class ShopGuiService implements Listener {
     private final RouteRepository routes;
     private final Consumer<Player> mainMenu;
     private final Set<UUID> explicitSaves = new HashSet<>();
+    private ShopSettingsGuiService settings;
 
     private interface Holder extends InventoryHolder {
         @Override
@@ -83,7 +92,16 @@ public final class ShopGuiService implements Listener {
     private record DeleteHolder(String key, Consumer<Player> back) implements Holder {
     }
 
-    private record EditorHolder(String key, int page, int fingerprint, Consumer<Player> back) implements Holder {
+    /**
+     * {@code rowTerms} are the settings of the trades shown on this page, by row;
+     * they belong to the row until the page is saved.
+     */
+    private record EditorHolder(String key, int page, int fingerprint, List<OfferTerms> rowTerms,
+            Consumer<Player> back) implements Holder {
+    }
+
+    /** A saved page: the shop, and the trade of every row (empty rows included). */
+    private record SavedPage(Shop shop, List<ShopOffer> rows) {
     }
 
     public ShopGuiService(Plugin plugin, ShopRepository shops, NpcShopService shopService, ChatInputService input,
@@ -95,6 +113,10 @@ public final class ShopGuiService implements Listener {
         this.definitions = definitions;
         this.routes = routes;
         this.mainMenu = mainMenu;
+    }
+
+    public void setSettings(ShopSettingsGuiService settings) {
+        this.settings = settings;
     }
 
     /** Opens the shop library; Back returns to the main menu. */
@@ -123,6 +145,11 @@ public final class ShopGuiService implements Listener {
             return;
         }
         open(player, shop, 0, back);
+    }
+
+    /** Opens page {@code page} of the trade editor of {@code key}. */
+    public void editPage(Player player, String key, int page, Consumer<Player> back) {
+        shops.find(key).ifPresentOrElse(shop -> open(player, shop, page, back), () -> back.accept(player));
     }
 
     /** Asks for a name in chat and creates an empty shop with a unique key. */
@@ -262,9 +289,14 @@ public final class ShopGuiService implements Listener {
 
     private void open(Player player, Shop shop, int requestedPage, Consumer<Player> back) {
         int page = Math.clamp(requestedPage, 0, pageCount(shop.offers().size()) - 1);
-        EditorHolder holder = new EditorHolder(shop.key(), page, fingerprint(shop), back);
-        Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Shop", shop.name()));
         List<ShopOffer> offers = shop.offers();
+        List<OfferTerms> rowTerms = new ArrayList<>(TRADES_PER_PAGE);
+        for (int index = 0; index < TRADES_PER_PAGE; index++) {
+            int offerIndex = page * TRADES_PER_PAGE + index;
+            rowTerms.add(offerIndex < offers.size() ? offers.get(offerIndex).terms() : OfferTerms.DEFAULT);
+        }
+        EditorHolder holder = new EditorHolder(shop.key(), page, fingerprint(shop), List.copyOf(rowTerms), back);
+        Inventory inventory = Bukkit.createInventory(holder, 54, UiText.title("Shop", shop.name()));
         for (int index = 0; index < TRADES_PER_PAGE; index++) {
             int offerIndex = page * TRADES_PER_PAGE + index;
             int base = tradeBaseSlot(index);
@@ -277,13 +309,18 @@ public final class ShopGuiService implements Listener {
             if (index % 2 == 0)
                 inventory.setItem(base + 4, item(Material.BLACK_STAINED_GLASS_PANE, " ", List.of()));
         }
-        refreshArrows(inventory);
+        refreshArrows(inventory, shop, holder);
         inventory.setItem(BACK_SLOT, item(Material.BARRIER, "Back", List.of("Saves this page first")));
         inventory.setItem(HELP_SLOT, item(Material.BOOK, "How Shops Work",
                 List.of("Place items into a trade row:", LegacyText.WHITE + "cost, second cost (optional), result",
-                        "Trades have unlimited stock.", "Players open the shop through the",
+                        "Click the arrow of a trade to set a money", "price or payout, a stock limit, and whether",
+                        "it is offered or rotates.", "Items trade exactly as placed, including",
+                        "names and enchantments.", "Players open the shop through the",
                         LegacyText.WHITE + "Open Shop" + LegacyText.GRAY + " behaviour action, e.g. on right-click.",
                         "Changes apply to every NPC using this shop.")));
+        if (settings != null)
+            inventory.setItem(ASSORTMENT_SLOT,
+                    settings.rotationSummary(shop, List.of("", GuiItems.hint("Click", "rotation and restocking"))));
         List<String> users = usage(shop.key());
         List<String> usageLore = new ArrayList<>();
         usageLore.add("Key: " + LegacyText.WHITE + shop.key());
@@ -301,11 +338,11 @@ public final class ShopGuiService implements Listener {
                         "Shown as the trading screen title", "", GuiItems.hint("Click", "rename"))));
         inventory.setItem(SAVE_SLOT, item(Material.WRITABLE_BOOK, "Save",
                 List.of("Closing the menu also saves", "", GuiItems.hint("Click", "save now"))));
-        inventory.setItem(PREVIEW_SLOT,
-                item(Material.EMERALD, "Preview Shop",
-                        List.of("Opens the trading screen as players see it",
-                                "Complete trades: " + LegacyText.WHITE + shop.validOffers().size(), "",
-                                GuiItems.hint("Click", "preview"))));
+        inventory.setItem(PREVIEW_SLOT, item(Material.EMERALD, "Preview Shop", List.of(
+                "Opens the shop as players see it",
+                shop.needsShopMenu() ? "Uses the shop menu (money or stock)" : "Uses the villager trading screen",
+                "Offered trades: " + LegacyText.WHITE + shop.offeredTrades().size(),
+                LegacyText.GOLD + "Trades in the preview are real", "", GuiItems.hint("Click", "preview"))));
         if (page > 0)
             inventory.setItem(PREVIOUS_SLOT,
                     item(Material.ARROW, "Previous Page", List.of("Page " + page + " of " + MAX_PAGES)));
@@ -338,6 +375,7 @@ public final class ShopGuiService implements Listener {
             if (slot == 11) {
                 shops.find(delete.key()).ifPresent(shop -> {
                     shops.delete(shop.key());
+                    shopService.forget(shop.key());
                     player.sendMessage(UiText.success("Deleted shop '" + shop.name() + "'."));
                 });
                 delete.back().accept(player);
@@ -421,11 +459,24 @@ public final class ShopGuiService implements Listener {
         if (slot < 0 || slot >= top.getSize())
             return;
         if (isItemSlot(slot)) {
-            Bukkit.getScheduler().runTask(plugin, () -> refreshArrows(top));
+            Bukkit.getScheduler().runTask(plugin, () -> refreshArrows(top, null, holder));
             return;
         }
         event.setCancelled(true);
+        int arrowRow = arrowRow(slot);
+        if (arrowRow >= 0) {
+            openTradeSettings(player, top, holder, arrowRow);
+            return;
+        }
         switch (slot) {
+            case ASSORTMENT_SLOT -> {
+                Shop shop = persist(player, top, holder);
+                if (shop != null && settings != null) {
+                    explicitSaves.add(player.getUniqueId());
+                    settings.openAssortment(player, shop.key(),
+                            p -> editPage(p, shop.key(), holder.page(), holder.back()));
+                }
+            }
             case BACK_SLOT -> {
                 if (persist(player, top, holder) != null) {
                     explicitSaves.add(player.getUniqueId());
@@ -450,8 +501,8 @@ public final class ShopGuiService implements Listener {
                 Shop shop = persist(player, top, holder);
                 if (shop == null)
                     return;
-                if (shop.validOffers().isEmpty()) {
-                    player.sendMessage(UiText.warning("Add at least one trade with a cost and a result first."));
+                if (shop.offeredTrades().isEmpty()) {
+                    player.sendMessage(UiText.warning("Add at least one complete, offered trade first."));
                     reopen(player, shop, holder.page(), holder.back());
                     return;
                 }
@@ -490,7 +541,8 @@ public final class ShopGuiService implements Listener {
             return;
         }
         Inventory top = event.getView().getTopInventory();
-        Bukkit.getScheduler().runTask(plugin, () -> refreshArrows(top));
+        EditorHolder editor = (EditorHolder) holder;
+        Bukkit.getScheduler().runTask(plugin, () -> refreshArrows(top, null, editor));
     }
 
     @EventHandler
@@ -526,6 +578,16 @@ public final class ShopGuiService implements Listener {
      * was open (the stale copy is then discarded).
      */
     private Shop persist(Player player, Inventory inventory, EditorHolder holder) {
+        SavedPage saved = persistPage(player, inventory, holder);
+        return saved == null ? null : saved.shop();
+    }
+
+    /**
+     * Saves the visible page like {@link #persist} and also returns the trade of
+     * every row, so a row can be mapped to its trade id. Rows keep the settings and
+     * id of the trade they showed when the page opened.
+     */
+    private SavedPage persistPage(Player player, Inventory inventory, EditorHolder holder) {
         Shop shop = shops.find(holder.key()).orElse(null);
         if (shop == null) {
             explicitSaves.add(player.getUniqueId());
@@ -539,14 +601,51 @@ public final class ShopGuiService implements Listener {
             player.closeInventory();
             return null;
         }
+        List<ShopOffer> existing = shop.offers();
         List<ShopOffer> page = new ArrayList<>();
         for (int index = 0; index < TRADES_PER_PAGE; index++) {
             int base = tradeBaseSlot(index);
-            page.add(new ShopOffer(inventory.getItem(base), inventory.getItem(base + 1), inventory.getItem(base + 3)));
+            int offerIndex = holder.page() * TRADES_PER_PAGE + index;
+            ShopOffer previous = offerIndex < existing.size() ? existing.get(offerIndex) : null;
+            ItemStack cost = inventory.getItem(base);
+            ItemStack secondCost = inventory.getItem(base + 1);
+            ItemStack result = inventory.getItem(base + 3);
+            page.add(previous == null
+                    ? new ShopOffer(cost, secondCost, result)
+                    : previous.withItems(cost, secondCost, result));
         }
-        Shop updated = shop.withOffers(replacePage(shop.offers(), holder.page(), page));
+        Shop updated = shop.withOffers(replacePage(existing, holder.page(), page));
         shops.save(updated);
-        return updated;
+        return new SavedPage(updated, page);
+    }
+
+    /** Saves the page, then opens the settings of the trade in {@code row}. */
+    private void openTradeSettings(Player player, Inventory top, EditorHolder holder, int row) {
+        SavedPage saved = persistPage(player, top, holder);
+        if (saved == null)
+            return;
+        ShopOffer offer = saved.rows().get(row);
+        if (offer.isEmpty() || settings == null) {
+            player.sendMessage(UiText.warning("Place the trade's items first, then click its arrow."));
+            reopen(player, saved.shop(), holder.page(), holder.back());
+            return;
+        }
+        explicitSaves.add(player.getUniqueId());
+        String key = saved.shop().key();
+        settings.openOffer(player, key, offer.id(), p -> editPage(p, key, holder.page(), holder.back()));
+    }
+
+    /**
+     * The trade row whose arrow is at {@code slot}, or -1. Arrows sit between the
+     * costs and the result, in columns 2 and 7.
+     */
+    static int arrowRow(int slot) {
+        if (slot < 0 || slot >= TRADES_PER_PAGE / 2 * 9)
+            return -1;
+        int column = slot % 9;
+        if (column != 2 && column != 7)
+            return -1;
+        return slot / 9 * 2 + (column == 7 ? 1 : 0);
     }
 
     /**
@@ -596,7 +695,14 @@ public final class ShopGuiService implements Listener {
         int users = usage(shop.key()).size();
         List<String> lore = new ArrayList<>();
         lore.add(LegacyText.DARK_GRAY + "Key: " + shop.key());
-        lore.add("Complete trades: " + LegacyText.WHITE + shop.validOffers().size());
+        lore.add("Offered trades: " + LegacyText.WHITE + shop.offeredTrades().size());
+        if (shop.assortment().rotates())
+            lore.add("Rotation: " + LegacyText.WHITE + shop.assortment().rotatingSlots() + " of "
+                    + shop.rotationPool().size());
+        if (shop.assortment().refreshes())
+            lore.add("Restock: " + LegacyText.WHITE + "every " + Durations.minutes(shop.assortment().refreshMinutes()));
+        if (shop.needsShopMenu())
+            lore.add("Screen: " + LegacyText.WHITE + "shop menu (money or stock)");
         lore.add("Used by: " + LegacyText.WHITE + users + (users == 1 ? " NPC or route" : " NPCs or routes"));
         return lore;
     }
@@ -617,24 +723,68 @@ public final class ShopGuiService implements Listener {
             inventory.setItem(LIST_NEXT_SLOT, GuiItems.nextPage(page, pages));
     }
 
-    private static void refreshArrows(Inventory inventory) {
+    /**
+     * Colors each trade's arrow by its state and lists its settings. {@code shop}
+     * may be null while items are being moved; the row settings come from the
+     * holder either way.
+     */
+    private void refreshArrows(Inventory inventory, Shop shop, EditorHolder holder) {
+        Shop current = shop != null ? shop : shops.find(holder.key()).orElse(null);
+        ShopEconomy economy = shopService.economy();
+        boolean rotates = current != null && current.assortment().rotates();
         for (int index = 0; index < TRADES_PER_PAGE; index++) {
             int base = tradeBaseSlot(index);
-            ShopOffer offer = new ShopOffer(inventory.getItem(base), inventory.getItem(base + 1),
-                    inventory.getItem(base + 3));
-            ItemStack arrow;
-            if (offer.isEmpty()) {
-                arrow = item(Material.GRAY_STAINED_GLASS_PANE, "→ Empty Trade",
-                        List.of("Place a cost item on the left", "and the result on the right."));
-            } else if (offer.isValid()) {
-                arrow = item(Material.LIME_STAINED_GLASS_PANE, "→ Trade Ready", List.of());
-            } else {
-                arrow = item(Material.RED_STAINED_GLASS_PANE, "→ Incomplete Trade",
-                        List.of(LegacyText.RED + "Ignored by the shop until it has",
-                                LegacyText.RED + "a first cost and a result."));
-            }
-            inventory.setItem(base + 2, arrow);
+            ShopOffer offer = new ShopOffer(null, inventory.getItem(base), inventory.getItem(base + 1),
+                    inventory.getItem(base + 3), holder.rowTerms().get(index));
+            inventory.setItem(base + 2, arrow(offer, economy, rotates));
         }
+    }
+
+    static Material arrowMaterial(ShopOffer offer) {
+        if (offer.isEmpty())
+            return Material.GRAY_STAINED_GLASS_PANE;
+        if (!offer.isValid())
+            return Material.RED_STAINED_GLASS_PANE;
+        return switch (offer.terms().availability()) {
+            case OFFERED -> Material.LIME_STAINED_GLASS_PANE;
+            case ALWAYS -> Material.LIGHT_BLUE_STAINED_GLASS_PANE;
+            case HIDDEN -> Material.LIGHT_GRAY_STAINED_GLASS_PANE;
+        };
+    }
+
+    private static ItemStack arrow(ShopOffer offer, ShopEconomy economy, boolean rotates) {
+        if (offer.isEmpty())
+            return item(Material.GRAY_STAINED_GLASS_PANE, "→ Empty Trade",
+                    List.of("Place a cost item on the left", "and the result on the right.", "",
+                            LegacyText.DARK_GRAY + "Then click here for money, stock",
+                            LegacyText.DARK_GRAY + "and availability."));
+        OfferTerms terms = offer.terms();
+        List<String> lore = new ArrayList<>();
+        String name;
+        if (!offer.isValid()) {
+            name = "→ Incomplete Trade";
+            lore.add(LegacyText.RED + "Ignored by the shop until the player");
+            lore.add(LegacyText.RED + "gives something (an item or a price)");
+            lore.add(LegacyText.RED + "and gets something (an item or a payout).");
+        } else {
+            name = switch (terms.availability()) {
+                case OFFERED -> rotates ? "→ Offered, Rotates" : "→ Trade Ready";
+                case ALWAYS -> "→ Always Offered";
+                case HIDDEN -> "→ Not Offered";
+            };
+        }
+        if (terms.price() > 0)
+            lore.add("Price: " + LegacyText.WHITE + economy.format(terms.price()));
+        if (terms.payout() > 0)
+            lore.add("Payout: " + LegacyText.WHITE + economy.format(terms.payout()));
+        if (terms.limited())
+            lore.add("Stock: " + LegacyText.WHITE + terms.stockLimit() + " per restock"
+                    + (terms.stockScope() == StockScope.PER_PLAYER ? ", per player" : ""));
+        if (rotates && terms.availability() == OfferAvailability.OFFERED)
+            lore.add("Draw weight: " + LegacyText.WHITE + terms.weight());
+        lore.add("");
+        lore.add(GuiItems.hint("Click", "money, stock and availability"));
+        return item(arrowMaterial(offer), name, lore);
     }
 
     private static ItemStack item(Material material, String name, List<String> lore) {
