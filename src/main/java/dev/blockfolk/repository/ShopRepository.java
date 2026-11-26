@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
+import java.util.logging.Logger;
 
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -19,11 +20,10 @@ import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcRoute;
-import dev.blockfolk.model.OfferAvailability;
 import dev.blockfolk.model.OfferTerms;
 import dev.blockfolk.model.Shop;
-import dev.blockfolk.model.ShopAssortment;
 import dev.blockfolk.model.ShopOffer;
+import dev.blockfolk.model.ShopPageMode;
 import dev.blockfolk.model.StockScope;
 
 /**
@@ -33,20 +33,37 @@ import dev.blockfolk.model.StockScope;
 public final class ShopRepository {
     private final File file;
     private final DebouncedYamlWriter writer;
+    private final Logger logger;
     private final Map<String, Shop> shops = new LinkedHashMap<>();
 
     public ShopRepository(JavaPlugin plugin) {
         file = new File(plugin.getDataFolder(), "shops.yml");
         writer = new DebouncedYamlWriter(plugin);
+        logger = plugin.getLogger();
     }
 
     public void loadAll() {
         shops.clear();
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
-        decode(yaml).forEach(shop -> shops.put(shop.key(), shop));
-        // Trades from older versions get their ids on load; store them so stock
-        // counts and rotation picks keep pointing at the same trades.
-        if (hasTradesWithoutId(yaml))
+        List<Shop> decoded = decode(yaml);
+        decoded.forEach(shop -> shops.put(shop.key(), shop));
+        boolean rewrite = needsRewrite(yaml);
+        // Trades switched to "Not Offered" before shops had daily pages move into
+        // a shop of their own that no NPC opens, so nothing is lost or sold.
+        Map<String, List<ShopOffer>> stored = decodeStoredTrades(yaml);
+        for (Shop shop : decoded) {
+            List<ShopOffer> trades = stored.getOrDefault(shop.key(), List.of());
+            if (trades.isEmpty())
+                continue;
+            Shop storage = new Shop(uniqueKey(shop.key() + "_stored"), shop.name() + " (stored)", trades);
+            shops.put(storage.key(), storage);
+            rewrite = true;
+            logger.info(() -> "Moved " + trades.size() + " not-offered trade(s) of shop '" + shop.key()
+                    + "' into the new, unused shop '" + storage.key() + "'.");
+        }
+        // Store ids and slots given on load, so stock counts and pages keep
+        // pointing at the same trades.
+        if (rewrite)
             saveAll();
     }
 
@@ -130,10 +147,8 @@ public final class ShopRepository {
         for (Shop shop : shops) {
             ConfigurationSection section = root.createSection(shop.key());
             section.set("name", shop.name());
-            if (shop.assortment().rotates())
-                section.set("assortment.rotating-slots", shop.assortment().rotatingSlots());
-            if (shop.assortment().refreshes())
-                section.set("assortment.refresh-minutes", shop.assortment().refreshMinutes());
+            if (shop.pageMode() != ShopPageMode.ALL_PAGES)
+                section.set("page-mode", shop.pageMode().name());
             section.set("offers", encodeOffers(shop.offers()));
         }
         return yaml;
@@ -148,18 +163,49 @@ public final class ShopRepository {
             ConfigurationSection section = root.getConfigurationSection(key);
             if (section == null || Shop.normalizeKey(key).isEmpty())
                 continue;
-            ShopAssortment assortment = new ShopAssortment(section.getInt("assortment.rotating-slots", 0),
-                    section.getInt("assortment.refresh-minutes", 0));
-            shops.add(new Shop(key, section.getString("name"), decodeOffers(section.getList("offers", List.of())),
-                    assortment));
+            // Shops that rotated a random assortment become one-page-per-day shops.
+            ShopPageMode pageMode = section.isSet("page-mode")
+                    ? ShopPageMode.fromStored(section.getString("page-mode"))
+                    : section.getInt("assortment.rotating-slots", 0) > 0
+                            ? ShopPageMode.ONE_PER_DAY
+                            : ShopPageMode.ALL_PAGES;
+            List<?> offers = section.getList("offers", List.of());
+            shops.add(new Shop(key, section.getString("name"),
+                    decodeOffers(offers.stream().filter(entry -> !isStoredTrade(entry)).toList()), pageMode));
         }
         return shops;
+    }
+
+    /**
+     * Trades marked "Not Offered" by the version before daily pages, by shop key.
+     */
+    static Map<String, List<ShopOffer>> decodeStoredTrades(YamlConfiguration yaml) {
+        Map<String, List<ShopOffer>> stored = new LinkedHashMap<>();
+        ConfigurationSection root = yaml.getConfigurationSection("shops");
+        if (root == null)
+            return stored;
+        for (String key : root.getKeys(false)) {
+            ConfigurationSection section = root.getConfigurationSection(key);
+            if (section == null || Shop.normalizeKey(key).isEmpty())
+                continue;
+            List<?> hidden = section.getList("offers", List.of()).stream().filter(ShopRepository::isStoredTrade)
+                    .toList();
+            if (!hidden.isEmpty())
+                stored.put(Shop.normalizeKey(key), decodeOffers(hidden).stream()
+                        .map(offer -> offer.withSlot(ShopOffer.UNPLACED)).toList());
+        }
+        return stored;
+    }
+
+    private static boolean isStoredTrade(Object entry) {
+        return entry instanceof Map<?, ?> saved && "HIDDEN".equalsIgnoreCase(text(saved.get("availability")));
     }
 
     static List<Map<String, Object>> encodeOffers(List<ShopOffer> offers) {
         return offers.stream().map(offer -> {
             Map<String, Object> saved = new LinkedHashMap<>();
             saved.put("id", offer.id());
+            saved.put("slot", offer.slot());
             putItem(saved, "cost", offer.cost());
             putItem(saved, "second-cost", offer.secondCost());
             putItem(saved, "result", offer.result());
@@ -168,10 +214,6 @@ public final class ShopRepository {
                 saved.put("price", terms.price());
             if (terms.payout() > 0)
                 saved.put("payout", terms.payout());
-            if (terms.availability() != OfferTerms.DEFAULT.availability())
-                saved.put("availability", terms.availability().name());
-            if (terms.weight() != OfferTerms.DEFAULT_WEIGHT)
-                saved.put("weight", terms.weight());
             if (terms.limited()) {
                 saved.put("stock", terms.stockLimit());
                 saved.put("stock-scope", terms.stockScope().name());
@@ -185,17 +227,21 @@ public final class ShopRepository {
         for (Object entry : stored) {
             if (entry instanceof Map<?, ?> saved) {
                 OfferTerms terms = new OfferTerms(number(saved.get("price"), 0), number(saved.get("payout"), 0),
-                        OfferAvailability.fromStored(text(saved.get("availability"))),
-                        (int) number(saved.get("weight"), OfferTerms.DEFAULT_WEIGHT),
                         (int) number(saved.get("stock"), 0), StockScope.fromStored(text(saved.get("stock-scope"))));
-                offers.add(new ShopOffer(text(saved.get("id")), itemOrNull(saved.get("cost")),
+                // Trades without a slot keep their position in the list.
+                offers.add(new ShopOffer(text(saved.get("id")),
+                        (int) number(saved.get("slot"), ShopOffer.UNPLACED), itemOrNull(saved.get("cost")),
                         itemOrNull(saved.get("second-cost")), itemOrNull(saved.get("result")), terms));
             }
         }
         return offers;
     }
 
-    static boolean hasTradesWithoutId(YamlConfiguration yaml) {
+    /**
+     * Whether the file is from an older version: trades without an id or slot, or
+     * settings of the former rotating assortment.
+     */
+    static boolean needsRewrite(YamlConfiguration yaml) {
         ConfigurationSection root = yaml.getConfigurationSection("shops");
         if (root == null)
             return false;
@@ -203,8 +249,12 @@ public final class ShopRepository {
             ConfigurationSection section = root.getConfigurationSection(key);
             if (section == null)
                 continue;
+            if (section.isSet("assortment"))
+                return true;
             for (Object entry : section.getList("offers", List.of())) {
-                if (entry instanceof Map<?, ?> saved && !ShopOffer.isValidId(text(saved.get("id"))))
+                if (entry instanceof Map<?, ?> saved && (!ShopOffer.isValidId(text(saved.get("id")))
+                        || !saved.containsKey("slot") || saved.containsKey("availability")
+                        || saved.containsKey("weight")))
                     return true;
             }
         }

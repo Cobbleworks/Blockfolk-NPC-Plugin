@@ -3,7 +3,6 @@ package dev.blockfolk.repository;
 import java.io.File;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -15,7 +14,7 @@ import dev.blockfolk.model.Shop;
 import dev.blockfolk.model.ShopState;
 
 /**
- * Stock periods, rotation picks, and sales of every shop, stored in
+ * The current day, the page on sale, and the sales of every shop, stored in
  * {@code shop-state.yml} apart from the shop definitions so that trading never
  * rewrites {@code shops.yml}.
  */
@@ -34,9 +33,9 @@ public final class ShopStateRepository {
         states.putAll(decode(YamlConfiguration.loadConfiguration(file)));
     }
 
-    /** The stored state, or a fresh one starting at {@code now}. */
-    public ShopState get(String shopKey, long now) {
-        return states.computeIfAbsent(Shop.normalizeKey(shopKey), ignored -> ShopState.fresh(now));
+    /** The stored state, or a fresh one starting on {@code today}. */
+    public ShopState get(String shopKey, long today) {
+        return states.computeIfAbsent(Shop.normalizeKey(shopKey), ignored -> ShopState.fresh(today));
     }
 
     public void delete(String shopKey) {
@@ -57,9 +56,10 @@ public final class ShopStateRepository {
         ConfigurationSection root = yaml.createSection("shops");
         states.forEach((key, state) -> {
             ConfigurationSection section = root.createSection(key);
-            section.set("period-start", state.periodStart());
-            if (!state.picks().isEmpty())
-                section.set("picks", state.picks());
+            if (state.knowsDay())
+                section.set("day", state.day());
+            if (state.page() > 0)
+                section.set("page", state.page());
             if (!state.sharedSales().isEmpty())
                 section.createSection("sold", new LinkedHashMap<>(state.sharedSales()));
             Map<String, Map<UUID, Integer>> playerSales = state.playerSales();
@@ -106,8 +106,10 @@ public final class ShopStateRepository {
                     soldTo.put(offer, counts);
                 }
             }
-            List<String> picks = section.getStringList("picks");
-            states.put(Shop.normalizeKey(key), new ShopState(section.getLong("period-start"), picks, sold, soldTo));
+            // States from before daily restocks have no day; the shop adopts the
+            // current day when it is next opened.
+            long day = section.isSet("day") ? section.getLong("day") : ShopState.UNKNOWN_DAY;
+            states.put(Shop.normalizeKey(key), new ShopState(day, section.getInt("page"), sold, soldTo));
         }
         return states;
     }
