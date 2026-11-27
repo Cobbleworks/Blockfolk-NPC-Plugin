@@ -11,15 +11,23 @@ import org.bukkit.inventory.ItemStack;
  * are stored as complete stacks, so renamed, enchanted, or otherwise custom
  * items trade exactly as placed. Empty item stacks are normalised to
  * {@code null}; a second cost without a first cost moves into the first slot.
- * The {@code id} stays with the trade while it is edited, so stock counts and
- * rotation picks survive changes to its items.
+ * The {@code id} stays with the trade while it is edited, so stock counts
+ * survive changes to its items.
+ *
+ * @param slot
+ *            the trade's place in the editor: page {@code slot / 10}, row
+ *            {@code slot % 10}. {@link #UNPLACED} lets the {@link Shop} put it
+ *            into the first free place.
  */
-public record ShopOffer(String id, ItemStack cost, ItemStack secondCost, ItemStack result, OfferTerms terms) {
+public record ShopOffer(String id, int slot, ItemStack cost, ItemStack secondCost, ItemStack result,
+        OfferTerms terms) {
 
+    public static final int UNPLACED = -1;
     private static final int ID_LENGTH = 8;
 
     public ShopOffer {
         id = isValidId(id) ? id : newId();
+        slot = slot < 0 || slot >= Shop.MAX_TRADES ? UNPLACED : slot;
         cost = copy(cost);
         secondCost = copy(secondCost);
         result = copy(result);
@@ -30,9 +38,14 @@ public record ShopOffer(String id, ItemStack cost, ItemStack secondCost, ItemSta
         terms = Objects.requireNonNullElse(terms, OfferTerms.DEFAULT);
     }
 
+    /** A trade the shop places into its first free slot. */
+    public ShopOffer(String id, ItemStack cost, ItemStack secondCost, ItemStack result, OfferTerms terms) {
+        this(id, UNPLACED, cost, secondCost, result, terms);
+    }
+
     /** A new trade with a fresh id and default terms. */
     public ShopOffer(ItemStack cost, ItemStack secondCost, ItemStack result) {
-        this(null, cost, secondCost, result, OfferTerms.DEFAULT);
+        this(null, UNPLACED, cost, secondCost, result, OfferTerms.DEFAULT);
     }
 
     @Override
@@ -50,16 +63,25 @@ public record ShopOffer(String id, ItemStack cost, ItemStack secondCost, ItemSta
         return copy(result);
     }
 
+    /** The editor page this trade is on, counted from 0. */
+    public int page() {
+        return slot / Shop.TRADES_PER_PAGE;
+    }
+
     public ShopOffer withItems(ItemStack cost, ItemStack secondCost, ItemStack result) {
-        return new ShopOffer(id, cost, secondCost, result, terms);
+        return new ShopOffer(id, slot, cost, secondCost, result, terms);
     }
 
     public ShopOffer withTerms(OfferTerms terms) {
-        return new ShopOffer(id, cost, secondCost, result, terms);
+        return new ShopOffer(id, slot, cost, secondCost, result, terms);
+    }
+
+    public ShopOffer withSlot(int slot) {
+        return new ShopOffer(id, slot, cost, secondCost, result, terms);
     }
 
     /**
-     * A trade can be offered once the player gives something (an item or money) and
+     * A trade can be sold once the player gives something (an item or money) and
      * gets something (an item or money).
      */
     public boolean isValid() {
@@ -69,11 +91,6 @@ public record ShopOffer(String id, ItemStack cost, ItemStack secondCost, ItemSta
     /** No items at all; such trades are dropped when the shop is saved. */
     public boolean isEmpty() {
         return cost == null && secondCost == null && result == null;
-    }
-
-    /** Valid and not switched off. */
-    public boolean isOffered() {
-        return isValid() && terms.availability() != OfferAvailability.HIDDEN;
     }
 
     /** Needs the Blockfolk shop menu: money or a stock limit is involved. */

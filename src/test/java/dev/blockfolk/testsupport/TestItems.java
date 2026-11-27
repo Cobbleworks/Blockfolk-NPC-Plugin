@@ -8,7 +8,6 @@ import java.util.stream.IntStream;
 
 import org.bukkit.inventory.ItemStack;
 
-import dev.blockfolk.model.OfferAvailability;
 import dev.blockfolk.model.OfferTerms;
 import dev.blockfolk.model.ShopOffer;
 
@@ -25,14 +24,13 @@ public final class TestItems {
         return item;
     }
 
-    /** An item-for-item trade with the given availability and draw weight. */
-    public static ShopOffer offer(OfferAvailability availability, int weight) {
-        return new ShopOffer(null, item(), null, item(),
-                OfferTerms.DEFAULT.withAvailability(availability).withWeight(weight));
+    /** An item-for-item trade in editor slot {@code slot}. */
+    public static ShopOffer offer(int slot) {
+        return new ShopOffer(null, slot, item(), null, item(), OfferTerms.DEFAULT);
     }
 
-    /** {@code count} offered item-for-item trades with the default weight. */
+    /** {@code count} item-for-item trades in the first {@code count} slots. */
     public static List<ShopOffer> offers(int count) {
-        return IntStream.range(0, count).mapToObj(ignored -> offer(OfferAvailability.OFFERED, 10)).toList();
+        return IntStream.range(0, count).mapToObj(TestItems::offer).toList();
     }
 }

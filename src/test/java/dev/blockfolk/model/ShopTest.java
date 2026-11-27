@@ -10,6 +10,8 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import dev.blockfolk.testsupport.TestItems;
+
 class ShopTest {
     @Test
     void newShopHasNoTrades() {
@@ -57,6 +59,40 @@ class ShopTest {
 
         assertEquals("smithy", shop.key());
         assertEquals("Smithy", shop.name());
+    }
+
+    @Test
+    void tradesKeepTheirSlotSoEmptyRowsDoNotShiftLaterPages() {
+        ShopOffer first = TestItems.offer(0);
+        ShopOffer onPageTwo = TestItems.offer(12);
+        Shop shop = Shop.create("market", null).withOffers(List.of(onPageTwo, first));
+
+        Shop edited = shop.withPage(0, List.of(new ShopOffer(null, 0, null, null, null, null)));
+
+        assertEquals(List.of(onPageTwo), edited.offers());
+        assertEquals(List.of(1), edited.pagesWithTrades());
+        assertEquals(1, edited.offers().getFirst().page());
+    }
+
+    @Test
+    void tradesWithoutOrWithATakenSlotMoveToTheFirstFreeOne() {
+        ShopOffer placed = TestItems.offer(1);
+        ShopOffer clash = TestItems.offer(1);
+        ShopOffer unplaced = new ShopOffer(TestItems.item(), null, TestItems.item());
+
+        Shop shop = Shop.create("market", null).withOffers(List.of(placed, clash, unplaced));
+
+        assertEquals(List.of(0, 1, 2), shop.offers().stream().map(ShopOffer::slot).toList());
+        assertEquals(placed, shop.offerAt(1).orElseThrow());
+    }
+
+    @Test
+    void aShopHoldsAtMostFivePagesOfTrades() {
+        List<ShopOffer> offers = new ArrayList<>();
+        for (int index = 0; index < Shop.MAX_TRADES + 5; index++)
+            offers.add(new ShopOffer(TestItems.item(), null, TestItems.item()));
+
+        assertEquals(Shop.MAX_TRADES, Shop.create("market", null).withOffers(offers).offers().size());
     }
 
     @Test

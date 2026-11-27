@@ -2,45 +2,57 @@ package dev.blockfolk.model;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * What changes while a shop is used, stored apart from its definition: when the
- * current stock period began, which rotating trades were drawn for it, and how
- * often each limited trade was bought since.
+ * What changes while a shop is used, stored apart from its definition: the
+ * Minecraft day the current stock belongs to, which page is on sale in a
+ * one-page-per-day shop, and how often each limited trade was bought since the
+ * last restock.
  */
 public final class ShopState {
-    private long periodStart;
-    private List<String> picks;
+    /** The day is not known yet, for example in a state from an older version. */
+    public static final long UNKNOWN_DAY = Long.MIN_VALUE;
+
+    private long day;
+    private int page;
     private final Map<String, Integer> sold;
     private final Map<String, Map<UUID, Integer>> soldTo;
 
-    public ShopState(long periodStart, List<String> picks, Map<String, Integer> sold,
-            Map<String, Map<UUID, Integer>> soldTo) {
-        this.periodStart = periodStart;
-        this.picks = List.copyOf(picks);
+    public ShopState(long day, int page, Map<String, Integer> sold, Map<String, Map<UUID, Integer>> soldTo) {
+        this.day = day;
+        this.page = Math.max(0, page);
         this.sold = new LinkedHashMap<>(sold);
         this.soldTo = new LinkedHashMap<>();
         soldTo.forEach((offer, buyers) -> this.soldTo.put(offer, new HashMap<>(buyers)));
     }
 
-    /** A state whose first period starts at {@code now} without any picks. */
-    public static ShopState fresh(long now) {
-        return new ShopState(now, List.of(), Map.of(), Map.of());
+    /** A state for {@code day} that starts on the first page without sales. */
+    public static ShopState fresh(long day) {
+        return new ShopState(day, 0, Map.of(), Map.of());
     }
 
-    public long periodStart() {
-        return periodStart;
+    public long day() {
+        return day;
     }
 
-    public List<String> picks() {
-        return picks;
+    public boolean knowsDay() {
+        return day != UNKNOWN_DAY;
     }
 
-    public void setPicks(List<String> picks) {
-        this.picks = List.copyOf(picks);
+    /** Takes {@code day} as the current day without restocking. */
+    public void setDay(long day) {
+        this.day = day;
+    }
+
+    /** The page on sale in a one-page-per-day shop. */
+    public int page() {
+        return page;
+    }
+
+    public void setPage(int page) {
+        this.page = Math.max(0, page);
     }
 
     /** Trades of {@code offerId} counted against its limit for {@code buyer}. */
@@ -59,9 +71,9 @@ public final class ShopState {
             sold.merge(offerId, trades, Integer::sum);
     }
 
-    /** Starts a new period: every limited trade is fully stocked again. */
-    public void restock(long periodStart) {
-        this.periodStart = periodStart;
+    /** Starts {@code day}: every limited trade is fully stocked again. */
+    public void restock(long day) {
+        this.day = day;
         sold.clear();
         soldTo.clear();
     }

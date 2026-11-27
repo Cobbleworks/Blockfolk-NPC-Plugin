@@ -13,7 +13,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
-import dev.blockfolk.model.OfferAvailability;
 import dev.blockfolk.model.OfferTerms;
 import dev.blockfolk.model.ShopOffer;
 import dev.blockfolk.testsupport.TestItems;
@@ -130,10 +129,10 @@ class ShopTradeTest {
     }
 
     @Test
-    void tradesThatAreNotOfferedCannotBeMade() {
-        ShopOffer hidden = offer(OfferTerms.DEFAULT.withAvailability(OfferAvailability.HIDDEN));
+    void incompleteTradesCannotBeMade() {
+        ShopOffer incomplete = new ShopOffer(null, TestItems.item(), null, null, OfferTerms.DEFAULT);
 
-        assertEquals(ShopTrade.Result.UNAVAILABLE, ShopTrade.execute(hidden, goods, wallet, refundFailure));
+        assertEquals(ShopTrade.Result.UNAVAILABLE, ShopTrade.execute(incomplete, goods, wallet, refundFailure));
         verifyNoInteractions(goods);
     }
 

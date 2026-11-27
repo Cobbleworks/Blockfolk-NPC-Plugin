@@ -4,9 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.List;
-import java.util.stream.IntStream;
-
 import org.junit.jupiter.api.Test;
 
 class ShopGuiServiceTest {
@@ -33,20 +30,10 @@ class ShopGuiServiceTest {
     }
 
     @Test
-    void editedPageReplacesOnlyItsOwnTrades() {
-        List<Integer> offers = IntStream.range(0, 15).boxed().toList();
-        List<Integer> edited = List.of(100, 101);
-
-        List<Integer> result = ShopGuiService.replacePage(offers, 1, edited);
-
-        assertEquals(List.of(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 100, 101), result);
-    }
-
-    @Test
-    void editingAnEmptyNextPageAppendsTrades() {
-        List<Integer> offers = IntStream.range(0, 10).boxed().toList();
-
-        assertEquals(11, ShopGuiService.replacePage(offers, 1, List.of(42)).size());
+    void rowsMapToShopSlotsPageByPage() {
+        assertEquals(0, ShopGuiService.tradeSlot(0, 0));
+        assertEquals(19, ShopGuiService.tradeSlot(1, 9));
+        assertEquals(42, ShopGuiService.tradeSlot(4, 2));
     }
 
     @Test
@@ -56,13 +43,5 @@ class ShopGuiServiceTest {
         assertEquals(-1, ShopGuiService.arrowRow(0), "cost slot");
         assertEquals(-1, ShopGuiService.arrowRow(4), "divider");
         assertEquals(-1, ShopGuiService.arrowRow(47), "button row");
-    }
-
-    @Test
-    void anotherPageOpensOnlyWhenTheLastOneIsFull() {
-        assertEquals(1, ShopGuiService.pageCount(0));
-        assertEquals(1, ShopGuiService.pageCount(9));
-        assertEquals(2, ShopGuiService.pageCount(10));
-        assertEquals(ShopGuiService.MAX_PAGES, ShopGuiService.pageCount(500));
     }
 }

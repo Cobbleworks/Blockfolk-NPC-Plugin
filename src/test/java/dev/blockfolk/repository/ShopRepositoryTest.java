@@ -12,11 +12,10 @@ import org.junit.jupiter.api.Test;
 
 import dev.blockfolk.model.BehaviourAction;
 import dev.blockfolk.model.BehaviourActionType;
-import dev.blockfolk.model.OfferAvailability;
 import dev.blockfolk.model.OfferTerms;
 import dev.blockfolk.model.Shop;
-import dev.blockfolk.model.ShopAssortment;
 import dev.blockfolk.model.ShopOffer;
+import dev.blockfolk.model.ShopPageMode;
 import dev.blockfolk.model.StockScope;
 import dev.blockfolk.testsupport.TestItems;
 
@@ -31,48 +30,74 @@ class ShopRepositoryTest {
     }
 
     @Test
-    void assortmentRoundTrips() throws Exception {
-        Shop shop = Shop.create("market", "Market").withAssortment(new ShopAssortment(10, 90));
+    void pageModeRoundTrips() throws Exception {
+        Shop shop = Shop.create("market", "Market").withPageMode(ShopPageMode.ONE_PER_DAY);
         YamlConfiguration yaml = new YamlConfiguration();
         yaml.loadFromString(ShopRepository.encode(List.of(shop)).saveToString());
 
-        assertEquals(new ShopAssortment(10, 90), ShopRepository.decode(yaml).getFirst().assortment());
+        assertEquals(ShopPageMode.ONE_PER_DAY, ShopRepository.decode(yaml).getFirst().pageMode());
     }
 
     @Test
-    void tradeIdsAndTermsRoundTrip() {
-        OfferTerms terms = new OfferTerms(120.5, 3, OfferAvailability.ALWAYS, 25, 4, StockScope.PER_PLAYER);
-        ShopOffer offer = new ShopOffer("sword01", TestItems.item(), null, TestItems.item(), terms);
-        ShopOffer plain = new ShopOffer("bread01", TestItems.item(), null, TestItems.item(), null);
+    void tradeIdsSlotsAndTermsRoundTrip() {
+        OfferTerms terms = new OfferTerms(120.5, 3, 4, StockScope.PER_PLAYER);
+        ShopOffer offer = new ShopOffer("sword01", 23, TestItems.item(), null, TestItems.item(), terms);
+        ShopOffer plain = new ShopOffer("bread01", 0, TestItems.item(), null, TestItems.item(), null);
 
         List<ShopOffer> decoded = ShopRepository.decodeOffers(ShopRepository.encodeOffers(List.of(offer, plain)));
 
         assertEquals("sword01", decoded.get(0).id());
+        assertEquals(23, decoded.get(0).slot());
         assertEquals(terms, decoded.get(0).terms());
         assertEquals("bread01", decoded.get(1).id());
         assertEquals(OfferTerms.DEFAULT, decoded.get(1).terms());
-        assertEquals(List.of("id", "cost", "result"),
+        assertEquals(List.of("id", "slot", "cost", "result"),
                 List.copyOf(ShopRepository.encodeOffers(List.of(plain)).getFirst().keySet()),
                 "default terms are not written");
     }
 
     @Test
-    void tradesFromOlderVersionsAreDetectedSoTheirNewIdsGetSaved() throws Exception {
-        YamlConfiguration old = new YamlConfiguration();
-        old.loadFromString("shops:\n  bakery:\n    offers:\n    - price: 2\n");
-        YamlConfiguration current = new YamlConfiguration();
-        current.loadFromString("shops:\n  bakery:\n    offers:\n    - id: abc\n");
-
-        assertTrue(ShopRepository.hasTradesWithoutId(old));
-        assertFalse(ShopRepository.hasTradesWithoutId(current));
+    void filesFromOlderVersionsAreDetectedSoTheyGetRewritten() throws Exception {
+        assertTrue(ShopRepository.needsRewrite(yaml("shops:\n  bakery:\n    offers:\n    - price: 2\n")),
+                "no id");
+        assertTrue(ShopRepository.needsRewrite(yaml("shops:\n  bakery:\n    offers:\n    - id: abc\n")),
+                "no slot");
+        assertTrue(ShopRepository.needsRewrite(
+                yaml("shops:\n  bakery:\n    offers:\n    - id: abc\n      slot: 0\n      weight: 20\n")),
+                "draw weight");
+        assertTrue(ShopRepository.needsRewrite(
+                yaml("shops:\n  bakery:\n    assortment:\n      refresh-minutes: 60\n    offers: []\n")),
+                "assortment");
+        assertFalse(ShopRepository
+                .needsRewrite(yaml("shops:\n  bakery:\n    offers:\n    - id: abc\n      slot: 0\n")));
     }
 
     @Test
-    void oldShopsLoadWithoutRotationOrRestock() throws Exception {
-        YamlConfiguration yaml = new YamlConfiguration();
-        yaml.loadFromString("shops:\n  bakery:\n    name: Bakery\n    offers: []\n");
+    void oldShopsShowAllPagesAndTheirTradesKeepTheirOrder() throws Exception {
+        YamlConfiguration yaml = yaml("shops:\n  bakery:\n    name: Bakery\n    offers: []\n");
 
-        assertEquals(ShopAssortment.DEFAULT, ShopRepository.decode(yaml).getFirst().assortment());
+        assertEquals(ShopPageMode.ALL_PAGES, ShopRepository.decode(yaml).getFirst().pageMode());
+        // Without a slot, the shop places trades in list order (see ShopTest).
+        assertEquals(ShopOffer.UNPLACED,
+                ShopRepository.decodeOffers(List.of(java.util.Map.of("id", "a"))).getFirst().slot());
+    }
+
+    @Test
+    void rotatingShopsBecomeOnePagePerDayAndNotOfferedTradesAreSetAside() throws Exception {
+        YamlConfiguration yaml = yaml("shops:\n  market:\n    assortment:\n      rotating-slots: 3\n"
+                + "    offers:\n    - id: sold\n      price: 2\n      payout: 1\n"
+                + "    - id: kept\n      price: 2\n      payout: 1\n      availability: HIDDEN\n");
+
+        List<ShopOffer> stored = ShopRepository.decodeStoredTrades(yaml).get("market");
+
+        assertEquals(ShopPageMode.ONE_PER_DAY, ShopRepository.decode(yaml).getFirst().pageMode());
+        assertEquals(List.of("kept"), stored.stream().map(ShopOffer::id).toList());
+    }
+
+    private static YamlConfiguration yaml(String text) throws Exception {
+        YamlConfiguration yaml = new YamlConfiguration();
+        yaml.loadFromString(text);
+        return yaml;
     }
 
     @Test

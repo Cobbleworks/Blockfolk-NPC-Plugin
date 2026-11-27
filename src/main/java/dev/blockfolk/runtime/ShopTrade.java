@@ -50,7 +50,7 @@ public final class ShopTrade {
     }
 
     public static Result execute(ShopOffer offer, Goods goods, Wallet wallet, RefundFailure refundFailure) {
-        if (!offer.isOffered())
+        if (!offer.isValid())
             return Result.UNAVAILABLE;
         if (offer.terms().usesMoney() && !wallet.available())
             return Result.NO_ECONOMY;

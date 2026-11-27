@@ -6,8 +6,8 @@ Blockfolk stores its runtime configuration under `plugins/Blockfolk/`.
 | --- | --- |
 | `config.yml` | Global timeouts, MineSkin, and OpenRouter settings. |
 | `definitions/*.yml` | One file per NPC preset, including behaviour, combat, equipment, and AI settings. |
-| `shops.yml` | Shared shops, keyed by shop key: name, assortment (`rotating-slots`, `refresh-minutes`), and trades. Each trade has an `id`, its items, and optional `price`, `payout`, `availability`, `weight`, `stock`, and `stock-scope`; absent keys mean the default. |
-| `shop-state.yml` | What changes while players trade: each shop's current stock period start (`period-start`), its rotation picks, and how often limited trades were sold (`sold`, and `sold-to` per player). Deleting it restocks every shop and draws new rotations. |
+| `shops.yml` | Shared shops, keyed by shop key: name, `page-mode` (`ONE_PER_DAY`; absent means all pages are on sale), and trades. Each trade has an `id`, a `slot` (its place in the trade editor: page × 10 + row, counted from 0), its items, and optional `price`, `payout`, `stock`, and `stock-scope`; absent keys mean the default. |
+| `shop-state.yml` | What changes while players trade: the Minecraft day each shop's stock belongs to (`day`), the page on sale in a one-page-per-day shop (`page`, counted from 0), and how often limited trades were sold that day (`sold`, and `sold-to` per player). Deleting it restocks every shop and starts daily shops on their first page. |
 | `definition-order.yml` | Preset browser ordering. |
 | `instances.yml` | Spawned variants: UUID, preset, position, spawn point, and optional `label`, `skin`, and `route-swaps` overrides. Absent overrides inherit from the preset. |
 | `routes.yml` | NPC-owned routes and their point actions. |

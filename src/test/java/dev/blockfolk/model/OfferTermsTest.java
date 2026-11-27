@@ -25,11 +25,8 @@ class OfferTermsTest {
     }
 
     @Test
-    void weightAndStockStayInTheirRanges() {
-        OfferTerms terms = OfferTerms.DEFAULT.withWeight(0).withStockLimit(-4);
-        assertEquals(OfferTerms.MIN_WEIGHT, terms.weight());
-        assertFalse(terms.limited());
-        assertEquals(OfferTerms.MAX_WEIGHT, OfferTerms.DEFAULT.withWeight(1_000).weight());
+    void stockStaysInItsRange() {
+        assertFalse(OfferTerms.DEFAULT.withStockLimit(-4).limited());
         assertEquals(OfferTerms.MAX_STOCK, OfferTerms.DEFAULT.withStockLimit(Integer.MAX_VALUE).stockLimit());
     }
 
@@ -107,7 +104,7 @@ class OfferTermsTest {
 
         state.restock(100);
 
-        assertEquals(100, state.periodStart());
+        assertEquals(100, state.day());
         assertEquals(0, state.sold("sword", StockScope.SHARED, alex));
         assertEquals(0, state.sold("apple", StockScope.PER_PLAYER, alex));
     }

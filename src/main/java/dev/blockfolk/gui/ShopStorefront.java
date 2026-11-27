@@ -158,12 +158,11 @@ public final class ShopStorefront implements Listener, NpcShopService.Storefront
 
     private ItemStack restockItem(Shop shop) {
         NpcShopService.Assortment assortment = service.assortment(shop);
-        if (!assortment.refreshes())
+        if (!assortment.restocks() || !shop.changesAtSunrise())
             return null;
-        long left = assortment.nextRefreshAt() - System.currentTimeMillis();
         List<Component> lore = new ArrayList<>();
-        lore.add(line("New stock in ", Durations.remaining(left), VALUE));
-        lore.add(Component.text(shop.assortment().rotates()
+        lore.add(line("New stock at sunrise, in ", Durations.remaining(assortment.millisUntilRestock()), VALUE));
+        lore.add(Component.text(shop.onePagePerDay() && shop.pagesWithTrades().size() > 1
                 ? "Restocks sold-out trades and brings new ones"
                 : "Restocks sold-out trades", LABEL));
         return item(Material.CLOCK, "Restock", lore);
@@ -333,7 +332,7 @@ public final class ShopStorefront implements Listener, NpcShopService.Storefront
             case NO_ROOM -> "make room in your inventory first.";
             case NO_ECONOMY -> "money trades are unavailable because the server has no economy.";
             case PAYMENT_FAILED -> "the payment did not go through, so nothing was traded.";
-            case UNAVAILABLE -> "this trade is no longer offered.";
+            case UNAVAILABLE -> "this trade is no longer for sale.";
         };
     }
 

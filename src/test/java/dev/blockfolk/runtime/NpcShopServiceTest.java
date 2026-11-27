@@ -2,29 +2,25 @@ package dev.blockfolk.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import dev.blockfolk.model.OfferAvailability;
 import dev.blockfolk.model.OfferTerms;
 import dev.blockfolk.model.Shop;
-import dev.blockfolk.model.ShopAssortment;
 import dev.blockfolk.model.ShopOffer;
+import dev.blockfolk.model.ShopPageMode;
 import dev.blockfolk.model.ShopState;
 import dev.blockfolk.model.StockScope;
 import dev.blockfolk.repository.ShopRepository;
@@ -32,75 +28,89 @@ import dev.blockfolk.repository.ShopStateRepository;
 import dev.blockfolk.testsupport.TestItems;
 
 class NpcShopServiceTest {
-    private static final long MINUTE = 60_000L;
+    private static final long DAY = 24_000L;
 
     private final ShopRepository shops = mock(ShopRepository.class);
     private final ShopStateRepository states = mock(ShopStateRepository.class);
     private final Map<String, ShopState> stored = new HashMap<>();
-    private final AtomicLong now = new AtomicLong(1_000_000L);
+    private long fullTime = 10 * DAY + 1_000;
+    private boolean timeAdvances = true;
     private NpcShopService service;
 
     @BeforeEach
     void setUp() {
-        when(states.get(org.mockito.ArgumentMatchers.anyString(), anyLong())).thenAnswer(
+        when(states.get(anyString(), anyLong())).thenAnswer(
                 call -> stored.computeIfAbsent(call.getArgument(0), ignored -> ShopState.fresh(call.getArgument(1))));
-        service = new NpcShopService(null, shops, states, ShopEconomy.none(), now::get, new Random(11));
+        NpcShopService.DayClock clock = new NpcShopService.DayClock() {
+            @Override
+            public long fullTime() {
+                return fullTime;
+            }
+
+            @Override
+            public boolean advances() {
+                return timeAdvances;
+            }
+        };
+        service = new NpcShopService(null, shops, states, ShopEconomy.none(), clock);
     }
 
     @Test
-    void rotatingShopShowsTheSameTradesUntilTheIntervalEnds() {
-        Shop shop = rotatingShop(30, 10, 60);
-        List<ShopOffer> first = service.assortment(shop).offers();
-        now.addAndGet(59 * MINUTE);
+    void allPagesAreOnSaleByDefault() {
+        Shop shop = new Shop("market", "Market", tradesOnPages(0, 1, 3));
 
-        assertEquals(10, first.size());
-        assertEquals(first, service.assortment(shop).offers(), "same assortment within the hour");
+        assertEquals(6, service.assortment(shop).offers().size(), "two trades on each of three pages");
     }
 
     @Test
-    void afterTheIntervalTenNewTradesAreOnSale() {
-        Shop shop = rotatingShop(30, 10, 60);
-        Set<String> first = ids(service.assortment(shop).offers());
-        now.addAndGet(60 * MINUTE);
+    void oneShopPagePerDayInOrderSkippingEmptyPages() {
+        Shop shop = dailyShop(0, 1, 3);
 
-        Set<String> second = ids(service.assortment(shop).offers());
-
-        assertEquals(10, second.size());
-        assertTrue(second.stream().noneMatch(first::contains), "30 trades allow an entirely new assortment");
+        assertEquals(List.of(0, 1, 3, 0), pagesOverDays(shop, 4));
     }
 
     @Test
-    void countdownPointsAtTheNextRestock() {
-        Shop shop = rotatingShop(30, 10, 60);
-        long opened = now.get();
+    void theSamePageStaysOnSaleAllDay() {
+        Shop shop = dailyShop(0, 1);
+        List<ShopOffer> morning = service.assortment(shop).offers();
+        fullTime += 20_000;
+
+        assertEquals(morning, service.assortment(shop).offers());
+    }
+
+    @Test
+    void daysWithoutVisitorsStillCountSoTheScheduleKeepsItsOrder() {
+        Shop shop = dailyShop(0, 1, 2);
         service.assortment(shop);
-        now.addAndGet(150 * MINUTE);
+        fullTime += 2 * DAY;
 
-        NpcShopService.Assortment assortment = service.assortment(shop);
-
-        // Periods keep their schedule: 120 minutes in, the next one starts at 180.
-        assertEquals(opened + 180 * MINUTE, assortment.nextRefreshAt());
+        assertEquals(2, service.assortment(shop).page());
     }
 
     @Test
-    void alwaysOfferedTradesAreShownOnTopOfTheRotation() {
-        ShopOffer pinned = new ShopOffer(null, TestItems.item(), null, TestItems.item(),
-                OfferTerms.DEFAULT.withAvailability(OfferAvailability.ALWAYS));
-        List<ShopOffer> offers = new java.util.ArrayList<>(TestItems.offers(8));
-        offers.add(pinned);
-        Shop shop = new Shop("market", "Market", offers, new ShopAssortment(3, 60));
+    void settingTheTimeBackStillTurnsOnePage() {
+        Shop shop = dailyShop(0, 1, 2);
+        service.assortment(shop);
+        fullTime = 1_000;
 
-        List<ShopOffer> visible = service.assortment(shop).offers();
-
-        assertEquals(4, visible.size());
-        assertTrue(visible.contains(pinned));
+        assertEquals(1, service.assortment(shop).page());
     }
 
     @Test
-    void sharedStockRunsOutForEveryoneAndRestocksWithTheNextPeriod() {
+    void aPageThatLosesItsTradesHandsOverToTheNextPage() {
+        Shop shop = dailyShop(0, 2);
+        service.assortment(shop);
+        Shop edited = shop.withOffers(shop.offers().stream().filter(offer -> offer.page() != 0).toList());
+
+        assertEquals(2, service.assortment(edited).page());
+    }
+
+    @Test
+    void sharedStockRunsOutForEveryoneAndRestocksAtSunrise() {
         ShopOffer sword = new ShopOffer(null, TestItems.item(), null, TestItems.item(),
                 OfferTerms.DEFAULT.withPrice(100).withStockLimit(2));
-        Shop shop = new Shop("armory", "Armory", List.of(sword), new ShopAssortment(0, 30));
+        Shop shop = new Shop("armory", "Armory", List.of(sword));
+        sword = shop.offers().getFirst();
         UUID alex = UUID.randomUUID();
         UUID sam = UUID.randomUUID();
         service.assortment(shop);
@@ -108,9 +118,9 @@ class NpcShopServiceTest {
 
         assertEquals(0, service.remaining(shop, sword, alex));
         assertEquals(0, service.remaining(shop, sword, sam));
-        assertEquals(2, service.soldThisPeriod(shop, sword));
+        assertEquals(2, service.soldSinceRestock(shop, sword));
 
-        now.addAndGet(30 * MINUTE);
+        fullTime += DAY;
         service.assortment(shop);
 
         assertEquals(2, service.remaining(shop, sword, sam));
@@ -130,40 +140,39 @@ class NpcShopServiceTest {
     }
 
     @Test
-    void restockNowRefillsAndDrawsANewRotationImmediately() {
-        Shop shop = rotatingShop(20, 5, 0);
-        Set<String> before = ids(service.assortment(shop).offers());
-        ShopOffer sold = shop.findOffer(before.iterator().next()).orElseThrow();
+    void restockNowRefillsAndTurnsToTheNextPage() {
+        Shop shop = dailyShop(0, 1);
+        ShopOffer sold = service.assortment(shop).offers().getFirst();
         stored.get(shop.key()).recordSale(sold.id(), StockScope.SHARED, UUID.randomUUID(), 1);
 
         service.restockNow(shop);
-        Set<String> after = ids(service.assortment(shop).offers());
 
-        assertNotEquals(before, after);
+        assertEquals(1, service.assortment(shop).page());
         assertEquals(0, stored.get(shop.key()).sold(sold.id(), StockScope.SHARED, UUID.randomUUID()));
     }
 
     @Test
-    void shopsWithoutIntervalKeepTheirAssortmentUntilRestockedByHand() {
-        Shop shop = rotatingShop(20, 5, 0);
-        Set<String> first = ids(service.assortment(shop).offers());
-        now.addAndGet(365L * 24 * 60 * MINUTE);
+    void stateFromAnOlderVersionAdoptsTodayWithoutRestocking() {
+        Shop shop = dailyShop(0, 1);
+        ShopState old = new ShopState(ShopState.UNKNOWN_DAY, 0, Map.of("x", 1), Map.of());
+        stored.put(shop.key(), old);
+        String first = shop.offers().getFirst().id();
+        old.recordSale(first, StockScope.SHARED, UUID.randomUUID(), 1);
 
-        assertEquals(first, ids(service.assortment(shop).offers()));
-        assertFalse(service.assortment(shop).refreshes());
+        assertEquals(0, service.assortment(shop).page());
+        assertEquals(10, old.day());
+        assertEquals(1, old.sold(first, StockScope.SHARED, UUID.randomUUID()));
     }
 
     @Test
-    void removedTradesAreReplacedWithoutWaitingForTheNextRotation() {
-        Shop shop = rotatingShop(20, 5, 60);
-        List<ShopOffer> visible = service.assortment(shop).offers();
-        ShopOffer removed = visible.getFirst();
-        Shop edited = shop.withOffers(shop.offers().stream().filter(offer -> offer != removed).toList());
+    void countdownRunsToSunriseOnlyWhileTimeAdvances() {
+        Shop shop = dailyShop(0);
 
-        List<ShopOffer> after = service.assortment(edited).offers();
+        assertEquals((DAY - 1_000) * 50, service.assortment(shop).millisUntilRestock());
 
-        assertEquals(5, after.size());
-        assertFalse(after.contains(removed));
+        timeAdvances = false;
+
+        assertFalse(service.assortment(shop).restocks());
     }
 
     @Test
@@ -173,15 +182,31 @@ class NpcShopServiceTest {
 
         assertEquals(Integer.MAX_VALUE, service.remaining(shop, bread, UUID.randomUUID()));
         assertFalse(shop.needsShopMenu(), "item trades keep the vanilla trading screen");
+        assertTrue(service.assortment(shop).offers().contains(shop.offers().getFirst()));
     }
 
-    private static Shop rotatingShop(int trades, int slots, int minutes) {
-        return new Shop("market", "Market", TestItems.offers(trades), new ShopAssortment(slots, minutes));
+    private List<Integer> pagesOverDays(Shop shop, int days) {
+        List<Integer> pages = new ArrayList<>();
+        for (int day = 0; day < days; day++) {
+            NpcShopService.Assortment assortment = service.assortment(shop);
+            assertTrue(assortment.offers().stream().allMatch(offer -> offer.page() == assortment.page()));
+            pages.add(assortment.page());
+            fullTime += DAY;
+        }
+        return pages;
     }
 
-    private static Set<String> ids(List<ShopOffer> offers) {
-        Set<String> ids = new HashSet<>();
-        offers.forEach(offer -> ids.add(offer.id()));
-        return ids;
+    private static Shop dailyShop(int... pages) {
+        return new Shop("market", "Market", tradesOnPages(pages), ShopPageMode.ONE_PER_DAY);
+    }
+
+    /** Two trades on each of {@code pages}. */
+    private static List<ShopOffer> tradesOnPages(int... pages) {
+        List<ShopOffer> offers = new ArrayList<>();
+        for (int page : pages) {
+            offers.add(TestItems.offer(page * Shop.TRADES_PER_PAGE));
+            offers.add(TestItems.offer(page * Shop.TRADES_PER_PAGE + 3));
+        }
+        return offers;
     }
 }

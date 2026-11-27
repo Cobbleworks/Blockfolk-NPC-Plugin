@@ -6,38 +6,27 @@ import java.util.Objects;
 
 /**
  * Everything about a trade besides its items: money the player pays
- * ({@code price}) and receives ({@code payout}), whether and how it is offered,
- * and how often it can be bought before the shop restocks.
+ * ({@code price}) and receives ({@code payout}), and how often it can be bought
+ * before the shop restocks at the next sunrise.
  *
  * @param price
  *            money the player pays per trade, 0 for none
  * @param payout
  *            money the player receives per trade, 0 for none
- * @param availability
- *            whether players see the trade and whether it rotates
- * @param weight
- *            relative chance to be drawn when the shop rotates
  * @param stockLimit
  *            trades available until the next restock, 0 for unlimited
  * @param stockScope
  *            whether the limit is shared or counted per player
  */
-public record OfferTerms(double price, double payout, OfferAvailability availability, int weight, int stockLimit,
-        StockScope stockScope) {
+public record OfferTerms(double price, double payout, int stockLimit, StockScope stockScope) {
 
     public static final double MAX_MONEY = 1_000_000_000d;
-    public static final int MIN_WEIGHT = 1;
-    public static final int MAX_WEIGHT = 100;
-    public static final int DEFAULT_WEIGHT = 10;
     public static final int MAX_STOCK = 10_000;
-    public static final OfferTerms DEFAULT = new OfferTerms(0, 0, OfferAvailability.OFFERED, DEFAULT_WEIGHT, 0,
-            StockScope.SHARED);
+    public static final OfferTerms DEFAULT = new OfferTerms(0, 0, 0, StockScope.SHARED);
 
     public OfferTerms {
         price = money(price);
         payout = money(payout);
-        availability = Objects.requireNonNullElse(availability, OfferAvailability.OFFERED);
-        weight = Math.clamp(weight, MIN_WEIGHT, MAX_WEIGHT);
         stockLimit = Math.clamp(stockLimit, 0, MAX_STOCK);
         stockScope = Objects.requireNonNullElse(stockScope, StockScope.SHARED);
     }
@@ -61,26 +50,18 @@ public record OfferTerms(double price, double payout, OfferAvailability availabi
     }
 
     public OfferTerms withPrice(double price) {
-        return new OfferTerms(price, payout, availability, weight, stockLimit, stockScope);
+        return new OfferTerms(price, payout, stockLimit, stockScope);
     }
 
     public OfferTerms withPayout(double payout) {
-        return new OfferTerms(price, payout, availability, weight, stockLimit, stockScope);
-    }
-
-    public OfferTerms withAvailability(OfferAvailability availability) {
-        return new OfferTerms(price, payout, availability, weight, stockLimit, stockScope);
-    }
-
-    public OfferTerms withWeight(int weight) {
-        return new OfferTerms(price, payout, availability, weight, stockLimit, stockScope);
+        return new OfferTerms(price, payout, stockLimit, stockScope);
     }
 
     public OfferTerms withStockLimit(int stockLimit) {
-        return new OfferTerms(price, payout, availability, weight, stockLimit, stockScope);
+        return new OfferTerms(price, payout, stockLimit, stockScope);
     }
 
     public OfferTerms withStockScope(StockScope stockScope) {
-        return new OfferTerms(price, payout, availability, weight, stockLimit, stockScope);
+        return new OfferTerms(price, payout, stockLimit, stockScope);
     }
 }

@@ -349,7 +349,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         if (action.equals("restock") && args.length == 3) {
             shopService.restockNow(shop);
             player.sendMessage(UiText.success(
-                    "Restocked " + shop.name() + (shop.assortment().rotates() ? " and drew a new rotation." : ".")));
+                    "Restocked " + shop.name() + (shop.onePagePerDay() ? " and turned to the next page." : ".")));
             return;
         }
         player.sendMessage(UiText.info(SHOP_USAGE));
