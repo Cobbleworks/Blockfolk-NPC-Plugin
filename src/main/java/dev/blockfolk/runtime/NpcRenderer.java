@@ -9,6 +9,7 @@ import org.bukkit.entity.Pose;
 
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
+import net.kyori.adventure.text.Component;
 
 public interface NpcRenderer {
 
@@ -67,4 +68,12 @@ public interface NpcRenderer {
     void jump(NpcInstance instance);
 
     void lookAt(NpcInstance instance, Location target);
+
+    /**
+     * Shows a dialog line above the NPC, or clears it (null). Returns false when
+     * the NPC is not loaded; the line still appears once it is.
+     */
+    default boolean setDialogLine(NpcInstance instance, Component line) {
+        return false;
+    }
 }

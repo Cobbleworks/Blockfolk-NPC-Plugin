@@ -740,7 +740,7 @@ public final class GuiService implements Listener {
         inventory.setItem(PROPERTY_PUSHABLE_SLOT, GuiItems.toggle(Material.PISTON, Material.OBSIDIAN, "Pushable",
                 definition.isPushable(), "players can bump it aside", "stays where it stands", List.of()));
         inventory.setItem(PROPERTY_SHOW_NAME_SLOT, GuiItems.toggle(Material.NAME_TAG, Material.PAPER, "Show Name",
-                definition.isShowName(), "name hologram above the NPC", "no name above the NPC", List.of()));
+                definition.isShowName(), "name hologram above the NPC", "name only on mouse-over", List.of()));
         inventory.setItem(PROPERTY_LOOK_SLOT,
                 GuiItems.toggle(Material.ENDER_EYE, Material.ENDER_PEARL, "Look at Player", definition.isLookAtPlayer(),
                         "turns its head toward players", "keeps facing ahead",

@@ -4,13 +4,9 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
-import java.util.Optional;
-import java.util.function.Function;
 
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
-import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
@@ -21,7 +17,20 @@ import dev.blockfolk.model.NpcInstance;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 
+/**
+ * Times the dialog lines and AI thinking indicator above NPCs. The renderer
+ * draws them; a line is shown to everyone even when the NPC's name only shows
+ * on mouse-over, so players notice it.
+ */
 public final class DialogService {
+
+    /**
+     * Draws or clears (null) an NPC's line. Returns false when it is not loaded.
+     */
+    @FunctionalInterface
+    public interface LineDisplay {
+        boolean show(NpcInstance instance, Component line);
+    }
 
     private static final String PROCESSING_PREFIX = "Thinking";
     private static final int MINIMUM_LINE_DURATION_SECONDS = 3;
@@ -30,7 +39,7 @@ public final class DialogService {
     private final Plugin plugin;
     private final NamespacedKey instanceKey;
     private final Map<UUID, DialogRuntime> dialogs = new HashMap<>();
-    private Function<NpcInstance, Optional<LivingEntity>> entityProvider = ignored -> Optional.empty();
+    private LineDisplay lineDisplay = (instance, line) -> false;
     private BukkitTask task;
 
     public DialogService(Plugin plugin) {
@@ -38,8 +47,8 @@ public final class DialogService {
         this.instanceKey = new NamespacedKey(plugin, "dialog-instance-id");
     }
 
-    public void setEntityProvider(Function<NpcInstance, Optional<LivingEntity>> entityProvider) {
-        this.entityProvider = entityProvider == null ? ignored -> Optional.empty() : entityProvider;
+    public void setLineDisplay(LineDisplay lineDisplay) {
+        this.lineDisplay = lineDisplay == null ? (instance, line) -> false : lineDisplay;
     }
 
     public static int lineDurationSeconds(String line) {
@@ -60,10 +69,7 @@ public final class DialogService {
         if (task != null) {
             task.cancel();
         }
-        dialogs.values().forEach(runtime -> {
-            restoreNameVisibility(runtime);
-            setDescription(runtime.instance, null);
-        });
+        dialogs.values().forEach(runtime -> setLine(runtime.instance, null));
         dialogs.clear();
     }
 
@@ -73,10 +79,8 @@ public final class DialogService {
 
     public void detach(UUID instanceId) {
         DialogRuntime runtime = dialogs.remove(instanceId);
-        if (runtime != null) {
-            restoreNameVisibility(runtime);
-            setDescription(runtime.instance, null);
-        }
+        if (runtime != null)
+            setLine(runtime.instance, null);
         removeLegacyDisplays(instanceId);
     }
 
@@ -94,7 +98,7 @@ public final class DialogService {
             active.pendingLineTicks = lineDurationSeconds(line) * 20;
             return;
         }
-        if (!setDescription(instance, Component.text(line))) {
+        if (!setLine(instance, Component.text(line))) {
             return;
         }
         DialogRuntime runtime = dialogs.computeIfAbsent(instance.getId(), ignored -> new DialogRuntime(instance));
@@ -102,14 +106,9 @@ public final class DialogService {
     }
 
     public void showProcessing(NpcInstance instance) {
-        Mannequin mannequin = mannequin(instance);
-        if (mannequin == null)
+        if (!setLine(instance, processingText(1)))
             return;
         DialogRuntime runtime = dialogs.computeIfAbsent(instance.getId(), ignored -> new DialogRuntime(instance));
-        if (!runtime.processing)
-            runtime.previousNameVisibility = mannequin.isCustomNameVisible();
-        mannequin.setCustomNameVisible(true);
-        mannequin.setDescription(processingText(1));
         runtime.processing = true;
         runtime.processingFrame = 0;
         runtime.processingFrameTicks = 0;
@@ -120,13 +119,12 @@ public final class DialogService {
         DialogRuntime runtime = dialogs.get(instance.getId());
         if (runtime == null || !runtime.processing)
             return;
-        restoreNameVisibility(runtime);
         runtime.processing = false;
-        if (runtime.pendingLine != null && setDescription(instance, runtime.pendingLine)) {
+        if (runtime.pendingLine != null && setLine(instance, runtime.pendingLine)) {
             runtime.remainingTicks = runtime.pendingLineTicks;
             runtime.pendingLine = null;
         } else {
-            setDescription(instance, null);
+            setLine(instance, null);
             dialogs.remove(instance.getId());
         }
     }
@@ -143,49 +141,25 @@ public final class DialogService {
         }
     }
 
-    private boolean setDescription(NpcInstance instance, Component description) {
-        Mannequin mannequin = mannequin(instance);
-        if (mannequin == null) {
-            return false;
-        }
-        mannequin.setDescription(description);
-        return true;
-    }
-
-    private Mannequin mannequin(NpcInstance instance) {
-        LivingEntity entity = entityProvider.apply(instance).orElse(null);
-        return entity instanceof Mannequin mannequin && mannequin.isValid() ? mannequin : null;
-    }
-
-    private void restoreNameVisibility(DialogRuntime runtime) {
-        if (!runtime.processing)
-            return;
-        Mannequin mannequin = mannequin(runtime.instance);
-        if (mannequin != null)
-            mannequin.setCustomNameVisible(runtime.previousNameVisibility);
+    private boolean setLine(NpcInstance instance, Component line) {
+        return lineDisplay.show(instance, line);
     }
 
     private void tick() {
         Iterator<Map.Entry<UUID, DialogRuntime>> dialogIterator = dialogs.entrySet().iterator();
         while (dialogIterator.hasNext()) {
             DialogRuntime runtime = dialogIterator.next().getValue();
-            Mannequin mannequin = mannequin(runtime.instance);
-            if (mannequin == null) {
-                dialogIterator.remove();
-                continue;
-            }
             if (runtime.processing) {
-                if (!mannequin.isCustomNameVisible())
-                    mannequin.setCustomNameVisible(true);
                 if (++runtime.processingFrameTicks >= 20) {
                     runtime.processingFrameTicks = 0;
                     runtime.processingFrame = (runtime.processingFrame + 1) % 3;
-                    setDescription(runtime.instance, processingText(runtime.processingFrame + 1));
+                    setLine(runtime.instance, processingText(runtime.processingFrame + 1));
                 }
                 continue;
             }
+            // A line keeps counting down while its NPC is unloaded.
             if (--runtime.remainingTicks <= 0) {
-                setDescription(runtime.instance, null);
+                setLine(runtime.instance, null);
                 dialogIterator.remove();
             }
         }
@@ -200,7 +174,6 @@ public final class DialogService {
         private final NpcInstance instance;
         private int remainingTicks;
         private boolean processing;
-        private boolean previousNameVisibility;
         private int processingFrame;
         private int processingFrameTicks;
         private Component pendingLine;

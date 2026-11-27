@@ -2172,6 +2172,8 @@ public final class AiControlService {
         }
         return center.getWorld().getNearbyEntities(center, PERCEPTION_RADIUS, PERCEPTION_RADIUS, PERCEPTION_RADIUS)
                 .stream().filter(entity -> !(entity instanceof Player))
+                // NPC name labels and health bars are text displays, not things to act on.
+                .filter(entity -> !(entity instanceof org.bukkit.entity.Display))
                 .filter(entity -> !npcEntityIds.contains(entity.getEntityId()) && !instances.isNavigationEntity(entity))
                 // Minecarts and boats have their own list with riding details.
                 .filter(entity -> !NpcVehicles.isTransport(entity))

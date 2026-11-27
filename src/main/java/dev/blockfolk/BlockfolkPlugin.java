@@ -99,7 +99,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         dialogService = new DialogService(this);
         instanceRegistry = new NpcInstanceRegistry(this, definitionRepository, instanceRepository, npcRenderer,
                 navigationService, dialogService);
-        dialogService.setEntityProvider(instanceRegistry::findEntity);
+        dialogService.setLineDisplay(npcRenderer::setDialogLine);
         chatInputService = new ChatInputService(this, getConfig().getInt("chat-input-timeout-seconds", 60));
         skinResolver = new SkinResolver(getName() + "/" + getPluginMeta().getVersion(),
                 getConfig().getString("mineskin-api-key", ""));
