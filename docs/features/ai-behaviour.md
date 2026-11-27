@@ -42,6 +42,10 @@ Open an NPC preset and choose **AI Behaviour**. Configure one or more context se
 
 At least one section is required before AI behaviour can be activated.
 
+**Quick Setup:** click the green **Character** header to describe the NPC in your own words in a text box. The configured
+OpenRouter model turns the description into all five sections and saves them, replacing any sections already filled in.
+Review and edit the results like any hand-written section. If the request fails, nothing changes.
+
 ## Choose triggers
 
 Players can use `/bf config ai mute-me on` to keep their nearby chat from triggering NPC AI responses, then `/bf config ai mute-me off` to allow responses again. Players start unmuted.

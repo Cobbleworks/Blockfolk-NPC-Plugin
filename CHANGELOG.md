@@ -28,6 +28,8 @@ Notable changes to Blockfolk are documented in GitHub release notes.
 
 ### Added
 
+- **Quick Setup** for AI Behaviour. Click the **Character** header in the AI Behaviour menu, describe the NPC in your own words, and the AI fills in Identity, Personality & Behaviour, Goal / Role, Knowledge / Information, and Likes & Dislikes from it. It replaces the current Character sections; a failed request changes nothing. Needs a configured OpenRouter model.
+
 - **Money in shops.** With Vault and an economy plugin such as EssentialsX, a trade can have a **Price** the player pays and a **Payout** the player receives, alone or together with cost and result items. A trade with cost items and a payout but no result buys items from players. Click the pane between a trade's costs and its result in the trade editor to open its new **Trade Settings**. Without an economy, item trades keep working and money trades show as unavailable. Vault is an optional soft dependency.
 - **One shop page per day.** The **Pages** button in the trade editor switches a shop from **Show All Pages** (the default) to **One Page per Day**: each Minecraft day the shop sells the next editor page, in order, skipping empty pages, so every page is one day's offer. Shops follow the main overworld's clock, and every NPC using the shop shows the same page. Right-click **Pages** or run `/bf shop <shop> restock` to restock and turn to the next page now.
 - **Stock limits.** A trade can be made a set number of times per Minecraft day, shared by all players or counted **Per Player**. Every shop restocks at sunrise.

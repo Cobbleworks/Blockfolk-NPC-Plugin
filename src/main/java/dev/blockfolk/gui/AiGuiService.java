@@ -2,7 +2,9 @@ package dev.blockfolk.gui;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BiConsumer;
 
 import org.bukkit.Bukkit;
@@ -16,6 +18,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 
 import dev.blockfolk.ai.AiActionType;
+import dev.blockfolk.ai.AiCharacterDraft;
 import dev.blockfolk.ai.AiControlService;
 import dev.blockfolk.ai.AiControlSettings;
 import dev.blockfolk.input.ChatInputService;
@@ -33,6 +36,7 @@ import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import io.papermc.paper.registry.data.dialog.input.TextDialogInput;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
@@ -45,6 +49,8 @@ final class AiGuiService {
 
     private static final String CONTEXT_INPUT_KEY = "context";
     private static final int CONTEXT_MAX_LENGTH = 8192;
+    private static final String QUICK_SETUP_INPUT_KEY = "notes";
+    private static final int QUICK_SETUP_MAX_LENGTH = 4000;
     private static final int SETTINGS_HEADER_SLOT = 1;
     private static final int CHARACTER_HEADER_SLOT = 10;
     private static final int IDENTITY_SLOT = 12;
@@ -72,6 +78,8 @@ final class AiGuiService {
     private final ChatInputService chatInput;
     private final BiConsumer<Player, NpcDefinition> back;
     private AiControlService aiControl;
+    /** NPC keys with a Quick Setup request in flight, so one NPC is never generated twice at once. */
+    private final Set<String> pendingQuickSetups = new HashSet<>();
 
     AiGuiService(Plugin plugin, NpcDefinitionRepository definitions, ChatInputService chatInput,
             BiConsumer<Player, NpcDefinition> back) {
@@ -136,8 +144,7 @@ final class AiGuiService {
                 settings.sharedConversation() ? 0 : 1, List.of("Per spawned instance of this NPC")));
         inventory.setItem(SETTINGS_HEADER_SLOT, GuiItems.sectionHeader(Material.LIGHT_BLUE_STAINED_GLASS_PANE,
                 LegacyText.AQUA, "Status & Memory", "Turn the AI on and set how it remembers"));
-        inventory.setItem(CHARACTER_HEADER_SLOT, GuiItems.sectionHeader(Material.LIME_STAINED_GLASS_PANE,
-                LegacyText.GREEN, "Character", "Who the NPC is; fill in at least one"));
+        inventory.setItem(CHARACTER_HEADER_SLOT, quickSetupItem(definition));
         inventory.setItem(ACTIONS_HEADER_SLOT, GuiItems.sectionHeader(Material.PURPLE_STAINED_GLASS_PANE,
                 LegacyText.LIGHT_PURPLE, "Allowed AI Actions", "What the AI may do when it responds"));
         for (int index = 0; index < ACTION_TYPES.size(); index++) {
@@ -283,6 +290,10 @@ final class AiGuiService {
         int slot = event.getRawSlot();
         if (slot >= IDENTITY_SLOT && slot <= LIKES_DISLIKES_SLOT) {
             requestContext(player, definition, slot);
+            return;
+        }
+        if (slot == CHARACTER_HEADER_SLOT) {
+            requestQuickSetup(player, definition);
             return;
         }
         if (slot == MEMORY_SLOT) {
@@ -466,6 +477,112 @@ final class AiGuiService {
                         .build())
                 .type(DialogType.confirmation(save, cancel)));
         player.showDialog(dialog);
+    }
+
+    private ItemStack quickSetupItem(NpcDefinition definition) {
+        List<String> lore = new ArrayList<>();
+        lore.add(LegacyText.GRAY + "Who the NPC is; fill in at least one");
+        lore.add("");
+        if (pendingQuickSetups.contains(definition.getKey())) {
+            lore.add(LegacyText.GOLD + "Quick Setup is generating...");
+        } else {
+            lore.add(LegacyText.GRAY + "Quick Setup: describe the NPC in your own");
+            lore.add(LegacyText.GRAY + "words and the AI fills in all five sections");
+            if (definition.getAiControlSettings().hasContext())
+                lore.add(LegacyText.GOLD + "Replaces the current Character sections");
+            lore.add("");
+            lore.add(GuiItems.hint("Click", "quick setup"));
+        }
+        return GuiItems.item(new ItemStack(Material.LIME_STAINED_GLASS_PANE), LegacyText.GREEN + "Character", lore);
+    }
+
+    private void requestQuickSetup(Player player, NpcDefinition definition) {
+        if (aiControl == null || !aiControl.configured()) {
+            player.sendMessage(UiText.warning("Quick Setup needs OpenRouter"
+                    + (aiControl == null ? "." : ": " + aiControl.configurationIssue() + ".")));
+            return;
+        }
+        if (pendingQuickSetups.contains(definition.getKey())) {
+            player.sendMessage(UiText.info("Quick Setup is already generating this NPC's character."));
+            return;
+        }
+        String key = definition.getKey();
+        ActionButton generate = ActionButton.builder(Component.text("Generate", NamedTextColor.GREEN))
+                .action(DialogAction.customClick((view, audience) -> {
+                    if (!(audience instanceof Player submitting)
+                            || !submitting.getUniqueId().equals(player.getUniqueId()))
+                        return;
+                    String notes = view.getText(QUICK_SETUP_INPUT_KEY);
+                    Bukkit.getScheduler().runTask(plugin, () -> startQuickSetup(submitting, key, notes));
+                }, ClickCallback.Options.builder().uses(1).build())).build();
+        ActionButton cancel = ActionButton.builder(Component.text("Cancel", NamedTextColor.RED))
+                .action(DialogAction.customClick((view, audience) -> Bukkit.getScheduler().runTask(plugin,
+                        () -> definitions.find(key).ifPresent(current -> {
+                            if (player.isOnline())
+                                open(player, current);
+                        })), ClickCallback.Options.builder().uses(1).build()))
+                .build();
+        List<DialogBody> body = new ArrayList<>();
+        body.add(DialogBody.plainMessage(Component.text("Describe " + definition.getDisplayName()
+                + " in your own words: who they are, how they talk, what they want, what they know, and what "
+                + "they like or hate. The AI writes all five Character sections from it."), 400));
+        if (definition.getAiControlSettings().hasContext())
+            body.add(DialogBody.plainMessage(
+                    Component.text("This replaces the current Character sections.", NamedTextColor.GOLD), 400));
+        Dialog dialog = Dialog.create(builder -> builder.empty()
+                .base(DialogBase.builder(Component.text("Quick Setup: " + definition.getDisplayName()))
+                        .canCloseWithEscape(true).afterAction(DialogBase.DialogAfterAction.CLOSE).body(body)
+                        .inputs(List.of(DialogInput.text(QUICK_SETUP_INPUT_KEY, Component.text("Description"))
+                                .width(400).maxLength(QUICK_SETUP_MAX_LENGTH)
+                                .multiline(TextDialogInput.MultilineOptions.create(null, 160)).build()))
+                        .build())
+                .type(DialogType.confirmation(generate, cancel)));
+        player.showDialog(dialog);
+    }
+
+    private void startQuickSetup(Player player, String key, String notes) {
+        NpcDefinition definition = definitions.find(key).orElse(null);
+        if (definition == null || !player.isOnline())
+            return;
+        if (notes == null || notes.isBlank()) {
+            player.sendMessage(UiText.info("Enter a short description of the NPC to use Quick Setup."));
+            open(player, definition);
+            return;
+        }
+        if (aiControl == null || !aiControl.configured() || !pendingQuickSetups.add(key)) {
+            open(player, definition);
+            return;
+        }
+        player.sendMessage(UiText.info("Generating a character for " + definition.getDisplayName() + "..."));
+        open(player, definition);
+        aiControl.draftCharacter(definition.getDisplayName(), notes).whenComplete((draft, error) -> Bukkit
+                .getScheduler().runTask(plugin, () -> finishQuickSetup(player, key, draft, error)));
+    }
+
+    private void finishQuickSetup(Player player, String key, AiCharacterDraft draft, Throwable error) {
+        pendingQuickSetups.remove(key);
+        NpcDefinition definition = definitions.find(key).orElse(null);
+        if (definition == null)
+            return;
+        if (error != null || draft == null) {
+            Throwable cause = error;
+            while (cause != null && cause.getCause() != null && cause.getCause() != cause)
+                cause = cause.getCause();
+            String reason = cause == null || cause.getMessage() == null ? "unknown error" : cause.getMessage();
+            plugin.getLogger().warning("AI Quick Setup failed for " + key + ": " + reason);
+            if (player.isOnline())
+                player.sendMessage(UiText.warning("Quick Setup failed: " + reason + ". Nothing was changed."));
+        } else {
+            definition.setAiControlSettings(draft.applyTo(definition.getAiControlSettings()));
+            definitions.save(definition);
+            if (player.isOnline())
+                player.sendMessage(UiText.success("Quick Setup filled " + draft.sectionCount() + " Character "
+                        + (draft.sectionCount() == 1 ? "section" : "sections") + " for "
+                        + definition.getDisplayName() + ". Review them in AI Behaviour."));
+        }
+        if (player.isOnline() && player.getOpenInventory().getTopInventory().getHolder() instanceof AiControlHolder holder
+                && holder.key().equals(key))
+            open(player, definition);
     }
 
     private static String categoryLabel(AiMemory.Category category) {

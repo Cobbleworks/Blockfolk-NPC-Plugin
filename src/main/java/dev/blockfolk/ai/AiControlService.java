@@ -549,6 +549,15 @@ public final class AiControlService {
         return client.configured();
     }
 
+    /**
+     * Quick Setup: asks the model to expand free-form notes into the five
+     * Character sections. Completes off the main thread.
+     */
+    public CompletableFuture<AiCharacterDraft> draftCharacter(String npcName, String notes) {
+        return client.complete(AiCharacterDraft.SYSTEM_PROMPT, AiCharacterDraft.userPrompt(npcName, notes))
+                .thenApply(AiCharacterDraft::parse);
+    }
+
     public String model() {
         return client.model();
     }

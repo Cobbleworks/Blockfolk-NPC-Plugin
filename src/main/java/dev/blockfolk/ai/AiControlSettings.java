@@ -72,6 +72,12 @@ public record AiControlSettings(String identity, String behaviour, String likesD
         return withContext(identity, behaviour, likesDislikes, goal, information);
     }
 
+    /** Replaces all five Character sections at once. */
+    public AiControlSettings withCharacter(String identity, String behaviour, String likesDislikes, String goal,
+            String information) {
+        return withContext(identity, behaviour, likesDislikes, goal, information);
+    }
+
     private AiControlSettings withContext(String identity, String behaviour, String likesDislikes, String goal,
             String information) {
         boolean hadContext = hasContext();
