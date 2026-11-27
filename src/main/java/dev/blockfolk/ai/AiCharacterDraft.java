@@ -11,7 +11,10 @@ import com.google.gson.JsonParser;
 public record AiCharacterDraft(String identity, String behaviour, String goal, String information,
         String likesDislikes) {
 
-    /** Longest value kept per section, so one runaway answer cannot bloat every prompt. */
+    /**
+     * Longest value kept per section, so one runaway answer cannot bloat every
+     * prompt.
+     */
     static final int MAX_SECTION_LENGTH = 1500;
 
     static final String SYSTEM_PROMPT = """
@@ -24,9 +27,10 @@ public record AiCharacterDraft(String identity, String behaviour, String goal, S
             "information": facts, lore, rules, and local knowledge it may share. Use only what the notes give
             or clearly imply; do not invent specific places, items, or mechanics of the server.
             "likes_dislikes": things it enjoys, values, avoids, or strongly dislikes.
-            Keep each field to 1-4 concise sentences. Keep every detail from the notes, and fill gaps with
-            fitting, modest choices. Write in the language of the notes. Use an empty string only when nothing
-            sensible fits.""";
+            Aim for around 2-10 concise sentences in each field. Give each sentence a distinct detail that
+            adds depth to the character. Keep every detail from the notes, and fill gaps with fitting, modest
+            choices. Use fewer sentences when the notes only support a few distinct details for a field.
+            Write in the language of the notes. Use an empty string only when nothing sensible fits.""";
 
     public AiCharacterDraft {
         identity = clean(identity);
@@ -50,28 +54,34 @@ public record AiCharacterDraft(String identity, String behaviour, String goal, S
                 + (information.isEmpty() ? 0 : 1) + (likesDislikes.isEmpty() ? 0 : 1);
     }
 
-    /** Replaces every Character section of {@code settings} with this draft. */
+    /**
+     * Replaces every Character section of {@code settings} with this draft.
+     */
     public AiControlSettings applyTo(AiControlSettings settings) {
         return settings.withCharacter(identity, behaviour, likesDislikes, goal, information);
     }
 
     /**
-     * Reads the model's answer. Tolerates a fenced code block or text around the
-     * object; throws {@link IllegalStateException} when no usable section exists.
+     * Reads the model's answer. Tolerates a fenced code block or text around
+     * the object; throws {@link IllegalStateException} when no usable section
+     * exists.
      */
     static AiCharacterDraft parse(String response) {
-        if (response == null)
+        if (response == null) {
             throw new IllegalStateException("The AI returned no character");
+        }
         String text = response.strip();
         int start = text.indexOf('{');
         int end = text.lastIndexOf('}');
-        if (start < 0 || end <= start)
+        if (start < 0 || end <= start) {
             throw new IllegalStateException("The AI did not return a JSON object");
+        }
         JsonObject root;
         try {
             JsonElement element = JsonParser.parseString(text.substring(start, end + 1));
-            if (!element.isJsonObject())
+            if (!element.isJsonObject()) {
                 throw new IllegalStateException("The AI did not return a JSON object");
+            }
             root = element.getAsJsonObject();
         } catch (IllegalStateException exception) {
             throw exception;
@@ -81,25 +91,30 @@ public record AiCharacterDraft(String identity, String behaviour, String goal, S
         AiCharacterDraft draft = new AiCharacterDraft(field(root, "identity"), field(root, "behaviour", "behavior"),
                 field(root, "goal", "role"), field(root, "information", "knowledge"),
                 field(root, "likes_dislikes", "likesDislikes", "likes"));
-        if (draft.isEmpty())
+        if (draft.isEmpty()) {
             throw new IllegalStateException("The AI returned an empty character");
+        }
         return draft;
     }
 
     private static String field(JsonObject root, String... names) {
         for (String name : names) {
             JsonElement value = root.get(name);
-            if (value == null || value.isJsonNull())
+            if (value == null || value.isJsonNull()) {
                 continue;
-            if (value.isJsonPrimitive())
+            }
+            if (value.isJsonPrimitive()) {
                 return value.getAsString();
+            }
             if (value.isJsonArray()) {
                 StringBuilder joined = new StringBuilder();
                 for (JsonElement part : value.getAsJsonArray()) {
-                    if (!part.isJsonPrimitive())
+                    if (!part.isJsonPrimitive()) {
                         continue;
-                    if (!joined.isEmpty())
+                    }
+                    if (!joined.isEmpty()) {
                         joined.append(' ');
+                    }
                     joined.append(part.getAsString().strip());
                 }
                 return joined.toString();
@@ -109,8 +124,9 @@ public record AiCharacterDraft(String identity, String behaviour, String goal, S
     }
 
     private static String clean(String value) {
-        if (value == null)
+        if (value == null) {
             return "";
+        }
         String stripped = value.strip();
         return stripped.length() <= MAX_SECTION_LENGTH ? stripped : stripped.substring(0, MAX_SECTION_LENGTH).strip();
     }
