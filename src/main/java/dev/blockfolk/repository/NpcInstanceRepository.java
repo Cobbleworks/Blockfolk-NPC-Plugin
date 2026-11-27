@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 import org.bukkit.Location;
@@ -13,6 +14,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.NpcInstance;
 import dev.blockfolk.model.StoredLocation;
 import dev.blockfolk.util.LocationCodec;
@@ -107,6 +109,19 @@ public final class NpcInstanceRepository {
                 }
             }
         }
+        ConfigurationSection behaviours = section.getConfigurationSection("behaviours");
+        if (behaviours != null) {
+            for (String name : behaviours.getKeys(false)) {
+                BehaviourEvent event;
+                try {
+                    event = BehaviourEvent.valueOf(name.toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException ignored) {
+                    continue;
+                }
+                // An empty list is kept: it means the variant does nothing there.
+                instance.setBehaviourOverride(event, BehaviourActionCodec.decodeList(behaviours.getList(name)));
+            }
+        }
     }
 
     /**
@@ -127,6 +142,12 @@ public final class NpcInstanceRepository {
         if (!instance.getRouteSwaps().isEmpty()) {
             ConfigurationSection swaps = section.createSection("route-swaps");
             instance.getRouteSwaps().forEach(swaps::set);
+        }
+        if (!instance.getBehaviourOverrideEvents().isEmpty()) {
+            ConfigurationSection behaviours = section.createSection("behaviours");
+            for (BehaviourEvent event : instance.getBehaviourOverrideEvents())
+                behaviours.set(event.name().toLowerCase(Locale.ROOT),
+                        BehaviourActionCodec.encodeList(instance.getBehaviourOverride(event)));
         }
     }
 

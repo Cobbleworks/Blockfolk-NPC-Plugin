@@ -20,6 +20,12 @@ public final class NpcInstance {
     private String skinTextureValue;
     private String skinTextureSignature;
     private final java.util.Map<String, String> routeSwaps = new java.util.LinkedHashMap<>();
+    /**
+     * Behaviour rows this variant runs in place of the preset's. A present but
+     * empty list means the variant does nothing on that event.
+     */
+    private final java.util.Map<BehaviourEvent, java.util.List<BehaviourAction>> behaviourOverrides = new java.util.EnumMap<>(
+            BehaviourEvent.class);
 
     public NpcInstance(UUID id, String definitionKey, Location location) {
         this(id, definitionKey, location, location);
@@ -60,6 +66,10 @@ public final class NpcInstance {
 
     public void setSpawnLocation(Location spawnLocation) {
         this.spawnLocation = StoredLocation.from(spawnLocation);
+    }
+
+    public void setStoredSpawnLocation(StoredLocation spawnLocation) {
+        this.spawnLocation = java.util.Objects.requireNonNull(spawnLocation, "spawnLocation");
     }
 
     public StoredLocation getStoredLocation() {
@@ -184,15 +194,80 @@ public final class NpcInstance {
     }
 
     /**
-     * Drops every swap from or to {@code routeKey}; returns whether any existed.
+     * Drops every swap from or to {@code routeKey} and every Set Route action in
+     * this variant's own behaviour that walks it; returns whether any existed.
      */
     public boolean removeRouteReferences(String routeKey) {
         String key = NpcRoute.normalizeKey(routeKey);
-        return routeSwaps.entrySet().removeIf(entry -> entry.getKey().equals(key) || entry.getValue().equals(key));
+        boolean changed = routeSwaps.entrySet()
+                .removeIf(entry -> entry.getKey().equals(key) || entry.getValue().equals(key));
+        for (java.util.Map.Entry<BehaviourEvent, java.util.List<BehaviourAction>> entry : behaviourOverrides
+                .entrySet()) {
+            java.util.List<BehaviourAction> kept = BehaviourActions.removeIf(entry.getValue(),
+                    action -> setsRoute(action, key));
+            if (!kept.equals(entry.getValue())) {
+                entry.setValue(kept);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    /**
+     * Whether this variant runs its own actions on {@code event} instead of the
+     * preset's.
+     */
+    public boolean hasBehaviourOverride(BehaviourEvent event) {
+        return behaviourOverrides.containsKey(event);
+    }
+
+    /** This variant's own actions for {@code event}; null when it uses the preset's. */
+    public java.util.List<BehaviourAction> getBehaviourOverride(BehaviourEvent event) {
+        java.util.List<BehaviourAction> actions = behaviourOverrides.get(event);
+        return actions == null ? null : new java.util.ArrayList<>(actions);
+    }
+
+    /**
+     * Gives this variant its own actions for {@code event}; an empty list makes it
+     * do nothing there, and null returns the event to the preset's actions.
+     */
+    public void setBehaviourOverride(BehaviourEvent event, java.util.List<BehaviourAction> actions) {
+        if (actions == null)
+            behaviourOverrides.remove(event);
+        else
+            behaviourOverrides.put(event, new java.util.ArrayList<>(actions));
+    }
+
+    /** Events this variant handles with its own actions, in event order. */
+    public java.util.Set<BehaviourEvent> getBehaviourOverrideEvents() {
+        java.util.Set<BehaviourEvent> events = java.util.EnumSet.noneOf(BehaviourEvent.class);
+        events.addAll(behaviourOverrides.keySet());
+        return java.util.Collections.unmodifiableSet(events);
+    }
+
+    /** The actions this variant runs on {@code event}: its own, else the preset's. */
+    public java.util.List<BehaviourAction> behaviourActions(NpcDefinition definition, BehaviourEvent event) {
+        java.util.List<BehaviourAction> own = behaviourOverrides.get(event);
+        return own != null ? new java.util.ArrayList<>(own) : definition.getBehaviourActions(event);
+    }
+
+    /** Visits every action in this variant's own behaviour rows. */
+    public void forEachOverrideAction(java.util.function.Consumer<BehaviourAction> visitor) {
+        behaviourOverrides.values().forEach(actions -> BehaviourActions.forEach(actions, visitor));
     }
 
     public boolean hasOverrides() {
-        return label != null || hasSkinOverride() || !routeSwaps.isEmpty();
+        return label != null || hasSkinOverride() || !routeSwaps.isEmpty() || !behaviourOverrides.isEmpty();
+    }
+
+    private static boolean setsRoute(BehaviourAction action, String routeKey) {
+        if (action.type() != BehaviourActionType.SET_ROUTE || action.value() == null)
+            return false;
+        try {
+            return NpcRoute.normalizeKey(action.value()).equals(routeKey);
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
     }
 
     /** Skin source URL this instance renders with: its own, else the preset's. */

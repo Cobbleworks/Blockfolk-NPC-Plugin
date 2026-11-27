@@ -345,7 +345,7 @@ public final class NpcBehaviourService implements Listener {
         }
         Runnable completion = event == BehaviourEvent.SPAWN ? () -> startIdle(instance) : () -> {
         };
-        List<BehaviourAction> actions = definition.getBehaviourActions(event);
+        List<BehaviourAction> actions = instance.behaviourActions(definition, event);
         java.util.function.BooleanSupplier alive = yieldingToScenes(instance, ALWAYS);
         if (sceneService != null) {
             SceneService.Reaction reaction = sceneService.reaction(instance, event);
@@ -676,7 +676,7 @@ public final class NpcBehaviourService implements Listener {
             idleCycles.remove(instance.getId(), token);
             return;
         }
-        List<BehaviourAction> actions = definition.getBehaviourActions(BehaviourEvent.IDLE);
+        List<BehaviourAction> actions = instance.behaviourActions(definition, BehaviourEvent.IDLE);
         java.util.function.BooleanSupplier alive = yieldingToScenes(instance, ALWAYS);
         if (sceneService != null && sceneService.isCast(instance)) {
             // While a scene owns the NPC only its scene idle reaction runs, and
@@ -769,7 +769,7 @@ public final class NpcBehaviourService implements Listener {
                 continue;
             }
             NpcDefinition definition = definitions.find(observer.getDefinitionKey()).orElse(null);
-            if (definition != null && !definition.getBehaviourActions(BehaviourEvent.NEARBY_AGGRESSION).isEmpty()
+            if (definition != null && !observer.behaviourActions(definition, BehaviourEvent.NEARBY_AGGRESSION).isEmpty()
                     && (perceives(observer, victim) || attacker != null && perceives(observer, attacker))) {
                 trigger(BehaviourEvent.NEARBY_AGGRESSION, observer, victim, detail);
             }
@@ -1434,7 +1434,7 @@ public final class NpcBehaviourService implements Listener {
                 .collect(java.util.stream.Collectors.toSet());
         for (NpcInstance instance : instances.findActive()) {
             NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-            if (definition == null || definition.getBehaviourActions(BehaviourEvent.ENTITY_NEARBY).isEmpty())
+            if (definition == null || instance.behaviourActions(definition, BehaviourEvent.ENTITY_NEARBY).isEmpty())
                 continue;
             Location center = instance.getLocation();
             if (center.getWorld() == null)
@@ -1476,7 +1476,7 @@ public final class NpcBehaviourService implements Listener {
         double range = conversationService.encounterRange();
         for (NpcInstance instance : active) {
             NpcDefinition definition = definitions.find(instance.getDefinitionKey()).orElse(null);
-            if (definition == null || definition.getBehaviourActions(BehaviourEvent.NPC_NEARBY).isEmpty()
+            if (definition == null || instance.behaviourActions(definition, BehaviourEvent.NPC_NEARBY).isEmpty()
                     && (sceneService == null || sceneService.reaction(instance, BehaviourEvent.NPC_NEARBY) == null))
                 continue;
             Location center = instances.currentLocation(instance);

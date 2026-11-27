@@ -150,4 +150,58 @@ class NpcInstanceTest {
 
         assertFalse(instance.defaultMovement(preset).enabled());
     }
+
+    @Test
+    void variantBehaviourOverridesReplaceThePresetRowPerEvent() {
+        NpcDefinition preset = new NpcDefinition("guard");
+        preset.setBehaviourActions(BehaviourEvent.RIGHT_CLICK,
+                java.util.List.of(new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Jungle hello")));
+        preset.setBehaviourActions(BehaviourEvent.SPAWN,
+                java.util.List.of(new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Spawned")));
+        NpcInstance variant = new NpcInstance(UUID.randomUUID(), "guard", new Location(null, 0, 0, 0));
+
+        variant.setBehaviourOverride(BehaviourEvent.RIGHT_CLICK,
+                java.util.List.of(new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Village hello")));
+
+        assertEquals("Village hello", variant.behaviourActions(preset, BehaviourEvent.RIGHT_CLICK).getFirst().value());
+        assertEquals("Spawned", variant.behaviourActions(preset, BehaviourEvent.SPAWN).getFirst().value());
+        assertTrue(variant.hasOverrides());
+    }
+
+    @Test
+    void anEmptyVariantRowMeansDoNothingAndNullReturnsToThePreset() {
+        NpcDefinition preset = new NpcDefinition("guard");
+        preset.setBehaviourActions(BehaviourEvent.RIGHT_CLICK,
+                java.util.List.of(new BehaviourAction(BehaviourActionType.OPEN_SHOP, "jungle-shop")));
+        NpcInstance variant = new NpcInstance(UUID.randomUUID(), "guard", new Location(null, 0, 0, 0));
+
+        variant.setBehaviourOverride(BehaviourEvent.RIGHT_CLICK, java.util.List.of());
+        assertTrue(variant.hasBehaviourOverride(BehaviourEvent.RIGHT_CLICK));
+        assertTrue(variant.behaviourActions(preset, BehaviourEvent.RIGHT_CLICK).isEmpty());
+
+        variant.setBehaviourOverride(BehaviourEvent.RIGHT_CLICK, null);
+        assertFalse(variant.hasBehaviourOverride(BehaviourEvent.RIGHT_CLICK));
+        assertEquals(1, variant.behaviourActions(preset, BehaviourEvent.RIGHT_CLICK).size());
+        assertFalse(variant.hasOverrides());
+    }
+
+    @Test
+    void deletingARouteStripsItFromVariantRowsIncludingQuestionBranches() {
+        NpcInstance variant = new NpcInstance(UUID.randomUUID(), "guard", new Location(null, 0, 0, 0));
+        NpcQuestion question = new NpcQuestion(UUID.randomUUID(), "Where to?",
+                java.util.List.of(new QuestionOption("Market",
+                        java.util.List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "market")))),
+                java.util.List.of());
+        variant.setBehaviourOverride(BehaviourEvent.RIGHT_CLICK,
+                java.util.List.of(new BehaviourAction(BehaviourActionType.SET_ROUTE, "market"),
+                        new BehaviourAction(BehaviourActionType.SEND_DIALOG, "Off I go"), BehaviourAction.ask(question)));
+
+        assertTrue(variant.removeRouteReferences("market"));
+
+        java.util.List<BehaviourAction> kept = variant.getBehaviourOverride(BehaviourEvent.RIGHT_CLICK);
+        assertEquals(2, kept.size());
+        assertEquals(BehaviourActionType.SEND_DIALOG, kept.getFirst().type());
+        assertTrue(kept.get(1).question().options().getFirst().actions().isEmpty());
+        assertFalse(variant.removeRouteReferences("market"));
+    }
 }

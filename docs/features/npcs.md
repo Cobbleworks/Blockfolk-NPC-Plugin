@@ -32,7 +32,7 @@ Select **Preset Spawnpoint** to save your current position. The spawnpoint is us
 
 The preset is the main NPC. Each spawned copy of it is a **variant**. The first visible copy is created with **Spawn NPC**. After that, **Variants** in the editor lists every copy of the preset. **Spawn Here** adds another one at your position, identical to the preset.
 
-A variant shares everything with its preset (display name, equipment, properties, behaviour, AI, combat, and memories) except what you set on it:
+A variant is the same character in another place. It shares its identity with the preset (display name, equipment, properties, AI, combat, and long-term memories) and can differ in what you set on it:
 
 | Override | What it does |
 | --- | --- |
@@ -40,12 +40,14 @@ A variant shares everything with its preset (display name, equipment, properties
 | **Skin** | Its own skin URL or texture hash. Shift-right-click the Skin button, or enter `inherit`, to use the preset's skin again. |
 | **Spawn Point** | Where it stands after restarts and combat respawns. Every variant has its own. |
 | **Routes** | Route swaps: whenever the preset's actions, a scene, or the AI make the NPC walk one of its routes, this variant walks another route of the same NPC instead. |
+| **Behaviour** | Its own actions for chosen events, such as a different **On Right-Click** in the village than in the jungle. Events it does not override keep running the preset's actions. |
 
-Shift-left-click a variant in the list to edit these. Each variant's tooltip shows which skin and routes it uses. In the list:
+Each variant's tooltip shows which skin, routes, and behaviour it uses.
 
-- left-click teleports to the variant;
-- middle-click moves it and its spawn point to you;
-- right-click removes it (asks first).
+- Left-click opens the variant editor.
+- Right-click teleports you to the variant.
+- Middle-click moves the variant and its spawn point to you.
+- Shift-right-click asks you to confirm removal.
 
 When a preset has exactly one variant:
 
@@ -60,8 +62,26 @@ Route swaps let several variants share one routine while each walks its own path
 
 Open **Routes** in the variant editor to see the preset's routes. Click one to pick its replacement, or use **Create Route** to make a new one and swap it in right away. Replacement routes belong to the same NPC, so they appear in its Routes menu as usual and can have their own waypoint actions. The AI keeps using the preset's route names, and the swap is applied when the variant starts walking. Deleting a route removes any swap from or to it, and the variant falls back to the preset's route.
 
+### Variant behaviour
+
+Open **Behaviour** in the variant editor to see the same event rows as the preset's behaviour editor. Each row shows **From preset** until the variant gets its own actions for that event:
+
+- left-click a row's header to give the variant its own row, starting as a copy of the preset's;
+- or simply edit, add, or remove an action: the row becomes the variant's own first;
+- right-click the header of an own row (it glints) to use the preset's actions again.
+
+An own row replaces the preset's row for that event completely; it is not merged with it. An own row with no actions makes the variant do nothing on that event, for example no shop on right-click in one place. Later changes to the preset's row do not reach an own row. Scene reactions still take priority while the variant plays a scene role.
+
+Short-term memory (recent events and conversations) belongs to each variant, while long-term memories are the preset's and shared. A player who talked to the jungle variant meets the village variant fresh, but it remembers whatever was consolidated into long-term memory.
+
+### Detach as new NPC
+
+When a variant has drifted far enough to be its own character, click **Detach as New NPC** in the variant editor and enter a name. Blockfolk creates a new preset copied from the original, with the variant's skin, spawn point, and own behaviour rows built in. The original's routes are copied for the new NPC, with the variant's route swaps baked in. The new NPC spawns where the variant stands, and the variant is removed.
+
+The new NPC starts with the long-term memories the preset has at that moment but no longer shares new ones. Scene roles, quests, and integrations that target the original preset or the variant's UUID do not carry over. The variant's world must be loaded to detach it.
+
 ::: tip When to use a separate preset
-Use a variant when only the look, the spot, or the path differs. If an NPC needs its own name, dialog, equipment, or AI personality, make a separate preset (for example by duplicating it).
+Use a variant when the same character should appear in another place, with a different look, spot, path, or reactions there. If an NPC needs its own name, equipment, or AI personality, make a separate preset by duplicating it or detaching a variant.
 :::
 
 ## Direct editing

@@ -127,6 +127,7 @@ public final class BlockfolkPlugin extends JavaPlugin {
         shopGuiService.setSettings(shopSettingsGuiService);
         guiService.setShopGuiService(shopGuiService);
         shopGuiService.setSceneRepository(sceneRepository);
+        shopGuiService.setInstanceRegistry(instanceRegistry);
         routeGuiService.setWaypointActionOpener(guiService::openWaypointActions);
         routeGuiService.setNpcMenuOpener(guiService::openEditor);
         guiService.setLocationsOpener(routeGuiService::openLocationsFromMain);

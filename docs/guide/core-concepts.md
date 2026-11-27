@@ -4,7 +4,7 @@ Blockfolk separates reusable configuration from the NPCs placed in the world.
 
 ## Presets and variants
 
-An **NPC preset** is the main NPC. It stores the display name, skin, equipment, properties, combat profile, movement configuration, event routines, and AI settings. A **variant** is one persistent spawned copy with its own UUID, position, and spawn point. A variant can also have its own skin and swap the preset's routes for others, and it shares everything else with the preset.
+An **NPC preset** is the main NPC. It stores the display name, skin, equipment, properties, combat profile, movement configuration, event routines, and AI settings. A **variant** is one persistent spawned copy with its own UUID, position, and spawn point. A variant can also have its own skin, swap the preset's routes for others, and run its own actions for chosen events. It shares its identity (name, equipment, AI, combat, long-term memories) with the preset and can be detached into a preset of its own.
 
 Spawning a preset creates one NPC by default. Additional copies are created explicitly through **Variants** or the spawn command. Integrations refer to each copy's persistent UUID, including after a server restart or combat respawn. See [Variants](/features/npcs#variants).
 

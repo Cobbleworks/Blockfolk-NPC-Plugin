@@ -37,18 +37,22 @@ import dev.blockfolk.util.SkinTextureUtil;
 import dev.blockfolk.util.UiText;
 
 /**
- * Editor for one variant of a preset: a spawned instance that shares everything
- * with its preset except an optional label, skin, spawn point, and route swaps.
+ * Editor for one variant of a preset: a spawned instance that shares its
+ * identity (name, equipment, AI, memories, combat) with its preset but can have
+ * its own label, skin, spawn point, route swaps, and behaviour rows. A variant
+ * that has drifted far enough can be detached into an NPC of its own.
  */
 public final class VariantGuiService implements Listener {
 
     private static final int LABEL_SLOT = 10;
-    private static final int SKIN_SLOT = 12;
-    private static final int SPAWN_SLOT = 14;
-    private static final int ROUTES_SLOT = 16;
+    private static final int SKIN_SLOT = 11;
+    private static final int SPAWN_SLOT = 12;
+    private static final int ROUTES_SLOT = 14;
+    private static final int BEHAVIOUR_SLOT = 15;
+    private static final int TELEPORT_SLOT = 16;
     private static final int INFO_SLOT = 4;
-    private static final int TELEPORT_SLOT = 18;
     private static final int EDITOR_BACK_SLOT = 22;
+    private static final int DETACH_SLOT = 26;
     private static final int LIST_SIZE = 45;
 
     private final Plugin plugin;
@@ -59,7 +63,15 @@ public final class VariantGuiService implements Listener {
     private final SkinResolver skinResolver;
     private final GuiService.RouteCreator routeCreator;
     private final BiConsumer<Player, NpcDefinition> openVariantList;
+    private final VariantAction openBehaviour;
+    private final VariantAction beginDetach;
     private final Map<UUID, String> pendingSkinUrls = new HashMap<>();
+
+    /** Something the variant editor hands back to the main GUI. */
+    @FunctionalInterface
+    public interface VariantAction {
+        void run(Player player, NpcDefinition definition, NpcInstance variant);
+    }
 
     private interface Holder extends InventoryHolder {
         String definitionKey();
@@ -83,7 +95,8 @@ public final class VariantGuiService implements Listener {
 
     public VariantGuiService(Plugin plugin, NpcDefinitionRepository definitions, RouteRepository routes,
             NpcInstanceRegistry instances, ChatInputService input, SkinResolver skinResolver,
-            GuiService.RouteCreator routeCreator, BiConsumer<Player, NpcDefinition> openVariantList) {
+            GuiService.RouteCreator routeCreator, BiConsumer<Player, NpcDefinition> openVariantList,
+            VariantAction openBehaviour, VariantAction beginDetach) {
         this.plugin = plugin;
         this.definitions = definitions;
         this.routes = routes;
@@ -92,6 +105,8 @@ public final class VariantGuiService implements Listener {
         this.skinResolver = skinResolver;
         this.routeCreator = routeCreator;
         this.openVariantList = openVariantList;
+        this.openBehaviour = openBehaviour;
+        this.beginDetach = beginDetach;
     }
 
     /** The name a variant is listed under: its label, else "Variant N". */
@@ -111,6 +126,20 @@ public final class VariantGuiService implements Listener {
             swaps.forEach((from, to) -> lines.add(LegacyText.GRAY + "Route: " + LegacyText.WHITE + routeName(from)
                     + LegacyText.GRAY + " → " + LegacyText.AQUA + routeName(to)));
         }
+        lines.addAll(behaviourSummary(instance));
+        return lines;
+    }
+
+    private static List<String> behaviourSummary(NpcInstance instance) {
+        java.util.Set<dev.blockfolk.model.BehaviourEvent> own = instance.getBehaviourOverrideEvents();
+        if (own.isEmpty())
+            return List.of(LegacyText.GRAY + "Behaviour: " + LegacyText.WHITE + "From preset");
+        List<String> lines = new ArrayList<>();
+        lines.add(LegacyText.GRAY + "Own behaviour:");
+        own.stream().limit(5).forEach(event -> lines.add(LegacyText.AQUA + "• " + event.displayName()
+                + (instance.getBehaviourOverride(event).isEmpty() ? LegacyText.DARK_GRAY + " (nothing)" : "")));
+        if (own.size() > 5)
+            lines.add(LegacyText.DARK_GRAY + "… and " + (own.size() - 5) + " more");
         return lines;
     }
 
@@ -128,8 +157,8 @@ public final class VariantGuiService implements Listener {
         info.add(LegacyText.DARK_GRAY + instance.getId().toString());
         info.add(LegacyText.GRAY + formatLocation(instance.getStoredLocation()));
         info.add("");
-        info.add(LegacyText.GRAY + "Shares name, equipment, behaviour,");
-        info.add(LegacyText.GRAY + "AI, and combat with " + LegacyText.WHITE + definition.getDisplayName());
+        info.add(LegacyText.GRAY + "Shares name, equipment, AI, memories,");
+        info.add(LegacyText.GRAY + "and combat with " + LegacyText.WHITE + definition.getDisplayName());
         inventory.setItem(INFO_SLOT, variantIcon(instance, definition, name, info));
 
         inventory.setItem(LABEL_SLOT,
@@ -154,13 +183,36 @@ public final class VariantGuiService implements Listener {
                                 LegacyText.DARK_GRAY + "Where it stands after restarts and respawns", "",
                                 GuiItems.hint("Click", "move it and its spawn point to you"))));
 
-        List<String> summary = overrideSummary(instance, definition);
-        List<String> routeLore = new ArrayList<>(summary.subList(1, summary.size()));
+        List<String> routeLore = new ArrayList<>();
+        Map<String, String> swaps = instance.getRouteSwaps();
+        if (swaps.isEmpty())
+            routeLore.add(LegacyText.GRAY + "Routes: " + LegacyText.WHITE + "From preset");
+        else
+            swaps.forEach((from, to) -> routeLore.add(LegacyText.GRAY + "Route: " + LegacyText.WHITE
+                    + routeName(from) + LegacyText.GRAY + " → " + LegacyText.AQUA + routeName(to)));
         routeLore.add(LegacyText.DARK_GRAY + "Walk another route wherever the");
         routeLore.add(LegacyText.DARK_GRAY + "preset's actions or AI pick one");
         routeLore.add("");
         routeLore.add(GuiItems.hint("Click", "choose route swaps"));
         inventory.setItem(ROUTES_SLOT, GuiItems.item(Material.FILLED_MAP, "Routes", routeLore));
+
+        List<String> behaviourLore = new ArrayList<>(behaviourSummary(instance));
+        behaviourLore.add(LegacyText.DARK_GRAY + "Own actions for chosen events, e.g. a");
+        behaviourLore.add(LegacyText.DARK_GRAY + "different right-click here; the rest");
+        behaviourLore.add(LegacyText.DARK_GRAY + "stays the preset's");
+        behaviourLore.add("");
+        behaviourLore.add(GuiItems.hint("Click", "edit this variant's behaviour"));
+        ItemStack behaviourIcon = GuiItems.item(Material.WRITABLE_BOOK, "Behaviour", behaviourLore);
+        inventory.setItem(BEHAVIOUR_SLOT, instance.getBehaviourOverrideEvents().isEmpty()
+                ? behaviourIcon
+                : GuiItems.glint(behaviourIcon));
+
+        inventory.setItem(DETACH_SLOT, GuiItems.item(Material.SHEARS, "Detach as New NPC",
+                List.of(LegacyText.GRAY + "Turns this variant into its own NPC",
+                        LegacyText.GRAY + "with its skin, spawn, routes, and",
+                        LegacyText.GRAY + "behaviour built in. It keeps today's",
+                        LegacyText.GRAY + "memories but stops sharing new ones", "",
+                        GuiItems.danger("Click", "detach (asks for a name)"))));
 
         inventory.setItem(TELEPORT_SLOT, GuiItems.item(Material.ENDER_PEARL, "Teleport",
                 List.of(LegacyText.GRAY + "Go to where it stands now", "", GuiItems.hint("Click", "teleport"))));
@@ -297,6 +349,8 @@ public final class VariantGuiService implements Listener {
                 open(player, definition, instance);
             }
             case ROUTES_SLOT -> openRoutes(player, definition, instance);
+            case BEHAVIOUR_SLOT -> openBehaviour.run(player, definition, instance);
+            case DETACH_SLOT -> beginDetach.run(player, definition, instance);
             case TELEPORT_SLOT -> {
                 Location destination = instances.currentLocation(instance);
                 player.closeInventory();

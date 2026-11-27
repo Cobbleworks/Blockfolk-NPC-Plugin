@@ -261,12 +261,19 @@ public final class GuiService implements Listener {
                 this::updateSkin);
         this.variantGuiService = new VariantGuiService(plugin, definitionRepository, routeRepository, instanceRegistry,
                 chatInputService, skinResolver, routeCreator,
-                (player, definition) -> openInstances(player, definition, 0));
+                (player, definition) -> openInstances(player, definition, 0),
+                (player, definition, variant) -> openBehaviours(player, definition, variant, 0),
+                this::beginDetach);
         this.aiGuiService.setSceneTriggerCheck(
                 definition -> sceneRepository.findAll().stream().flatMap(scene -> scene.getRoles().stream())
                         .filter(role -> definition.getKey().equals(role.getPresetKey())).anyMatch(role -> {
                             boolean[] found = {false};
                             role.forEachAction(action -> found[0] |= action.type() == BehaviourActionType.AI_TRIGGER);
+                            return found[0];
+                        }) || instanceRegistry.findByDefinition(definition).stream().anyMatch(instance -> {
+                            boolean[] found = {false};
+                            instance.forEachOverrideAction(
+                                    action -> found[0] |= action.type() == BehaviourActionType.AI_TRIGGER);
                             return found[0];
                         }));
     }
@@ -302,13 +309,18 @@ public final class GuiService implements Listener {
                 .ifPresentOrElse(current -> openEditor(p, current), p::closeInventory));
     }
 
-    /** Keys of the shops opened by this preset's actions, in first-use order. */
-    private static List<String> usedShopKeys(NpcDefinition definition) {
+    /**
+     * Keys of the shops opened by this preset's actions and its variants' own
+     * actions, in first-use order.
+     */
+    private List<String> usedShopKeys(NpcDefinition definition) {
         Set<String> keys = new java.util.LinkedHashSet<>();
-        definition.forEachAction(action -> {
+        java.util.function.Consumer<BehaviourAction> collect = action -> {
             if (action.type() == BehaviourActionType.OPEN_SHOP && action.value() != null)
                 keys.add(action.value());
-        });
+        };
+        definition.forEachAction(collect);
+        instanceRegistry.findByDefinition(definition).forEach(instance -> instance.forEachOverrideAction(collect));
         return List.copyOf(keys);
     }
 
@@ -478,6 +490,79 @@ public final class GuiService implements Listener {
         definitionRepository.save(copy);
         player.sendMessage(UiText.success("Duplicated " + source.getDisplayName() + " as " + copy.getDisplayName()
                 + " (/bf npc " + definitionRepository.commandReference(copy) + ")."));
+    }
+
+    /**
+     * Explains what detaching does, then asks in chat for the new NPC's name.
+     */
+    public void beginDetach(Player player, NpcDefinition source, NpcInstance variant) {
+        String sourceKey = source.getKey();
+        UUID variantId = variant.getId();
+        player.closeInventory();
+        player.sendMessage(UiText.info("Detaching makes this variant its own NPC, built from "
+                + source.getDisplayName() + " with the variant's skin, spawn, route swaps, and behaviour."));
+        player.sendMessage(UiText.info("It keeps the memories it has now but no longer shares new ones, and quests"
+                + " or scene roles for " + source.getDisplayName() + " stop counting it."));
+        Runnable reopen = () -> definitionRepository.find(sourceKey)
+                .ifPresent(current -> instanceRegistry.findById(variantId).ifPresentOrElse(
+                        currentVariant -> variantGuiService.open(player, current, currentVariant),
+                        () -> openInstances(player, current, 0)));
+        chatInputService.request(player, "Enter a name for the new NPC:", value -> {
+            NpcDefinition current = definitionRepository.find(sourceKey).orElse(null);
+            NpcInstance currentVariant = instanceRegistry.findById(variantId).orElse(null);
+            if (current == null || currentVariant == null) {
+                player.sendMessage(UiText.error("That variant no longer exists."));
+                return;
+            }
+            detach(player, current, currentVariant, value);
+        }, reopen);
+    }
+
+    /**
+     * Turns a variant into an NPC of its own: a copy of its preset with the
+     * variant's overrides built in, spawned where the variant stands. The
+     * variant is removed only once the new NPC has spawned.
+     */
+    public void detach(Player player, NpcDefinition source, NpcInstance variant, String name) {
+        String trimmed = name == null ? "" : name.trim();
+        if (trimmed.isEmpty()) {
+            player.sendMessage(UiText.error("NPC names cannot be blank."));
+            return;
+        }
+        NpcDefinition conflict = definitionRepository.findNameConflict(trimmed, null).orElse(null);
+        if (conflict != null) {
+            player.sendMessage(UiText.error(nameTakenMessage(conflict)));
+            return;
+        }
+        Location location = instanceRegistry.currentLocation(variant);
+        if (location == null || location.getWorld() == null) {
+            player.sendMessage(UiText.error("Load the variant's world before detaching it."));
+            return;
+        }
+        NpcDefinition copy = source.copyAs(trimmed);
+        if (variant.hasSkinOverride())
+            copy.setResolvedSkin(variant.getSkinUrl(), variant.getSkinTextureValue(),
+                    variant.getSkinTextureSignature());
+        copy.setStoredSpawnpoint(variant.getStoredSpawnLocation());
+        for (BehaviourEvent event : variant.getBehaviourOverrideEvents())
+            copy.setBehaviourActions(event, variant.getBehaviourOverride(event));
+        // Variant rows still name the preset's routes; they are repointed with the rest.
+        routeRepository.copyOwnedRoutes(source, copy, variant::resolveRoute);
+        definitionRepository.save(copy);
+
+        NpcInstance detached = instanceRegistry.spawnPersistent(copy, location);
+        if (detached == null) {
+            player.sendMessage(UiText.warning("Created " + copy.getDisplayName() + " but could not spawn it, so the"
+                    + " variant was kept. Spawn the new NPC from its Variants menu."));
+            return;
+        }
+        detached.setStoredSpawnLocation(variant.getStoredSpawnLocation());
+        detached.setTemporaryInventoryContents(variant.getTemporaryInventoryContents());
+        instanceRegistry.save(detached);
+        instanceRegistry.deleteInstance(variant.getId());
+        player.sendMessage(UiText.success("Detached the variant as " + copy.getDisplayName() + " (/bf npc "
+                + definitionRepository.commandReference(copy) + ")."));
+        openEditor(player, copy);
     }
 
     /** Shown when a new name would make commands unable to tell two NPCs apart. */
@@ -984,23 +1069,55 @@ public final class GuiService implements Listener {
     }
 
     public void openBehaviours(Player player, NpcDefinition definition, int requestedPage) {
+        openBehaviours(player, definition, null, requestedPage);
+    }
+
+    /**
+     * The behaviour rows of a preset, or of one variant when {@code variant} is
+     * set. A variant row shows the preset's actions until the variant gets its
+     * own, which happens on the first edit or when the row header is clicked.
+     */
+    public void openBehaviours(Player player, NpcDefinition definition, NpcInstance variant, int requestedPage) {
         List<BehaviourEvent> events = MANUAL_BEHAVIOUR_EVENTS;
         int pages = Math.max(1, (events.size() + 4) / 5);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        Inventory inventory = Bukkit.createInventory(new BehaviourHolder(definition.getKey(), page), 54,
-                UiText.title("Behaviour", definition.getDisplayName()));
+        net.kyori.adventure.text.Component title = variant == null
+                ? UiText.title("Behaviour", definition.getDisplayName())
+                : UiText.title("Variant Behaviour", definition.getDisplayName() + " · " + variantName(variant));
+        Inventory inventory = Bukkit.createInventory(
+                new BehaviourHolder(definition.getKey(), variant == null ? null : variant.getId(), page), 54, title);
         for (int row = 0; row < 5; row++) {
             int eventIndex = page * 5 + row;
             if (eventIndex >= events.size()) {
                 break;
             }
             BehaviourEvent behaviourEvent = events.get(eventIndex);
-            List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
-            inventory.setItem(row * 9,
-                    item(eventMaterial(behaviourEvent), behaviourEvent.displayName(),
-                            actionSummaryLore(List.of(LegacyText.GRAY + "Actions run from left to right",
-                                    GuiItems.hint("Shift-left-click", "copy row"),
-                                    GuiItems.hint("Shift-right-click", "paste row")), actions)));
+            List<BehaviourAction> actions = variant == null
+                    ? definition.getBehaviourActions(behaviourEvent)
+                    : variant.behaviourActions(definition, behaviourEvent);
+            List<String> intro = new ArrayList<>();
+            boolean own = variant != null && variant.hasBehaviourOverride(behaviourEvent);
+            if (variant != null) {
+                if (own) {
+                    intro.add(LegacyText.AQUA + "Own actions" + LegacyText.GRAY + " — replace the preset's");
+                    if (actions.isEmpty())
+                        intro.add(LegacyText.GRAY + "Does nothing here");
+                } else {
+                    intro.add(LegacyText.WHITE + "From preset");
+                    intro.add(LegacyText.DARK_GRAY + "Editing an action gives this variant its own row");
+                }
+            }
+            intro.add(LegacyText.GRAY + "Actions run from left to right");
+            if (variant != null) {
+                intro.add(own
+                        ? GuiItems.danger("Right-click", "use the preset's actions")
+                        : GuiItems.hint("Left-click", "give this variant its own row"));
+            }
+            intro.add(GuiItems.hint("Shift-left-click", "copy row"));
+            intro.add(GuiItems.hint("Shift-right-click", "paste row"));
+            ItemStack header = item(eventMaterial(behaviourEvent), behaviourEvent.displayName(),
+                    actionSummaryLore(intro, actions));
+            inventory.setItem(row * 9, own ? GuiItems.glint(header) : header);
             inventory.setItem(row * 9 + 1, addActionItem(actions.size(), MAX_ROW_ACTIONS));
             for (int column = 0; column < 7; column++) {
                 int slot = row * 9 + column + 2;
@@ -1013,11 +1130,17 @@ public final class GuiService implements Listener {
         if (page > 0) {
             inventory.setItem(45, GuiItems.previousPage(page, pages));
         }
-        inventory.setItem(49, GuiItems.back("the NPC menu"));
+        inventory.setItem(49, GuiItems.back(variant == null ? "the NPC menu" : "the variant"));
         if (page + 1 < pages) {
             inventory.setItem(53, GuiItems.nextPage(page, pages));
         }
         openInventory(player, inventory);
+    }
+
+    private String variantName(NpcInstance variant) {
+        List<NpcInstance> siblings = new ArrayList<>(instanceRegistry.findAll().stream()
+                .filter(instance -> instance.getDefinitionKey().equals(variant.getDefinitionKey())).toList());
+        return VariantGuiService.variantName(variant, Math.max(0, siblings.indexOf(variant)));
     }
 
     private List<String> sceneRolesLore(NpcDefinition definition) {
@@ -1057,7 +1180,7 @@ public final class GuiService implements Listener {
                 player.closeInventory();
             return;
         }
-        List<SceneLaneRef> rows = SceneLaneRef.rows(scene, role.getId());
+        List<ActionLaneRef> rows = ActionLaneRef.rows(scene, role.getId());
         int pages = Math.max(1, (rows.size() + 4) / 5);
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
         Inventory inventory = Bukkit.createInventory(new SceneRoleHolder(scene.getKey(), role.getId(), page), 54,
@@ -1066,7 +1189,7 @@ public final class GuiService implements Listener {
             int rowIndex = page * 5 + row;
             if (rowIndex >= rows.size())
                 break;
-            SceneLaneRef lane = rows.get(rowIndex);
+            ActionLaneRef lane = rows.get(rowIndex);
             List<BehaviourAction> actions = lane.actions(scene, role);
             setSceneRow(inventory, row * 9, scene, lane, actions);
         }
@@ -1121,7 +1244,7 @@ public final class GuiService implements Listener {
                 preset == null
                         ? item(Material.SKELETON_SKULL, "Played By: Nobody", headerLore)
                         : definitionIcon(preset, headerLore));
-        SceneLaneRef lane = SceneLaneRef.beat(scene.getKey(), role.getId(), beatId);
+        ActionLaneRef lane = ActionLaneRef.beat(scene.getKey(), role.getId(), beatId);
         setSceneRow(inventory, 9, scene, lane, lane.actions(scene, role));
         if (index > 0)
             inventory.setItem(SCENE_BEAT_PREVIOUS_SLOT, item(Material.ARROW, "Previous Beat",
@@ -1136,11 +1259,11 @@ public final class GuiService implements Listener {
     }
 
     /** One action row starting at {@code first}: label, add button, actions. */
-    private void setSceneRow(Inventory inventory, int first, Scene scene, SceneLaneRef lane,
+    private void setSceneRow(Inventory inventory, int first, Scene scene, ActionLaneRef lane,
             List<BehaviourAction> actions) {
         ItemStack label = item(sceneRowMaterial(lane), sceneRowName(scene, lane),
                 actionSummaryLore(sceneRowIntroduction(scene, lane), actions));
-        if (lane.part() == SceneLaneRef.Part.BEAT)
+        if (lane.part() == ActionLaneRef.Part.BEAT)
             label.setAmount(Math.clamp(scene.beatIndex(lane.beatId()) + 1, 1, 64));
         inventory.setItem(first, label);
         inventory.setItem(first + 1, addActionItem(actions.size(), MAX_ROW_ACTIONS));
@@ -1149,10 +1272,22 @@ public final class GuiService implements Listener {
     }
 
     /**
-     * Back to the editor a scene row belongs to, after editing one of its actions.
+     * Back to the editor a scene or variant row belongs to, after editing one of
+     * its actions.
      */
-    private void openSceneLane(Player player, SceneLaneRef lane, int page) {
-        if (lane.part() == SceneLaneRef.Part.BEAT)
+    private void openSceneLane(Player player, ActionLaneRef lane, int page) {
+        if (lane.isVariant()) {
+            NpcInstance instance = instanceRegistry.findById(lane.variantId()).orElse(null);
+            NpcDefinition definition = instance == null
+                    ? null
+                    : definitionRepository.find(instance.getDefinitionKey()).orElse(null);
+            if (definition == null) {
+                player.sendMessage(UiText.warning("That variant no longer exists."));
+                player.closeInventory();
+                return;
+            }
+            openBehaviours(player, definition, instance, page);
+        } else if (lane.part() == ActionLaneRef.Part.BEAT)
             openSceneBeat(player, lane.sceneKey(), lane.roleId(), lane.beatId());
         else
             openSceneRole(player, lane.sceneKey(), lane.roleId(), page);
@@ -1166,23 +1301,24 @@ public final class GuiService implements Listener {
                 .orElse(role.getPresetKey());
     }
 
-    private Material sceneRowMaterial(SceneLaneRef lane) {
+    private Material sceneRowMaterial(ActionLaneRef lane) {
         return switch (lane.part()) {
             case BEAT -> Material.MAP;
             case WRAP_UP -> Material.RED_BED;
-            case REACTION -> eventMaterial(lane.event());
+            case REACTION, VARIANT -> eventMaterial(lane.event());
         };
     }
 
-    private String sceneRowName(Scene scene, SceneLaneRef lane) {
+    private String sceneRowName(Scene scene, ActionLaneRef lane) {
         return switch (lane.part()) {
             case BEAT -> "Beat " + (scene.beatIndex(lane.beatId()) + 1);
             case WRAP_UP -> "Wrap-Up";
             case REACTION -> "While Active: " + lane.event().displayName();
+            case VARIANT -> lane.event().displayName();
         };
     }
 
-    private List<String> sceneRowIntroduction(Scene scene, SceneLaneRef lane) {
+    private List<String> sceneRowIntroduction(Scene scene, ActionLaneRef lane) {
         List<String> lore = new ArrayList<>();
         switch (lane.part()) {
             case BEAT -> {
@@ -1213,19 +1349,31 @@ public final class GuiService implements Listener {
     /**
      * The action row an editor holder points at: preset behaviour or a scene row.
      */
-    private List<BehaviourAction> actionsFor(NpcDefinition definition, BehaviourEvent event, SceneLaneRef lane) {
+    private List<BehaviourAction> actionsFor(NpcDefinition definition, BehaviourEvent event, ActionLaneRef lane) {
         if (lane == null)
             return definition.getBehaviourActions(event);
+        if (lane.isVariant()) {
+            // Until the variant has its own row this edits a copy of the preset's.
+            return instanceRegistry.findById(lane.variantId())
+                    .map(instance -> instance.behaviourActions(definition, lane.event())).orElseGet(ArrayList::new);
+        }
         Scene scene = sceneRepository.find(lane.sceneKey()).orElse(null);
         SceneRole role = scene == null ? null : scene.findRole(lane.roleId()).orElse(null);
         return role == null ? new ArrayList<>() : lane.actions(scene, role);
     }
 
-    private void storeActions(NpcDefinition definition, BehaviourEvent event, SceneLaneRef lane,
+    private void storeActions(NpcDefinition definition, BehaviourEvent event, ActionLaneRef lane,
             List<BehaviourAction> actions) {
         if (lane == null) {
             definition.setBehaviourActions(event, actions);
             definitionRepository.save(definition);
+            return;
+        }
+        if (lane.isVariant()) {
+            instanceRegistry.findById(lane.variantId()).ifPresent(instance -> {
+                instance.setBehaviourOverride(lane.event(), actions);
+                instanceRegistry.save(instance);
+            });
             return;
         }
         Scene scene = sceneRepository.find(lane.sceneKey()).orElse(null);
@@ -1251,7 +1399,7 @@ public final class GuiService implements Listener {
         openActionPicker(player, definition, event, null, actionIndex, page);
     }
 
-    private void openActionPicker(Player player, NpcDefinition definition, BehaviourEvent event, SceneLaneRef lane,
+    private void openActionPicker(Player player, NpcDefinition definition, BehaviourEvent event, ActionLaneRef lane,
             int actionIndex, int page) {
         Inventory inventory = Bukkit.createInventory(
                 new ActionPickerHolder(definition.getKey(), event, lane, actionIndex, page), 54,
@@ -1399,10 +1547,10 @@ public final class GuiService implements Listener {
             lore.add(LegacyText.GRAY + formatLocation(instance.getStoredLocation()));
             lore.addAll(variantGuiService.overrideSummary(instance, definition));
             lore.add("");
-            lore.add(GuiItems.hint("Left-click", "teleport to it"));
-            lore.add(GuiItems.hint("Shift-left-click", "edit skin, spawn & routes"));
+            lore.add(GuiItems.hint("Left-click", "edit this variant"));
+            lore.add(GuiItems.hint("Right-click", "teleport to it"));
             lore.add(GuiItems.hint("Middle-click", "move it to you"));
-            lore.add(GuiItems.danger("Right-click", "remove"));
+            lore.add(GuiItems.danger("Shift-right-click", "remove (asks first)"));
             ItemStack icon = variantGuiService.variantIcon(instance, definition,
                     VariantGuiService.variantName(instance, index), lore);
             inventory.setItem(index - from, icon);
@@ -2180,20 +2328,20 @@ public final class GuiService implements Listener {
                     return;
                 }
                 NpcInstance instance = instances.get(index);
-                if (event.getClick() == ClickType.SHIFT_LEFT) {
-                    variantGuiService.open(player, definition, instance);
-                } else if (event.getClick() == ClickType.MIDDLE) {
-                    Location destination = player.getLocation();
-                    if (instanceRegistry.relocate(instance, destination)) {
-                        player.sendMessage(UiText.success("Moved the variant and its spawn point to you."));
-                    } else {
-                        player.sendMessage(UiText.error("Could not move the variant."));
+                switch (event.getClick()) {
+                    case LEFT -> variantGuiService.open(player, definition, instance);
+                    case RIGHT -> teleportToInstance(player, instance, VariantGuiService.variantName(instance, index));
+                    case MIDDLE -> {
+                        if (instanceRegistry.relocate(instance, player.getLocation())) {
+                            player.sendMessage(UiText.success("Moved the variant and its spawn point to you."));
+                        } else {
+                            player.sendMessage(UiText.error("Could not move the variant."));
+                        }
+                        openInstances(player, definition, holder.page());
                     }
-                    openInstances(player, definition, holder.page());
-                } else if (event.isRightClick()) {
-                    openInstanceDeleteConfirmation(player, definition, instance, holder.page());
-                } else {
-                    teleportToInstance(player, instance, VariantGuiService.variantName(instance, index));
+                    case SHIFT_RIGHT -> openInstanceDeleteConfirmation(player, definition, instance, holder.page());
+                    default -> {
+                    }
                 }
             }
         }
@@ -2209,17 +2357,31 @@ public final class GuiService implements Listener {
             player.closeInventory();
             return;
         }
+        NpcInstance variant = null;
+        if (holder.variantId() != null) {
+            variant = instanceRegistry.findById(holder.variantId()).orElse(null);
+            if (variant == null) {
+                player.sendMessage(UiText.warning("That variant no longer exists."));
+                openInstances(player, definition, 0);
+                return;
+            }
+        }
+        NpcInstance currentVariant = variant;
+        Runnable reopen = () -> openBehaviours(player, definition, currentVariant, holder.page());
         int slot = event.getRawSlot();
         if (slot == 45) {
-            openBehaviours(player, definition, holder.page() - 1);
+            openBehaviours(player, definition, variant, holder.page() - 1);
             return;
         }
         if (slot == 49) {
-            openEditor(player, definition);
+            if (variant == null)
+                openEditor(player, definition);
+            else
+                variantGuiService.open(player, definition, variant);
             return;
         }
         if (slot == 53) {
-            openBehaviours(player, definition, holder.page() + 1);
+            openBehaviours(player, definition, variant, holder.page() + 1);
             return;
         }
         int row = slot / 9;
@@ -2229,29 +2391,43 @@ public final class GuiService implements Listener {
             return;
         }
         BehaviourEvent behaviourEvent = MANUAL_BEHAVIOUR_EVENTS.get(eventIndex);
-        List<BehaviourAction> actions = definition.getBehaviourActions(behaviourEvent);
+        ActionLaneRef lane = variant == null ? null : ActionLaneRef.variant(variant.getId(), behaviourEvent);
+        List<BehaviourAction> actions = actionsFor(definition, behaviourEvent, lane);
         if (slot % 9 == 0 && handleBehaviourClipboardClick(event, player, actions, pasted -> {
-            definition.setBehaviourActions(behaviourEvent, pasted);
-            definitionRepository.save(definition);
-            openBehaviours(player, definition, holder.page());
+            storeActions(definition, behaviourEvent, lane, pasted);
+            reopen.run();
         })) {
             return;
+        } else if (slot % 9 == 0 && variant != null) {
+            if (event.isRightClick() && variant.hasBehaviourOverride(behaviourEvent)) {
+                variant.setBehaviourOverride(behaviourEvent, null);
+                instanceRegistry.save(variant);
+                GuiItems.click(player);
+                player.sendMessage(UiText.info(
+                        "This variant uses the preset's " + behaviourEvent.displayName() + " actions again."));
+            } else if (event.isLeftClick() && !variant.hasBehaviourOverride(behaviourEvent)) {
+                storeActions(definition, behaviourEvent, lane, actions);
+                GuiItems.click(player);
+                player.sendMessage(UiText.success("This variant now has its own " + behaviourEvent.displayName()
+                        + " actions, starting as a copy of the preset's."));
+            }
+            reopen.run();
         } else if (slot % 9 == 1) {
             // "Add Action" button in column 1 — always appends at the end
             if (actions.size() < MAX_ROW_ACTIONS)
-                openActionPicker(player, definition, behaviourEvent, actions.size(), holder.page());
+                openActionPicker(player, definition, behaviourEvent, lane, actions.size(), holder.page());
         } else if (column < 0 || column >= 7) {
             return;
         } else if (column < actions.size() && event.isRightClick()) {
-            definition.removeBehaviourAction(behaviourEvent, column);
-            definitionRepository.save(definition);
-            openBehaviours(player, definition, holder.page());
+            actions.remove(column);
+            storeActions(definition, behaviourEvent, lane, actions);
+            reopen.run();
         } else if (column < actions.size() && actions.get(column).type() == BehaviourActionType.ASK_QUESTION
                 && !event.isShiftClick()) {
             openQuestionEditor(player,
-                    QuestionTarget.definition(definition.getKey(), behaviourEvent, null, column, holder.page()));
+                    QuestionTarget.definition(definition.getKey(), behaviourEvent, lane, column, holder.page()));
         } else if (column < actions.size()) {
-            openActionPicker(player, definition, behaviourEvent, column, holder.page());
+            openActionPicker(player, definition, behaviourEvent, lane, column, holder.page());
         }
     }
 
@@ -2291,7 +2467,7 @@ public final class GuiService implements Listener {
             default -> {
             }
         }
-        List<SceneLaneRef> rows = SceneLaneRef.rows(scene, role.getId());
+        List<ActionLaneRef> rows = ActionLaneRef.rows(scene, role.getId());
         int row = slot / 9;
         int rowIndex = holder.page() * 5 + row;
         if (row >= 5 || rowIndex >= rows.size())
@@ -2336,7 +2512,7 @@ public final class GuiService implements Listener {
         if (slot / 9 != 1)
             return;
         handleSceneRowClick(event, player, scene, role,
-                SceneLaneRef.beat(scene.getKey(), role.getId(), holder.beatId()), slot % 9, 0,
+                ActionLaneRef.beat(scene.getKey(), role.getId(), holder.beatId()), slot % 9, 0,
                 () -> openSceneBeat(player, scene.getKey(), role.getId(), holder.beatId()));
     }
 
@@ -2345,7 +2521,7 @@ public final class GuiService implements Listener {
      * (0 label, 1 add, 2-8 actions).
      */
     private void handleSceneRowClick(InventoryClickEvent event, Player player, Scene scene, SceneRole role,
-            SceneLaneRef lane, int slotInRow, int page, Runnable reopen) {
+            ActionLaneRef lane, int slotInRow, int page, Runnable reopen) {
         List<BehaviourAction> actions = lane.actions(scene, role);
         int column = slotInRow - 2;
         if (slotInRow == 0 && handleBehaviourClipboardClick(event, player, actions, pasted -> {
@@ -4394,7 +4570,8 @@ public final class GuiService implements Listener {
     private record InstancesHolder(String key, int page) implements GuiHolder {
     }
 
-    private record BehaviourHolder(String key, int page) implements GuiHolder {
+    /** Preset behaviour, or a variant's when {@code variantId} is set. */
+    private record BehaviourHolder(String key, UUID variantId, int page) implements GuiHolder {
     }
 
     private record SceneRoleHolder(String sceneKey, String roleId, int page) implements GuiHolder {
@@ -4403,7 +4580,7 @@ public final class GuiService implements Listener {
     private record SceneBeatHolder(String sceneKey, String roleId, String beatId) implements GuiHolder {
     }
 
-    private record ActionPickerHolder(String key, BehaviourEvent event, SceneLaneRef lane, int actionIndex,
+    private record ActionPickerHolder(String key, BehaviourEvent event, ActionLaneRef lane, int actionIndex,
             int page) implements GuiHolder {
     }
 
@@ -4445,17 +4622,17 @@ public final class GuiService implements Listener {
     private record SavedLocationPickerHolder(UUID token, String folder, int page) implements GuiHolder {
     }
 
-    private record AnimationPickerHolder(String key, BehaviourEvent event, SceneLaneRef lane, int actionIndex,
+    private record AnimationPickerHolder(String key, BehaviourEvent event, ActionLaneRef lane, int actionIndex,
             int page) implements GuiHolder {
     }
 
-    private record BehaviourValuePickerHolder(String key, BehaviourEvent event, SceneLaneRef lane, int actionIndex,
+    private record BehaviourValuePickerHolder(String key, BehaviourEvent event, ActionLaneRef lane, int actionIndex,
             int behaviourPage, BehaviourValuePickerType pickerType, String folder, int valuePage) implements GuiHolder {
     }
 
-    private record QuestionTarget(String definitionKey, BehaviourEvent event, SceneLaneRef lane, String routeKey,
+    private record QuestionTarget(String definitionKey, BehaviourEvent event, ActionLaneRef lane, String routeKey,
             RoutePoint point, int actionIndex, int page) {
-        static QuestionTarget definition(String key, BehaviourEvent event, SceneLaneRef lane, int actionIndex,
+        static QuestionTarget definition(String key, BehaviourEvent event, ActionLaneRef lane, int actionIndex,
                 int page) {
             return new QuestionTarget(key, event, lane, null, null, actionIndex, page);
         }

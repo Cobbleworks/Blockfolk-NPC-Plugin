@@ -132,7 +132,19 @@ public final class RouteRepository {
     }
 
     public void copyOwnedRoutes(NpcDefinition source, NpcDefinition target) {
-        Map<String, String> replacements = new LinkedHashMap<>();
+        copyOwnedRoutes(source, target, java.util.function.UnaryOperator.identity());
+    }
+
+    /**
+     * Gives {@code target} its own copy of every route {@code source} owns and
+     * repoints the target's references, and those inside the copied routes, at
+     * the copies. {@code redirect} maps a source route key to the source route
+     * whose copy should be walked instead, which bakes a variant's route swaps
+     * into a detached NPC.
+     */
+    public void copyOwnedRoutes(NpcDefinition source, NpcDefinition target,
+            java.util.function.UnaryOperator<String> redirect) {
+        Map<String, String> copies = new LinkedHashMap<>();
         for (NpcRoute route : List.copyOf(findAll())) {
             if (!route.isOwnedBy(source.getKey()))
                 continue;
@@ -146,9 +158,16 @@ public final class RouteRepository {
             copy.setOwnerKey(target.getKey());
             route.getPoints().forEach(copy::addPoint);
             save(copy);
-            replacements.put(route.getKey(), copy.getKey());
-            target.replaceRouteReferences(route.getKey(), copy.getKey());
+            copies.put(route.getKey(), copy.getKey());
         }
+        // Copy keys are new, so they never collide with a source key and the
+        // replacements below cannot chain into each other.
+        Map<String, String> replacements = new LinkedHashMap<>();
+        copies.forEach((original, copy) -> {
+            String redirected = redirect.apply(original);
+            replacements.put(original, redirected == null ? copy : copies.getOrDefault(redirected, copy));
+        });
+        replacements.forEach(target::replaceRouteReferences);
         for (NpcRoute route : findAll()) {
             if (!route.isOwnedBy(target.getKey()))
                 continue;

@@ -186,6 +186,16 @@ public final class ShopGuiService implements Listener {
             if (used[0])
                 users.add(definition.getDisplayName());
         }
+        if (instanceRegistry != null) {
+            for (dev.blockfolk.model.NpcInstance instance : instanceRegistry.findAll()) {
+                boolean[] used = {false};
+                instance.forEachOverrideAction(action -> used[0] |= opensShop(action, normalized));
+                if (used[0])
+                    users.add(definitions.find(instance.getDefinitionKey()).map(NpcDefinition::getDisplayName)
+                            .orElse(instance.getDefinitionKey()) + " (variant"
+                            + (instance.getLabel() == null ? "" : " " + instance.getLabel()) + ")");
+            }
+        }
         for (NpcRoute route : routes.findAll()) {
             boolean[] used = {false};
             route.forEachAction(action -> used[0] |= opensShop(action, normalized));
@@ -207,6 +217,13 @@ public final class ShopGuiService implements Listener {
 
     public void setSceneRepository(dev.blockfolk.repository.SceneRepository sceneRepository) {
         this.sceneRepository = sceneRepository;
+    }
+
+    private dev.blockfolk.runtime.NpcInstanceRegistry instanceRegistry;
+
+    /** Lets shop usage include Open Shop actions in variants' own behaviour. */
+    public void setInstanceRegistry(dev.blockfolk.runtime.NpcInstanceRegistry instanceRegistry) {
+        this.instanceRegistry = instanceRegistry;
     }
 
     private static boolean opensShop(BehaviourAction action, String key) {

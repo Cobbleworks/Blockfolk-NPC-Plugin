@@ -84,4 +84,25 @@ class NpcInstanceRepositoryTest {
         assertEquals("https://textures.minecraft.net/texture/abc", skin.getString("url"));
         assertFalse(skin.contains("value"));
     }
+
+    @Test
+    void variantBehaviourRowsSurviveARoundTripIncludingEmptyOnes() throws Exception {
+        NpcInstance saved = instance();
+        saved.setBehaviourOverride(dev.blockfolk.model.BehaviourEvent.RIGHT_CLICK, java.util.List.of(
+                new dev.blockfolk.model.BehaviourAction(dev.blockfolk.model.BehaviourActionType.OPEN_SHOP, "village")));
+        saved.setBehaviourOverride(dev.blockfolk.model.BehaviourEvent.PLAYER_APPROACH, java.util.List.of());
+        YamlConfiguration written = new YamlConfiguration();
+        NpcInstanceRepository.writeOverrides(written, saved);
+
+        YamlConfiguration read = new YamlConfiguration();
+        read.loadFromString(written.saveToString());
+        NpcInstance loaded = instance();
+        NpcInstanceRepository.readOverrides(read, loaded);
+
+        assertEquals(saved.getBehaviourOverride(dev.blockfolk.model.BehaviourEvent.RIGHT_CLICK),
+                loaded.getBehaviourOverride(dev.blockfolk.model.BehaviourEvent.RIGHT_CLICK));
+        assertTrue(loaded.hasBehaviourOverride(dev.blockfolk.model.BehaviourEvent.PLAYER_APPROACH));
+        assertTrue(loaded.getBehaviourOverride(dev.blockfolk.model.BehaviourEvent.PLAYER_APPROACH).isEmpty());
+        assertFalse(loaded.hasBehaviourOverride(dev.blockfolk.model.BehaviourEvent.SPAWN));
+    }
 }
