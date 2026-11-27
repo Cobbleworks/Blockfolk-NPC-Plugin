@@ -35,13 +35,13 @@ public final class FighterAttackRepository {
         attacks.clear();
         File source = sourceFile(file);
         if (!source.exists()) {
-            FighterTemplates.defaults().forEach(attack -> attacks.put(attack.key(), attack));
+            withPresets(List.of()).forEach(attack -> attacks.put(attack.key(), attack));
             saveAll();
             return;
         }
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(source);
         List<String> legacyChains = legacyChainKeys(yaml);
-        decode(yaml).forEach(attack -> attacks.put(attack.key(), attack));
+        withPresets(decode(yaml)).forEach(attack -> attacks.put(attack.key(), attack));
         if (!legacyChains.isEmpty())
             plugin.getLogger()
                     .warning("The Chain ability shape was removed; converted " + String.join(", ", legacyChains)
@@ -53,6 +53,20 @@ public final class FighterAttackRepository {
     static File sourceFile(File file) {
         return file.exists() ? file : new File(file.getParentFile(), "fighters.yml");
     }
+    /**
+     * Library order: every preset (its saved edits, or its default when it was
+     * never saved or deleted by an older version), followed by custom abilities in
+     * saved order.
+     */
+    static List<FighterAttack> withPresets(List<FighterAttack> stored) {
+        Map<String, FighterAttack> saved = new LinkedHashMap<>();
+        stored.forEach(attack -> saved.put(attack.key(), attack));
+        List<FighterAttack> ordered = new ArrayList<>();
+        for (FighterAttack preset : FighterTemplates.defaults())
+            ordered.add(saved.getOrDefault(preset.key(), preset));
+        saved.values().stream().filter(attack -> !FighterTemplates.isPreset(attack.key())).forEach(ordered::add);
+        return ordered;
+    }
     public List<FighterAttack> findAll() {
         return List.copyOf(attacks.values());
     }
@@ -63,8 +77,13 @@ public final class FighterAttackRepository {
         attacks.put(attack.key(), attack);
         saveAll();
     }
+    /** Removes a custom ability; a preset cannot be removed and is reset to its default instead. */
     public void delete(String key) {
-        if (attacks.remove(key) != null)
+        var preset = FighterTemplates.preset(key);
+        if (preset.isPresent()) {
+            attacks.put(key, preset.get());
+            saveAll();
+        } else if (attacks.remove(key) != null)
             saveAll();
     }
     private void saveAll() {

@@ -1,6 +1,7 @@
 package dev.blockfolk.fighters;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import dev.blockfolk.fighters.FighterAttack.*;
 
@@ -49,6 +50,14 @@ public final class FighterTemplates {
                 FighterAttack.builder("second_wind", "Second Wind").shape(Shape.SELF).range(16).cooldownTicks(900)
                         .damage(0).effects(Effect.REGENERATION, Effect.ABSORPTION).effectSeconds(6).effectLevel(2)
                         .condition(Condition.CASTER_CRITICAL).visual(Visual.HEARTS).build());
+    }
+    /** The default version of the preset with this key, if the key belongs to a preset. */
+    public static Optional<FighterAttack> preset(String key) {
+        return defaults().stream().filter(attack -> attack.key().equals(key)).findFirst();
+    }
+    /** Presets always exist in the ability library; they can be edited and reset but not deleted. */
+    public static boolean isPreset(String key) {
+        return preset(key).isPresent();
     }
     private static FighterAttack spell(String key, String name, double range, int cooldown, double damage,
             Set<Effect> effects, int duration, int level, Visual visual) {

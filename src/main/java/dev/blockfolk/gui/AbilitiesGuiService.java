@@ -79,8 +79,7 @@ public final class AbilitiesGuiService implements Listener {
     }
     private record LibraryHolder(int page, Consumer<Player> back) implements Holder {
     }
-    private record SelectHolder(int page, Consumer<String> select, Consumer<Player> back,
-            boolean assignment) implements Holder {
+    private record SelectHolder(int page, Consumer<String> select, Consumer<Player> back) implements Holder {
     }
     private record TemplateHolder(Consumer<Player> back) implements Holder {
     }
@@ -90,7 +89,7 @@ public final class AbilitiesGuiService implements Listener {
             this(key, tab, back, new HashMap<>());
         }
     }
-    /** {@code cancel} reopens wherever the deletion was started from. */
+    /** {@code cancel} reopens wherever the deletion (or preset reset) was started from. */
     private record DeleteHolder(String key, Consumer<Player> back, Consumer<Player> cancel) implements Holder {
     }
     private record AssignHolder(SpecialAttackOptions options, Consumer<SpecialAttackOptions> save,
@@ -120,7 +119,7 @@ public final class AbilitiesGuiService implements Listener {
     }
 
     public void selectAbility(Player player, Consumer<String> select, Consumer<Player> back) {
-        selector(player, new SelectHolder(0, select, back, false));
+        selector(player, new SelectHolder(0, select, back));
     }
     public String abilityName(String key) {
         return repository.find(key).map(FighterAttack::name).orElse(key + " (missing)");
@@ -129,13 +128,12 @@ public final class AbilitiesGuiService implements Listener {
     private void selector(Player player, SelectHolder holder) {
         List<FighterAttack> attacks = repository.findAll();
         int page = page(holder.page(), attacks.size());
-        Inventory inventory = menu(new SelectHolder(page, holder.select(), holder.back(), holder.assignment()),
-                holder.assignment() ? "Abilities · Assign Ability" : "Use Ability · Choose Ability");
+        Inventory inventory = menu(new SelectHolder(page, holder.select(), holder.back()),
+                "Use Ability · Choose Ability");
         for (int i = page * PAGE_SIZE; i < Math.min(attacks.size(), (page + 1) * PAGE_SIZE); i++) {
             FighterAttack attack = attacks.get(i);
             List<String> lore = summary(attack);
-            lore.add(hint("Left-click",
-                    holder.assignment() ? "Assign this ability to the NPC" : "Use this ability in the action"));
+            lore.add(hint("Left-click", "Use this ability in the action"));
             inventory.setItem(i % PAGE_SIZE, abilityItem(attack, attack.name(), lore));
         }
         if (attacks.isEmpty())
@@ -151,9 +149,11 @@ public final class AbilitiesGuiService implements Listener {
         for (int i = page * PAGE_SIZE; i < Math.min(attacks.size(), (page + 1) * PAGE_SIZE); i++) {
             FighterAttack attack = attacks.get(i);
             List<String> lore = summary(attack);
+            lore.add(0, kind(attack.key()));
             lore.add("");
             lore.add(hint("Left-click", "edit"));
-            lore.add(LegacyText.RED + "Shift-right-click: " + LegacyText.GRAY + "delete");
+            lore.add(LegacyText.RED + "Shift-right-click: " + LegacyText.GRAY
+                    + (FighterTemplates.isPreset(attack.key()) ? "reset to default" : "delete"));
             lore.addAll(iconHints());
             inventory.setItem(i % PAGE_SIZE, abilityItem(attack, attack.name(), lore));
         }
@@ -175,34 +175,40 @@ public final class AbilitiesGuiService implements Listener {
         inventory.setItem(49, GuiItems.back(""));
         show(player, inventory);
     }
+    /**
+     * Every library ability as a toggle: presets first, then custom abilities
+     * starting on a fresh row, then assignments whose definition was deleted.
+     */
     private void assignments(Player player, AssignHolder holder) {
-        List<String> keys = assignmentKeys(holder.options());
-        int page = page(holder.page(), keys.size());
+        List<String> slots = assignmentSlots(holder.options());
+        int page = page(holder.page(), slots.size());
         holder = new AssignHolder(holder.options(), holder.save(), holder.back(), page);
-        Inventory inventory = menu(holder, "Abilities · Assigned Abilities");
-        for (int i = page * PAGE_SIZE; i < Math.min(keys.size(), (page + 1) * PAGE_SIZE); i++) {
-            String key = keys.get(i);
+        Set<String> assigned = holder.options().assignedAttackKeys();
+        Inventory inventory = menu(holder, "Abilities · Assign Abilities");
+        for (int i = page * PAGE_SIZE; i < Math.min(slots.size(), (page + 1) * PAGE_SIZE); i++) {
+            String key = slots.get(i);
+            if (key == null)
+                continue;
             FighterAttack attack = repository.find(key).orElse(null);
-            List<String> lore = attack == null
-                    ? new ArrayList<>(List.of(LegacyText.RED + "Definition was deleted; right-click to unassign"))
-                    : summary(attack);
-            lore.add(0, LegacyText.GREEN + "✔ Assigned");
-            lore.add(hint("Right-click", "Remove assignment"));
-            if (attack != null) {
-                lore.add(hint("Left-click", "Edit shared ability"));
-                lore.addAll(iconHints());
+            if (attack == null) {
+                inventory.setItem(i % PAGE_SIZE, item(Material.BARRIER, key + " (missing)",
+                        List.of(LegacyText.RED + "Definition was deleted", hint("Click", "Remove assignment"))));
+                continue;
             }
-            if (attack == null)
-                inventory.setItem(i % PAGE_SIZE, item(Material.BARRIER, key + " (missing)", lore));
-            else
-                inventory.setItem(i % PAGE_SIZE, abilityItem(attack, attack.name(), lore));
+            boolean on = assigned.contains(key);
+            List<String> lore = summary(attack);
+            lore.add(0, on ? LegacyText.GREEN + "✔ Assigned" : LegacyText.DARK_GRAY + "✘ Not assigned");
+            lore.add(1, kind(key));
+            lore.add("");
+            lore.add(hint("Left-click", on ? "Unassign from this NPC" : "Assign to this NPC"));
+            lore.add(hint("Right-click", "Edit shared ability"));
+            lore.addAll(iconHints());
+            ItemStack item = abilityItem(attack, on ? LegacyText.GREEN + attack.name() : attack.name(), lore);
+            inventory.setItem(i % PAGE_SIZE, on ? glint(item) : item);
         }
-        if (keys.isEmpty())
-            inventory.setItem(22, item(Material.BARRIER, "No Assigned Abilities",
-                    List.of("Use Assign Ability to choose an attack from the library")));
-        inventory.setItem(46,
-                item(Material.EMERALD, "Assign Ability", List.of("Choose an ability from the shared library")));
-        List<String> intervalLore = new ArrayList<>(List.of("Mixes ready attacks with weapon combat",
+        inventory.setItem(46, GuiItems.create("Create Ability", "Start a custom ability from a template"));
+        List<String> intervalLore = new ArrayList<>(List.of(LegacyText.GRAY + "Assigned: " + LegacyText.WHITE
+                + assigned.size(), "Mixes ready attacks with weapon combat",
                 "Each NPC has independent cooldowns", "Abilities whose trigger is met are preferred",
                 "Requires Max Health above 0", hint("Left-click", "Decrease interval by 1 second"),
                 hint("Right-click", "Increase interval by 1 second"),
@@ -211,15 +217,26 @@ public final class AbilitiesGuiService implements Listener {
                 intervalLore));
         inventory.setItem(50,
                 item(Material.BOOK, "Manage Ability Library", List.of("Create and edit attacks for all NPCs")));
-        footer(inventory, page, keys.size());
+        footer(inventory, page, slots.size());
         show(player, inventory);
     }
-    private List<String> assignmentKeys(SpecialAttackOptions options) {
-        Set<String> assigned = options.assignedAttackKeys();
-        List<String> keys = new ArrayList<>(
-                repository.findAll().stream().map(FighterAttack::key).filter(assigned::contains).toList());
-        assigned.stream().filter(key -> !keys.contains(key)).sorted().forEach(keys::add);
-        return keys;
+    /** Keys in display order; {@code null} entries are blank spacer slots. */
+    private List<String> assignmentSlots(SpecialAttackOptions options) {
+        List<String> presets = new ArrayList<>();
+        List<String> rest = new ArrayList<>();
+        for (FighterAttack attack : repository.findAll())
+            (FighterTemplates.isPreset(attack.key()) ? presets : rest).add(attack.key());
+        options.assignedAttackKeys().stream().filter(key -> repository.find(key).isEmpty()).sorted()
+                .forEach(rest::add);
+        List<String> slots = new ArrayList<>(presets);
+        if (!rest.isEmpty())
+            while (slots.size() % 9 != 0)
+                slots.add(null);
+        slots.addAll(rest);
+        return slots;
+    }
+    private static String kind(String key) {
+        return LegacyText.DARK_GRAY + (FighterTemplates.isPreset(key) ? "Preset ability" : "Custom ability");
     }
 
     private void edit(Player player, EditHolder request) {
@@ -272,7 +289,12 @@ public final class AbilitiesGuiService implements Listener {
                 (event, p) -> create(p, attack, holder.back()));
         screen.set(24, item(Material.BOOK, "Shared Ability", List.of("Edits apply to every NPC assigned this attack",
                 "Use the tabs above to configure it", "NPC usage frequency is set on the assignment screen")));
-        screen.button(53, item(Material.TNT, "Delete Ability", List.of("Requires confirmation")),
+        boolean preset = FighterTemplates.isPreset(attack.key());
+        screen.button(53,
+                preset
+                        ? item(Material.TNT, "Reset to Default",
+                                List.of("Preset abilities cannot be deleted", "Requires confirmation"))
+                        : item(Material.TNT, "Delete Ability", List.of("Requires confirmation")),
                 (event, p) -> confirmDelete(p, holder, owner -> edit(owner, holder)));
     }
 
@@ -443,10 +465,13 @@ public final class AbilitiesGuiService implements Listener {
             holder.back().accept(player);
             return;
         }
+        boolean preset = FighterTemplates.isPreset(attack.key());
         Inventory inventory = Bukkit.createInventory(new DeleteHolder(holder.key(), holder.back(), cancel), 27,
-                UiText.title("Delete Ability", attack.name()));
-        inventory.setItem(11,
-                GuiItems.confirm(List.of("Removes this ability from the library", "Assigned NPCs will stop using it")));
+                UiText.title(preset ? "Reset Ability" : "Delete Ability", attack.name()));
+        inventory.setItem(11, GuiItems.confirm(preset
+                ? List.of("Restores the preset's default settings", "Name, icon, and edits are reverted",
+                        "Assigned NPCs keep using it")
+                : List.of("Removes this ability from the library", "Assigned NPCs will stop using it")));
         inventory.setItem(13, abilityItem(attack, attack.name(), summary(attack)));
         inventory.setItem(15, GuiItems.cancel());
         show(player, inventory);
@@ -477,8 +502,7 @@ public final class AbilitiesGuiService implements Listener {
             else if (slot == 49)
                 select.back().accept(player);
             else if (slot == 45 || slot == 53)
-                selector(player, new SelectHolder(select.page() + (slot == 45 ? -1 : 1), select.select(), select.back(),
-                        select.assignment()));
+                selector(player, new SelectHolder(select.page() + (slot == 45 ? -1 : 1), select.select(), select.back()));
         } else if (holder instanceof LibraryHolder library) {
             List<FighterAttack> attacks = repository.findAll();
             if (slot < PAGE_SIZE && library.page() * PAGE_SIZE + slot < attacks.size()) {
@@ -505,30 +529,29 @@ public final class AbilitiesGuiService implements Listener {
             else if (slot < FighterTemplates.defaults().size())
                 create(player, FighterTemplates.defaults().get(slot), template.back());
         } else if (holder instanceof AssignHolder assign) {
-            List<String> keys = assignmentKeys(assign.options());
+            List<String> slots = assignmentSlots(assign.options());
             int index = assign.page() * PAGE_SIZE + slot;
-            if (slot < PAGE_SIZE && index < keys.size()) {
-                String key = keys.get(index);
-                if (isIconClick(event) && repository.find(key).isPresent()) {
+            if (slot < PAGE_SIZE && index < slots.size() && slots.get(index) != null) {
+                String key = slots.get(index);
+                boolean exists = repository.find(key).isPresent();
+                if (!exists)
+                    saveAssignment(player, assign, assign.options().toggle(key));
+                else if (isIconClick(event)) {
                     repository.save(
                             repository.find(key).orElseThrow().withIcon(player.getInventory().getItemInMainHand()));
                     assignments(player, assign);
-                } else if (event.isLeftClick() && repository.find(key).isPresent())
+                } else if (event.isRightClick())
                     edit(player, new EditHolder(key, Tab.OVERVIEW, p -> assignments(p, assign)));
-                else if (event.isRightClick())
+                else if (event.isLeftClick()) {
+                    player.playSound(player.getLocation(), CLICK_SOUND, 0.35f, 1.6f);
                     saveAssignment(player, assign, assign.options().toggle(key));
+                }
             } else if (slot == 49)
                 assign.back().accept(player);
             else if (slot == 50)
                 library(player, 0, p -> assignments(p, assign));
             else if (slot == 46)
-                selector(player,
-                        new SelectHolder(0,
-                                key -> saveAssignment(player, assign,
-                                        assign.options().assignedAttackKeys().contains(key)
-                                                ? assign.options()
-                                                : assign.options().toggle(key)),
-                                p -> assignments(p, assign), true));
+                templates(player, p -> assignments(p, assign));
             else if (slot == 48) {
                 int direction = NumericControl.direction(event.getClick());
                 if (direction != 0)
@@ -540,9 +563,11 @@ public final class AbilitiesGuiService implements Listener {
         } else if (holder instanceof DeleteHolder delete) {
             if (slot == 11) {
                 String name = abilityName(delete.key());
+                boolean preset = FighterTemplates.isPreset(delete.key());
                 repository.delete(delete.key());
-                player.sendMessage(UiText.success("Deleted ability '" + name + "'."));
-                delete.back().accept(player);
+                player.sendMessage(UiText.success((preset ? "Reset" : "Deleted") + " ability '" + name + "'."));
+                // A reset preset still exists, so return to wherever the reset was started.
+                (preset ? delete.cancel() : delete.back()).accept(player);
             } else if (slot == 15)
                 delete.cancel().accept(player);
         }

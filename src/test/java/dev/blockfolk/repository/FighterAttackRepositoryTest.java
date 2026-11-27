@@ -14,6 +14,21 @@ class FighterAttackRepositoryTest {
     java.nio.file.Path folder;
 
     @Test
+    void presetsAreAlwaysListedFirstAndKeepTheirSavedEdits() {
+        var presets = FighterTemplates.defaults();
+        var custom = presets.get(8).copy("custom_breath", "Custom Breath");
+        var editedFear = FighterTemplates.preset("fear").orElseThrow().withName("Terror");
+        var loaded = FighterAttackRepository.withPresets(List.of(custom, editedFear));
+        assertEquals(presets.size() + 1, loaded.size());
+        assertEquals(presets.stream().map(FighterAttack::key).toList(),
+                loaded.subList(0, presets.size()).stream().map(FighterAttack::key).toList());
+        assertEquals("Terror", loaded.stream().filter(a -> a.key().equals("fear")).findFirst().orElseThrow().name());
+        assertEquals(custom, loaded.getLast());
+        assertTrue(FighterTemplates.isPreset("fear"));
+        assertFalse(FighterTemplates.isPreset("custom_breath"));
+    }
+
+    @Test
     void chargedCastAndNewVisualThemesRoundTripAndOldTimingStillLoads() throws Exception {
         var charge = FighterTemplates.defaults().get(8).withCastMode(FighterAttack.CastMode.NEXT_ATTACK)
                 .withVisual(FighterAttack.Visual.SPORES);

@@ -7,10 +7,10 @@
 1. Open **Abilities → Create Ability** and choose a starting template.
 2. Enter a name. Configure the attack using the tabs along the top: **Shape & Range**, **Timing & Triggers**, **Damage & Effects**, and **Visuals**. The open tab glows.
 3. Click **Preview** to see the shape from your position and view direction. Preview only displays particles and sound.
-4. Open an NPC's **Fighting & Survival → Abilities → Assign Ability** and select an attack from the library. It is enabled immediately and appears in **Assigned Abilities**. Left-click an assigned attack to edit its shared definition; right-click to remove its assignment.
+4. Open an NPC's **Fighting & Survival → Abilities**. The screen lists every ability in the library: the 20 presets first, then your custom abilities starting on a new row. Assigned abilities glow and are labelled **✔ Assigned**. Left-click an ability to assign or unassign it; the change applies immediately. Right-click it to edit its shared definition. **Create Ability** starts a new custom ability from a template without leaving the NPC.
 5. Set **Max Health** above zero and configure aggression or a **Start Combat** action.
 
-Attack definitions are shared. Editing a definition changes it for every NPC assigned that attack. Use **Duplicate** to create a separate variant. Renaming keeps existing assignments. Shift-right-click an attack in the library to delete it, or use **Delete Ability** in its overview. Deleting requires confirmation; NPCs stop using it, and its missing assignment can be removed in the assignment screen.
+Attack definitions are shared. Editing a definition changes it for every NPC assigned that attack. Use **Duplicate** to create a separate variant. Renaming keeps existing assignments. Shift-right-click a custom attack in the library to delete it, or use **Delete Ability** in its overview. Deleting requires confirmation; NPCs stop using it, and its missing assignment is shown with a barrier in the assignment screen, where a click removes it. Presets cannot be deleted: the same click (or **Reset to Default** in the overview) restores the preset's default settings, and NPCs assigned to it keep using it.
 
 Choices such as shape, cast mode, trigger, and visual theme are shown side by side. Click one to select it; the selected option glows and is labelled **✔ Selected**. Each tab only shows the settings that apply to the chosen shape.
 
@@ -68,7 +68,7 @@ Abilities can hit any eligible entity in the affected area, including passive mo
 
 ## Templates and visuals
 
-There are **20 editable templates**. A new library is seeded with all of them; existing libraries keep their abilities, and every template is always offered through **Create Ability**. The classic templates are Life Drain, Freezing Spell, Poison Spit, Wither Curse, Flame Burst, Lightning Mark, Defensive Shockwave, Fear, Fire Breath, Sonic Blast, and Reposition Blink. The others show off the newer options:
+There are **20 editable presets**. They are always part of the library and of every NPC's assignment screen, so they can be assigned without creating anything first. Edits to a preset are saved; a preset that is missing from `abilities.yml` (for example, one deleted in an earlier version) is restored with its default settings. Every preset is also offered as a template through **Create Ability**. The classic templates are Life Drain, Freezing Spell, Poison Spit, Wither Curse, Flame Burst, Lightning Mark, Defensive Shockwave, Fear, Fire Breath, Sonic Blast, and Reposition Blink. The others show off the newer options:
 
 | Template | Shows off |
 | --- | --- |
@@ -94,4 +94,4 @@ Targeted abilities use the current combat opponent or a valid triggering actor. 
 
 **Change Fight Options → Abilities** uses the same assignment screen for behaviour routines, waypoint actions, and question branches. It temporarily replaces the NPC's assigned attacks and usage interval.
 
-Shared definitions are saved in `plugins/Blockfolk/abilities.yml`. Existing `fighters.yml` data is loaded and copied into the new file automatically; the old file is preserved. Once `abilities.yml` exists, it is used in preference to the old file. Abilities saved by earlier versions load unchanged, with a single pulse, no minimum range, and the Always trigger. Assignments are saved with the NPC combat profile or behaviour action. Existing assignments to the original eight special attacks remain valid. The library is seeded on first use; deleted templates are not recreated on restart.
+Shared definitions are saved in `plugins/Blockfolk/abilities.yml`. Existing `fighters.yml` data is loaded and copied into the new file automatically; the old file is preserved. Once `abilities.yml` exists, it is used in preference to the old file. Abilities saved by earlier versions load unchanged, with a single pulse, no minimum range, and the Always trigger. Assignments are saved with the NPC combat profile or behaviour action. Existing assignments to the original eight special attacks remain valid. Presets are always present in the library; custom abilities are listed after them.
