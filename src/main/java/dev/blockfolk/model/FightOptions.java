@@ -4,7 +4,6 @@ import java.util.Arrays;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Aggression, targets, and special attacks temporarily applied by a behaviour
@@ -36,9 +35,11 @@ public record FightOptions(AttackReaction attackReaction, boolean mobs, boolean 
                 sections.put(pair[0].trim(), pair[1].trim());
         }
         AttackReaction reaction = AttackReaction.fromStored(sections.get("aggression"));
-        Set<String> targets = Arrays.stream(sections.getOrDefault("targets", "").split(","))
-                .map(target -> target.trim().toLowerCase(Locale.ROOT)).filter(target -> !target.isEmpty())
-                .collect(Collectors.toSet());
+        Set<TargetCategory> targets = TargetCategory
+                .fromStored(Arrays.asList(sections.getOrDefault("targets", "").split(",")));
+        Set<TargetCategory> abilityTargets = sections.containsKey("ability-targets")
+                ? TargetCategory.fromStored(Arrays.asList(sections.get("ability-targets").split(",")))
+                : targets;
         int interval = SpecialAttackOptions.DEFAULT_INTERVAL_SECONDS;
         try {
             interval = Integer.parseInt(sections.getOrDefault("special-interval", String.valueOf(interval)));
@@ -47,14 +48,18 @@ public record FightOptions(AttackReaction attackReaction, boolean mobs, boolean 
         }
         SpecialAttackOptions special = SpecialAttackOptions
                 .fromStored(Arrays.asList(sections.getOrDefault("special-attacks", "").split(",")), interval)
-                .withFighterAttacks(Arrays.asList(sections.getOrDefault("fighter-attacks", "").split(",")));
-        return new FightOptions(reaction, targets.contains("mobs"), targets.contains("animals"),
-                targets.contains("players"), targets.contains("npcs"), special);
+                .withFighterAttacks(Arrays.asList(sections.getOrDefault("fighter-attacks", "").split(",")))
+                .withTargets(abilityTargets);
+        return new FightOptions(reaction, targets.contains(TargetCategory.MOBS),
+                targets.contains(TargetCategory.ANIMALS), targets.contains(TargetCategory.PLAYERS),
+                targets.contains(TargetCategory.NPCS), special);
     }
 
     public String storedValue() {
-        String stored = "aggression=" + attackReaction.name().toLowerCase(Locale.ROOT) + ";targets=" + targetValue();
-        if (!specialAttacks.equals(SpecialAttackOptions.disabled())) {
+        String stored = "aggression=" + attackReaction.name().toLowerCase(Locale.ROOT) + ";targets=" + targetValue()
+                + ";ability-targets=" + String.join(",", TargetCategory.storedValues(specialAttacks.targets()));
+        if (!specialAttacks.enabled().isEmpty()
+                || specialAttacks.intervalSeconds() != SpecialAttackOptions.DEFAULT_INTERVAL_SECONDS) {
             stored += ";special-attacks=" + String.join(",", specialAttacks.storedAttacks()) + ";special-interval="
                     + specialAttacks.intervalSeconds();
         }
@@ -66,17 +71,19 @@ public record FightOptions(AttackReaction attackReaction, boolean mobs, boolean 
     }
 
     public String targetValue() {
-        StringBuilder value = new StringBuilder();
-        append(value, mobs, "mobs");
-        append(value, animals, "animals");
-        append(value, players, "players");
-        append(value, npcs, "npcs");
-        return value.toString();
+        return String.join(",", TargetCategory.storedValues(huntTargets()));
+    }
+
+    public Set<TargetCategory> huntTargets() {
+        return TargetCategory.fromFlags(mobs, animals, players, npcs);
     }
 
     public String displayName() {
-        String targets = targetValue().isEmpty() ? "No targets" : targetValue();
-        return attackReaction.displayName() + "; " + targets
+        String targets = targetValue();
+        return attackReaction.displayName()
+                + (attackReaction == AttackReaction.HUNTING
+                        ? "; hunts " + (targets.isEmpty() ? "nothing" : targets)
+                        : "")
                 + (specialAttacks.assignedAttackKeys().isEmpty()
                         ? ""
                         : "; " + specialAttacks.assignedAttackKeys().size() + " special attacks");
@@ -106,11 +113,4 @@ public record FightOptions(AttackReaction attackReaction, boolean mobs, boolean 
         return new FightOptions(attackReaction, mobs, animals, players, npcs, options);
     }
 
-    private static void append(StringBuilder value, boolean enabled, String target) {
-        if (!enabled)
-            return;
-        if (!value.isEmpty())
-            value.append(',');
-        value.append(target);
-    }
 }

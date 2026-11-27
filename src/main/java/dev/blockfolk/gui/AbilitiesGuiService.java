@@ -32,6 +32,7 @@ import dev.blockfolk.fighters.FighterAttack.*;
 import dev.blockfolk.fighters.FighterTemplates;
 import dev.blockfolk.input.ChatInputService;
 import dev.blockfolk.model.SpecialAttackOptions;
+import dev.blockfolk.model.TargetCategory;
 import dev.blockfolk.repository.FighterAttackRepository;
 import dev.blockfolk.util.LegacyText;
 import dev.blockfolk.util.UiText;
@@ -40,6 +41,9 @@ import dev.blockfolk.util.UiText;
 public final class AbilitiesGuiService implements Listener {
     private static final int PAGE_SIZE = 45;
     private static final int PREVIEW_SLOT = 7;
+    private static final int ABILITY_TARGETS_SLOT = 51;
+    private static final int FIRST_ABILITY_CATEGORY_SLOT = 11;
+    private static final int ABILITY_TARGETS_BACK_SLOT = 22;
     private static final String CLICK_SOUND = "minecraft:ui.button.click";
     private final FighterAttackRepository repository;
     private final ChatInputService input;
@@ -95,6 +99,8 @@ public final class AbilitiesGuiService implements Listener {
     }
     private record AssignHolder(SpecialAttackOptions options, Consumer<SpecialAttackOptions> save,
             Consumer<Player> back, int page) implements Holder {
+    }
+    private record AbilityTargetsHolder(AssignHolder assignment) implements Holder {
     }
     private record Screen(Inventory inventory, Map<Integer, Action> actions) {
         void button(int slot, ItemStack item, Action action) {
@@ -211,9 +217,25 @@ public final class AbilitiesGuiService implements Listener {
                 intervalLore));
         inventory.setItem(50,
                 item(Material.BOOK, "Manage Ability Library", List.of("Create and edit attacks for all NPCs")));
+        inventory.setItem(ABILITY_TARGETS_SLOT,
+                item(Material.TARGET, "Ability Targets", List.of("Controls who else abilities can hit",
+                        "An eligible opponent can always be hit", hint("Click", "Choose target categories"))));
         footer(inventory, page, keys.size());
         show(player, inventory);
     }
+
+    private void abilityTargets(Player player, AssignHolder assign) {
+        Inventory inventory = Bukkit.createInventory(new AbilityTargetsHolder(assign), 27,
+                UiText.title("Abilities · Ability Targets"));
+        for (TargetCategory category : TargetCategory.values()) {
+            inventory.setItem(FIRST_ABILITY_CATEGORY_SLOT + category.ordinal(),
+                    GuiItems.targetToggle(category, "Allow", assign.options().targets().contains(category),
+                            "abilities can also hit this type", "abilities spare bystanders of this type"));
+        }
+        inventory.setItem(ABILITY_TARGETS_BACK_SLOT, GuiItems.back("Assigned Abilities"));
+        show(player, inventory);
+    }
+
     private List<String> assignmentKeys(SpecialAttackOptions options) {
         Set<String> assigned = options.assignedAttackKeys();
         List<String> keys = new ArrayList<>(
@@ -521,6 +543,8 @@ public final class AbilitiesGuiService implements Listener {
                 assign.back().accept(player);
             else if (slot == 50)
                 library(player, 0, p -> assignments(p, assign));
+            else if (slot == ABILITY_TARGETS_SLOT)
+                abilityTargets(player, assign);
             else if (slot == 46)
                 selector(player,
                         new SelectHolder(0,
@@ -537,6 +561,20 @@ public final class AbilitiesGuiService implements Listener {
             } else if (slot == 45 || slot == 53)
                 assignments(player, new AssignHolder(assign.options(), assign.save(), assign.back(),
                         assign.page() + (slot == 45 ? -1 : 1)));
+        } else if (holder instanceof AbilityTargetsHolder targets) {
+            AssignHolder assign = targets.assignment();
+            if (slot == ABILITY_TARGETS_BACK_SLOT) {
+                assignments(player, assign);
+            } else {
+                int index = slot - FIRST_ABILITY_CATEGORY_SLOT;
+                TargetCategory[] categories = TargetCategory.values();
+                if (index >= 0 && index < categories.length) {
+                    SpecialAttackOptions updated = assign.options().toggleTarget(categories[index]);
+                    assign.save().accept(updated);
+                    GuiItems.click(player);
+                    abilityTargets(player, new AssignHolder(updated, assign.save(), assign.back(), assign.page()));
+                }
+            }
         } else if (holder instanceof DeleteHolder delete) {
             if (slot == 11) {
                 String name = abilityName(delete.key());

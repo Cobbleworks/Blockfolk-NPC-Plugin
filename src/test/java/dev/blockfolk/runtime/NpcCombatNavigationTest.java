@@ -23,12 +23,15 @@ import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
+import dev.blockfolk.model.SpecialAttackOptions;
+import dev.blockfolk.model.TargetCategory;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 
@@ -162,6 +165,44 @@ class NpcCombatNavigationTest {
     }
 
     @Test
+    void abilityTargetsCanBeUsedByScriptedCastsWithoutBeingHunted() throws Exception {
+        when(definition.getCombatProfile())
+                .thenReturn(CombatProfile.disabled().withMaxHealth(20).withAttackReaction(AttackReaction.HUNTING)
+                        .withSpecialAttacks(SpecialAttackOptions.disabled().toggleTarget(TargetCategory.PLAYERS)));
+        when(npc.getNearbyEntities(anyDouble(), anyDouble(), anyDouble())).thenReturn(List.of(target));
+
+        for (int i = 0; i < 10; i++)
+            tick();
+
+        assertFalse(combat.isEngaged(instance));
+        assertEquals(20, combat.useAbility(instance, "lightning_mark", null));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"IGNORE, false", "IGNORE, true", "FLEE, false", "FLEE, true", "FIGHT_BACK, false", "FIGHT_BACK, true",
+            "HUNTING, false", "HUNTING, true"})
+    void damageReactionDependsOnModeAndIgnoresHuntTargets(AttackReaction reaction, boolean huntPlayers)
+            throws Exception {
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(() -> Bukkit.getEntity(targetId)).thenReturn(target);
+            when(definition.getCombatProfile()).thenReturn(CombatProfile.disabled().withMaxHealth(20)
+                    .withAttackReaction(reaction).withTargetPlayers(huntPlayers));
+
+            hitByTarget();
+            tick();
+
+            if (reaction == AttackReaction.IGNORE) {
+                assertFalse(combat.isEngaged(instance));
+                verify(instances, never()).navigate(eq(instance), any(Location.class), any(WalkingSpeed.class));
+            } else {
+                assertTrue(combat.isEngaged(instance));
+                verify(instances).navigate(eq(instance), any(Location.class),
+                        eq(reaction == AttackReaction.FLEE ? WalkingSpeed.VERY_FAST : WalkingSpeed.FAST));
+            }
+        }
+    }
+
+    @Test
     void hitNpcStandsUpUnlessItHoldsItsPose() {
         try (var bukkit = mockStatic(Bukkit.class)) {
             bukkit.when(Bukkit::getScheduler).thenReturn(mock(org.bukkit.scheduler.BukkitScheduler.class));
@@ -227,13 +268,17 @@ class NpcCombatNavigationTest {
         if (mode.equals("flee")) {
             when(definition.getCombatProfile())
                     .thenReturn(CombatProfile.disabled().withMaxHealth(20).withAttackReaction(AttackReaction.FLEE));
-            EntityDamageByEntityEvent damage = mock(EntityDamageByEntityEvent.class);
-            when(damage.getEntity()).thenReturn(npc);
-            when(damage.getDamager()).thenReturn(target);
-            combat.onNpcDamage(damage);
+            hitByTarget();
         } else {
             assertTrue(combat.startDirectedCombat(instance, target));
         }
+    }
+
+    private void hitByTarget() {
+        EntityDamageByEntityEvent damage = mock(EntityDamageByEntityEvent.class);
+        when(damage.getEntity()).thenReturn(npc);
+        when(damage.getDamager()).thenReturn(target);
+        combat.onNpcDamage(damage);
     }
 
     private void tick() throws Exception {

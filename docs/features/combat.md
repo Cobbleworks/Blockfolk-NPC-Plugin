@@ -4,7 +4,6 @@ Combat is configured per preset under **Fighting & Survival**.
 
 <div class="screenshot-grid">
   <img src="../screenshots/screenshot-combat-menu.jpeg" alt="Blockfolk combat configuration menu">
-  <img src="../screenshots/screenshot-combat-target-menu.jpeg" alt="Blockfolk combat target and aggression menu">
 </div>
 
 ## Health and respawning
@@ -28,14 +27,16 @@ Pending combat respawns survive server restarts and keep the persistent instance
 
 | Mode | Behaviour |
 | --- | --- |
-| Ignore | Does not seek targets; only fights attackers from an enabled target category. |
-| Fights Back | Retaliates against any attacker. |
-| Flee | Moves away from attackers, except those from an enabled target category, which it fights. |
-| Hunting | Proactively seeks enabled target categories and retaliates against any attacker. |
+| Ignore | Ignores attacks. |
+| Fights Back | Retaliates against any eligible attacker. |
+| Flee | Runs away when attacked. |
+| Hunting | Attacks enabled target types on sight and retaliates against any eligible attacker. |
+
+The **Hunt** toggles appear when **Hunting** is selected. The editor remembers them when you switch modes. With all four toggles off, Hunting only retaliates. Use **Abilities → Ability Targets** to control which bystanders abilities can hit.
 
 An NPC with **Hold Pose** (NPC Properties) stays in its pose when hit: it fights only within its weapon's reach and never walks, flees, or dashes in combat. See [Holding a pose](customization.md#holding-a-pose).
 
-Target categories are hostile mobs, animals, survival/adventure players, and other vulnerable Blockfolk NPCs. Peaceful mobs such as villagers and iron golems are never hunted, but an NPC that fights back still defends itself against them.
+The hunt categories are hostile mobs, animals, Survival and Adventure players, and other vulnerable Blockfolk NPCs. NPCs in **Fights Back** or **Hunting** can also retaliate against peaceful mobs such as iron golems.
 
 An NPC under attack from several sides keeps its current opponent unless that opponent is gone, out of sight for a second, or a new attacker is more than three blocks closer. Every attacker is remembered for ten seconds: when the current opponent dies or escapes, the NPC turns to the closest remembered attacker instead of leaving combat.
 
@@ -52,16 +53,14 @@ See [Abilities](/features/abilities) for the attack editor, templates, and casti
 NPCs with the same non-empty alliance value do not fight each other, and neither do spawned copies of the same preset.
 Alliance names ignore capitalization.
 
-Allies fight together. When an NPC is attacked, allied NPCs within 16 blocks join the fight if their aggression is
-Fights Back or Hunting (or the attacker is one of their enabled target categories). Allies answering a call for help
-never flee. Damage between allies, such as a stray arrow, is cancelled. A player can appear allied to an NPC by carrying an item whose custom display name matches
+NPCs in **Fights Back** or **Hunting** join the fight when one of their allies is attacked within 16 blocks.
+Damage between allies, such as a stray arrow, is cancelled. A player can appear allied to an NPC by carrying an item whose custom display name matches
 that NPC's alliance. The comparison ignores capitalization and checks every inventory slot; allied NPCs will neither
-choose that player as a target nor retaliate against them. Allied NPCs within 16 blocks also defend such a player
-from attackers, and their stray hits do not harm them.
+choose that player as a target nor retaliate against them. Allied NPCs in **Fights Back** or **Hunting** within 16 blocks of that player also defend them, and their stray hits do not harm them.
 
 ## Runtime combat actions
 
-**Start Combat** starts an encounter from a behaviour routine. **Change Fight Options** temporarily changes aggression, target categories, and special attacks, allowing a routine to switch stance without modifying the stored combat profile.
+**Start Combat** starts an encounter from a behaviour routine. **Change Fight Options** temporarily changes aggression, hunt targets, and ability settings without modifying the stored combat profile.
 
 AI combat is separately gated by the preset's enabled AI capabilities. The response still passes validated nearby targets only.
 

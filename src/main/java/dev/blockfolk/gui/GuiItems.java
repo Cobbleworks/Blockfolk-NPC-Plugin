@@ -11,6 +11,7 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
+import dev.blockfolk.model.TargetCategory;
 import dev.blockfolk.util.LegacyText;
 
 /**
@@ -100,6 +101,20 @@ final class GuiItems {
         ItemStack item = item(new ItemStack(enabled ? onIcon : offIcon),
                 (enabled ? LegacyText.GREEN : LegacyText.RED) + label + ": " + (enabled ? "On" : "Off"), lore);
         return enabled ? glint(item) : item;
+    }
+
+    static ItemStack targetToggle(TargetCategory category, String action, boolean enabled, String onText,
+            String offText) {
+        return switch (category) {
+            case MOBS -> toggle(Material.ZOMBIE_HEAD, Material.POPPY, action + " Mobs", enabled, onText, offText,
+                    List.of("Hostile mobs"));
+            case ANIMALS -> toggle(Material.PORKCHOP, Material.POPPY, action + " Animals", enabled, onText, offText,
+                    List.of("Animals"));
+            case PLAYERS -> toggle(Material.PLAYER_HEAD, Material.POPPY, action + " Players", enabled, onText, offText,
+                    List.of("Survival and Adventure players", "Allies are spared"));
+            case NPCS -> toggle(Material.ARMOR_STAND, Material.POPPY, action + " Other NPCs", enabled, onText, offText,
+                    List.of("Vulnerable NPCs", "Allies and copies of this preset are spared"));
+        };
     }
 
     /**

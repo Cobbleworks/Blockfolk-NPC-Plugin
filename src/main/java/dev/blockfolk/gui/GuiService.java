@@ -49,6 +49,7 @@ import dev.blockfolk.model.FightOptions;
 import dev.blockfolk.model.BehaviourEvent;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.SpecialAttackOptions;
+import dev.blockfolk.model.TargetCategory;
 import dev.blockfolk.model.Scene;
 import dev.blockfolk.model.SceneBeat;
 import dev.blockfolk.model.SceneRole;
@@ -687,15 +688,16 @@ public final class GuiService implements Listener {
                         List.of(LegacyText.GRAY + "Routes owned by this NPC: " + LegacyText.WHITE + routeCount, "",
                                 GuiItems.hint("Click", "manage routes"))));
         CombatProfile combat = definition.getCombatProfile();
-        inventory.setItem(EDITOR_FIGHTING_SLOT, item(Material.IRON_SWORD, "Fighting & Survival",
+        List<String> combatLore = new ArrayList<>(
                 List.of(LegacyText.GRAY + "Health: " + LegacyText.WHITE + healthLabel(combat),
                         LegacyText.GRAY + "Armor: " + LegacyText.WHITE + armorLabel(combat),
-                        LegacyText.GRAY + "Respawn: " + LegacyText.WHITE + respawnLabel(combat),
-                        LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName(),
-                        LegacyText.GRAY + "Attack targets: " + LegacyText.WHITE + enabledTargetCount(combat) + "/4",
-                        LegacyText.GRAY + "Abilities: " + LegacyText.WHITE
-                                + combat.specialAttacks().assignedAttackKeys().size(),
-                        "", GuiItems.hint("Click", "configure combat"))));
+                        LegacyText.GRAY + "Respawn: " + LegacyText.WHITE + respawnLabel(combat)));
+        addAggressionLore(combatLore, combat);
+        combatLore.add(LegacyText.GRAY + "Abilities: " + LegacyText.WHITE
+                + combat.specialAttacks().assignedAttackKeys().size());
+        combatLore.add("");
+        combatLore.add(GuiItems.hint("Click", "configure combat"));
+        inventory.setItem(EDITOR_FIGHTING_SLOT, item(Material.IRON_SWORD, "Fighting & Survival", combatLore));
         List<String> shopLore = new ArrayList<>();
         List<String> usedShops = usedShopKeys(definition);
         if (usedShops.isEmpty()) {
@@ -884,10 +886,11 @@ public final class GuiService implements Listener {
         inventory.setItem(FIGHTING_BOSS_BAR_SLOT,
                 GuiItems.toggle(Material.WITHER_SKELETON_SKULL, Material.SKELETON_SKULL, "Boss Bar",
                         combat.showBossBar(), "health bar for players within 16 blocks", "no health bar", List.of()));
-        inventory.setItem(FIGHTING_TARGETS_SLOT, item(Material.TARGET, "Targets & Behaviour", List.of(
-                LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName(),
-                LegacyText.GRAY + "Attack targets enabled: " + LegacyText.WHITE + enabledTargetCount(combat) + "/4", "",
-                GuiItems.hint("Click", "configure"))));
+        List<String> aggressionLore = new ArrayList<>();
+        addAggressionLore(aggressionLore, combat);
+        aggressionLore.add("");
+        aggressionLore.add(GuiItems.hint("Click", "configure"));
+        inventory.setItem(FIGHTING_TARGETS_SLOT, item(Material.TARGET, "Aggression", aggressionLore));
         inventory.setItem(FIGHTING_ALLIANCE_SLOT,
                 item(Material.NAME_TAG, "Alliance",
                         List.of(LegacyText.GRAY + "Current: " + LegacyText.WHITE + allianceLabel(combat),
@@ -910,7 +913,7 @@ public final class GuiService implements Listener {
 
     public void openTargetsAndBehaviour(Player player, NpcDefinition definition) {
         Inventory inventory = Bukkit.createInventory(new TargetsHolder(definition.getKey()), 27,
-                UiText.title("Targets & Behaviour", definition.getDisplayName()));
+                UiText.title("Aggression", definition.getDisplayName()));
         populateFightOptions(inventory, FightOptions.from(definition.getCombatProfile()), "Fighting & Survival");
         openInventory(player, inventory);
     }
@@ -928,19 +931,16 @@ public final class GuiService implements Listener {
                         reactionDescription(value), reactionColor(value)))
                 .toList();
         inventory.setItem(10, GuiItems.cycle("Aggression", reactions, reaction.ordinal(),
-                List.of("How the NPC reacts to enemies and attackers")));
-        inventory.setItem(12, targetToggle(Material.ZOMBIE_HEAD, "Mobs", options.mobs(), "hostile mobs"));
-        inventory.setItem(13, targetToggle(Material.PORKCHOP, "Animals", options.animals(), "passive animals"));
-        inventory.setItem(14,
-                targetToggle(Material.PLAYER_HEAD, "Players", options.players(), "survival and adventure players"));
-        inventory.setItem(15, targetToggle(Material.ARMOR_STAND, "Other NPCs", options.npcs(), "vulnerable NPCs"));
+                List.of("Choose Hunting to configure what to attack on sight")));
+        if (reaction == AttackReaction.HUNTING) {
+            Set<TargetCategory> targets = options.huntTargets();
+            for (TargetCategory category : TargetCategory.values()) {
+                inventory.setItem(12 + category.ordinal(), GuiItems.targetToggle(category, "Hunt",
+                        targets.contains(category), "attacks on sight", "leaves alone until attacked"));
+            }
+        }
         inventory.setItem(16, specialAttacksItem(options.specialAttacks()));
         inventory.setItem(22, GuiItems.back(backDestination));
-    }
-
-    private ItemStack targetToggle(Material icon, String label, boolean enabled, String who) {
-        return GuiItems.toggle(icon, Material.POPPY, "Target " + label, enabled, "attacks " + who, "spares " + who,
-                List.of(LegacyText.DARK_GRAY + "Allies and same-preset NPCs are always spared"));
     }
 
     private static String reactionColor(AttackReaction reaction) {
@@ -1952,6 +1952,8 @@ public final class GuiService implements Listener {
             return;
         }
         CombatProfile combat = definition.getCombatProfile();
+        if (event.getRawSlot() >= 12 && event.getRawSlot() <= 15 && combat.attackReaction() != AttackReaction.HUNTING)
+            return;
         int direction = GuiItems.cycleDirection(event.getClick());
         CombatProfile updated = switch (event.getRawSlot()) {
             case 10 ->
@@ -1986,6 +1988,8 @@ public final class GuiService implements Listener {
             return;
         }
         FightOptions current = holder.options();
+        if (event.getRawSlot() >= 12 && event.getRawSlot() <= 15 && current.attackReaction() != AttackReaction.HUNTING)
+            return;
         int direction = GuiItems.cycleDirection(event.getClick());
         FightOptions updated = switch (event.getRawSlot()) {
             case 10 ->
@@ -4097,9 +4101,12 @@ public final class GuiService implements Listener {
         };
     }
 
-    private int enabledTargetCount(CombatProfile combat) {
-        return (combat.targetMobs() ? 1 : 0) + (combat.targetAnimals() ? 1 : 0) + (combat.targetPlayers() ? 1 : 0)
-                + (combat.targetNpcs() ? 1 : 0);
+    private void addAggressionLore(List<String> lore, CombatProfile combat) {
+        lore.add(LegacyText.GRAY + "Aggression: " + LegacyText.WHITE + combat.attackReaction().displayName());
+        if (combat.attackReaction() == AttackReaction.HUNTING) {
+            int huntCount = FightOptions.from(combat).huntTargets().size();
+            lore.add(LegacyText.GRAY + "Hunt targets enabled: " + LegacyText.WHITE + huntCount + "/4");
+        }
     }
 
     private Material eventMaterial(BehaviourEvent event) {
@@ -4309,7 +4316,7 @@ public final class GuiService implements Listener {
             case IGNORE -> "does not react when attacked";
             case FLEE -> "runs away after taking damage";
             case FIGHT_BACK -> "attacks whoever damages it";
-            case HUNTING -> "hunts enabled targets, fights back";
+            case HUNTING -> "hunts enabled types on sight and fights back";
         };
     }
 

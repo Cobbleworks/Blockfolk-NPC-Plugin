@@ -7,7 +7,8 @@ import java.util.Set;
 import java.util.HashSet;
 import dev.blockfolk.fighters.FighterAttack;
 
-public record SpecialAttackOptions(Set<SpecialAttack> enabled, int intervalSeconds, Set<String> fighterAttacks) {
+public record SpecialAttackOptions(Set<SpecialAttack> enabled, int intervalSeconds, Set<String> fighterAttacks,
+        Set<TargetCategory> targets) {
     public static final int DEFAULT_INTERVAL_SECONDS = 8;
     public static final int MIN_INTERVAL_SECONDS = 3;
     public static final int MAX_INTERVAL_SECONDS = 60;
@@ -29,7 +30,12 @@ public record SpecialAttackOptions(Set<SpecialAttack> enabled, int intervalSecon
         }
         enabled = Set.copyOf(legacy);
         fighterAttacks = Set.copyOf(custom);
+        targets = Set.copyOf(targets);
         intervalSeconds = Math.clamp(intervalSeconds, MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS);
+    }
+
+    public SpecialAttackOptions(Set<SpecialAttack> enabled, int intervalSeconds, Set<String> fighterAttacks) {
+        this(enabled, intervalSeconds, fighterAttacks, Set.of());
     }
 
     public SpecialAttackOptions(Set<SpecialAttack> enabled, int intervalSeconds) {
@@ -50,11 +56,12 @@ public record SpecialAttackOptions(Set<SpecialAttack> enabled, int intervalSecon
         key = FighterAttack.normalizeKey(key);
         if (!key.isEmpty() && !keys.remove(key))
             keys.add(key);
-        return new SpecialAttackOptions(enabled, intervalSeconds, keys);
+        return new SpecialAttackOptions(enabled, intervalSeconds, keys, targets);
     }
 
     public SpecialAttackOptions withFighterAttacks(Collection<String> keys) {
-        return new SpecialAttackOptions(enabled, intervalSeconds, keys == null ? Set.of() : new HashSet<>(keys));
+        return new SpecialAttackOptions(enabled, intervalSeconds, keys == null ? Set.of() : new HashSet<>(keys),
+                targets);
     }
 
     public static SpecialAttackOptions disabled() {
@@ -79,10 +86,22 @@ public record SpecialAttackOptions(Set<SpecialAttack> enabled, int intervalSecon
         updated.addAll(enabled);
         if (!updated.remove(attack))
             updated.add(attack);
-        return new SpecialAttackOptions(updated, intervalSeconds, fighterAttacks);
+        return new SpecialAttackOptions(updated, intervalSeconds, fighterAttacks, targets);
     }
 
     public SpecialAttackOptions withIntervalSeconds(int seconds) {
-        return new SpecialAttackOptions(enabled, seconds, fighterAttacks);
+        return new SpecialAttackOptions(enabled, seconds, fighterAttacks, targets);
+    }
+
+    public SpecialAttackOptions withTargets(Set<TargetCategory> categories) {
+        return new SpecialAttackOptions(enabled, intervalSeconds, fighterAttacks, categories);
+    }
+
+    public SpecialAttackOptions toggleTarget(TargetCategory category) {
+        Set<TargetCategory> updated = EnumSet.noneOf(TargetCategory.class);
+        updated.addAll(targets);
+        if (!updated.remove(category))
+            updated.add(category);
+        return withTargets(updated);
     }
 }

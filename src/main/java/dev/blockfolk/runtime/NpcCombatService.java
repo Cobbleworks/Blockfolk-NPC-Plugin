@@ -43,6 +43,7 @@ import dev.blockfolk.combat.NpcSpecialAttackService;
 import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.FightOptions;
+import dev.blockfolk.model.TargetCategory;
 import dev.blockfolk.model.LootTier;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
@@ -241,15 +242,16 @@ public final class NpcCombatService implements Listener {
         if (definition == null || npc == null || !npc.isValid() || npc.isDead())
             return -1;
         FightOptions options = fightOptions(instance, definition.getCombatProfile());
+        Set<TargetCategory> abilityTargets = options.specialAttacks().targets();
         Entity opponent = currentTarget(instance);
         LivingEntity target = opponent instanceof LivingEntity living && isAttackable(instance, living)
                 ? living
                 : actor instanceof LivingEntity living && living.getWorld() == npc.getWorld()
-                        && isAttackable(instance, living) ? living : findNearestTarget(instance, npc, options);
+                        && isAttackable(instance, living) ? living : findNearestTarget(instance, npc, abilityTargets);
         LivingEntity chosen = target;
         int delay = specialAttackService.useAbility(instance.getId(), npc, target, key, options.specialAttacks(),
                 victim -> isAttackable(instance, victim)
-                        && (victim.equals(chosen) || isSelectedTarget(victim, options)),
+                        && (victim.equals(chosen) || isSelectedTarget(victim, abilityTargets)),
                 currentTick);
         if (delay > 0)
             instanceRegistry.stopNavigating(instance);
@@ -287,12 +289,13 @@ public final class NpcCombatService implements Listener {
                     || victim.getHealth() + victim.getAbsorptionAmount() >= hit.before())
                 continue;
             FightOptions options = fightOptions(instance, definition.getCombatProfile());
-            specialAttackService.onSuccessfulWeaponHit(instance.getId(), hit.charge(), npc, victim,
-                    options.specialAttacks(),
-                    candidate -> candidate.equals(victim)
-                            ? victim.isDead() || isAttackable(instance, victim)
-                            : isAttackable(instance, candidate) && isSelectedTarget(candidate, options),
-                    currentTick);
+            specialAttackService
+                    .onSuccessfulWeaponHit(instance.getId(), hit.charge(), npc, victim, options.specialAttacks(),
+                            candidate -> candidate.equals(victim)
+                                    ? victim.isDead() || isAttackable(instance, victim)
+                                    : isAttackable(instance, candidate)
+                                            && isSelectedTarget(candidate, options.specialAttacks().targets()),
+                            currentTick);
         }
     }
 
@@ -302,6 +305,7 @@ public final class NpcCombatService implements Listener {
 
     public void changeFightOptions(NpcInstance instance, FightOptions options) {
         fightOptionsOverrides.put(instance.getId(), options);
+        threats.remove(instance.getId());
         clearState(instance, CombatExitReason.STOPPED);
     }
 
@@ -413,17 +417,19 @@ public final class NpcCombatService implements Listener {
      * false when the NPC answers a call for help: then it never flees.
      */
     private void defend(NpcInstance instance, NpcDefinition definition, LivingEntity attacker, boolean direct) {
-        rememberThreat(instance, attacker);
-        FightOptions options = fightOptions(instance, definition.getCombatProfile());
-        AttackReaction reaction = options.attackReaction();
-        boolean selectedTarget = isSelectedTarget(attacker, options);
-        if (reaction == AttackReaction.FLEE && !selectedTarget) {
+        AttackReaction reaction = fightOptions(instance, definition.getCombatProfile()).attackReaction();
+        if (reaction == AttackReaction.FLEE) {
             // An NPC holding its pose stays where it is instead of running away.
             if (direct && !definition.isHoldPose())
                 engage(instance, definition, CombatMode.FLEE, attacker);
-        } else if (reaction == AttackReaction.FIGHT_BACK || reaction == AttackReaction.HUNTING || selectedTarget) {
+        } else if (retaliates(reaction)) {
+            rememberThreat(instance, attacker);
             engageAttacker(instance, definition, attacker);
         }
+    }
+
+    private boolean retaliates(AttackReaction reaction) {
+        return reaction == AttackReaction.FIGHT_BACK || reaction == AttackReaction.HUNTING;
     }
 
     /**
@@ -492,6 +498,8 @@ public final class NpcCombatService implements Listener {
      * none.
      */
     private boolean engageNextThreat(NpcInstance instance, NpcDefinition definition, LivingEntity npc) {
+        if (!retaliates(fightOptions(instance, definition.getCombatProfile()).attackReaction()))
+            return false;
         Map<UUID, Long> remembered = threats.get(instance.getId());
         if (remembered == null)
             return false;
@@ -705,7 +713,7 @@ public final class NpcCombatService implements Listener {
             CombatState state = states.get(instance.getId());
             if (state == null && fightOptions.attackReaction() == AttackReaction.HUNTING
                     && currentTick % 10 == Math.floorMod(instance.getId().hashCode(), 10)) {
-                LivingEntity target = findNearestTarget(instance, npc, fightOptions);
+                LivingEntity target = findNearestTarget(instance, npc, fightOptions.huntTargets());
                 if (target != null && withinStationaryReach(definition, npc, target)) {
                     engage(instance, definition, CombatMode.FIGHT, target);
                     state = states.get(instance.getId());
@@ -967,10 +975,12 @@ public final class NpcCombatService implements Listener {
         }
     }
 
-    private LivingEntity findNearestTarget(NpcInstance instance, LivingEntity npc, FightOptions options) {
+    private LivingEntity findNearestTarget(NpcInstance instance, LivingEntity npc, Set<TargetCategory> categories) {
+        if (categories.isEmpty())
+            return null;
         return npc.getNearbyEntities(SIGHT_RANGE, SIGHT_RANGE, SIGHT_RANGE).stream()
                 .filter(LivingEntity.class::isInstance).map(LivingEntity.class::cast)
-                .filter(target -> isAttackable(instance, target)).filter(target -> isSelectedTarget(target, options))
+                .filter(target -> isAttackable(instance, target)).filter(target -> isSelectedTarget(target, categories))
                 .filter(target -> !isTemporarilyUnreachable(instance, target)).filter(npc::hasLineOfSight)
                 .min(Comparator.comparingDouble(target -> target.getLocation().distanceSquared(npc.getLocation())))
                 .orElse(null);
@@ -980,22 +990,21 @@ public final class NpcCombatService implements Listener {
             LivingEntity primary) {
         // Capture the explicit target before the cast is consumed at impact.
         LivingEntity scripted = specialAttackService.scriptedTarget(instance.getId());
-        return victim -> isAttackable(instance, victim)
-                && (victim.equals(primary) || victim.equals(scripted) || isSelectedTarget(victim, options));
+        return victim -> isAttackable(instance, victim) && (victim.equals(primary) || victim.equals(scripted)
+                || isSelectedTarget(victim, options.specialAttacks().targets()));
     }
 
-    private boolean isSelectedTarget(LivingEntity target, FightOptions options) {
+    private boolean isSelectedTarget(LivingEntity target, Set<TargetCategory> categories) {
         if (target instanceof Mannequin) {
-            return options.npcs();
+            return categories.contains(TargetCategory.NPCS);
         }
         if (target instanceof Player) {
-            return options.players();
+            return categories.contains(TargetCategory.PLAYERS);
         }
         if (target instanceof Animals) {
-            return options.animals();
+            return categories.contains(TargetCategory.ANIMALS);
         }
-        // Villagers, golems, and other peaceful mobs are only fought when they attack.
-        return target instanceof Enemy && options.mobs();
+        return target instanceof Enemy && categories.contains(TargetCategory.MOBS);
     }
 
     private FightOptions fightOptions(NpcInstance instance, CombatProfile profile) {

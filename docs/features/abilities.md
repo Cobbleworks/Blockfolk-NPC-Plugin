@@ -64,7 +64,7 @@ Effects are grouped into three rows. Enabled effects glow and are labelled **✔
 
 **Effect Duration** ranges from 1–30 seconds and **Effect Level** from I–V; both apply to afflictions, potion crowd control, and caster buffs. **Force** ranges from 0–2.5 and controls Knockback, Pull, and Launch. Slowness also affects native NPC navigation; Weakness and Strength affect their melee damage. Undead NPC entity types are immune to Poison and Regeneration, as in vanilla.
 
-All victims must be attackable. The current opponent is eligible; collateral victims must also match an enabled target category. Allied NPCs, allied players, creative/spectator players, and navigation helpers are excluded. Cancelled or fully resisted damaging hits prevent their secondary effects. Attacks with effects only send a cancellable zero-damage protection event before applying effects. Attacks leave blocks unchanged and do not summon entities.
+All victims must be attackable. The current opponent is eligible. Bystanders must match a category enabled under **Abilities → Ability Targets**. These categories apply in every aggression mode. Allied NPCs, allied players, Creative and Spectator players, and navigation helpers are excluded. Cancelled or fully resisted damaging hits prevent their secondary effects. Attacks with effects only send a cancellable zero-damage protection event before applying effects. Attacks leave blocks unchanged and do not summon entities.
 
 ## Templates and visuals
 
@@ -90,7 +90,7 @@ Numeric controls use **left-click to decrease**, **right-click to increase**, **
 
 **Use Ability** is available in event routines, scene roles, waypoint actions, and question branches. It opens an ability selector and stores the chosen ability's stable key. The NPC can cast it without assigning it for random combat use. Cooldowns are shared with automatic casts, and an NPC can have one delayed cast or charge at a time.
 
-Targeted abilities use the current combat opponent, otherwise a valid triggering actor, otherwise the nearest selected target in sight. Target-centred areas, cones, beams, and dashes require a target within activation range. Caster-centred spheres and rings, teleport, Self abilities, and charging can run without an opponent, including on invulnerable NPCs. Collateral targets still follow alliance and target-category rules. Missing definitions or unavailable casts are skipped. A delayed action waits for its cast before the sequence continues; an instant or charge action continues immediately. For example, **Use Ability (On Next Attack) → Start Combat** arms the NPC before engaging the triggering actor.
+Targeted abilities use the current combat opponent, otherwise a valid triggering actor, otherwise the nearest visible entity matching **Ability Targets**. Target-centred areas, cones, beams, and dashes require a target within activation range. Caster-centred spheres and rings, teleport, Self abilities, and charging can run without an opponent, including on invulnerable NPCs. Bystanders follow the same alliance and ability-target rules. Missing definitions or unavailable casts are skipped. A delayed action waits for its cast before the sequence continues, while an instant or charge action continues immediately. For example, **Use Ability (On Next Attack) → Start Combat** arms the NPC before engaging the triggering actor.
 
 **Change Fight Options → Abilities** uses the same assignment screen for behaviour routines, waypoint actions, and question branches. It temporarily replaces the NPC's assigned attacks and usage interval.
 

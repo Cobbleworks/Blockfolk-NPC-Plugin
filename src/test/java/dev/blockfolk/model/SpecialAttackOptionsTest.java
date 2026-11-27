@@ -12,10 +12,11 @@ class SpecialAttackOptionsTest {
     @Test
     void customAssignmentsRoundTripInBehaviourActionsAndPreserveLegacyAttacks() {
         SpecialAttackOptions options = SpecialAttackOptions.disabled().toggle(SpecialAttack.FEAR)
-                .toggle("dragon_breath").toggle("sonic_blast").withIntervalSeconds(5);
+                .toggleTarget(TargetCategory.MOBS).toggle("dragon_breath").toggle("sonic_blast").withIntervalSeconds(5);
         FightOptions action = new FightOptions(AttackReaction.HUNTING, false, false, true, false, options);
         assertEquals(action, FightOptions.fromStored(action.storedValue()));
         assertEquals(Set.of("fear", "dragon_breath", "sonic_blast"), options.assignedAttackKeys());
+        assertEquals(Set.of(TargetCategory.MOBS), options.targets());
         assertEquals(Set.of("fear", "sonic_blast"), options.toggle("dragon_breath").assignedAttackKeys());
         SpecialAttackOptions duplicatedLegacy = options.withFighterAttacks(List.of("fear", "sonic_blast"));
         assertFalse(duplicatedLegacy.toggle("fear").assignedAttackKeys().contains("fear"));
@@ -44,8 +45,6 @@ class SpecialAttackOptionsTest {
     @Test
     void legacyConstructorsAndActionsDefaultToNoSpecialAttacks() {
         assertEquals(SpecialAttackOptions.disabled(), CombatProfile.disabled().specialAttacks());
-        assertEquals(SpecialAttackOptions.disabled(),
-                FightOptions.fromStored("aggression=fight_back;targets=players").specialAttacks());
         assertEquals(SpecialAttackOptions.disabled(), FightOptions.fromStored(null).specialAttacks());
     }
 
@@ -71,6 +70,17 @@ class SpecialAttackOptionsTest {
         assertTrue(action.players());
         assertEquals(AttackReaction.HUNTING, action.attackReaction());
         assertEquals(Set.of(SpecialAttack.FEAR), action.specialAttacks().enabled());
+        assertEquals(Set.of(TargetCategory.MOBS, TargetCategory.PLAYERS), action.specialAttacks().targets());
         assertEquals(8, action.specialAttacks().intervalSeconds());
+    }
+
+    @Test
+    void clearingMigratedAbilityTargetsKeepsTheHuntTargets() {
+        FightOptions legacy = FightOptions.fromStored("aggression=fight_back;targets=players");
+        assertEquals(Set.of(TargetCategory.PLAYERS), legacy.specialAttacks().targets());
+        FightOptions edited = legacy.withSpecialAttacks(legacy.specialAttacks().toggleTarget(TargetCategory.PLAYERS));
+        FightOptions reloaded = FightOptions.fromStored(edited.storedValue());
+        assertEquals(Set.of(), reloaded.specialAttacks().targets());
+        assertEquals(Set.of(TargetCategory.PLAYERS), reloaded.huntTargets());
     }
 }
