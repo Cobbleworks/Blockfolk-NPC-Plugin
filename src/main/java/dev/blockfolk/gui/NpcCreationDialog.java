@@ -1,6 +1,8 @@
 package dev.blockfolk.gui;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
@@ -8,10 +10,12 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
+import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
+import dev.blockfolk.util.SkinTextureUtil;
 import dev.blockfolk.util.UiText;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.dialog.DialogResponseView;
@@ -20,6 +24,7 @@ import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.action.DialogAction;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
+import io.papermc.paper.registry.data.dialog.input.SingleOptionDialogInput;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
@@ -28,32 +33,79 @@ import net.kyori.adventure.text.format.NamedTextColor;
 final class NpcCreationDialog {
 
     private static final String NAME = "name";
+    private static final String SKIN = "skin";
     private static final String HEALTH = "health";
+    private static final String EXPERIENCE = "experience";
+    private static final String COMBAT = "combat";
     private static final String RESPAWN = "respawn";
     private static final String PICKUP = "pickup";
     private static final String SHOW_NAME = "show_name";
     private static final String LOOK_AT_PLAYER = "look_at_player";
     private static final String PUSHABLE = "pushable";
     private static final int MAX_NAME_LENGTH = 64;
+    private static final int MAX_SKIN_LENGTH = 512;
+    /**
+     * Kept well below {@link CombatProfile#MAX_HEALTH} so the slider moves in
+     * useful steps; the NPC editor still allows the full range afterwards.
+     */
+    private static final int MAX_CREATION_HEALTH = 200;
+    private static final int MAX_CREATION_EXPERIENCE = 200;
     private static final int MAX_RESPAWN_SECONDS = 600;
+
+    /** Applies a skin the same way the editor's skin button does. */
+    @FunctionalInterface
+    interface SkinApplier {
+        void apply(Player player, NpcDefinition definition, String input);
+    }
+
+    /** The basic combat choices offered at creation time. */
+    enum CombatChoice {
+        IGNORE("Ignore attacks", AttackReaction.IGNORE, false), FIGHT_BACK("Fight back", AttackReaction.FIGHT_BACK,
+                false), FLEE("Flee", AttackReaction.FLEE,
+                        false), GUARD("Hunt hostile mobs", AttackReaction.HUNTING, true);
+
+        private final String label;
+        private final AttackReaction reaction;
+        private final boolean targetMobs;
+
+        CombatChoice(String label, AttackReaction reaction, boolean targetMobs) {
+            this.label = label;
+            this.reaction = reaction;
+            this.targetMobs = targetMobs;
+        }
+
+        String id() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+
+        CombatProfile applyTo(CombatProfile profile) {
+            return profile.withAttackReaction(reaction).withTargetMobs(targetMobs);
+        }
+
+        static CombatChoice fromId(String id) {
+            return Arrays.stream(values()).filter(choice -> choice.id().equals(id)).findFirst().orElse(null);
+        }
+    }
 
     private final Plugin plugin;
     private final NpcDefinitionRepository definitions;
     private final NpcInstanceRegistry instances;
     private final BiConsumer<Player, NpcDefinition> editor;
+    private final SkinApplier skinApplier;
 
     NpcCreationDialog(Plugin plugin, NpcDefinitionRepository definitions, NpcInstanceRegistry instances,
-            BiConsumer<Player, NpcDefinition> editor) {
+            BiConsumer<Player, NpcDefinition> editor, SkinApplier skinApplier) {
         this.plugin = plugin;
         this.definitions = definitions;
         this.instances = instances;
         this.editor = editor;
+        this.skinApplier = skinApplier;
     }
 
     void show(Player player, String initialName) {
         String name = initialName == null ? "" : initialName;
-        show(player, new CreationValues(name.substring(0, Math.min(name.length(), MAX_NAME_LENGTH)), 0, 0, false, true,
-                true, true));
+        show(player, new CreationValues(name.substring(0, Math.min(name.length(), MAX_NAME_LENGTH)), "", 0, 0,
+                CombatChoice.IGNORE, 0, false, true, true, true));
     }
 
     private void show(Player player, CreationValues initial) {
@@ -71,12 +123,20 @@ final class NpcCreationDialog {
         Dialog dialog = Dialog.create(builder -> builder.empty().base(DialogBase.builder(Component.text("Create NPC"))
                 .canCloseWithEscape(true).afterAction(DialogBase.DialogAfterAction.CLOSE)
                 .body(List.of(DialogBody.plainMessage(Component.text(
-                        "Set the NPC's starting properties. Health 0 makes it invulnerable; respawn 0 disables respawning."))))
+                        "Set the NPC's starting properties. Health 0 makes it invulnerable; respawn 0 disables respawning. "
+                                + "Higher HP and more combat options are available in the NPC editor."))))
                 .inputs(List.of(
                         DialogInput.text(NAME, Component.text("Name")).width(300).initial(initial.name())
                                 .maxLength(MAX_NAME_LENGTH).build(),
-                        DialogInput.numberRange(HEALTH, Component.text("HP"), 0, CombatProfile.MAX_HEALTH)
+                        DialogInput.text(SKIN, Component.text("Skin URL or texture hash (optional)")).width(300)
+                                .initial(initial.skin()).maxLength(MAX_SKIN_LENGTH).build(),
+                        DialogInput.numberRange(HEALTH, Component.text("HP"), 0, MAX_CREATION_HEALTH)
                                 .initial((float) initial.health()).step(1.0F).width(300).build(),
+                        DialogInput
+                                .singleOption(COMBAT, Component.text("When attacked"), combatEntries(initial.combat()))
+                                .width(300).build(),
+                        DialogInput.numberRange(EXPERIENCE, Component.text("Dropped XP"), 0, MAX_CREATION_EXPERIENCE)
+                                .initial((float) initial.experience()).step(1.0F).width(300).build(),
                         DialogInput
                                 .numberRange(RESPAWN, Component.text("Respawn time (seconds)"), 0, MAX_RESPAWN_SECONDS)
                                 .initial((float) initial.respawnSeconds()).step(10.0F).width(300).build(),
@@ -88,6 +148,11 @@ final class NpcCreationDialog {
                                 .build()))
                 .build()).type(DialogType.confirmation(create, cancel)));
         player.showDialog(dialog);
+    }
+
+    private static List<SingleOptionDialogInput.OptionEntry> combatEntries(CombatChoice selected) {
+        return Arrays.stream(CombatChoice.values()).map(choice -> SingleOptionDialogInput.OptionEntry
+                .create(choice.id(), Component.text(choice.label), choice == selected)).toList();
     }
 
     private void submit(UUID playerId, CreationValues values) {
@@ -105,14 +170,25 @@ final class NpcCreationDialog {
             show(player, values);
             return;
         }
+        String skinInput = values.skin().trim();
+        if (!skinInput.isEmpty()) {
+            try {
+                SkinTextureUtil.normalizeTextureUrl(skinInput);
+            } catch (IllegalArgumentException exception) {
+                player.sendMessage(UiText.error(exception.getMessage()));
+                show(player, values);
+                return;
+            }
+        }
         NpcDefinition definition = NpcDefinition.create(name);
         if (definitions.find(definition.getKey()).isPresent()) {
             player.sendMessage(UiText.error("An NPC with that key already exists."));
             show(player, values);
             return;
         }
-        definition.setCombatProfile(definition.getCombatProfile().withMaxHealth(values.health())
-                .withRespawnSeconds(values.respawnSeconds()));
+        definition
+                .setCombatProfile(values.combat().applyTo(definition.getCombatProfile()).withMaxHealth(values.health())
+                        .withDroppedExperience(values.experience()).withRespawnSeconds(values.respawnSeconds()));
         definition.setItemPickup(values.pickup());
         definition.setShowName(values.showName());
         definition.setLookAtPlayer(values.lookAtPlayer());
@@ -123,29 +199,39 @@ final class NpcCreationDialog {
             player.sendMessage(UiText.warning("Preset created, but its NPC could not be rendered."));
         }
         editor.accept(player, definition);
+        if (!skinInput.isEmpty()) {
+            // Image URLs are uploaded to MineSkin in the background; the editor is
+            // reopened once the skin has been processed.
+            skinApplier.apply(player, definition, skinInput);
+        }
     }
 
-    record CreationValues(String name, int health, int respawnSeconds, boolean pickup, boolean showName,
-            boolean lookAtPlayer, boolean pushable) {
+    record CreationValues(String name, String skin, int health, int experience, CombatChoice combat, int respawnSeconds,
+            boolean pickup, boolean showName, boolean lookAtPlayer, boolean pushable) {
 
         static CreationValues from(DialogResponseView view) {
             if (view == null) {
                 return null;
             }
             String name = view.getText(NAME);
+            String skin = view.getText(SKIN);
             Float health = view.getFloat(HEALTH);
+            Float experience = view.getFloat(EXPERIENCE);
+            String combatId = view.getText(COMBAT);
+            CombatChoice combat = combatId == null ? null : CombatChoice.fromId(combatId);
             Float respawn = view.getFloat(RESPAWN);
             Boolean pickup = view.getBoolean(PICKUP);
             Boolean showName = view.getBoolean(SHOW_NAME);
             Boolean lookAtPlayer = view.getBoolean(LOOK_AT_PLAYER);
             Boolean pushable = view.getBoolean(PUSHABLE);
-            if (name == null || name.length() > MAX_NAME_LENGTH || !validNumber(health, CombatProfile.MAX_HEALTH)
-                    || !validNumber(respawn, MAX_RESPAWN_SECONDS) || pickup == null || showName == null
-                    || lookAtPlayer == null || pushable == null) {
+            if (name == null || name.length() > MAX_NAME_LENGTH || skin == null || skin.length() > MAX_SKIN_LENGTH
+                    || !validNumber(health, MAX_CREATION_HEALTH) || !validNumber(experience, MAX_CREATION_EXPERIENCE)
+                    || combat == null || !validNumber(respawn, MAX_RESPAWN_SECONDS) || pickup == null
+                    || showName == null || lookAtPlayer == null || pushable == null) {
                 return null;
             }
-            return new CreationValues(name, health.intValue(), respawn.intValue(), pickup, showName, lookAtPlayer,
-                    pushable);
+            return new CreationValues(name, skin, health.intValue(), experience.intValue(), combat, respawn.intValue(),
+                    pickup, showName, lookAtPlayer, pushable);
         }
 
         private static boolean validNumber(Float value, int max) {

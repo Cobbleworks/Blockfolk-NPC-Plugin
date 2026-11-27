@@ -6,6 +6,8 @@ NPC administration starts in the preset browser opened by `/bf`.
 
 Create a preset with `/bf create <name>` or from the browser. Its stable key is derived from the initial name; the visible display name can be changed later. The browser supports paging and duplicating presets.
 
+The creation dialog sets the starting values: name, an optional skin (HTTPS image URL or Minecraft texture hash), HP and dropped XP (each up to 200 here; the editor allows more later), a basic combat reaction (**Ignore attacks**, **Fight back**, **Flee**, or **Hunt hostile mobs**), respawn time, and the pickup, name, look-at and push toggles.
+
 To customize the preset order, click **Blockfolk Overview** at the bottom of the preset browser. In **Reorder NPC Presets**, pick up and drop preset icons into their desired positions, then choose **Save Order**. The saved order controls the main NPC browser and the NPC folders shown in the route manager.
 
 Opening a preset gives access to:

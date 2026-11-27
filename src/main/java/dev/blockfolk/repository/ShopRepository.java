@@ -191,8 +191,8 @@ public final class ShopRepository {
             List<?> hidden = section.getList("offers", List.of()).stream().filter(ShopRepository::isStoredTrade)
                     .toList();
             if (!hidden.isEmpty())
-                stored.put(Shop.normalizeKey(key), decodeOffers(hidden).stream()
-                        .map(offer -> offer.withSlot(ShopOffer.UNPLACED)).toList());
+                stored.put(Shop.normalizeKey(key),
+                        decodeOffers(hidden).stream().map(offer -> offer.withSlot(ShopOffer.UNPLACED)).toList());
         }
         return stored;
     }
@@ -229,9 +229,9 @@ public final class ShopRepository {
                 OfferTerms terms = new OfferTerms(number(saved.get("price"), 0), number(saved.get("payout"), 0),
                         (int) number(saved.get("stock"), 0), StockScope.fromStored(text(saved.get("stock-scope"))));
                 // Trades without a slot keep their position in the list.
-                offers.add(new ShopOffer(text(saved.get("id")),
-                        (int) number(saved.get("slot"), ShopOffer.UNPLACED), itemOrNull(saved.get("cost")),
-                        itemOrNull(saved.get("second-cost")), itemOrNull(saved.get("result")), terms));
+                offers.add(new ShopOffer(text(saved.get("id")), (int) number(saved.get("slot"), ShopOffer.UNPLACED),
+                        itemOrNull(saved.get("cost")), itemOrNull(saved.get("second-cost")),
+                        itemOrNull(saved.get("result")), terms));
             }
         }
         return offers;
@@ -252,9 +252,9 @@ public final class ShopRepository {
             if (section.isSet("assortment"))
                 return true;
             for (Object entry : section.getList("offers", List.of())) {
-                if (entry instanceof Map<?, ?> saved && (!ShopOffer.isValidId(text(saved.get("id")))
-                        || !saved.containsKey("slot") || saved.containsKey("availability")
-                        || saved.containsKey("weight")))
+                if (entry instanceof Map<?, ?> saved
+                        && (!ShopOffer.isValidId(text(saved.get("id"))) || !saved.containsKey("slot")
+                                || saved.containsKey("availability") || saved.containsKey("weight")))
                     return true;
             }
         }

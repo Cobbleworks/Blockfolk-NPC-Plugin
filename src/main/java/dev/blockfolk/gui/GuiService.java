@@ -256,7 +256,8 @@ public final class GuiService implements Listener {
         this.waypointTokenKey = new NamespacedKey(plugin, "behaviour-waypoint-token");
         this.reorderIconKey = new NamespacedKey(plugin, "reorder-definition");
         this.aiGuiService = new AiGuiService(plugin, definitionRepository, chatInputService, this::openEditor);
-        this.creationDialog = new NpcCreationDialog(plugin, definitionRepository, instanceRegistry, this::openEditor);
+        this.creationDialog = new NpcCreationDialog(plugin, definitionRepository, instanceRegistry, this::openEditor,
+                this::updateSkin);
         this.variantGuiService = new VariantGuiService(plugin, definitionRepository, routeRepository, instanceRegistry,
                 chatInputService, skinResolver, routeCreator,
                 (player, definition) -> openInstances(player, definition, 0));

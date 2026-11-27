@@ -19,8 +19,7 @@ import org.bukkit.inventory.ItemStack;
  *            {@code slot % 10}. {@link #UNPLACED} lets the {@link Shop} put it
  *            into the first free place.
  */
-public record ShopOffer(String id, int slot, ItemStack cost, ItemStack secondCost, ItemStack result,
-        OfferTerms terms) {
+public record ShopOffer(String id, int slot, ItemStack cost, ItemStack secondCost, ItemStack result, OfferTerms terms) {
 
     public static final int UNPLACED = -1;
     private static final int ID_LENGTH = 8;

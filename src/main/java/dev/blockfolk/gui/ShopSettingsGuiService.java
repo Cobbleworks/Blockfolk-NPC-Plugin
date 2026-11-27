@@ -104,17 +104,18 @@ public final class ShopSettingsGuiService implements Listener {
         inventory.setItem(TRADE_HEADER_SLOT, GuiItems.sectionHeader(Material.LIGHT_BLUE_STAINED_GLASS_PANE,
                 LegacyText.AQUA, "Trade", "What changes hands"));
         inventory.setItem(TRADE_PREVIEW_SLOT, tradePreview(offer, economy));
-        inventory.setItem(PAGE_INFO_SLOT, item(Material.BOOK, "Page " + (offer.page() + 1),
-                shop.onePagePerDay()
-                        ? List.of("On sale on the days this page", "is shown, one page per day")
-                        : List.of("On sale every day, like every", "other page of this shop")));
+        inventory.setItem(PAGE_INFO_SLOT,
+                item(Material.BOOK, "Page " + (offer.page() + 1),
+                        shop.onePagePerDay()
+                                ? List.of("On sale on the days this page", "is shown, one page per day")
+                                : List.of("On sale every day, like every", "other page of this shop")));
 
         inventory.setItem(STOCK_HEADER_SLOT, GuiItems.sectionHeader(Material.LIME_STAINED_GLASS_PANE, LegacyText.GREEN,
                 "Stock", "How often it can be bought"));
-        inventory.setItem(STOCK_LIMIT_SLOT, numeric(Material.BARREL,
-                "Stock: " + (terms.limited() ? terms.stockLimit() : "Unlimited"),
-                List.of("Trades available per Minecraft day", LegacyText.DARK_GRAY + "0 = unlimited",
-                        "Restocks at every sunrise", "Step: " + STOCK_STEP)));
+        inventory.setItem(STOCK_LIMIT_SLOT,
+                numeric(Material.BARREL, "Stock: " + (terms.limited() ? terms.stockLimit() : "Unlimited"),
+                        List.of("Trades available per Minecraft day", LegacyText.DARK_GRAY + "0 = unlimited",
+                                "Restocks at every sunrise", "Step: " + STOCK_STEP)));
         List<GuiItems.Option> scopes = Arrays.stream(StockScope.values())
                 .map(value -> new GuiItems.Option(value.icon(), value.displayName(), value.summary())).toList();
         inventory.setItem(STOCK_SCOPE_SLOT, GuiItems.cycle("Stock Applies", scopes, terms.stockScope().ordinal(),
@@ -167,8 +168,7 @@ public final class ShopSettingsGuiService implements Listener {
             }
             case STOCK_LIMIT_SLOT -> {
                 if (click == ClickType.MIDDLE) {
-                    requestNumber(player,
-                            "Type how many trades are available per day (0 = unlimited), or 'cancel':",
+                    requestNumber(player, "Type how many trades are available per day (0 = unlimited), or 'cancel':",
                             OfferTerms.MAX_STOCK, value -> withOffer(holder,
                                     (current, currentOffer) -> currentOffer.terms().withStockLimit(value)),
                             reopen);

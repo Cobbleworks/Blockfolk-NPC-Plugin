@@ -313,8 +313,7 @@ public final class ShopGuiService implements Listener {
                 List.of("Place items into a trade row:", LegacyText.WHITE + "cost, second cost (optional), result",
                         "Click the arrow of a trade to set a money", "price or payout and a stock limit.",
                         "Items trade exactly as placed, including", "names and enchantments.",
-                        "With " + LegacyText.WHITE + "One Page per Day" + LegacyText.GRAY
-                                + ", each page is one day's",
+                        "With " + LegacyText.WHITE + "One Page per Day" + LegacyText.GRAY + ", each page is one day's",
                         "offer: page 1, then 2, and so on.", "Players open the shop through the",
                         LegacyText.WHITE + "Open Shop" + LegacyText.GRAY + " behaviour action, e.g. on right-click.",
                         "Changes apply to every NPC using this shop.")));
@@ -676,8 +675,8 @@ public final class ShopGuiService implements Listener {
     }
 
     /**
-     * The page mode switch, which also restocks by hand. {@code onSale} is the
-     * page sold today in a one-page-per-day shop, else -1.
+     * The page mode switch, which also restocks by hand. {@code onSale} is the page
+     * sold today in a one-page-per-day shop, else -1.
      */
     private static ItemStack pagesItem(Shop shop, NpcShopService.Assortment assortment, int onSale) {
         List<String> lore = new ArrayList<>();
@@ -760,9 +759,8 @@ public final class ShopGuiService implements Listener {
 
     private static ItemStack arrow(ShopOffer offer, ShopEconomy economy) {
         if (offer.isEmpty())
-            return item(Material.GRAY_STAINED_GLASS_PANE, "→ Empty Trade",
-                    List.of("Place a cost item on the left", "and the result on the right.", "",
-                            LegacyText.DARK_GRAY + "Then click here for money and stock."));
+            return item(Material.GRAY_STAINED_GLASS_PANE, "→ Empty Trade", List.of("Place a cost item on the left",
+                    "and the result on the right.", "", LegacyText.DARK_GRAY + "Then click here for money and stock."));
         OfferTerms terms = offer.terms();
         List<String> lore = new ArrayList<>();
         String name;

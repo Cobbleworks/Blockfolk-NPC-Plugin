@@ -94,8 +94,8 @@ public final class NpcShopService implements Listener {
 
     /**
      * The trades a shop shows right now, in editor order, the page on sale in a
-     * one-page-per-day shop, and the time until the next restock ({@code -1}
-     * while time stands still).
+     * one-page-per-day shop, and the time until the next restock ({@code -1} while
+     * time stands still).
      */
     public record Assortment(List<ShopOffer> offers, int page, long millisUntilRestock) {
         public boolean restocks() {
@@ -330,8 +330,9 @@ public final class NpcShopService implements Listener {
         merchant.setRecipes(assortment.offers().stream().map(NpcShopService::recipe).toList());
         Component title = Component.text(shop.name());
         if (assortment.restocks() && shop.changesAtSunrise())
-            title = title.append(Component.text(" · new stock in " + Durations.remaining(assortment.millisUntilRestock()),
-                    NamedTextColor.DARK_GRAY));
+            title = title
+                    .append(Component.text(" · new stock in " + Durations.remaining(assortment.millisUntilRestock()),
+                            NamedTextColor.DARK_GRAY));
         MenuType.MERCHANT.builder().merchant(merchant).title(title).checkReachable(false).build(player).open();
         merchantViewers.put(player.getUniqueId(), shop.key());
         return true;
@@ -353,8 +354,8 @@ public final class NpcShopService implements Listener {
     }
 
     /**
-     * Restocks shops someone is looking at, so open screens change the moment a
-     * new day begins.
+     * Restocks shops someone is looking at, so open screens change the moment a new
+     * day begins.
      */
     void tick() {
         Set<String> viewed = new HashSet<>(merchantViewers.values());

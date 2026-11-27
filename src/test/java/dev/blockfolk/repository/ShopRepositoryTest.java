@@ -58,18 +58,18 @@ class ShopRepositoryTest {
 
     @Test
     void filesFromOlderVersionsAreDetectedSoTheyGetRewritten() throws Exception {
-        assertTrue(ShopRepository.needsRewrite(yaml("shops:\n  bakery:\n    offers:\n    - price: 2\n")),
-                "no id");
-        assertTrue(ShopRepository.needsRewrite(yaml("shops:\n  bakery:\n    offers:\n    - id: abc\n")),
-                "no slot");
-        assertTrue(ShopRepository.needsRewrite(
-                yaml("shops:\n  bakery:\n    offers:\n    - id: abc\n      slot: 0\n      weight: 20\n")),
+        assertTrue(ShopRepository.needsRewrite(yaml("shops:\n  bakery:\n    offers:\n    - price: 2\n")), "no id");
+        assertTrue(ShopRepository.needsRewrite(yaml("shops:\n  bakery:\n    offers:\n    - id: abc\n")), "no slot");
+        assertTrue(
+                ShopRepository.needsRewrite(
+                        yaml("shops:\n  bakery:\n    offers:\n    - id: abc\n      slot: 0\n      weight: 20\n")),
                 "draw weight");
-        assertTrue(ShopRepository.needsRewrite(
-                yaml("shops:\n  bakery:\n    assortment:\n      refresh-minutes: 60\n    offers: []\n")),
+        assertTrue(
+                ShopRepository.needsRewrite(
+                        yaml("shops:\n  bakery:\n    assortment:\n      refresh-minutes: 60\n    offers: []\n")),
                 "assortment");
-        assertFalse(ShopRepository
-                .needsRewrite(yaml("shops:\n  bakery:\n    offers:\n    - id: abc\n      slot: 0\n")));
+        assertFalse(
+                ShopRepository.needsRewrite(yaml("shops:\n  bakery:\n    offers:\n    - id: abc\n      slot: 0\n")));
     }
 
     @Test
