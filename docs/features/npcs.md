@@ -4,7 +4,7 @@ NPC administration starts in the preset browser opened by `/bf`.
 
 ## Create and organize presets
 
-Create a preset with `/bf create <name>` or from the browser. Its stable key is derived from the initial name; the visible display name can be changed later, and commands accept both the key and the current name. Duplicate a preset with `/bf npc <name> duplicate <new name>`; the copy's key comes from its new name. The browser supports paging.
+Create a preset with `/bf create <name>` or from the browser. Commands refer to a preset by its current name, and names must be unique. Behind the scenes each preset also keeps a stable key from the name it was created with, so routes, scenes, and quests stay linked after a rename. Duplicate a preset with `/bf npc <name> duplicate <new name>`. The browser supports paging.
 
 The creation dialog sets the starting values: name, an optional skin (HTTPS image URL or Minecraft texture hash), HP and dropped XP (each up to 200 here; the editor allows more later), a basic combat reaction (**Ignore attacks**, **Fight back**, **Flee**, or **Hunt hostile mobs**), respawn time, and the pickup, name, look-at and push toggles.
 

@@ -467,16 +467,21 @@ public final class GuiService implements Listener {
             player.sendMessage(UiText.error("NPC names cannot be blank."));
             return;
         }
-        NpcDefinition copy = source.copyAs(trimmed);
-        if (definitionRepository.find(copy.getKey()).isPresent()) {
-            player.sendMessage(
-                    UiText.error("An NPC with the key '" + copy.getKey() + "' already exists. Choose another name."));
+        NpcDefinition conflict = definitionRepository.findNameConflict(trimmed, null).orElse(null);
+        if (conflict != null) {
+            player.sendMessage(UiText.error(nameTakenMessage(conflict)));
             return;
         }
+        NpcDefinition copy = source.copyAs(trimmed);
         routeRepository.copyOwnedRoutes(source, copy);
         definitionRepository.save(copy);
         player.sendMessage(UiText.success("Duplicated " + source.getDisplayName() + " as " + copy.getDisplayName()
-                + " (/bf npc " + copy.getKey() + ")."));
+                + " (/bf npc " + definitionRepository.commandReference(copy) + ")."));
+    }
+
+    /** Shown when a new name would make commands unable to tell two NPCs apart. */
+    public static String nameTakenMessage(NpcDefinition conflict) {
+        return "That name is already used by '" + conflict.getDisplayName() + "'. NPC names must be unique.";
     }
 
     public void openMain(Player player, int requestedPage) {
@@ -1696,6 +1701,12 @@ public final class GuiService implements Listener {
             case EDITOR_NAME_SLOT -> chatInputService.request(player, "Enter NPC display name:", value -> {
                 if (value.isBlank()) {
                     player.sendMessage(UiText.error("NPC display names cannot be blank."));
+                    openEditor(player, definition);
+                    return;
+                }
+                NpcDefinition conflict = definitionRepository.findNameConflict(value, definition).orElse(null);
+                if (conflict != null) {
+                    player.sendMessage(UiText.error(nameTakenMessage(conflict)));
                     openEditor(player, definition);
                     return;
                 }

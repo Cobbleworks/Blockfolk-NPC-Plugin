@@ -98,23 +98,59 @@ public final class NpcDefinitionRepository {
     }
 
     /**
-     * Resolves what an admin typed: an exact key wins, otherwise every preset whose
-     * current display name has that key form. Keys never change on rename, so this
-     * lets {@code /bf npc town-florist} find a preset that started out as the town
-     * baker. More than one result means the name is ambiguous.
+     * The name commands use for a preset: its current display name in key form, so
+     * a preset renamed to "Town Florist" is {@code town-florist}.
      */
-    public List<NpcDefinition> findByKeyOrName(String keyOrName) {
-        return matchKeyOrName(findAll(), keyOrName);
+    public static String commandName(NpcDefinition definition) {
+        return NpcDefinition.toKey(definition.getDisplayName());
     }
 
-    static List<NpcDefinition> matchKeyOrName(Collection<NpcDefinition> all, String keyOrName) {
-        if (keyOrName == null || keyOrName.isBlank())
+    /**
+     * Resolves what an admin typed after {@code /bf npc}. The current name comes
+     * first, because that is how admins recognise their NPCs; the internal key,
+     * which never changes on rename, still works as a fallback. More than one
+     * result means the name is ambiguous.
+     */
+    public List<NpcDefinition> findByNameOrKey(String nameOrKey) {
+        return matchNameOrKey(findAll(), nameOrKey);
+    }
+
+    static List<NpcDefinition> matchNameOrKey(Collection<NpcDefinition> all, String nameOrKey) {
+        if (nameOrKey == null || nameOrKey.isBlank())
             return List.of();
-        String key = NpcDefinition.toKey(keyOrName);
-        List<NpcDefinition> byKey = all.stream().filter(definition -> definition.getKey().equals(key)).toList();
-        if (!byKey.isEmpty())
-            return byKey;
-        return all.stream().filter(definition -> NpcDefinition.toKey(definition.getDisplayName()).equals(key)).toList();
+        String typed = NpcDefinition.toKey(nameOrKey);
+        List<NpcDefinition> byName = all.stream().filter(definition -> commandName(definition).equals(typed)).toList();
+        List<NpcDefinition> byKey = all.stream().filter(definition -> definition.getKey().equals(typed)).toList();
+        if (byName.size() == 1 || byName.size() > 1 && byKey.isEmpty())
+            return byName;
+        // No name matches, or several presets share it (only possible for presets
+        // named before names had to be unique). A matching key settles either case.
+        return byKey;
+    }
+
+    /**
+     * Another preset that already answers to this name in commands, by its name or
+     * its key. Names must be unique so that a name always means one NPC.
+     */
+    public Optional<NpcDefinition> findNameConflict(String name, NpcDefinition self) {
+        return nameConflict(findAll(), name, self);
+    }
+
+    static Optional<NpcDefinition> nameConflict(Collection<NpcDefinition> all, String name, NpcDefinition self) {
+        String typed = NpcDefinition.toKey(name);
+        return all.stream().filter(definition -> definition != self)
+                .filter(definition -> definition.getKey().equals(typed) || commandName(definition).equals(typed))
+                .findFirst();
+    }
+
+    /**
+     * What to type after {@code /bf npc} to reach this preset: its name, or its key
+     * when the name alone would not find it.
+     */
+    public String commandReference(NpcDefinition definition) {
+        String name = commandName(definition);
+        List<NpcDefinition> matches = findByNameOrKey(name);
+        return matches.size() == 1 && matches.get(0) == definition ? name : definition.getKey();
     }
 
     public Collection<NpcDefinition> findAll() {

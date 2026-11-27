@@ -41,6 +41,6 @@
 | `/bf config chunkloaders` | List all NPC presets with Keep Chunks Loaded enabled, including presets without spawned instances. Click an entry to open its NPC editor. Also works from the console as a text list. |
 | `/bf config ai mute-me <on\|off>` | Stop or allow nearby AIs hearing your chat. Off by default; saved per player. |
 
-NPC names in commands are stable preset keys, made from the name a preset was created with. Commands also accept a preset's current name in the same form (lowercase, spaces as dashes), so a renamed "Town Baker" called "Town Florist" answers to both `town-baker` and `town-florist`. An exact key always wins; if several presets share a name, the command lists their keys to choose from. Saved locations are global location keys. Tab completion lists keys, current names, and locations.
+NPC names in commands are the preset's current name, lowercase with spaces as dashes: "Town Florist" is `town-florist`. Names must be unique, so creating, duplicating, or renaming to a name another preset already answers to is refused. A preset's original key (from the name it was created with) keeps working too, but tab completion shows only current names. Saved locations are global location keys.
 
 Existing `/bf create [name]` commands remain available. The former custom-event commands still work: `/bf events` opens the scene browser and `/bf events trigger <event>` starts the scene that event became.

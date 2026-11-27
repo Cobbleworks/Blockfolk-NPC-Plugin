@@ -180,12 +180,13 @@ final class NpcCreationDialog {
                 return;
             }
         }
-        NpcDefinition definition = NpcDefinition.create(name);
-        if (definitions.find(definition.getKey()).isPresent()) {
-            player.sendMessage(UiText.error("An NPC with that key already exists."));
+        NpcDefinition conflict = definitions.findNameConflict(name, null).orElse(null);
+        if (conflict != null) {
+            player.sendMessage(UiText.error(GuiService.nameTakenMessage(conflict)));
             show(player, values);
             return;
         }
+        NpcDefinition definition = NpcDefinition.create(name);
         definition
                 .setCombatProfile(values.combat().applyTo(definition.getCombatProfile()).withMaxHealth(values.health())
                         .withDroppedExperience(values.experience()).withRespawnSeconds(values.respawnSeconds()));

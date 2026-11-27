@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -124,8 +123,8 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
                 sender.sendMessage(Component
                         .text("- " + definition.getDisplayName() + " (" + definition.getKey() + ")",
                                 NamedTextColor.AQUA)
-                        .hoverEvent(Component.text("Click to open the NPC menu."))
-                        .clickEvent(ClickEvent.runCommand("/bf npc " + definition.getKey() + " edit")));
+                        .hoverEvent(Component.text("Click to open the NPC menu.")).clickEvent(ClickEvent
+                                .runCommand("/bf npc " + definitionRepository.commandReference(definition) + " edit")));
             }
             return true;
         }
@@ -461,6 +460,11 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
                 String name = String.join(" ", Arrays.copyOfRange(args, 4, args.length)).trim();
                 if (name.isBlank())
                     return false;
+                NpcDefinition conflict = definitionRepository.findNameConflict(name, definition).orElse(null);
+                if (conflict != null) {
+                    player.sendMessage(UiText.error(GuiService.nameTakenMessage(conflict)));
+                    return true;
+                }
                 definition.setDisplayName(name);
             }
             case "color" -> {
@@ -635,18 +639,18 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
     }
 
     /**
-     * Finds the NPC an admin typed, by key or by current name. Reports unknown and
+     * Finds the NPC an admin typed, by current name or key. Reports unknown and
      * ambiguous names to the player and returns null for them.
      */
     private NpcDefinition resolveNpc(Player player, String input) {
-        List<NpcDefinition> matches = definitionRepository.findByKeyOrName(input);
+        List<NpcDefinition> matches = definitionRepository.findByNameOrKey(input);
         if (matches.size() == 1)
             return matches.get(0);
         if (matches.isEmpty()) {
             player.sendMessage(UiText.error("Unknown NPC: " + input));
             return null;
         }
-        player.sendMessage(UiText.error("Several NPCs are called '" + input + "'. Use one of their keys:"));
+        player.sendMessage(UiText.error("Several NPCs are called '" + input + "'. Click one, or rename them apart:"));
         for (NpcDefinition match : matches)
             player.sendMessage(
                     Component.text("- " + match.getDisplayName() + " (" + match.getKey() + ")", NamedTextColor.GRAY)
@@ -654,16 +658,9 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         return null;
     }
 
-    /**
-     * Every key plus each current name in key form, so renamed NPCs complete too.
-     */
+    /** One entry per preset: its current name, or its key if the name is shared. */
     private List<String> npcSuggestions() {
-        Set<String> suggestions = new LinkedHashSet<>();
-        for (NpcDefinition definition : definitionRepository.findAll()) {
-            suggestions.add(definition.getKey());
-            suggestions.add(NpcDefinition.toKey(definition.getDisplayName()));
-        }
-        return List.copyOf(suggestions);
+        return definitionRepository.findAll().stream().map(definitionRepository::commandReference).distinct().toList();
     }
 
     private List<String> filter(List<String> values, String prefix) {

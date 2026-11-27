@@ -20,35 +20,53 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 class NpcDefinitionRepositoryTest {
     @Test
-    void findsRenamedPresetsByTheirCurrentName() {
+    void findsRenamedPresetsByTheirCurrentNameAndStillByKey() {
         NpcDefinition baker = NpcDefinition.create("Town Baker");
         baker.setDisplayName("Town Florist");
         List<NpcDefinition> all = List.of(baker, NpcDefinition.create("Guard"));
 
-        assertEquals(List.of(baker), NpcDefinitionRepository.matchKeyOrName(all, "town-baker"));
-        assertEquals(List.of(baker), NpcDefinitionRepository.matchKeyOrName(all, "town-florist"));
-        assertEquals(List.of(baker), NpcDefinitionRepository.matchKeyOrName(all, "Town Florist"));
-        assertEquals(List.of(), NpcDefinitionRepository.matchKeyOrName(all, "smith"));
-        assertEquals(List.of(), NpcDefinitionRepository.matchKeyOrName(all, " "));
+        assertEquals(List.of(baker), NpcDefinitionRepository.matchNameOrKey(all, "town-florist"));
+        assertEquals(List.of(baker), NpcDefinitionRepository.matchNameOrKey(all, "Town Florist"));
+        assertEquals(List.of(baker), NpcDefinitionRepository.matchNameOrKey(all, "town-baker"));
+        assertEquals(List.of(), NpcDefinitionRepository.matchNameOrKey(all, "smith"));
+        assertEquals(List.of(), NpcDefinitionRepository.matchNameOrKey(all, " "));
     }
 
     @Test
-    void anExactKeyWinsOverAnotherPresetsName() {
-        NpcDefinition guard = NpcDefinition.create("Guard");
-        NpcDefinition renamed = NpcDefinition.create("Watchman");
-        renamed.setDisplayName("Guard");
+    void theCurrentNameWinsOverAnotherPresetsOldKey() {
+        NpcDefinition watchman = NpcDefinition.create("Guard");
+        watchman.setDisplayName("Watchman");
+        NpcDefinition guard = NpcDefinition.create("Soldier");
+        guard.setDisplayName("Guard");
 
-        assertEquals(List.of(guard), NpcDefinitionRepository.matchKeyOrName(List.of(renamed, guard), "guard"));
+        assertEquals(List.of(guard), NpcDefinitionRepository.matchNameOrKey(List.of(watchman, guard), "guard"));
     }
 
     @Test
-    void reportsEveryPresetSharingAName() {
+    void sharedLegacyNamesAreAmbiguousUnlessAKeyMatches() {
         NpcDefinition first = NpcDefinition.create("Baker One");
         first.setDisplayName("Baker");
         NpcDefinition second = NpcDefinition.create("Baker Two");
         second.setDisplayName("Baker");
+        NpcDefinition original = NpcDefinition.create("Baker");
 
-        assertEquals(List.of(first, second), NpcDefinitionRepository.matchKeyOrName(List.of(first, second), "baker"));
+        assertEquals(List.of(first, second), NpcDefinitionRepository.matchNameOrKey(List.of(first, second), "baker"));
+        assertEquals(List.of(original), NpcDefinitionRepository.matchNameOrKey(List.of(first, original), "baker"));
+        assertEquals(List.of(second), NpcDefinitionRepository.matchNameOrKey(List.of(first, second), "baker-two"));
+    }
+
+    @Test
+    void namesMustNotClashWithAnotherPresetsNameOrKey() {
+        NpcDefinition watchman = NpcDefinition.create("Guard");
+        watchman.setDisplayName("Watchman");
+        NpcDefinition baker = NpcDefinition.create("Baker");
+        List<NpcDefinition> all = List.of(watchman, baker);
+
+        assertEquals(watchman, NpcDefinitionRepository.nameConflict(all, "Watchman", null).orElse(null));
+        assertEquals(watchman, NpcDefinitionRepository.nameConflict(all, "guard", baker).orElse(null));
+        assertEquals(baker, NpcDefinitionRepository.nameConflict(all, "BAKER!", null).orElse(null));
+        assertNull(NpcDefinitionRepository.nameConflict(all, "Guard", watchman).orElse(null));
+        assertNull(NpcDefinitionRepository.nameConflict(all, "Florist", null).orElse(null));
     }
 
     @Test
