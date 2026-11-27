@@ -134,6 +134,12 @@ public final class BlockfolkPlugin extends JavaPlugin {
                 player -> guiService.isSelectingMoveToWaypoint(player) || sceneGuiService.isSelectingArea(player));
         combatService = new NpcCombatService(this, definitionRepository, instanceRegistry, navigationService,
                 fighterAttackRepository);
+        combatService.setHealthRegeneration(dev.blockfolk.runtime.HealthRegeneration.fromConfig(
+                getConfig().getBoolean("health-regeneration.enabled", true),
+                getConfig().getInt("health-regeneration.delay-seconds",
+                        dev.blockfolk.runtime.HealthRegeneration.DEFAULT_DELAY_SECONDS),
+                getConfig().getInt("health-regeneration.seconds-to-full",
+                        dev.blockfolk.runtime.HealthRegeneration.DEFAULT_SECONDS_TO_FULL)));
         questionService = new NpcQuestionService(this, instanceRegistry, chatInputService,
                 getConfig().getInt("question-timeout-seconds", 30));
         chatInputService.setBeforeRequest(questionService::cancelForAdminInput);
@@ -270,8 +276,8 @@ public final class BlockfolkPlugin extends JavaPlugin {
         }
 
         BlockfolkCommand executor = new BlockfolkCommand(definitionRepository, instanceRegistry, guiService,
-                routeGuiService, routeRepository, sceneGuiService, sceneService, behaviourService, locationRepository,
-                aiControlService, shopRepository, shopService, shopGuiService, this);
+                routeGuiService, sceneGuiService, sceneService, behaviourService, locationRepository, aiControlService,
+                shopRepository, shopService, shopGuiService, this);
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> event.registrar()
                 .register("blockfolk", "Opens and controls Blockfolk.", java.util.List.of("bf"), executor));
 

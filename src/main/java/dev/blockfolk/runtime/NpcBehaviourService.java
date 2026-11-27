@@ -796,7 +796,9 @@ public final class NpcBehaviourService implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onHeal(EntityRegainHealthEvent event) {
-        if (event.getAmount() < HEAL_BURST_THRESHOLD) {
+        // Out-of-combat regeneration heals in small steady ticks, not a burst.
+        if (event.getAmount() < HEAL_BURST_THRESHOLD
+                || event.getRegainReason() == EntityRegainHealthEvent.RegainReason.REGEN) {
             return;
         }
         instances.findByEntityId(event.getEntity().getEntityId())

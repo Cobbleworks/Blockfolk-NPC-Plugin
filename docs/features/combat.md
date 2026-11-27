@@ -16,6 +16,7 @@ Combat is configured per preset under **Fighting & Survival**.
 - Dropped experience changes in steps of 5.
 - The optional boss bar is visible to players within 16 blocks.
 - A damaged NPC shows a small `[■■■■□□□□□□]` health bar above its head, visible within 16 blocks. It disappears once the NPC is back to full health. Turn it off or change the distance under `health-bars` in `config.yml`.
+- Out of combat, damaged NPCs regenerate like players do. After 10 seconds without fighting or taking damage they heal back to full within 40 seconds, whatever their max HP. Tune or disable this under `health-regeneration` in `config.yml`. It does not trigger **On Heal**, which reacts to bursts such as potions.
 
 Health, respawn time, and dropped experience each use one icon. **Left-click** decreases the value, **right-click** increases it, **shift-click** uses five steps, and **middle-click** lets you enter an exact whole number in chat. Setting health or respawn time to `0` keeps the behaviours described above.
 

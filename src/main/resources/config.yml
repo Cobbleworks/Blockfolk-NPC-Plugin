@@ -18,6 +18,14 @@ health-bars:
   enabled: true
   # Blocks within which players see the bar.
   view-distance: 16
+# Damaged NPCs heal back to full on their own, like players with a full hunger bar.
+health-regeneration:
+  enabled: true
+  # Seconds without fighting or taking damage before an NPC starts to heal.
+  delay-seconds: 10
+  # Seconds an NPC needs to heal from nearly dead to full. Healing scales with max HP,
+  # so a 200 HP NPC heals as quickly (relative to its health) as a 20 HP one.
+  seconds-to-full: 40
 # What NPCs notice: other NPCs, players and mobs for On Nearby NPC, On Entity Nearby, On Nearby Aggression,
 # the AI's list of what is nearby, and who hears an NPC speak. Combat targeting always needs line of sight.
 perception:

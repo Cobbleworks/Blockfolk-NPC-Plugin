@@ -35,11 +35,12 @@
 | `/bf npc <name> equipment` | Open Equipment & Loot. |
 | `/bf npc <name> delete` | Delete the preset, its instances, and its owned routes. |
 | `/bf npc <name> spawn [here\|location]` | Spawn a persistent instance at your position or a saved location. |
+| `/bf npc <name> duplicate [new name]` | Copy the preset under a new name, which also becomes the copy's key. Without a name, you are asked in chat. |
 | `/bf config ai model [model]` | Without a model, show the one in use. With a model, save and immediately use it. Also works from the console. |
 | `/bf config ai reasoning [none\|minimal\|low\|medium\|high]` | Without a value, show the reasoning effort in use. With a value, save and immediately use it. Also works from the console. |
 | `/bf config chunkloaders` | List all NPC presets with Keep Chunks Loaded enabled, including presets without spawned instances. Click an entry to open its NPC editor. Also works from the console as a text list. |
 | `/bf config ai mute-me <on\|off>` | Stop or allow nearby AIs hearing your chat. Off by default; saved per player. |
 
-NPC names in commands are stable preset keys, shown in the editor. Saved locations are global location keys. Tab completion lists both.
+NPC names in commands are stable preset keys, made from the name a preset was created with. Commands also accept a preset's current name in the same form (lowercase, spaces as dashes), so a renamed "Town Baker" called "Town Florist" answers to both `town-baker` and `town-florist`. An exact key always wins; if several presets share a name, the command lists their keys to choose from. Saved locations are global location keys. Tab completion lists keys, current names, and locations.
 
-Existing `/bf create [name]` and `/bf npc <name> duplicate` commands remain available. The former custom-event commands still work: `/bf events` opens the scene browser and `/bf events trigger <event>` starts the scene that event became.
+Existing `/bf create [name]` commands remain available. The former custom-event commands still work: `/bf events` opens the scene browser and `/bf events trigger <event>` starts the scene that event became.

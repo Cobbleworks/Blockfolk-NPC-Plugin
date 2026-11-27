@@ -154,7 +154,7 @@ Conversation memory can be private per player or shared by everyone speaking to 
 | `/bf npc <name>`           | Open a preset editor; names are tab-completed                                 |
 | `/bf npc <name> edit`      | Open the same preset editor explicitly                                        |
 | `/bf npc <name> spawn`     | Spawn a persistent instance of a preset                                       |
-| `/bf npc <name> duplicate` | Duplicate a preset with ` (copy)` appended to its name                        |
+| `/bf npc <name> duplicate [new name]` | Duplicate a preset under a new name (asked in chat if omitted)   |
 | `/bf abilities`           | Open the shared attack library and editor                                     |
 | `/bf shops`               | Open the shared shop library                                                  |
 | `/bf routes`               | Open the route manager                                                        |

@@ -97,6 +97,26 @@ public final class NpcDefinitionRepository {
         return Optional.ofNullable(definitions.get(NpcDefinition.toKey(keyOrName)));
     }
 
+    /**
+     * Resolves what an admin typed: an exact key wins, otherwise every preset whose
+     * current display name has that key form. Keys never change on rename, so this
+     * lets {@code /bf npc town-florist} find a preset that started out as the town
+     * baker. More than one result means the name is ambiguous.
+     */
+    public List<NpcDefinition> findByKeyOrName(String keyOrName) {
+        return matchKeyOrName(findAll(), keyOrName);
+    }
+
+    static List<NpcDefinition> matchKeyOrName(Collection<NpcDefinition> all, String keyOrName) {
+        if (keyOrName == null || keyOrName.isBlank())
+            return List.of();
+        String key = NpcDefinition.toKey(keyOrName);
+        List<NpcDefinition> byKey = all.stream().filter(definition -> definition.getKey().equals(key)).toList();
+        if (!byKey.isEmpty())
+            return byKey;
+        return all.stream().filter(definition -> NpcDefinition.toKey(definition.getDisplayName()).equals(key)).toList();
+    }
+
     public Collection<NpcDefinition> findAll() {
         return definitionOrder.stream().map(definitions::get).filter(java.util.Objects::nonNull).toList();
     }

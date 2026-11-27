@@ -448,6 +448,37 @@ public final class GuiService implements Listener {
         creationDialog.show(player, name);
     }
 
+    /** Asks in chat for the copy's name, which also becomes its key. */
+    public void beginDuplicate(Player player, NpcDefinition source) {
+        String sourceKey = source.getKey();
+        chatInputService.request(player, "Enter a name for the copy of " + source.getDisplayName() + ":",
+                value -> definitionRepository.find(sourceKey).ifPresentOrElse(
+                        current -> duplicate(player, current, value),
+                        () -> player.sendMessage(UiText.error("That NPC no longer exists."))));
+    }
+
+    /**
+     * Copies a preset under a new name. The copy's key is made from that name, so
+     * commands refer to it by what it is called rather than by its source.
+     */
+    public void duplicate(Player player, NpcDefinition source, String name) {
+        String trimmed = name == null ? "" : name.trim();
+        if (trimmed.isEmpty()) {
+            player.sendMessage(UiText.error("NPC names cannot be blank."));
+            return;
+        }
+        NpcDefinition copy = source.copyAs(trimmed);
+        if (definitionRepository.find(copy.getKey()).isPresent()) {
+            player.sendMessage(
+                    UiText.error("An NPC with the key '" + copy.getKey() + "' already exists. Choose another name."));
+            return;
+        }
+        routeRepository.copyOwnedRoutes(source, copy);
+        definitionRepository.save(copy);
+        player.sendMessage(UiText.success("Duplicated " + source.getDisplayName() + " as " + copy.getDisplayName()
+                + " (/bf npc " + copy.getKey() + ")."));
+    }
+
     public void openMain(Player player, int requestedPage) {
         List<NpcDefinition> definitions = new ArrayList<>(definitionRepository.findAll());
         int pages = Math.max(1, (definitions.size() + MAIN_PAGE_SIZE - 1) / MAIN_PAGE_SIZE);

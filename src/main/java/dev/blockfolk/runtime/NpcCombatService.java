@@ -26,6 +26,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.boss.BarColor;
@@ -49,6 +50,7 @@ import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 import dev.blockfolk.repository.FighterAttackRepository;
 import dev.blockfolk.fighters.FighterTemplates;
+import dev.blockfolk.util.EntityHealth;
 import dev.blockfolk.util.LegacyText;
 import net.kyori.adventure.text.Component;
 
@@ -111,6 +113,9 @@ public final class NpcCombatService implements Listener {
     private NpcBehaviourService behaviourService;
     private BukkitTask task;
     private long currentTick;
+    /** The last tick each NPC fought or took damage, for health regeneration. */
+    private final Map<UUID, Long> lastCombatTicks = new HashMap<>();
+    private HealthRegeneration healthRegeneration = HealthRegeneration.defaults();
     private final List<PendingWeaponHit> pendingWeaponHits = new java.util.ArrayList<>();
     private record PendingWeaponHit(NpcInstance instance, UUID charge, LivingEntity victim, double before,
             EntityDamageByEntityEvent event) {
@@ -170,6 +175,10 @@ public final class NpcCombatService implements Listener {
         fightOptionsOverrides.clear();
         unreachableUntil.clear();
         threats.clear();
+    }
+
+    public void setHealthRegeneration(HealthRegeneration healthRegeneration) {
+        this.healthRegeneration = healthRegeneration == null ? HealthRegeneration.defaults() : healthRegeneration;
     }
 
     public boolean isEngaged(NpcInstance instance) {
@@ -322,6 +331,14 @@ public final class NpcCombatService implements Listener {
             // suffocation tick while preserving every other damage source.
             event.setCancelled(true);
         }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onNpcHurt(EntityDamageEvent event) {
+        if (event.getFinalDamage() <= 0.0)
+            return;
+        instanceRegistry.findByEntityId(event.getEntity().getEntityId())
+                .ifPresent(instance -> lastCombatTicks.put(instance.getId(), currentTick));
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -634,6 +651,28 @@ public final class NpcCombatService implements Listener {
             scheduleRespawn(instance);
     }
 
+    /** Heals a damaged NPC that has been out of combat for a while. */
+    private void regenerate(NpcInstance instance, LivingEntity npc) {
+        if (!healthRegeneration.enabled()
+                || Math.floorMod(currentTick + instance.getId().hashCode(), HealthRegeneration.INTERVAL_TICKS) != 0) {
+            return;
+        }
+        Long lastCombat = lastCombatTicks.get(instance.getId());
+        long ticksSinceCombat = lastCombat == null ? Long.MAX_VALUE : currentTick - lastCombat;
+        double health = npc.getHealth();
+        // Checked first so idle NPCs skip the attribute lookup.
+        if (!(health > 0.0) || ticksSinceCombat < healthRegeneration.delayTicks())
+            return;
+        double maxHealth = EntityHealth.maximum(npc);
+        double amount = healthRegeneration.amount(health, maxHealth, ticksSinceCombat);
+        if (amount <= 0.0)
+            return;
+        EntityRegainHealthEvent event = new EntityRegainHealthEvent(npc, amount,
+                EntityRegainHealthEvent.RegainReason.REGEN);
+        if (event.callEvent() && event.getAmount() > 0.0)
+            npc.setHealth(Math.min(maxHealth, npc.getHealth() + event.getAmount()));
+    }
+
     private void tick() {
         currentTick++;
         releaseSuccessfulCharges();
@@ -673,10 +712,12 @@ public final class NpcCombatService implements Listener {
                 }
             }
             if (state == null) {
+                regenerate(instance, npc);
                 specialAttackService.tick(instance.getId(), npc, null, fightOptions.specialAttacks(),
                         hitPredicate(instance, fightOptions, null), currentTick);
                 continue;
             }
+            lastCombatTicks.put(instance.getId(), currentTick);
             if (state.mode == CombatMode.FLEE) {
                 if (specialAttackService.tick(instance.getId(), npc, null, fightOptions.specialAttacks(),
                         hitPredicate(instance, fightOptions, null), currentTick))
@@ -689,6 +730,7 @@ public final class NpcCombatService implements Listener {
         }
         states.keySet().retainAll(activeInstances);
         threats.keySet().retainAll(activeInstances);
+        lastCombatTicks.keySet().retainAll(activeInstances);
         specialAttackService.retainInstances(activeInstances);
         fightOptionsOverrides.keySet().retainAll(activeInstances);
         bossBars.entrySet().removeIf(entry -> {

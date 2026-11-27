@@ -20,6 +20,38 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 class NpcDefinitionRepositoryTest {
     @Test
+    void findsRenamedPresetsByTheirCurrentName() {
+        NpcDefinition baker = NpcDefinition.create("Town Baker");
+        baker.setDisplayName("Town Florist");
+        List<NpcDefinition> all = List.of(baker, NpcDefinition.create("Guard"));
+
+        assertEquals(List.of(baker), NpcDefinitionRepository.matchKeyOrName(all, "town-baker"));
+        assertEquals(List.of(baker), NpcDefinitionRepository.matchKeyOrName(all, "town-florist"));
+        assertEquals(List.of(baker), NpcDefinitionRepository.matchKeyOrName(all, "Town Florist"));
+        assertEquals(List.of(), NpcDefinitionRepository.matchKeyOrName(all, "smith"));
+        assertEquals(List.of(), NpcDefinitionRepository.matchKeyOrName(all, " "));
+    }
+
+    @Test
+    void anExactKeyWinsOverAnotherPresetsName() {
+        NpcDefinition guard = NpcDefinition.create("Guard");
+        NpcDefinition renamed = NpcDefinition.create("Watchman");
+        renamed.setDisplayName("Guard");
+
+        assertEquals(List.of(guard), NpcDefinitionRepository.matchKeyOrName(List.of(renamed, guard), "guard"));
+    }
+
+    @Test
+    void reportsEveryPresetSharingAName() {
+        NpcDefinition first = NpcDefinition.create("Baker One");
+        first.setDisplayName("Baker");
+        NpcDefinition second = NpcDefinition.create("Baker Two");
+        second.setDisplayName("Baker");
+
+        assertEquals(List.of(first, second), NpcDefinitionRepository.matchKeyOrName(List.of(first, second), "baker"));
+    }
+
+    @Test
     void savesAndReloadsSpecialAttacksWithTheCombatProfile() throws Exception {
         CombatProfile profile = CombatProfile.disabled().withMaxHealth(40).withArmor(8).withAlliance("guards")
                 .withAttackReaction(AttackReaction.HUNTING).withTargetPlayers(true)

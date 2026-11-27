@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -31,7 +32,6 @@ import dev.blockfolk.model.Shop;
 import dev.blockfolk.runtime.SceneService;
 import dev.blockfolk.repository.LocationRepository;
 import dev.blockfolk.repository.NpcDefinitionRepository;
-import dev.blockfolk.repository.RouteRepository;
 import dev.blockfolk.repository.ShopRepository;
 import dev.blockfolk.runtime.NpcBehaviourService;
 import dev.blockfolk.runtime.NpcInstanceRegistry;
@@ -49,7 +49,6 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
     private final NpcInstanceRegistry instanceRegistry;
     private final GuiService guiService;
     private final RouteGuiService routeGuiService;
-    private final RouteRepository routeRepository;
     private final SceneGuiService sceneGuiService;
     private final SceneService sceneService;
     private final NpcBehaviourService behaviourService;
@@ -61,15 +60,14 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
     private final JavaPlugin plugin;
 
     public BlockfolkCommand(NpcDefinitionRepository definitionRepository, NpcInstanceRegistry instanceRegistry,
-            GuiService guiService, RouteGuiService routeGuiService, RouteRepository routeRepository,
-            SceneGuiService sceneGuiService, SceneService sceneService, NpcBehaviourService behaviourService,
-            LocationRepository locationRepository, AiControlService aiControlService, ShopRepository shopRepository,
-            NpcShopService shopService, ShopGuiService shopGuiService, JavaPlugin plugin) {
+            GuiService guiService, RouteGuiService routeGuiService, SceneGuiService sceneGuiService,
+            SceneService sceneService, NpcBehaviourService behaviourService, LocationRepository locationRepository,
+            AiControlService aiControlService, ShopRepository shopRepository, NpcShopService shopService,
+            ShopGuiService shopGuiService, JavaPlugin plugin) {
         this.definitionRepository = definitionRepository;
         this.instanceRegistry = instanceRegistry;
         this.guiService = guiService;
         this.routeGuiService = routeGuiService;
-        this.routeRepository = routeRepository;
         this.sceneGuiService = sceneGuiService;
         this.sceneService = sceneService;
         this.behaviourService = behaviourService;
@@ -273,11 +271,9 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return true;
         }
         if (args.length >= 2 && args[0].equalsIgnoreCase("npc")) {
-            NpcDefinition definition = definitionRepository.find(args[1]).orElse(null);
-            if (definition == null) {
-                player.sendMessage(UiText.error("Unknown NPC: " + args[1]));
+            NpcDefinition definition = resolveNpc(player, args[1]);
+            if (definition == null)
                 return true;
-            }
             if (args.length == 2 || args.length == 3 && args[2].equalsIgnoreCase("edit")) {
                 guiService.openEditor(player, definition);
                 return true;
@@ -285,25 +281,8 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             if (handleNpcCommand(player, definition, args))
                 return true;
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("npc") && args[2].equalsIgnoreCase("duplicate")) {
-            NpcDefinition source = definitionRepository.find(args[1]).orElse(null);
-            if (source == null) {
-                player.sendMessage(UiText.error("Unknown NPC: " + args[1]));
-                return true;
-            }
-            NpcDefinition copy = duplicate(source);
-            if (definitionRepository.find(copy.getKey()).isPresent()) {
-                player.sendMessage(UiText.error("A copy of this preset already exists."));
-                return true;
-            }
-            routeRepository.copyOwnedRoutes(source, copy);
-            definitionRepository.save(copy);
-            player.sendMessage(
-                    UiText.success("Duplicated " + source.getDisplayName() + " as " + copy.getDisplayName() + "."));
-            return true;
-        }
         player.sendMessage(UiText.info(
-                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn>]|shop [create <name>|<shop> [rename <name>|preview|restock]]|shops|abilities|routes|locations|config <chunkloaders|ai <model|mute-me|memory forgetnearby <radius>>>]"));
+                "Usage: /bf [npc [name <edit|set|tp|inventory|memory|events|combat|equipment|delete|spawn|duplicate [new name]>]|shop [create <name>|<shop> [rename <name>|preview|restock]]|shops|abilities|routes|locations|config <chunkloaders|ai <model|mute-me|memory forgetnearby <radius>>>]"));
         return true;
     }
 
@@ -358,6 +337,13 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
     private boolean handleNpcCommand(Player player, NpcDefinition definition, String[] args) {
         String action = args[2].toLowerCase(Locale.ROOT);
         switch (action) {
+            case "duplicate" -> {
+                if (args.length == 3)
+                    guiService.beginDuplicate(player, definition);
+                else
+                    guiService.duplicate(player, definition,
+                            String.join(" ", Arrays.copyOfRange(args, 3, args.length)));
+            }
             case "events" -> {
                 if (args.length != 3)
                     return false;
@@ -581,7 +567,7 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
             return filter(List.of("rename", "preview", "restock"), args[2]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("npc")) {
-            return filter(definitionRepository.findAll().stream().map(NpcDefinition::getKey).toList(), args[1]);
+            return filter(npcSuggestions(), args[1]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("scene")) {
             List<String> suggestions = new ArrayList<>(List.of("start", "stop"));
@@ -648,8 +634,36 @@ public final class BlockfolkCommand implements CommandExecutor, TabCompleter, Ba
         return names;
     }
 
-    private NpcDefinition duplicate(NpcDefinition source) {
-        return source.copyAs(source.getDisplayName() + " (copy)");
+    /**
+     * Finds the NPC an admin typed, by key or by current name. Reports unknown and
+     * ambiguous names to the player and returns null for them.
+     */
+    private NpcDefinition resolveNpc(Player player, String input) {
+        List<NpcDefinition> matches = definitionRepository.findByKeyOrName(input);
+        if (matches.size() == 1)
+            return matches.get(0);
+        if (matches.isEmpty()) {
+            player.sendMessage(UiText.error("Unknown NPC: " + input));
+            return null;
+        }
+        player.sendMessage(UiText.error("Several NPCs are called '" + input + "'. Use one of their keys:"));
+        for (NpcDefinition match : matches)
+            player.sendMessage(
+                    Component.text("- " + match.getDisplayName() + " (" + match.getKey() + ")", NamedTextColor.GRAY)
+                            .clickEvent(ClickEvent.suggestCommand("/bf npc " + match.getKey() + " ")));
+        return null;
+    }
+
+    /**
+     * Every key plus each current name in key form, so renamed NPCs complete too.
+     */
+    private List<String> npcSuggestions() {
+        Set<String> suggestions = new LinkedHashSet<>();
+        for (NpcDefinition definition : definitionRepository.findAll()) {
+            suggestions.add(definition.getKey());
+            suggestions.add(NpcDefinition.toKey(definition.getDisplayName()));
+        }
+        return List.copyOf(suggestions);
     }
 
     private List<String> filter(List<String> values, String prefix) {
