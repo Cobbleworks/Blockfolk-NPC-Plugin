@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
 import org.bukkit.FluidCollisionMode;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
@@ -49,6 +50,13 @@ final class NpcLabels {
     /** Wide enough that a dialog line never wraps, like a vanilla name tag. */
     private static final int LINE_WIDTH = 10_000;
     private static final double DEFAULT_HOVER_RANGE = 3.0;
+    /** 70% black behind the text. */
+    private static final Color BACKGROUND = Color.fromARGB(0xB3, 0, 0, 0);
+    /**
+     * Least relative luminance a name color needs to read well on the dark
+     * background (about 4.5:1 contrast against black).
+     */
+    private static final double MIN_NAME_LUMINANCE = 0.175;
 
     private final Plugin plugin;
     private final NamespacedKey labelKey;
@@ -67,7 +75,7 @@ final class NpcLabels {
      */
     void apply(UUID instanceId, Mannequin mannequin, String name, TextColor color, boolean nameAlwaysShown) {
         Label label = labels.computeIfAbsent(instanceId, ignored -> new Label());
-        label.name = Component.text(name, color);
+        label.name = Component.text(name, readable(color));
         label.nameAlwaysShown = nameAlwaysShown;
         update(instanceId, label, mannequin);
     }
@@ -200,10 +208,11 @@ final class NpcLabels {
             spawned.setVisibleByDefault(visibleByDefault);
             spawned.setBillboard(Display.Billboard.CENTER);
             spawned.setBrightness(new Display.Brightness(15, 15));
-            // The vanilla name tag background, which follows the client's text
-            // background opacity setting.
-            spawned.setDefaultBackground(true);
-            spawned.setShadowed(false);
+            // Darker than the vanilla name tag background (25% black), which barely
+            // separates the text from a dim scene behind it.
+            spawned.setDefaultBackground(false);
+            spawned.setBackgroundColor(BACKGROUND);
+            spawned.setShadowed(true);
             spawned.setSeeThrough(false);
             spawned.setLineWidth(LINE_WIDTH);
             spawned.setSilent(true);
@@ -214,6 +223,39 @@ final class NpcLabels {
             return null;
         }
         return display;
+    }
+
+    /**
+     * The color, mixed toward white just enough to stay readable on the dark label
+     * background. Black becomes mid gray; dark purple, dark gray, and blue get a
+     * little lighter; the other name colors stay as they are.
+     */
+    static TextColor readable(TextColor color) {
+        if (luminance(color.red(), color.green(), color.blue()) >= MIN_NAME_LUMINANCE)
+            return color;
+        for (int step = 1; step <= 20; step++) {
+            double mix = step / 20.0;
+            int red = mixToWhite(color.red(), mix);
+            int green = mixToWhite(color.green(), mix);
+            int blue = mixToWhite(color.blue(), mix);
+            if (luminance(red, green, blue) >= MIN_NAME_LUMINANCE)
+                return TextColor.color(red, green, blue);
+        }
+        return color;
+    }
+
+    private static int mixToWhite(int channel, double mix) {
+        return (int) Math.round(channel + (255 - channel) * mix);
+    }
+
+    /** WCAG relative luminance of an sRGB color. */
+    private static double luminance(int red, int green, int blue) {
+        return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue);
+    }
+
+    private static double linear(int channel) {
+        double value = channel / 255.0;
+        return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
     }
 
     private static void setText(TextDisplay display, Component text) {
