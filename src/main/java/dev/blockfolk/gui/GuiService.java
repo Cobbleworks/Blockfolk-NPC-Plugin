@@ -935,8 +935,7 @@ public final class GuiService implements Listener {
         if (reaction == AttackReaction.HUNTING) {
             Set<TargetCategory> targets = options.huntTargets();
             for (TargetCategory category : TargetCategory.values()) {
-                inventory.setItem(12 + category.ordinal(), GuiItems.targetToggle(category, "Hunt",
-                        targets.contains(category), "attacks on sight", "leaves alone until attacked"));
+                inventory.setItem(12 + category.ordinal(), GuiItems.huntToggle(category, targets.contains(category)));
             }
         }
         inventory.setItem(16, specialAttacksItem(options.specialAttacks()));

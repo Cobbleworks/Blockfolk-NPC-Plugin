@@ -103,16 +103,17 @@ final class GuiItems {
         return enabled ? glint(item) : item;
     }
 
-    static ItemStack targetToggle(TargetCategory category, String action, boolean enabled, String onText,
-            String offText) {
+    static ItemStack huntToggle(TargetCategory category, boolean enabled) {
+        String onText = "attacks on sight";
+        String offText = "skips this type when hunting";
         return switch (category) {
-            case MOBS -> toggle(Material.ZOMBIE_HEAD, Material.POPPY, action + " Mobs", enabled, onText, offText,
+            case MOBS -> toggle(Material.ZOMBIE_HEAD, Material.POPPY, "Hunt Mobs", enabled, onText, offText,
                     List.of("Hostile mobs"));
-            case ANIMALS -> toggle(Material.PORKCHOP, Material.POPPY, action + " Animals", enabled, onText, offText,
-                    List.of("Animals"));
-            case PLAYERS -> toggle(Material.PLAYER_HEAD, Material.POPPY, action + " Players", enabled, onText, offText,
+            case ANIMALS ->
+                toggle(Material.PORKCHOP, Material.POPPY, "Hunt Animals", enabled, onText, offText, List.of("Animals"));
+            case PLAYERS -> toggle(Material.PLAYER_HEAD, Material.POPPY, "Hunt Players", enabled, onText, offText,
                     List.of("Survival and Adventure players", "Allies are spared"));
-            case NPCS -> toggle(Material.ARMOR_STAND, Material.POPPY, action + " Other NPCs", enabled, onText, offText,
+            case NPCS -> toggle(Material.ARMOR_STAND, Material.POPPY, "Hunt Other NPCs", enabled, onText, offText,
                     List.of("Vulnerable NPCs", "Allies and copies of this preset are spared"));
         };
     }

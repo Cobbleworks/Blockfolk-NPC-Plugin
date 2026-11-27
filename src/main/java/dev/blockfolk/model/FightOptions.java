@@ -37,9 +37,6 @@ public record FightOptions(AttackReaction attackReaction, boolean mobs, boolean 
         AttackReaction reaction = AttackReaction.fromStored(sections.get("aggression"));
         Set<TargetCategory> targets = TargetCategory
                 .fromStored(Arrays.asList(sections.getOrDefault("targets", "").split(",")));
-        Set<TargetCategory> abilityTargets = sections.containsKey("ability-targets")
-                ? TargetCategory.fromStored(Arrays.asList(sections.get("ability-targets").split(",")))
-                : targets;
         int interval = SpecialAttackOptions.DEFAULT_INTERVAL_SECONDS;
         try {
             interval = Integer.parseInt(sections.getOrDefault("special-interval", String.valueOf(interval)));
@@ -48,16 +45,14 @@ public record FightOptions(AttackReaction attackReaction, boolean mobs, boolean 
         }
         SpecialAttackOptions special = SpecialAttackOptions
                 .fromStored(Arrays.asList(sections.getOrDefault("special-attacks", "").split(",")), interval)
-                .withFighterAttacks(Arrays.asList(sections.getOrDefault("fighter-attacks", "").split(",")))
-                .withTargets(abilityTargets);
+                .withFighterAttacks(Arrays.asList(sections.getOrDefault("fighter-attacks", "").split(",")));
         return new FightOptions(reaction, targets.contains(TargetCategory.MOBS),
                 targets.contains(TargetCategory.ANIMALS), targets.contains(TargetCategory.PLAYERS),
                 targets.contains(TargetCategory.NPCS), special);
     }
 
     public String storedValue() {
-        String stored = "aggression=" + attackReaction.name().toLowerCase(Locale.ROOT) + ";targets=" + targetValue()
-                + ";ability-targets=" + String.join(",", TargetCategory.storedValues(specialAttacks.targets()));
+        String stored = "aggression=" + attackReaction.name().toLowerCase(Locale.ROOT) + ";targets=" + targetValue();
         if (!specialAttacks.enabled().isEmpty()
                 || specialAttacks.intervalSeconds() != SpecialAttackOptions.DEFAULT_INTERVAL_SECONDS) {
             stored += ";special-attacks=" + String.join(",", specialAttacks.storedAttacks()) + ";special-interval="

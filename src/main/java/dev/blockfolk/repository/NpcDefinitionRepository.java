@@ -32,7 +32,6 @@ import dev.blockfolk.model.ShopOffer;
 import dev.blockfolk.model.Shop;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.SpecialAttackOptions;
-import dev.blockfolk.model.TargetCategory;
 import dev.blockfolk.model.MovementProfile;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcColor;
@@ -300,30 +299,23 @@ public final class NpcDefinitionRepository {
         configuration.set("combat.special-attacks.interval-seconds", profile.specialAttacks().intervalSeconds());
         configuration.set("combat.special-attacks.fighter-attacks",
                 profile.specialAttacks().fighterAttacks().stream().sorted().toList());
-        configuration.set("combat.special-attacks.targets",
-                TargetCategory.storedValues(profile.specialAttacks().targets()));
     }
 
     static CombatProfile readCombatProfile(YamlConfiguration configuration) {
-        boolean mobs = configuration.getBoolean("combat.targets.mobs", false);
-        boolean animals = configuration.getBoolean("combat.targets.animals", false);
-        boolean players = configuration.getBoolean("combat.targets.players", false);
-        boolean npcs = configuration.getBoolean("combat.targets.npcs", false);
-        Set<TargetCategory> abilityTargets = configuration.contains("combat.special-attacks.targets")
-                ? TargetCategory.fromStored(configuration.getStringList("combat.special-attacks.targets"))
-                : TargetCategory.fromFlags(mobs, animals, players, npcs);
         return new CombatProfile(configuration.getInt("combat.max-health", 0), configuration.getInt("combat.armor", 0),
                 configuration.getInt("combat.respawn-seconds", 0),
-                AttackReaction.fromStored(configuration.getString("combat.aggression-level")), mobs, animals, players,
-                npcs, configuration.getString("combat.alliance"),
+                AttackReaction.fromStored(configuration.getString("combat.aggression-level")),
+                configuration.getBoolean("combat.targets.mobs", false),
+                configuration.getBoolean("combat.targets.animals", false),
+                configuration.getBoolean("combat.targets.players", false),
+                configuration.getBoolean("combat.targets.npcs", false), configuration.getString("combat.alliance"),
                 configuration.getBoolean("combat.show-boss-bar", false),
                 configuration.getInt("combat.dropped-experience", 0),
                 SpecialAttackOptions
                         .fromStored(configuration.getStringList("combat.special-attacks.enabled"),
                                 configuration.getInt("combat.special-attacks.interval-seconds",
                                         SpecialAttackOptions.DEFAULT_INTERVAL_SECONDS))
-                        .withFighterAttacks(configuration.getStringList("combat.special-attacks.fighter-attacks"))
-                        .withTargets(abilityTargets));
+                        .withFighterAttacks(configuration.getStringList("combat.special-attacks.fighter-attacks")));
     }
 
     /**

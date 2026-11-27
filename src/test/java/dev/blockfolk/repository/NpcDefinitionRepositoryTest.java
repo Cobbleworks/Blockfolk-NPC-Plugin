@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.util.List;
-import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
@@ -17,7 +16,6 @@ import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.SpecialAttack;
 import dev.blockfolk.model.SpecialAttackOptions;
 import dev.blockfolk.model.Shop;
-import dev.blockfolk.model.TargetCategory;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 class NpcDefinitionRepositoryTest {
@@ -77,7 +75,7 @@ class NpcDefinitionRepositoryTest {
                 .withAttackReaction(AttackReaction.HUNTING).withTargetPlayers(true)
                 .withSpecialAttacks(SpecialAttackOptions.disabled().toggle(SpecialAttack.LIFE_DRAIN)
                         .toggle(SpecialAttack.FREEZING_SPELL).toggle("fire_breath").toggle("custom_laser")
-                        .withIntervalSeconds(15).toggleTarget(TargetCategory.MOBS));
+                        .withIntervalSeconds(15));
         YamlConfiguration saved = new YamlConfiguration();
         NpcDefinitionRepository.writeCombatProfile(saved, profile);
         YamlConfiguration loaded = new YamlConfiguration();
@@ -86,21 +84,13 @@ class NpcDefinitionRepositoryTest {
     }
 
     @Test
-    void oldDefinitionsKeepTheirCombatSettingsAndCarryTargetsIntoAbilities() throws Exception {
+    void oldDefinitionsKeepTheirCombatSettingsAndDefaultToNoSpecialAttacks() throws Exception {
         YamlConfiguration old = new YamlConfiguration();
         old.loadFromString(
                 "combat:\n  max-health: 30\n  aggression-level: fight_back\n  targets:\n    players: true\n");
-        CombatProfile migrated = NpcDefinitionRepository.readCombatProfile(old);
+        old.set("combat.special-attacks.targets", List.of("animals"));
         assertEquals(CombatProfile.disabled().withMaxHealth(30).withAttackReaction(AttackReaction.FIGHT_BACK)
-                .withTargetPlayers(true)
-                .withSpecialAttacks(SpecialAttackOptions.disabled().toggleTarget(TargetCategory.PLAYERS)), migrated);
-
-        CombatProfile edited = migrated.withSpecialAttacks(migrated.specialAttacks().withTargets(Set.of()));
-        YamlConfiguration saved = new YamlConfiguration();
-        NpcDefinitionRepository.writeCombatProfile(saved, edited);
-        YamlConfiguration loaded = new YamlConfiguration();
-        loaded.loadFromString(saved.saveToString());
-        assertEquals(edited, NpcDefinitionRepository.readCombatProfile(loaded));
+                .withTargetPlayers(true), NpcDefinitionRepository.readCombatProfile(old));
     }
 
     @Test

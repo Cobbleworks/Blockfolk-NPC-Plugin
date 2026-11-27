@@ -233,8 +233,8 @@ public final class NpcCombatService implements Listener {
     }
 
     /**
-     * Cast a shared ability at the combat opponent, triggering actor, or nearest
-     * selected target.
+     * Cast a shared ability at the combat opponent, triggering actor, or a hunt
+     * target if Hunting is active.
      */
     public int useAbility(NpcInstance instance, String key, Entity actor) {
         NpcDefinition definition = definitionRepository.find(instance.getDefinitionKey()).orElse(null);
@@ -242,17 +242,15 @@ public final class NpcCombatService implements Listener {
         if (definition == null || npc == null || !npc.isValid() || npc.isDead())
             return -1;
         FightOptions options = fightOptions(instance, definition.getCombatProfile());
-        Set<TargetCategory> abilityTargets = options.specialAttacks().targets();
         Entity opponent = currentTarget(instance);
         LivingEntity target = opponent instanceof LivingEntity living && isAttackable(instance, living)
                 ? living
                 : actor instanceof LivingEntity living && living.getWorld() == npc.getWorld()
-                        && isAttackable(instance, living) ? living : findNearestTarget(instance, npc, abilityTargets);
-        LivingEntity chosen = target;
+                        && isAttackable(instance, living) ? living : null;
+        if (target == null && options.attackReaction() == AttackReaction.HUNTING)
+            target = findNearestHuntTarget(instance, npc, options.huntTargets());
         int delay = specialAttackService.useAbility(instance.getId(), npc, target, key, options.specialAttacks(),
-                victim -> isAttackable(instance, victim)
-                        && (victim.equals(chosen) || isSelectedTarget(victim, abilityTargets)),
-                currentTick);
+                hitPredicate(instance), currentTick);
         if (delay > 0)
             instanceRegistry.stopNavigating(instance);
         return delay;
@@ -289,13 +287,10 @@ public final class NpcCombatService implements Listener {
                     || victim.getHealth() + victim.getAbsorptionAmount() >= hit.before())
                 continue;
             FightOptions options = fightOptions(instance, definition.getCombatProfile());
-            specialAttackService
-                    .onSuccessfulWeaponHit(instance.getId(), hit.charge(), npc, victim, options.specialAttacks(),
-                            candidate -> candidate.equals(victim)
-                                    ? victim.isDead() || isAttackable(instance, victim)
-                                    : isAttackable(instance, candidate)
-                                            && isSelectedTarget(candidate, options.specialAttacks().targets()),
-                            currentTick);
+            specialAttackService.onSuccessfulWeaponHit(instance.getId(), hit.charge(), npc, victim,
+                    options.specialAttacks(),
+                    candidate -> (candidate.equals(victim) && victim.isDead()) || isAttackable(instance, candidate),
+                    currentTick);
         }
     }
 
@@ -706,14 +701,14 @@ public final class NpcCombatService implements Listener {
                 if (states.containsKey(instance.getId()))
                     clearState(instance, CombatExitReason.STOPPED);
                 specialAttackService.tick(instance.getId(), npc, null, fightOptions.specialAttacks(),
-                        hitPredicate(instance, fightOptions, null), currentTick);
+                        hitPredicate(instance), currentTick);
                 continue;
             }
 
             CombatState state = states.get(instance.getId());
             if (state == null && fightOptions.attackReaction() == AttackReaction.HUNTING
                     && currentTick % 10 == Math.floorMod(instance.getId().hashCode(), 10)) {
-                LivingEntity target = findNearestTarget(instance, npc, fightOptions.huntTargets());
+                LivingEntity target = findNearestHuntTarget(instance, npc, fightOptions.huntTargets());
                 if (target != null && withinStationaryReach(definition, npc, target)) {
                     engage(instance, definition, CombatMode.FIGHT, target);
                     state = states.get(instance.getId());
@@ -722,13 +717,13 @@ public final class NpcCombatService implements Listener {
             if (state == null) {
                 regenerate(instance, npc);
                 specialAttackService.tick(instance.getId(), npc, null, fightOptions.specialAttacks(),
-                        hitPredicate(instance, fightOptions, null), currentTick);
+                        hitPredicate(instance), currentTick);
                 continue;
             }
             lastCombatTicks.put(instance.getId(), currentTick);
             if (state.mode == CombatMode.FLEE) {
                 if (specialAttackService.tick(instance.getId(), npc, null, fightOptions.specialAttacks(),
-                        hitPredicate(instance, fightOptions, null), currentTick))
+                        hitPredicate(instance), currentTick))
                     instanceRegistry.stopNavigating(instance);
                 else
                     flee(instance, npc, state);
@@ -822,8 +817,8 @@ public final class NpcCombatService implements Listener {
         }
         double distanceSquared = npc.getLocation().distanceSquared(target.getLocation());
         FightOptions options = fightOptions(instance, definition.getCombatProfile());
-        if (specialAttackService.tick(instance.getId(), npc, target, options.specialAttacks(),
-                hitPredicate(instance, options, target), currentTick)) {
+        if (specialAttackService.tick(instance.getId(), npc, target, options.specialAttacks(), hitPredicate(instance),
+                currentTick)) {
             instanceRegistry.stopNavigating(instance);
             state.navigationTarget = null;
             state.retreating = false;
@@ -975,26 +970,23 @@ public final class NpcCombatService implements Listener {
         }
     }
 
-    private LivingEntity findNearestTarget(NpcInstance instance, LivingEntity npc, Set<TargetCategory> categories) {
+    private LivingEntity findNearestHuntTarget(NpcInstance instance, LivingEntity npc, Set<TargetCategory> categories) {
         if (categories.isEmpty())
             return null;
         return npc.getNearbyEntities(SIGHT_RANGE, SIGHT_RANGE, SIGHT_RANGE).stream()
                 .filter(LivingEntity.class::isInstance).map(LivingEntity.class::cast)
-                .filter(target -> isAttackable(instance, target)).filter(target -> isSelectedTarget(target, categories))
+                .filter(target -> isAttackable(instance, target))
+                .filter(target -> matchesHuntCategory(target, categories))
                 .filter(target -> !isTemporarilyUnreachable(instance, target)).filter(npc::hasLineOfSight)
                 .min(Comparator.comparingDouble(target -> target.getLocation().distanceSquared(npc.getLocation())))
                 .orElse(null);
     }
 
-    private java.util.function.Predicate<LivingEntity> hitPredicate(NpcInstance instance, FightOptions options,
-            LivingEntity primary) {
-        // Capture the explicit target before the cast is consumed at impact.
-        LivingEntity scripted = specialAttackService.scriptedTarget(instance.getId());
-        return victim -> isAttackable(instance, victim) && (victim.equals(primary) || victim.equals(scripted)
-                || isSelectedTarget(victim, options.specialAttacks().targets()));
+    private java.util.function.Predicate<LivingEntity> hitPredicate(NpcInstance instance) {
+        return victim -> isAttackable(instance, victim);
     }
 
-    private boolean isSelectedTarget(LivingEntity target, Set<TargetCategory> categories) {
+    private boolean matchesHuntCategory(LivingEntity target, Set<TargetCategory> categories) {
         if (target instanceof Mannequin) {
             return categories.contains(TargetCategory.NPCS);
         }

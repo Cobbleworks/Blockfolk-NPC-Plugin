@@ -176,11 +176,6 @@ public final class NpcSpecialAttackService {
                 scripted, UUID.randomUUID());
     }
 
-    public LivingEntity scriptedTarget(UUID id) {
-        Cast cast = casts.get(id);
-        return cast != null && cast.scripted() ? cast.target() : null;
-    }
-
     public UUID chargeId(UUID id) {
         Cast cast = casts.get(id);
         return cast != null && cast.attack().castMode() == CastMode.NEXT_ATTACK ? cast.id() : null;

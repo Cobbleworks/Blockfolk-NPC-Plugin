@@ -32,7 +32,7 @@ Pending combat respawns survive server restarts and keep the persistent instance
 | Flee | Runs away when attacked. |
 | Hunting | Attacks enabled target types on sight and retaliates against any eligible attacker. |
 
-The **Hunt** toggles appear when **Hunting** is selected. The editor remembers them when you switch modes. With all four toggles off, Hunting only retaliates. Use **Abilities → Ability Targets** to control which bystanders abilities can hit.
+The **Hunt** toggles appear when **Hunting** is selected. The editor remembers them when you switch modes. With all four toggles off, Hunting only retaliates. Area abilities can hit any eligible bystander in the affected area, including animals and players with their **Hunt** toggles off.
 
 An NPC with **Hold Pose** (NPC Properties) stays in its pose when hit: it fights only within its weapon's reach and never walks, flees, or dashes in combat. See [Holding a pose](customization.md#holding-a-pose).
 

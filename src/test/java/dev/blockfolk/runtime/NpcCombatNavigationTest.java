@@ -30,8 +30,6 @@ import dev.blockfolk.model.AttackReaction;
 import dev.blockfolk.model.CombatProfile;
 import dev.blockfolk.model.NpcDefinition;
 import dev.blockfolk.model.NpcInstance;
-import dev.blockfolk.model.SpecialAttackOptions;
-import dev.blockfolk.model.TargetCategory;
 import dev.blockfolk.model.WalkingSpeed;
 import dev.blockfolk.repository.NpcDefinitionRepository;
 
@@ -164,18 +162,35 @@ class NpcCombatNavigationTest {
         }
     }
 
-    @Test
-    void abilityTargetsCanBeUsedByScriptedCastsWithoutBeingHunted() throws Exception {
-        when(definition.getCombatProfile())
-                .thenReturn(CombatProfile.disabled().withMaxHealth(20).withAttackReaction(AttackReaction.HUNTING)
-                        .withSpecialAttacks(SpecialAttackOptions.disabled().toggleTarget(TargetCategory.PLAYERS)));
+    @ParameterizedTest
+    @CsvSource({"HUNTING, false, -1", "HUNTING, true, 20", "FIGHT_BACK, true, -1"})
+    void scriptedAbilityUsesHuntTargetsAsFallbackOnlyInHuntingMode(AttackReaction reaction, boolean huntPlayers,
+            int expectedDelay) {
+        when(definition.getCombatProfile()).thenReturn(
+                CombatProfile.disabled().withMaxHealth(20).withAttackReaction(reaction).withTargetPlayers(huntPlayers));
         when(npc.getNearbyEntities(anyDouble(), anyDouble(), anyDouble())).thenReturn(List.of(target));
 
+        assertEquals(expectedDelay, combat.useAbility(instance, "lightning_mark", null));
+    }
+
+    @Test
+    void areaAbilityHitsEligibleBystandersWithHuntTogglesOff() throws Exception {
+        Player creative = mock(Player.class);
+        when(creative.getEntityId()).thenReturn(3);
+        when(creative.isValid()).thenReturn(true);
+        when(creative.getGameMode()).thenReturn(GameMode.CREATIVE);
+        when(creative.getLocation()).thenAnswer(call -> new Location(world, 1, 64, 0));
+        when(npc.hasLineOfSight(creative)).thenReturn(true);
+        when(target.getLocation()).thenAnswer(call -> new Location(world, 2, 64, 0));
+        when(world.getNearbyEntitiesByType(eq(LivingEntity.class), any(Location.class), anyDouble(), anyDouble(),
+                anyDouble(), isNull())).thenReturn(List.of(target, creative));
+
+        assertEquals(10, combat.useAbility(instance, "shockwave", null));
         for (int i = 0; i < 10; i++)
             tick();
 
-        assertFalse(combat.isEngaged(instance));
-        assertEquals(20, combat.useAbility(instance, "lightning_mark", null));
+        verify(target).damage(4.0, npc);
+        verify(creative, never()).damage(anyDouble(), any(org.bukkit.entity.Entity.class));
     }
 
     @ParameterizedTest

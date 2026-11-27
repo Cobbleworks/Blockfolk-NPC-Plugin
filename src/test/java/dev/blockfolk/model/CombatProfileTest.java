@@ -46,7 +46,7 @@ class CombatProfileTest {
         assertTrue(options.mobs());
         assertTrue(options.npcs());
         assertFalse(options.animals());
-        assertEquals("aggression=fight_back;targets=mobs,npcs;ability-targets=", options.storedValue());
+        assertEquals("aggression=fight_back;targets=mobs,npcs", options.storedValue());
         assertEquals(options, FightOptions.fromStored(options.storedValue()));
     }
 
@@ -54,7 +54,7 @@ class CombatProfileTest {
     void fightOptionsStoreAggression() {
         FightOptions options = new FightOptions(AttackReaction.HUNTING, true, false, true, false);
 
-        assertEquals("aggression=hunting;targets=mobs,players;ability-targets=", options.storedValue());
+        assertEquals("aggression=hunting;targets=mobs,players", options.storedValue());
         assertEquals(options, FightOptions.fromStored(options.storedValue()));
     }
 
